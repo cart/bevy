@@ -14,11 +14,10 @@
 
 // modified by Bevy contributors
 
-use crate::alloc::{vec, vec::Vec};
+use crate::{alloc::{vec, vec::Vec}, Archetype};
 use core::{
     any::{type_name, TypeId},
     fmt, mem,
-    ptr::NonNull,
 };
 
 use crate::{archetype::TypeInfo, Component};
@@ -36,7 +35,7 @@ pub trait DynamicBundle {
     /// Must invoke `f` only with a valid pointer, its type, and the pointee's size. A `false`
     /// return value indicates that the value was not moved and should be dropped.
     #[doc(hidden)]
-    unsafe fn put(self, f: impl FnMut(*mut u8, TypeId, usize) -> bool);
+    fn put(self, archetype: &mut Archetype);
 }
 
 /// A statically typed collection of components
@@ -47,19 +46,6 @@ pub trait Bundle: DynamicBundle {
     /// Obtain the fields' TypeInfos, sorted by descending alignment then id
     #[doc(hidden)]
     fn static_type_info() -> Vec<TypeInfo>;
-
-    /// Construct `Self` by moving components out of pointers fetched by `f`
-    ///
-    /// # Safety
-    ///
-    /// `f` must produce pointers to the expected fields. The implementation must not read from any
-    /// pointers if any call to `f` returns `None`.
-    #[doc(hidden)]
-    unsafe fn get(
-        f: impl FnMut(TypeId, usize) -> Option<NonNull<u8>>,
-    ) -> Result<Self, MissingComponent>
-    where
-        Self: Sized;
 }
 
 /// Error indicating that an entity did not have a required component
@@ -94,17 +80,11 @@ macro_rules! tuple_impl {
             }
 
             #[allow(unused_variables, unused_mut)]
-            unsafe fn put(self, mut f: impl FnMut(*mut u8, TypeId, usize) -> bool) {
+            fn put(self, archetype: &mut Archetype) {
                 #[allow(non_snake_case)]
                 let ($(mut $name,)*) = self;
                 $(
-                    if f(
-                        (&mut $name as *mut $name).cast::<u8>(),
-                        TypeId::of::<$name>(),
-                        mem::size_of::<$name>()
-                    ) {
-                        mem::forget($name)
-                    }
+                    archetype.insert($name);
                 )*
             }
         }
@@ -122,20 +102,9 @@ macro_rules! tuple_impl {
             }
 
             fn static_type_info() -> Vec<TypeInfo> {
-                let mut xs = vec![$(TypeInfo::of::<$name>()),*];
-                xs.sort_unstable();
-                xs
-            }
-
-            #[allow(unused_variables, unused_mut)]
-            unsafe fn get(mut f: impl FnMut(TypeId, usize) -> Option<NonNull<u8>>) -> Result<Self, MissingComponent> {
-                #[allow(non_snake_case)]
-                let ($(mut $name,)*) = ($(
-                    f(TypeId::of::<$name>(), mem::size_of::<$name>()).ok_or_else(MissingComponent::new::<$name>)?
-                        .as_ptr()
-                        .cast::<$name>(),)*
-                );
-                Ok(($($name.read(),)*))
+                let mut type_infos: Vec<TypeInfo> = vec![$(TypeInfo::of::<$name>()),*];
+                type_infos.sort_by_key(|info| info.id());
+                type_infos
             }
         }
     }

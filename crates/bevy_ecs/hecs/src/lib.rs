@@ -41,10 +41,6 @@
 //! ```
 
 #![warn(missing_docs)]
-#![no_std]
-
-#[cfg(feature = "std")]
-extern crate std;
 
 extern crate alloc;
 
@@ -75,11 +71,11 @@ mod query_one;
 mod serde;
 mod world;
 
-pub use archetype::{Archetype, TypeState};
+pub use archetype::{Archetype, ComponentStorageMeta, ComponentStorage};
 pub use borrow::{Ref, RefMut};
 pub use bundle::{Bundle, DynamicBundle, MissingComponent};
 pub use entities::{Entity, EntityReserver, Location, NoSuchEntity};
-pub use entity_builder::{BuiltEntity, EntityBuilder};
+// pub use entity_builder::{BuiltEntity, EntityBuilder};
 pub use query::{
     Access, Added, BatchedIter, Changed, Mut, Mutated, Or, Query, QueryBorrow, QueryIter,
     ReadOnlyFetch, With, Without,

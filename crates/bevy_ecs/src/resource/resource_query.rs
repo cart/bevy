@@ -203,15 +203,16 @@ impl<'a, T: Resource> FetchResource<'a> for FetchResourceRead<T> {
     type Item = Res<'a, T>;
 
     unsafe fn get(resources: &'a Resources, _system_id: Option<SystemId>) -> Self::Item {
-        Res::new(resources.get_unsafe_ref::<T>(ResourceIndex::Global))
+        // Res::new(resources.get_unsafe_ref::<T>(ResourceIndex::Global))
+        panic!()
     }
 
     fn borrow(resources: &Resources) {
-        resources.borrow::<T>();
+        // resources.borrow::<T>();
     }
 
     fn release(resources: &Resources) {
-        resources.release::<T>();
+        // resources.release::<T>();
     }
 
     fn access() -> TypeAccess {
@@ -232,20 +233,22 @@ impl<'a, T: Resource> FetchResource<'a> for FetchResourceChanged<T> {
     type Item = ChangedRes<'a, T>;
 
     unsafe fn get(resources: &'a Resources, _system_id: Option<SystemId>) -> Self::Item {
-        ChangedRes::new(resources.get_unsafe_ref::<T>(ResourceIndex::Global))
+        panic!()
+        // ChangedRes::new(resources.get_unsafe_ref::<T>(ResourceIndex::Global))
     }
 
     unsafe fn is_some(resources: &'a Resources, _system_id: Option<SystemId>) -> bool {
-        let (added, mutated) = resources.get_unsafe_added_and_mutated::<T>(ResourceIndex::Global);
-        *added.as_ptr() || *mutated.as_ptr()
+        panic!()
+        // let (added, mutated) = resources.get_unsafe_added_and_mutated::<T>(ResourceIndex::Global);
+        // *added.as_ptr() || *mutated.as_ptr()
     }
 
     fn borrow(resources: &Resources) {
-        resources.borrow::<T>();
+        // resources.borrow::<T>();
     }
 
     fn release(resources: &Resources) {
-        resources.release::<T>();
+        // resources.release::<T>();
     }
 
     fn access() -> TypeAccess {
@@ -266,17 +269,18 @@ impl<'a, T: Resource> FetchResource<'a> for FetchResourceWrite<T> {
     type Item = ResMut<'a, T>;
 
     unsafe fn get(resources: &'a Resources, _system_id: Option<SystemId>) -> Self::Item {
-        let (value, type_state) =
-            resources.get_unsafe_ref_with_type_state::<T>(ResourceIndex::Global);
-        ResMut::new(value, type_state.mutated())
+        // let (value, type_state) =
+        //     resources.get_unsafe_ref_with_type_state::<T>(ResourceIndex::Global);
+        // ResMut::new(value, type_state.mutated())
+        panic!()
     }
 
     fn borrow(resources: &Resources) {
-        resources.borrow_mut::<T>();
+        // resources.borrow_mut::<T>();
     }
 
     fn release(resources: &Resources) {
-        resources.release_mut::<T>();
+        // resources.release_mut::<T>();
     }
 
     fn access() -> TypeAccess {
@@ -303,21 +307,22 @@ impl<'a, T: Resource + FromResources> FetchResource<'a> for FetchResourceLocalMu
     type Item = Local<'a, T>;
 
     unsafe fn get(resources: &'a Resources, system_id: Option<SystemId>) -> Self::Item {
-        let id = system_id.expect("Local<T> resources can only be used by systems");
-        Local {
-            value: resources
-                .get_unsafe_ref::<T>(ResourceIndex::System(id))
-                .as_ptr(),
-            _marker: Default::default(),
-        }
+        panic!()
+        // let id = system_id.expect("Local<T> resources can only be used by systems");
+        // Local {
+        //     value: resources
+        //         .get_unsafe_ref::<T>(ResourceIndex::System(id))
+        //         .as_ptr(),
+        //     _marker: Default::default(),
+        // }
     }
 
     fn borrow(resources: &Resources) {
-        resources.borrow_mut::<T>();
+        // resources.borrow_mut::<T>();
     }
 
     fn release(resources: &Resources) {
-        resources.release_mut::<T>();
+        // resources.release_mut::<T>();
     }
 
     fn access() -> TypeAccess {

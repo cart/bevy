@@ -20,7 +20,10 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{archetype::Archetype, Component, MissingComponent};
+use crate::{
+    archetype::{Archetype, ComponentStorage},
+    Component, MissingComponent,
+};
 
 pub struct AtomicBorrow(AtomicUsize);
 
@@ -66,7 +69,7 @@ const UNIQUE_BIT: usize = !(usize::max_value() >> 1);
 /// Shared borrow of an entity's component
 #[derive(Clone)]
 pub struct Ref<'a, T: Component> {
-    archetype: &'a Archetype,
+    component_storage: &'a dyn ComponentStorage,
     target: &'a T,
 }
 
@@ -77,13 +80,13 @@ impl<'a, T: Component> Ref<'a, T> {
     ///
     /// - the index of the component must be valid
     pub unsafe fn new(archetype: &'a Archetype, index: usize) -> Result<Self, MissingComponent> {
-        let target = archetype
-            .get::<T>()
+        let component_storage = archetype
+            .get_storage::<T>()
             .ok_or_else(MissingComponent::new::<T>)?;
-        archetype.borrow::<T>();
+        component_storage.meta().borrow();
         Ok(Self {
-            archetype,
-            target: &*target.as_ptr().add(index as usize),
+            component_storage,
+            target: &*component_storage.get_value(index).cast::<T>(),
         })
     }
 }
@@ -93,7 +96,7 @@ unsafe impl<T: Component> Sync for Ref<'_, T> {}
 
 impl<'a, T: Component> Drop for Ref<'a, T> {
     fn drop(&mut self) {
-        self.archetype.release::<T>();
+        self.component_storage.meta().release();
     }
 }
 
@@ -116,7 +119,7 @@ where
 
 /// Unique borrow of an entity's component
 pub struct RefMut<'a, T: Component> {
-    archetype: &'a Archetype,
+    component_storage: &'a dyn ComponentStorage,
     target: &'a mut T,
     modified: &'a mut bool,
 }
@@ -128,14 +131,18 @@ impl<'a, T: Component> RefMut<'a, T> {
     ///
     /// - the index of the component must be valid
     pub unsafe fn new(archetype: &'a Archetype, index: usize) -> Result<Self, MissingComponent> {
-        let (target, type_state) = archetype
-            .get_with_type_state::<T>()
+        let component_storage = archetype
+            .get_storage::<T>()
             .ok_or_else(MissingComponent::new::<T>)?;
-        archetype.borrow_mut::<T>();
+        component_storage.meta().borrow_mut();
         Ok(Self {
-            archetype,
-            target: &mut *target.as_ptr().add(index),
-            modified: &mut *type_state.mutated().as_ptr().add(index),
+            component_storage,
+            target: &mut *(component_storage.get_value(index).cast::<T>() as *mut T),
+            modified: &mut *(component_storage
+                .meta()
+                .mutated_entities
+                .as_ptr()
+                .add(index) as *mut bool),
         })
     }
 }
@@ -145,7 +152,7 @@ unsafe impl<T: Component> Sync for RefMut<'_, T> {}
 
 impl<'a, T: Component> Drop for RefMut<'a, T> {
     fn drop(&mut self) {
-        self.archetype.release_mut::<T>();
+        self.component_storage.meta().release_mut();
     }
 }
 

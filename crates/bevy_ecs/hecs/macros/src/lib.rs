@@ -66,12 +66,9 @@ pub fn derive_bundle(input: TokenStream) -> TokenStream {
                 Self::static_type_info()
             }
 
-            unsafe fn put(mut self, mut f: impl FnMut(*mut u8, std::any::TypeId, usize) -> bool) {
+            fn put(mut self, archetype: &mut Archetype) {
                 #(
-                    if f((&mut self.#fields as *mut #tys).cast::<u8>(), std::any::TypeId::of::<#tys>(), std::mem::size_of::<#tys>()) {
-                        #[allow(clippy::forget_copy)]
-                        std::mem::forget(self.#fields);
-                    }
+                    archetype.insert(self.#fields);
                 )*
             }
         }
@@ -105,21 +102,21 @@ pub fn derive_bundle(input: TokenStream) -> TokenStream {
 
             fn static_type_info() -> Vec<#path::TypeInfo> {
                 let mut info = vec![#(#path::TypeInfo::of::<#tys>()),*];
-                info.sort_unstable();
+                info.sort_by_key(|info| info.id());
                 info
             }
 
-            unsafe fn get(
-                mut f: impl FnMut(std::any::TypeId, usize) -> Option<std::ptr::NonNull<u8>>,
-            ) -> Result<Self, #path::MissingComponent> {
-                #(
-                    let #fields = f(std::any::TypeId::of::<#tys>(), std::mem::size_of::<#tys>())
-                            .ok_or_else(#path::MissingComponent::new::<#tys>)?
-                            .cast::<#tys>()
-                        .as_ptr();
-                )*
-                Ok(Self { #( #fields: #fields.read(), )* })
-            }
+            // unsafe fn get(
+            //     mut f: impl FnMut(std::any::TypeId, usize) -> Option<std::ptr::NonNull<u8>>,
+            // ) -> Result<Self, #path::MissingComponent> {
+            //     #(
+            //         let #fields = f(std::any::TypeId::of::<#tys>(), std::mem::size_of::<#tys>())
+            //                 .ok_or_else(#path::MissingComponent::new::<#tys>)?
+            //                 .cast::<#tys>()
+            //             .as_ptr();
+            //     )*
+            //     Ok(Self { #( #fields: #fields.read(), )* })
+            // }
         }
     };
     TokenStream::from(code)

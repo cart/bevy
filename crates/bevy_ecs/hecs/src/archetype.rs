@@ -1,249 +1,220 @@
-// Copyright 2019 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// modified by Bevy contributors
-
-use crate::{
-    alloc::{
-        alloc::{alloc, dealloc, Layout},
-        vec::Vec,
-    },
-    Entity,
-};
+use crate::{alloc::vec::Vec, Entity, Location};
 use bevy_utils::{HashMap, HashMapExt};
-use core::{
-    any::{type_name, TypeId},
-    cell::UnsafeCell,
-    mem,
-    ptr::{self, NonNull},
-};
+use std::{any::TypeId, fmt::Debug};
 
 use crate::{borrow::AtomicBorrow, query::Fetch, Access, Component, Query};
+
+struct VecComponentStorage<T> {
+    storage: Vec<T>,
+    meta: ComponentStorageMeta,
+}
+
+impl<T> Default for VecComponentStorage<T> {
+    fn default() -> Self {
+        Self {
+            storage: Vec::default(),
+            meta: ComponentStorageMeta::default(),
+        }
+    }
+}
+
+impl<T> ComponentStorage for VecComponentStorage<T>
+where
+    T: 'static,
+{
+    fn meta(&self) -> &ComponentStorageMeta {
+        &self.meta
+    }
+
+    fn meta_mut(&mut self) -> &mut ComponentStorageMeta {
+        &mut self.meta
+    }
+
+    fn get_type(&self) -> TypeId {
+        TypeId::of::<T>()
+    }
+
+    fn get_pointer(&self) -> *const u8 {
+        self.storage.as_ptr().cast::<u8>()
+    }
+
+    fn get_value(&self, index: usize) -> *const u8 {
+        unsafe { self.storage.get_unchecked(index) as *const T as *const u8 }
+    }
+
+    fn insert(&mut self, value: *const u8) {
+        assert!(self.storage.len() + 1 <= self.storage.capacity());
+        unsafe {
+            let index = self.storage.len();
+            self.storage.set_len(index + 1);
+            println!("{} {}", self.storage.len(), self.storage.capacity());
+            std::ptr::copy_nonoverlapping(value.cast::<T>(), self.storage.as_mut_ptr().add(index), std::mem::size_of::<T>())
+        }
+    }
+
+    fn reserve(&mut self, size: usize) {
+        self.storage.reserve(size);
+    }
+
+    unsafe fn swap_remove(&mut self, index: usize, forget: bool) {
+        let value = self.storage.swap_remove(index);
+        if forget {
+            std::mem::forget(value);
+        }
+    }
+
+    fn clear(&mut self) {
+        self.storage.clear()
+    }
+
+    fn len(&self) -> usize {
+        self.storage.len()
+    }
+
+    fn capacity(&self) -> usize {
+        self.storage.capacity()
+    }
+}
+
+pub trait ComponentStorage {
+    fn meta(&self) -> &ComponentStorageMeta;
+    fn meta_mut(&mut self) -> &mut ComponentStorageMeta;
+    fn get_type(&self) -> TypeId;
+    fn get_pointer(&self) -> *const u8;
+    fn get_value(&self, index: usize) -> *const u8;
+    fn reserve(&mut self, size: usize);
+    fn insert(&mut self, value: *const u8);
+    fn len(&self) -> usize;
+    fn capacity(&self) -> usize;
+    unsafe fn swap_remove(&mut self, index: usize, forget: bool);
+    fn clear(&mut self);
+}
 
 /// A collection of entities having the same component types
 ///
 /// Accessing `Archetype`s is only required for complex dynamic scheduling. To manipulate entities,
 /// go through the `World`.
 pub struct Archetype {
-    types: Vec<TypeInfo>,
-    state: HashMap<TypeId, TypeState>,
-    len: usize,
-    entities: Vec<Entity>,
-    // UnsafeCell allows unique references into `data` to be constructed while shared references
-    // containing the `Archetype` exist
-    data: UnsafeCell<NonNull<u8>>,
-    data_size: usize,
+    pub type_info: Vec<TypeInfo>,
+    pub entities: Vec<Entity>,
+    component_storages: Vec<Box<dyn ComponentStorage>>,
+    pub type_indices: HashMap<TypeId, usize>,
     grow_size: usize,
 }
 
 impl Archetype {
     #[allow(missing_docs)]
-    pub fn new(types: Vec<TypeInfo>) -> Self {
-        Self::with_grow(types, 64)
+    pub fn new(type_info: Vec<TypeInfo>) -> Self {
+        Self::with_grow(type_info, 64)
     }
 
     #[allow(missing_docs)]
-    pub fn with_grow(types: Vec<TypeInfo>, grow_size: usize) -> Self {
-        debug_assert!(
-            types.windows(2).all(|x| x[0] < x[1]),
-            "type info unsorted or contains duplicates"
-        );
-        let mut state = HashMap::with_capacity(types.len());
-        for ty in &types {
-            state.insert(ty.id, TypeState::new());
+    pub fn with_grow(type_info: Vec<TypeInfo>, grow_size: usize) -> Self {
+        // TODO: check for dupes
+        let mut component_storages = Vec::with_capacity(type_info.len());
+        let mut type_indices = HashMap::with_capacity(type_info.len());
+        for ty in &type_info {
+            type_indices.insert(ty.id, component_storages.len());
+            component_storages.push((ty.get_storage)());
         }
+
         Self {
-            state,
-            types,
+            type_info,
             entities: Vec::new(),
-            len: 0,
-            data: UnsafeCell::new(NonNull::dangling()),
-            data_size: 0,
+            component_storages,
+            type_indices,
             grow_size,
         }
     }
 
     pub(crate) fn clear(&mut self) {
-        for ty in &self.types {
-            for index in 0..self.len {
-                unsafe {
-                    let removed = self
-                        .get_dynamic(ty.id, ty.layout.size(), index)
-                        .unwrap()
-                        .as_ptr();
-                    (ty.drop)(removed);
-                }
-            }
+        for storage in self.component_storages.iter_mut() {
+            storage.clear()
         }
-        self.len = 0;
+        self.entities.clear();
     }
 
     #[allow(missing_docs)]
     #[inline]
     pub fn has<T: Component>(&self) -> bool {
-        self.has_dynamic(TypeId::of::<T>())
+        self.has_type(TypeId::of::<T>())
     }
 
     #[allow(missing_docs)]
     #[inline]
     pub fn has_type(&self, ty: TypeId) -> bool {
-        self.has_dynamic(ty)
+        self.type_indices.contains_key(&ty)
     }
 
-    pub(crate) fn has_dynamic(&self, id: TypeId) -> bool {
-        self.state.contains_key(&id)
+    #[inline]
+    fn type_index<T: Component>(&self) -> Option<usize> {
+        self.type_index_dynamic(TypeId::of::<T>())
+    }
+
+    #[inline]
+    fn type_index_dynamic(&self, type_id: TypeId) -> Option<usize> {
+        self.type_indices.get(&type_id).cloned()
     }
 
     #[allow(missing_docs)]
     #[inline]
-    pub fn get<T: Component>(&self) -> Option<NonNull<T>> {
-        let state = self.state.get(&TypeId::of::<T>())?;
-        Some(unsafe {
-            NonNull::new_unchecked(
-                (*self.data.get()).as_ptr().add(state.offset).cast::<T>() as *mut T
-            )
-        })
+    pub fn get_storage<T: Component>(&self) -> Option<&dyn ComponentStorage> {
+        self.type_index::<T>()
+            .map(|index| &*self.component_storages[index])
+    }
+
+    // TODO: rename for parity
+    #[allow(missing_docs)]
+    #[inline]
+    pub fn get_storage_dynamic(&self, type_id: TypeId) -> Option<&Box<dyn ComponentStorage>> {
+        self.type_index_dynamic(type_id)
+            .map(|index| &self.component_storages[index])
     }
 
     #[allow(missing_docs)]
     #[inline]
-    pub fn get_with_type_state<T: Component>(&self) -> Option<(NonNull<T>, &TypeState)> {
-        let state = self.state.get(&TypeId::of::<T>())?;
-        Some(unsafe {
-            (
-                NonNull::new_unchecked(
-                    (*self.data.get()).as_ptr().add(state.offset).cast::<T>() as *mut T
-                ),
-                state,
-            )
-        })
-    }
-
-    #[allow(missing_docs)]
-    pub fn get_type_state(&self, ty: TypeId) -> Option<&TypeState> {
-        self.state.get(&ty)
-    }
-
-    #[allow(missing_docs)]
-    pub fn get_type_state_mut(&mut self, ty: TypeId) -> Option<&mut TypeState> {
-        self.state.get_mut(&ty)
-    }
-
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn borrow<T: Component>(&self) {
-        if self
-            .state
-            .get(&TypeId::of::<T>())
-            .map_or(false, |x| !x.borrow.borrow())
-        {
-            panic!("{} already borrowed uniquely", type_name::<T>());
-        }
-    }
-
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn borrow_mut<T: Component>(&self) {
-        if self
-            .state
-            .get(&TypeId::of::<T>())
-            .map_or(false, |x| !x.borrow.borrow_mut())
-        {
-            panic!("{} already borrowed", type_name::<T>());
-        }
-    }
-
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn release<T: Component>(&self) {
-        if let Some(x) = self.state.get(&TypeId::of::<T>()) {
-            x.borrow.release();
-        }
-    }
-
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn release_mut<T: Component>(&self) {
-        if let Some(x) = self.state.get(&TypeId::of::<T>()) {
-            x.borrow.release_mut();
-        }
+    pub fn get_storage_dynamic_mut(
+        &mut self,
+        type_id: TypeId,
+    ) -> Option<&mut Box<dyn ComponentStorage>> {
+        self.type_index_dynamic(type_id)
+            .map(move |index| &mut self.component_storages[index])
     }
 
     #[allow(missing_docs)]
     #[inline]
     pub fn len(&self) -> usize {
-        self.len
+        self.entities.len()
     }
 
     #[allow(missing_docs)]
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.entities.is_empty()
     }
 
     #[allow(missing_docs)]
     pub fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
-        self.entities.iter().take(self.len)
-    }
-
-    #[inline]
-    pub(crate) fn entities(&self) -> NonNull<Entity> {
-        unsafe { NonNull::new_unchecked(self.entities.as_ptr() as *mut _) }
+        self.entities.iter()
     }
 
     pub(crate) fn get_entity(&self, index: usize) -> Entity {
         self.entities[index]
     }
 
-    #[allow(missing_docs)]
-    pub fn types(&self) -> &[TypeInfo] {
-        &self.types
-    }
-
-    /// # Safety
-    /// `index` must be in-bounds
-    pub(crate) unsafe fn get_dynamic(
-        &self,
-        ty: TypeId,
-        size: usize,
-        index: usize,
-    ) -> Option<NonNull<u8>> {
-        debug_assert!(index < self.len);
-        Some(NonNull::new_unchecked(
-            (*self.data.get())
-                .as_ptr()
-                .add(self.state.get(&ty)?.offset + size * index)
-                .cast::<u8>(),
-        ))
-    }
-
-    /// # Safety
-    /// Every type must be written immediately after this call
-    pub unsafe fn allocate(&mut self, id: Entity) -> usize {
-        if self.len == self.entities.len() {
-            self.grow(self.len.max(self.grow_size));
+    pub fn allocate(&mut self, entity: Entity) -> usize {
+        if self.len() == self.entities.capacity() {
+            self.reserve(self.grow_size);
         }
 
-        self.entities[self.len] = id;
-        self.len += 1;
-        self.len - 1
-    }
-
-    pub(crate) fn reserve(&mut self, additional: usize) {
-        if additional > (self.capacity() - self.len()) {
-            self.grow(additional - (self.capacity() - self.len()));
+        self.entities.push(entity);
+        println!("e {} {}", self.entities.len(), self.entities.capacity());
+        for storage in self.component_storages.iter_mut() {
+            println!("s {:?} {} {}", storage.get_type(), storage.len(), storage.capacity());
+            storage.meta_mut().allocate();
         }
+
+        self.len() - 1
     }
 
     fn capacity(&self) -> usize {
@@ -252,160 +223,85 @@ impl Archetype {
 
     #[allow(missing_docs)]
     pub fn clear_trackers(&mut self) {
-        for type_state in self.state.values_mut() {
-            type_state.clear_trackers();
+        for storage in self.component_storages.iter_mut() {
+            storage.meta_mut().clear_trackers();
         }
     }
 
-    fn grow(&mut self, increment: usize) {
-        unsafe {
-            let old_count = self.len;
-            let count = old_count + increment;
-            self.entities.resize(
-                self.entities.len() + increment,
-                Entity {
-                    id: u32::MAX,
-                    generation: u32::MAX,
-                },
-            );
+    pub fn reserve(&mut self, count: usize) {
+        self.entities.reserve(count);
 
-            for type_state in self.state.values_mut() {
-                type_state.mutated_entities.resize_with(count, || false);
-                type_state.added_entities.resize_with(count, || false);
-            }
+        for storage in self.component_storages.iter_mut() {
+            storage.reserve(count);
+            storage.meta_mut().reserve(count);
+        }
+    }
 
-            let old_data_size = mem::replace(&mut self.data_size, 0);
-            let mut old_offsets = Vec::with_capacity(self.types.len());
-            for ty in &self.types {
-                self.data_size = align(self.data_size, ty.layout.align());
-                let ty_state = self.state.get_mut(&ty.id).unwrap();
-                old_offsets.push(ty_state.offset);
-                ty_state.offset = self.data_size;
-                self.data_size += ty.layout.size() * count;
+    /// Returns the ID of the entity moved into `index`, if any
+    pub(crate) fn remove(&mut self, index: usize) -> Option<Entity> {
+        if index >= self.len() {
+            panic!("entity index in archetype is out of bounds");
+        }
+        for storage in self.component_storages.iter_mut() {
+            unsafe {
+                storage.swap_remove(index, false);
             }
-            let new_data = if self.data_size == 0 {
-                NonNull::dangling()
+            let storage_meta = storage.meta_mut();
+            storage_meta.added_entities.swap_remove(index);
+            storage_meta.mutated_entities.swap_remove(index);
+        }
+
+        if self.entities.len() - 1 == index {
+            self.entities.pop();
+            None
+        } else {
+            self.entities.swap_remove(index);
+            Some(self.entities[index])
+        }
+    }
+
+    pub fn move_to<'a, 'b>(
+        &'a mut self,
+        location: &'b mut Location,
+        archetype: &'b mut Archetype,
+    ) -> Option<Entity> {
+        if location.index >= self.len() {
+            panic!("entity index in archetype is out of bounds");
+        }
+
+        let target_index = archetype.allocate(self.entities[location.index]);
+        let old_index = std::mem::replace(&mut location.index, target_index);
+        for storage in self.component_storages.iter_mut() {
+            if let Some(target_storage) = archetype.get_storage_dynamic_mut(storage.get_type()) {
+                let value = storage.get_value(old_index);
+                target_storage.insert(value);
+                unsafe {
+                    // forget the removed component because we copied it to the other archetype storage
+                    storage.swap_remove(old_index, true);
+                }
             } else {
-                NonNull::new(alloc(
-                    Layout::from_size_align(
-                        self.data_size,
-                        self.types.first().map_or(1, |x| x.layout.align()),
-                    )
-                    .unwrap(),
-                ))
-                .unwrap()
-            };
-            if old_data_size != 0 {
-                for (i, ty) in self.types.iter().enumerate() {
-                    let old_off = old_offsets[i];
-                    let new_off = self.state.get(&ty.id).unwrap().offset;
-                    ptr::copy_nonoverlapping(
-                        (*self.data.get()).as_ptr().add(old_off),
-                        new_data.as_ptr().add(new_off),
-                        ty.layout.size() * old_count,
-                    );
+                unsafe {
+                    storage.swap_remove(old_index, false);
                 }
             }
-
-            self.data = UnsafeCell::new(new_data);
         }
-    }
 
-    /// Returns the ID of the entity moved into `index`, if any
-    pub(crate) unsafe fn remove(&mut self, index: usize) -> Option<Entity> {
-        let last = self.len - 1;
-        for ty in &self.types {
-            let removed = self
-                .get_dynamic(ty.id, ty.layout.size(), index)
-                .unwrap()
-                .as_ptr();
-            (ty.drop)(removed);
-            if index != last {
-                // TODO: copy component tracker state here
-                ptr::copy_nonoverlapping(
-                    self.get_dynamic(ty.id, ty.layout.size(), last)
-                        .unwrap()
-                        .as_ptr(),
-                    removed,
-                    ty.layout.size(),
-                );
-
-                let type_state = self.state.get_mut(&ty.id).unwrap();
-                type_state.mutated_entities[index] = type_state.mutated_entities[last];
-                type_state.added_entities[index] = type_state.added_entities[last];
-            }
-        }
-        self.len = last;
-        if index != last {
-            self.entities[index] = self.entities[last];
-            Some(self.entities[last])
-        } else {
+        if self.entities.len() - 1 == old_index {
+            self.entities.pop();
             None
-        }
-    }
-
-    /// Returns the ID of the entity moved into `index`, if any
-    pub(crate) unsafe fn move_to(
-        &mut self,
-        index: usize,
-        mut f: impl FnMut(*mut u8, TypeId, usize, bool, bool),
-    ) -> Option<Entity> {
-        let last = self.len - 1;
-        for ty in &self.types {
-            let moved = self
-                .get_dynamic(ty.id, ty.layout.size(), index)
-                .unwrap()
-                .as_ptr();
-            let type_state = self.state.get(&ty.id).unwrap();
-            let is_added = type_state.added_entities[index];
-            let is_mutated = type_state.mutated_entities[index];
-            f(moved, ty.id(), ty.layout().size(), is_added, is_mutated);
-            if index != last {
-                ptr::copy_nonoverlapping(
-                    self.get_dynamic(ty.id, ty.layout.size(), last)
-                        .unwrap()
-                        .as_ptr(),
-                    moved,
-                    ty.layout.size(),
-                );
-                let type_state = self.state.get_mut(&ty.id).unwrap();
-                type_state.added_entities[index] = type_state.added_entities[last];
-                type_state.mutated_entities[index] = type_state.mutated_entities[last];
-            }
-        }
-        self.len -= 1;
-        if index != last {
-            self.entities[index] = self.entities[last];
-            Some(self.entities[last])
         } else {
-            None
+            self.entities.swap_remove(old_index);
+            Some(self.entities[old_index])
         }
     }
 
-    /// # Safety
-    ///
-    ///  - `component` must point to valid memory
-    ///  - the component `ty`pe must be registered
-    ///  - `index` must be in-bound
-    ///  - `size` must be the size of the component
-    ///  - the storage array must be big enough
-    pub unsafe fn put_dynamic(
-        &mut self,
-        component: *mut u8,
-        ty: TypeId,
-        size: usize,
-        index: usize,
-        added: bool,
-    ) {
-        let state = self.state.get_mut(&ty).unwrap();
-        if added {
-            state.added_entities[index] = true;
-        }
-        let ptr = (*self.data.get())
-            .as_ptr()
-            .add(state.offset + size * index)
-            .cast::<u8>();
-        ptr::copy_nonoverlapping(component, ptr, size);
+    pub fn insert<T: Component>(&mut self, value: T) {
+        self.insert_dynamic(TypeId::of::<T>(), &value as *const T as *const u8);
+        std::mem::forget(value);
+    }
+
+    pub fn insert_dynamic(&mut self, type_id: TypeId, value: *const u8) {
+        self.get_storage_dynamic_mut(type_id).unwrap().insert(value);
     }
 
     /// How, if at all, `Q` will access entities in this archetype
@@ -414,42 +310,24 @@ impl Archetype {
     }
 }
 
-impl Drop for Archetype {
-    fn drop(&mut self) {
-        self.clear();
-        if self.data_size != 0 {
-            unsafe {
-                dealloc(
-                    (*self.data.get()).as_ptr().cast(),
-                    Layout::from_size_align_unchecked(
-                        self.data_size,
-                        self.types.first().map_or(1, |x| x.layout.align()),
-                    ),
-                );
-            }
-        }
-    }
+pub struct ComponentStorageMeta {
+    pub borrow: AtomicBorrow,
+    pub mutated_entities: Vec<bool>,
+    pub added_entities: Vec<bool>,
 }
 
-/// Metadata about a type stored in an archetype
-pub struct TypeState {
-    offset: usize,
-    borrow: AtomicBorrow,
-    mutated_entities: Vec<bool>,
-    added_entities: Vec<bool>,
-}
-
-impl TypeState {
-    fn new() -> Self {
+impl Default for ComponentStorageMeta {
+    fn default() -> Self {
         Self {
-            offset: 0,
             borrow: AtomicBorrow::new(),
             mutated_entities: Vec::new(),
             added_entities: Vec::new(),
         }
     }
+}
 
-    fn clear_trackers(&mut self) {
+impl ComponentStorageMeta {
+    pub fn clear_trackers(&mut self) {
         for mutated in self.mutated_entities.iter_mut() {
             *mutated = false;
         }
@@ -459,84 +337,55 @@ impl TypeState {
         }
     }
 
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn mutated(&self) -> NonNull<bool> {
-        unsafe { NonNull::new_unchecked(self.mutated_entities.as_ptr() as *mut bool) }
+    fn reserve(&mut self, count: usize) {
+        self.added_entities.reserve(count);
+        self.mutated_entities.reserve(count);
     }
 
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn added(&self) -> NonNull<bool> {
-        unsafe { NonNull::new_unchecked(self.added_entities.as_ptr() as *mut bool) }
+    pub fn allocate(&mut self) {
+        self.added_entities.push(false);
+        self.mutated_entities.push(false);
+    }
+
+    pub fn borrow(&self) {
+        self.borrow.borrow();
+    }
+
+    pub fn borrow_mut(&self) {
+        self.borrow.borrow_mut();
+    }
+
+    pub fn release(&self) {
+        self.borrow.release();
+    }
+
+    pub fn release_mut(&self) {
+        self.borrow.release_mut();
     }
 }
 
-/// Metadata required to store a component
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Debug)]
 pub struct TypeInfo {
     id: TypeId,
-    layout: Layout,
-    drop: unsafe fn(*mut u8),
-}
-
-impl TypeInfo {
-    /// Metadata for `T`
-    pub fn of<T: 'static>() -> Self {
-        unsafe fn drop_ptr<T>(x: *mut u8) {
-            x.cast::<T>().drop_in_place()
-        }
-
-        Self {
-            id: TypeId::of::<T>(),
-            layout: Layout::new::<T>(),
-            drop: drop_ptr::<T>,
-        }
-    }
-
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn id(&self) -> TypeId {
-        self.id
-    }
-
-    #[allow(missing_docs)]
-    #[inline]
-    pub fn layout(&self) -> Layout {
-        self.layout
-    }
-
-    pub(crate) unsafe fn drop(&self, data: *mut u8) {
-        (self.drop)(data)
-    }
-}
-
-impl PartialOrd for TypeInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for TypeInfo {
-    /// Order by alignment, descending. Ties broken with TypeId.
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.layout
-            .align()
-            .cmp(&other.layout.align())
-            .reverse()
-            .then_with(|| self.id.cmp(&other.id))
-    }
+    get_storage: fn() -> Box<dyn ComponentStorage>,
 }
 
 impl PartialEq for TypeInfo {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        self.id.eq(&other.id)
     }
 }
 
-impl Eq for TypeInfo {}
+impl TypeInfo {
+    pub fn of<T: Component>() -> Self {
+        TypeInfo {
+            id: TypeId::of::<T>(),
+            get_storage: || Box::new(VecComponentStorage::<T>::default()),
+        }
+    }
 
-fn align(x: usize, alignment: usize) -> usize {
-    debug_assert!(alignment.is_power_of_two());
-    (x + alignment - 1) & (!alignment + 1)
+    #[inline]
+    pub fn id(&self) -> TypeId {
+        self.id
+    }
 }

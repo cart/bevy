@@ -1,6 +1,6 @@
 use super::{FetchResource, ResourceQuery};
 use crate::system::SystemId;
-use bevy_hecs::{Archetype, Entity, Ref, RefMut, TypeInfo, TypeState};
+use bevy_hecs::{Archetype, Entity, Ref, RefMut, TypeInfo};
 use bevy_utils::HashMap;
 use core::any::TypeId;
 use std::ptr::NonNull;
@@ -102,14 +102,15 @@ impl Resources {
 
         unsafe {
             let resource_ptr = (&mut resource as *mut T).cast::<u8>();
-            archetype.put_dynamic(
-                resource_ptr,
-                type_id,
-                core::mem::size_of::<T>(),
-                index,
-                added,
-            );
-            std::mem::forget(resource);
+            panic!();
+            // archetype.put_dynamic(
+            //     resource_ptr,
+            //     type_id,
+            //     core::mem::size_of::<T>(),
+            //     index,
+            //     added,
+            // );
+            // std::mem::forget(resource);
         }
     }
 
@@ -163,54 +164,54 @@ impl Resources {
         }
     }
 
-    #[inline]
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn get_unsafe_ref<T: Resource>(&self, resource_index: ResourceIndex) -> NonNull<T> {
-        self.get_resource_data_index::<T>(resource_index)
-            .and_then(|(data, index)| {
-                Some(NonNull::new_unchecked(
-                    data.archetype.get::<T>()?.as_ptr().add(index),
-                ))
-            })
-            .unwrap_or_else(|| panic!("Resource does not exist {}", std::any::type_name::<T>()))
-    }
+    // #[inline]
+    // #[allow(clippy::missing_safety_doc)]
+    // pub unsafe fn get_unsafe_ref<T: Resource>(&self, resource_index: ResourceIndex) -> NonNull<T> {
+    //     self.get_resource_data_index::<T>(resource_index)
+    //         .and_then(|(data, index)| {
+    //             Some(NonNull::new_unchecked(
+    //                 data.archetype.get::<T>()?.as_ptr().add(index),
+    //             ))
+    //         })
+    //         .unwrap_or_else(|| panic!("Resource does not exist {}", std::any::type_name::<T>()))
+    // }
 
-    #[inline]
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn get_unsafe_ref_with_type_state<T: Resource>(
-        &self,
-        resource_index: ResourceIndex,
-    ) -> (NonNull<T>, &TypeState) {
-        self.get_resource_data_index::<T>(resource_index)
-            .and_then(|(data, index)| {
-                data.archetype
-                    .get_with_type_state::<T>()
-                    .map(|(resource, type_state)| {
-                        (
-                            NonNull::new_unchecked(resource.as_ptr().add(index)),
-                            type_state,
-                        )
-                    })
-            })
-            .unwrap_or_else(|| panic!("Resource does not exist {}", std::any::type_name::<T>()))
-    }
+    // #[inline]
+    // #[allow(clippy::missing_safety_doc)]
+    // pub unsafe fn get_unsafe_ref_with_type_state<T: Resource>(
+    //     &self,
+    //     resource_index: ResourceIndex,
+    // ) -> (NonNull<T>, &TypeState) {
+    //     self.get_resource_data_index::<T>(resource_index)
+    //         .and_then(|(data, index)| {
+    //             data.archetype
+    //                 .get_with_type_state::<T>()
+    //                 .map(|(resource, type_state)| {
+    //                     (
+    //                         NonNull::new_unchecked(resource.as_ptr().add(index)),
+    //                         type_state,
+    //                     )
+    //                 })
+    //         })
+    //         .unwrap_or_else(|| panic!("Resource does not exist {}", std::any::type_name::<T>()))
+    // }
 
-    #[inline]
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn get_unsafe_added_and_mutated<T: Resource>(
-        &self,
-        resource_index: ResourceIndex,
-    ) -> (NonNull<bool>, NonNull<bool>) {
-        self.get_resource_data_index::<T>(resource_index)
-            .and_then(|(data, index)| {
-                let type_state = data.archetype.get_type_state(TypeId::of::<T>())?;
-                Some((
-                    NonNull::new_unchecked(type_state.added().as_ptr().add(index)),
-                    NonNull::new_unchecked(type_state.mutated().as_ptr().add(index)),
-                ))
-            })
-            .unwrap_or_else(|| panic!("Resource does not exist {}", std::any::type_name::<T>()))
-    }
+    // #[inline]
+    // #[allow(clippy::missing_safety_doc)]
+    // pub unsafe fn get_unsafe_added_and_mutated<T: Resource>(
+    //     &self,
+    //     resource_index: ResourceIndex,
+    // ) -> (NonNull<bool>, NonNull<bool>) {
+    //     self.get_resource_data_index::<T>(resource_index)
+    //         .and_then(|(data, index)| {
+    //             let type_state = data.archetype.get_type_state(TypeId::of::<T>())?;
+    //             Some((
+    //                 NonNull::new_unchecked(type_state.added().as_ptr().add(index)),
+    //                 NonNull::new_unchecked(type_state.mutated().as_ptr().add(index)),
+    //             ))
+    //         })
+    //         .unwrap_or_else(|| panic!("Resource does not exist {}", std::any::type_name::<T>()))
+    // }
 
     #[inline]
     fn get_resource_data_index<T: Resource>(
@@ -228,29 +229,29 @@ impl Resources {
         })
     }
 
-    pub fn borrow<T: Resource>(&self) {
-        if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
-            data.archetype.borrow::<T>();
-        }
-    }
+    // pub fn borrow<T: Resource>(&self) {
+    //     if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
+    //         data.archetype.borrow::<T>();
+    //     }
+    // }
 
-    pub fn release<T: Resource>(&self) {
-        if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
-            data.archetype.release::<T>();
-        }
-    }
+    // pub fn release<T: Resource>(&self) {
+    //     if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
+    //         data.archetype.release::<T>();
+    //     }
+    // }
 
-    pub fn borrow_mut<T: Resource>(&self) {
-        if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
-            data.archetype.borrow_mut::<T>();
-        }
-    }
+    // pub fn borrow_mut<T: Resource>(&self) {
+    //     if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
+    //         data.archetype.borrow_mut::<T>();
+    //     }
+    // }
 
-    pub fn release_mut<T: Resource>(&self) {
-        if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
-            data.archetype.release_mut::<T>();
-        }
-    }
+    // pub fn release_mut<T: Resource>(&self) {
+    //     if let Some(data) = self.resource_data.get(&TypeId::of::<T>()) {
+    //         data.archetype.release_mut::<T>();
+    //     }
+    // }
 
     /// Clears each resource's tracker state.
     /// For example, each resource's component "mutated" state will be reset to `false`.

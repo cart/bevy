@@ -16,13 +16,13 @@
 
 use crate::{
     alloc::vec::Vec, borrow::EntityRef, query::ReadOnlyFetch, query_one::ReadOnlyQueryOne,
-    EntityReserver, Mut, RefMut,
+    EntityReserver, Mut, RefMut, TypeInfo,
 };
 use bevy_utils::{HashMap, HashSet};
 use core::{any::TypeId, fmt, mem, ptr};
 
 #[cfg(feature = "std")]
-use std::error::Error;
+use std::{collections::hash_map::Entry, error::Error};
 
 use crate::{
     archetype::Archetype,
@@ -99,17 +99,12 @@ impl World {
         });
 
         let archetype = &mut self.archetypes[archetype_id as usize];
-        unsafe {
-            let index = archetype.allocate(entity);
-            components.put(|ptr, ty, size| {
-                archetype.put_dynamic(ptr, ty, size, index, true);
-                true
-            });
-            self.entities.meta[entity.id as usize].location = Location {
-                archetype: archetype_id,
-                index,
-            };
-        }
+        let index = archetype.allocate(entity);
+        components.put(archetype);
+        self.entities.meta[entity.id as usize].location = Location {
+            archetype: archetype_id,
+            index,
+        };
 
         entity
     }
@@ -154,14 +149,11 @@ impl World {
 
         let loc = self.entities.free(entity)?;
         let archetype = &mut self.archetypes[loc.archetype as usize];
-        if let Some(moved) = unsafe { archetype.remove(loc.index) } {
+        if let Some(moved) = archetype.remove(loc.index) {
             self.entities.get_mut(moved).unwrap().index = loc.index;
         }
-        for ty in archetype.types() {
-            let removed_entities = self
-                .removed_components
-                .entry(ty.id())
-                .or_insert_with(Vec::new);
+        for ty in archetype.type_indices.keys() {
+            let removed_entities = self.removed_components.entry(*ty).or_insert_with(Vec::new);
             removed_entities.push(entity);
         }
         Ok(())
@@ -200,11 +192,8 @@ impl World {
     /// Preserves allocated storage for reuse.
     pub fn clear(&mut self) {
         for archetype in &mut self.archetypes {
-            for ty in archetype.types() {
-                let removed_entities = self
-                    .removed_components
-                    .entry(ty.id())
-                    .or_insert_with(Vec::new);
+            for ty in archetype.type_indices.keys() {
+                let removed_entities = self.removed_components.entry(*ty).or_insert_with(Vec::new);
                 removed_entities.extend(archetype.iter_entities().copied());
             }
             archetype.clear();
@@ -422,9 +411,10 @@ impl World {
                 return Err(MissingComponent::new::<T>().into());
             }
             Ok(&*self.archetypes[loc.archetype as usize]
-                .get::<T>()
+                .get_storage::<T>()
                 .ok_or_else(MissingComponent::new::<T>)?
-                .as_ptr()
+                .get_pointer()
+                .cast::<T>()
                 .add(loc.index as usize))
         }
     }
@@ -512,71 +502,45 @@ impl World {
         entity: Entity,
         components: impl DynamicBundle,
     ) -> Result<(), NoSuchEntity> {
-        use std::collections::hash_map::Entry;
-
         self.flush();
         let loc = self.entities.get_mut(entity)?;
-        unsafe {
-            // Assemble Vec<TypeInfo> for the final entity
-            let arch = &mut self.archetypes[loc.archetype as usize];
-            let mut info = arch.types().to_vec();
-            for ty in components.type_info() {
-                if let Some(ptr) = arch.get_dynamic(ty.id(), ty.layout().size(), loc.index) {
-                    ty.drop(ptr.as_ptr());
-                } else {
-                    info.push(ty);
-                }
-            }
-            info.sort();
+        // TODO: make this nicer
+        let mut type_info = components.type_info();
+        type_info.extend(
+            self.archetypes[loc.archetype as usize]
+                .type_info
+                .iter()
+                .cloned(),
+        );
+        type_info.sort_by_key(|info| info.id());
+        type_info.dedup();
 
-            // Find the archetype it'll live in
-            let elements = info.iter().map(|x| x.id()).collect::<Vec<_>>();
-            let target = match self.index.entry(elements) {
-                Entry::Occupied(x) => *x.get(),
-                Entry::Vacant(x) => {
-                    let index = self.archetypes.len() as u32;
-                    self.archetypes.push(Archetype::new(info));
-                    x.insert(index);
-                    self.archetype_generation += 1;
-                    index
-                }
-            };
-
-            if target == loc.archetype {
-                // Update components in the current archetype
-                let arch = &mut self.archetypes[loc.archetype as usize];
-                components.put(|ptr, ty, size| {
-                    arch.put_dynamic(ptr, ty, size, loc.index, false);
-                    true
-                });
-                return Ok(());
-            }
-
-            // Move into a new archetype
-            let (source_arch, target_arch) = index2(
-                &mut self.archetypes,
-                loc.archetype as usize,
-                target as usize,
-            );
-            let target_index = target_arch.allocate(entity);
-            loc.archetype = target;
-            let old_index = mem::replace(&mut loc.index, target_index);
-            if let Some(moved) =
-                source_arch.move_to(old_index, |ptr, ty, size, is_added, is_mutated| {
-                    target_arch.put_dynamic(ptr, ty, size, target_index, false);
-                    let type_state = target_arch.get_type_state_mut(ty).unwrap();
-                    *type_state.added().as_ptr().add(target_index) = is_added;
-                    *type_state.mutated().as_ptr().add(target_index) = is_mutated;
-                })
-            {
-                self.entities.get_mut(moved).unwrap().index = old_index;
-            }
-
-            components.put(|ptr, ty, size| {
-                target_arch.put_dynamic(ptr, ty, size, target_index, true);
-                true
-            });
+        // Find the archetype it'll live in
+        let target = Self::get_or_create_archetype(
+            &mut self.archetypes,
+            &mut self.index,
+            &mut self.archetype_generation,
+            type_info,
+        );
+        if target == loc.archetype {
+            let arch = &mut self.archetypes[target as usize];
+            components.put(arch);
+            // Update components in the current archetype
+            return Ok(());
         }
+
+        // Move into a new archetype
+        let (source_arch, target_arch) = index2(
+            &mut self.archetypes,
+            loc.archetype as usize,
+            target as usize,
+        );
+        loc.archetype = target;
+        let old_index = loc.index;
+        if let Some(moved) = source_arch.move_to(loc, target_arch) {
+            self.entities.get_mut(moved).unwrap().index = old_index;
+        }
+        components.put(target_arch);
         Ok(())
     }
 
@@ -610,68 +574,68 @@ impl World {
     /// assert!(world.get::<&str>(e).is_err());
     /// assert_eq!(*world.get::<bool>(e).unwrap(), true);
     /// ```
-    pub fn remove<T: Bundle>(&mut self, entity: Entity) -> Result<T, ComponentError> {
-        use std::collections::hash_map::Entry;
-
+    pub fn remove<T: Bundle>(&mut self, entity: Entity) -> Result<(), ComponentError> {
         self.flush();
-        let loc = self.entities.get_mut(entity)?;
-        unsafe {
-            let removed = T::with_static_ids(|ids| ids.iter().copied().collect::<HashSet<_>>());
-            let info = self.archetypes[loc.archetype as usize]
-                .types()
+        let location = self.entities.get_mut(entity)?;
+        let bundle_type_info = T::static_type_info();
+        let mut type_info = self.archetypes[location.archetype as usize]
+            .type_info
+            .clone();
+        let start_len = type_info.len();
+        type_info.retain(|info| {
+            bundle_type_info
                 .iter()
-                .cloned()
-                .filter(|x| !removed.contains(&x.id()))
-                .collect::<Vec<_>>();
-            let elements = info.iter().map(|x| x.id()).collect::<Vec<_>>();
-            let target = match self.index.entry(elements) {
-                Entry::Occupied(x) => *x.get(),
-                Entry::Vacant(x) => {
-                    self.archetypes.push(Archetype::new(info));
-                    let index = (self.archetypes.len() - 1) as u32;
-                    x.insert(index);
-                    self.archetype_generation += 1;
-                    index
-                }
-            };
-            let old_index = loc.index;
-            let source_arch = &self.archetypes[loc.archetype as usize];
-            let bundle = T::get(|ty, size| source_arch.get_dynamic(ty, size, old_index))?;
-            let (source_arch, target_arch) = index2(
-                &mut self.archetypes,
-                loc.archetype as usize,
-                target as usize,
-            );
-            let target_index = target_arch.allocate(entity);
-            loc.archetype = target;
-            loc.index = target_index;
-            let removed_components = &mut self.removed_components;
-            if let Some(moved) =
-                source_arch.move_to(old_index, |src, ty, size, is_added, is_mutated| {
-                    // Only move the components present in the target archetype, i.e. the non-removed ones.
-                    if let Some(dst) = target_arch.get_dynamic(ty, size, target_index) {
-                        ptr::copy_nonoverlapping(src, dst.as_ptr(), size);
-                        let state = target_arch.get_type_state_mut(ty).unwrap();
-                        *state.added().as_ptr().add(target_index) = is_added;
-                        *state.mutated().as_ptr().add(target_index) = is_mutated;
-                    } else {
-                        let removed_entities =
-                            removed_components.entry(ty).or_insert_with(Vec::new);
-                        removed_entities.push(entity);
-                    }
-                })
-            {
-                self.entities.get_mut(moved).unwrap().index = old_index;
+                .find(|bundle_info| bundle_info.id() == info.id())
+                .is_none()
+        });
+        if start_len == type_info.len() {
+            return Err(ComponentError::NoSuchEntity);
+        }
+        println!("removeb {:?}", type_info);
+        let target = Self::get_or_create_archetype(
+            &mut self.archetypes,
+            &mut self.index,
+            &mut self.archetype_generation,
+            type_info,
+        );
+        let (source_arch, target_arch) = index2(
+            &mut self.archetypes,
+            location.archetype as usize,
+            target as usize,
+        );
+        let old_index = location.index;
+        location.archetype = target;
+        if let Some(moved) = source_arch.move_to(location, target_arch) {
+            self.entities.get_mut(moved).unwrap().index = old_index;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn get_or_create_archetype(
+        archetypes: &mut Vec<Archetype>,
+        index: &mut HashMap<Vec<TypeId>, u32>,
+        archetype_generation: &mut u64,
+        type_info: Vec<TypeInfo>,
+    ) -> u32 {
+        let elements = type_info.iter().map(|x| x.id()).collect::<Vec<_>>();
+        match index.entry(elements) {
+            Entry::Occupied(x) => *x.get(),
+            Entry::Vacant(x) => {
+                archetypes.push(Archetype::new(type_info));
+                let index = (archetypes.len() - 1) as u32;
+                x.insert(index);
+                *archetype_generation += 1;
+                index
             }
-            Ok(bundle)
         }
     }
 
     /// Remove the `T` component from `entity`
     ///
     /// See `remove`.
-    pub fn remove_one<T: Component>(&mut self, entity: Entity) -> Result<T, ComponentError> {
-        self.remove::<(T,)>(entity).map(|(x,)| x)
+    pub fn remove_one<T: Component>(&mut self, entity: Entity) -> Result<(), ComponentError> {
+        self.remove::<(T,)>(entity)
     }
 
     /// Borrow the `T` component at the given location, without safety checks
@@ -721,10 +685,10 @@ impl World {
             return Err(MissingComponent::new::<T>().into());
         }
         Ok(&*self.archetypes[location.archetype as usize]
-            .get::<T>()
+            .get_storage::<T>()
             .ok_or_else(MissingComponent::new::<T>)?
-            .as_ptr()
-            .add(location.index as usize))
+            .get_value(location.index as usize)
+            .cast::<T>())
     }
 
     /// Borrow the `T` component at the given location, without safety checks
@@ -761,11 +725,11 @@ impl World {
         if loc.archetype == 0 {
             return Err(MissingComponent::new::<T>().into());
         }
-        Ok(&mut *self.archetypes[loc.archetype as usize]
-            .get::<T>()
+        Ok(&mut *(self.archetypes[loc.archetype as usize]
+            .get_storage::<T>()
             .ok_or_else(MissingComponent::new::<T>)?
-            .as_ptr()
-            .add(loc.index as usize))
+            .get_value(loc.index as usize)
+            .cast::<T>() as *mut T))
     }
 
     /// Convert all reserved entities into empty entities that can be iterated and accessed
@@ -774,21 +738,17 @@ impl World {
     pub fn flush(&mut self) {
         let arch = &mut self.archetypes[0];
         for entity_id in self.entities.flush() {
-            self.entities.meta[entity_id as usize].location.index = unsafe {
-                arch.allocate(Entity {
-                    id: entity_id,
-                    generation: self.entities.meta[entity_id as usize].generation,
-                })
-            };
+            self.entities.meta[entity_id as usize].location.index = arch.allocate(Entity {
+                id: entity_id,
+                generation: self.entities.meta[entity_id as usize].generation,
+            });
         }
         for i in 0..self.entities.reserved_len() {
             let id = self.entities.reserved(i);
-            self.entities.meta[id as usize].location.index = unsafe {
-                arch.allocate(Entity {
-                    id,
-                    generation: self.entities.meta[id as usize].generation,
-                })
-            };
+            self.entities.meta[id as usize].location.index = arch.allocate(Entity {
+                id,
+                generation: self.entities.meta[id as usize].generation,
+            });
         }
         self.entities.clear_reserved();
     }
@@ -1016,17 +976,12 @@ where
     fn next(&mut self) -> Option<Entity> {
         let components = self.inner.next()?;
         let entity = self.entities.alloc();
-        unsafe {
-            let index = self.archetype.allocate(entity);
-            components.put(|ptr, ty, size| {
-                self.archetype.put_dynamic(ptr, ty, size, index, true);
-                true
-            });
-            self.entities.meta[entity.id as usize].location = Location {
-                archetype: self.archetype_id,
-                index,
-            };
-        }
+        let index = self.archetype.allocate(entity);
+        components.put(self.archetype);
+        self.entities.meta[entity.id as usize].location = Location {
+            archetype: self.archetype_id,
+            index,
+        };
         Some(entity)
     }
 

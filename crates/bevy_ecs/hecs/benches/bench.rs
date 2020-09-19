@@ -74,14 +74,15 @@ fn iterate_100k(b: &mut Bencher) {
     })
 }
 
-fn build(b: &mut Bencher) {
-    let mut world = World::new();
-    let mut builder = EntityBuilder::new();
-    b.iter(|| {
-        builder.add(Position(0.0)).add(Velocity(0.0));
-        world.spawn(builder.build());
-    });
-}
+// TODO: re-enable builder
+// fn build(b: &mut Bencher) {
+//     let mut world = World::new();
+//     let mut builder = EntityBuilder::new();
+//     b.iter(|| {
+//         builder.add(Position(0.0)).add(Velocity(0.0));
+//         world.spawn(builder.build());
+//     });
+// }
 
 benchmark_group!(
     benches,
@@ -89,6 +90,6 @@ benchmark_group!(
     spawn_static,
     spawn_batch,
     iterate_100k,
-    build
+    // build
 );
 benchmark_main!(benches);
