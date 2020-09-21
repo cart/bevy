@@ -137,9 +137,6 @@ fn dynamic_components() {
     let mut world = World::new();
     let e = world.spawn((42,));
     world.insert(e, (true, "abc")).unwrap();
-    for arch in world.archetypes.iter() {
-        println!("{:?}", arch.type_info);
-    }
     assert_eq!(
         world
             .query::<(Entity, &i32, &bool)>()
@@ -165,8 +162,6 @@ fn dynamic_components() {
             .collect::<Vec<_>>(),
         &[(e, true, "abc")]
     );
-
-    println!("FINISH");
 }
 
 #[test]

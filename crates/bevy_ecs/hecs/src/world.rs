@@ -584,10 +584,17 @@ impl World {
             .type_info
             .clone();
         let start_len = type_info.len();
-        type_info.retain(|info| {
+        let removed_components = &mut self.removed_components;
+        type_info.retain(move |info| {
             bundle_type_info
                 .iter()
-                .find(|bundle_info| bundle_info.id() == info.id())
+                .find(|bundle_info| if bundle_info.id() == info.id() {
+                    let removed_entities = removed_components.entry(bundle_info.id()).or_insert_with(Vec::new);
+                    removed_entities.push(entity);
+                    true
+                } else {
+                    false
+                })
                 .is_none()
         });
         if start_len == type_info.len() {

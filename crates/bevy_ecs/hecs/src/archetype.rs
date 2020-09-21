@@ -47,7 +47,6 @@ where
         unsafe {
             let index = self.storage.len();
             self.storage.set_len(index + 1);
-            println!("{} {}", self.storage.len(), self.storage.capacity());
             std::ptr::copy_nonoverlapping(
                 value.cast::<T>(),
                 self.storage.as_mut_ptr().add(index),
@@ -213,14 +212,7 @@ impl Archetype {
         }
 
         self.entities.push(entity);
-        println!("e {} {}", self.entities.len(), self.entities.capacity());
         for storage in self.component_storages.iter_mut() {
-            println!(
-                "s {:?} {} {}",
-                storage.get_type(),
-                storage.len(),
-                storage.capacity()
-            );
             storage.meta_mut().allocate();
         }
 
