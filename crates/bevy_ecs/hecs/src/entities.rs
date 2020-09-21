@@ -152,6 +152,30 @@ impl Entities {
         }
     }
 
+    pub fn claim<'a>(&'a mut self, count: u32) -> impl Iterator<Item = Entity> + 'a{
+        debug_assert_eq!(
+            self.pending.load(Ordering::Relaxed),
+            0,
+            "allocator must be flushed before potentially growing"
+        );
+        let index = self.free_cursor.load(Ordering::Relaxed);
+        match index.checked_sub(count) {
+            None => {
+                panic!("attempted to claim more entities than are available");
+            }
+            Some(next) => {
+                // Not racey due to &mut self
+                self.free_cursor.store(next, Ordering::Relaxed);
+                let meta = &self.meta;
+                self.free[next as usize..(next + count) as usize].iter().map(move |id| Entity {
+                    generation: meta[*id as usize].generation,
+                    id: *id,
+                })
+            }
+        }
+    }
+
+
     /// Destroy an entity, allowing it to be reused
     ///
     /// Must not be called on reserved entities prior to `flush`.

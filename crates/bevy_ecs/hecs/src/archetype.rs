@@ -70,6 +70,10 @@ where
     fn capacity(&self) -> usize {
         self.storage.capacity()
     }
+
+    fn item_size(&self) -> usize {
+        std::mem::size_of::<T>()
+    }
 }
 
 pub trait ComponentStorage {
@@ -84,6 +88,7 @@ pub trait ComponentStorage {
     fn capacity(&self) -> usize;
     unsafe fn swap_remove(&mut self, index: usize, forget: bool);
     fn clear(&mut self);
+    fn item_size(&self) -> usize;
 }
 
 /// A collection of entities having the same component types

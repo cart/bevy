@@ -69,8 +69,10 @@ mod query;
 mod query_one;
 #[cfg(feature = "serde")]
 mod serde;
+mod soa;
 mod world;
 
+pub use soa::SoaBatch;
 pub use archetype::{Archetype, ComponentStorageMeta, ComponentStorage};
 pub use borrow::{Ref, RefMut};
 pub use bundle::{Bundle, DynamicBundle, MissingComponent};

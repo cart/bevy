@@ -16,7 +16,7 @@
 
 use crate::{
     alloc::vec::Vec, borrow::EntityRef, query::ReadOnlyFetch, query_one::ReadOnlyQueryOne,
-    EntityReserver, Mut, RefMut, TypeInfo,
+    soa::SpawnBatch, EntityReserver, Mut, RefMut, TypeInfo,
 };
 use bevy_utils::{HashMap, HashSet};
 use core::{any::TypeId, fmt, mem, ptr};
@@ -39,12 +39,12 @@ use crate::{
 /// The components of entities who have the same set of component types are stored in contiguous
 /// runs, allowing for extremely fast, cache-friendly iteration.
 pub struct World {
-    entities: Entities,
-    index: HashMap<Vec<TypeId>, u32>,
+    pub(crate) entities: Entities,
+    pub(crate) index: HashMap<Vec<TypeId>, u32>,
     removed_components: HashMap<TypeId, Vec<Entity>>,
     #[allow(missing_docs)]
     pub archetypes: Vec<Archetype>,
-    archetype_generation: u64,
+    pub(crate) archetype_generation: u64,
 }
 
 impl World {
@@ -454,6 +454,11 @@ impl World {
         )?)
     }
 
+    pub fn spawn_batch_new(&mut self, batch: impl SpawnBatch) -> Vec<Entity> {
+        batch.spawn(self);
+        Vec::new()
+    }
+
     /// Iterate over all entities in the world
     ///
     /// Entities are yielded in arbitrary order. Prefer `World::query` for better performance when
@@ -588,12 +593,16 @@ impl World {
         type_info.retain(move |info| {
             bundle_type_info
                 .iter()
-                .find(|bundle_info| if bundle_info.id() == info.id() {
-                    let removed_entities = removed_components.entry(bundle_info.id()).or_insert_with(Vec::new);
-                    removed_entities.push(entity);
-                    true
-                } else {
-                    false
+                .find(|bundle_info| {
+                    if bundle_info.id() == info.id() {
+                        let removed_entities = removed_components
+                            .entry(bundle_info.id())
+                            .or_insert_with(Vec::new);
+                        removed_entities.push(entity);
+                        true
+                    } else {
+                        false
+                    }
                 })
                 .is_none()
         });
@@ -614,7 +623,7 @@ impl World {
             target as usize,
         );
 
-        // SAFE: removed components are returned and will get dropped appropriately when they are no longer used 
+        // SAFE: removed components are returned and will get dropped appropriately when they are no longer used
         unsafe {
             let bundle = T::get(source_arch, location.index as usize)?;
             let old_index = location.index;
