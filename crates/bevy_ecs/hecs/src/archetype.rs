@@ -43,15 +43,8 @@ where
     }
 
     fn insert(&mut self, value: *const u8) {
-        assert!(self.storage.len() + 1 <= self.storage.capacity());
         unsafe {
-            let index = self.storage.len();
-            self.storage.set_len(index + 1);
-            std::ptr::copy_nonoverlapping(
-                value.cast::<T>(),
-                self.storage.as_mut_ptr().add(index),
-                std::mem::size_of::<T>(),
-            )
+            self.storage.push(value.cast::<T>().read());
         }
     }
 
@@ -201,6 +194,7 @@ impl Archetype {
         self.entities.iter()
     }
 
+    #[inline]
     pub(crate) fn get_entity(&self, index: usize) -> Entity {
         self.entities[index]
     }
@@ -219,6 +213,7 @@ impl Archetype {
         self.len() - 1
     }
 
+    #[inline]
     fn capacity(&self) -> usize {
         self.entities.len()
     }
@@ -240,6 +235,7 @@ impl Archetype {
     }
 
     /// Returns the ID of the entity moved into `index`, if any
+    #[inline]
     pub(crate) fn remove(&mut self, index: usize) -> Option<Entity> {
         if index >= self.len() {
             panic!("entity index in archetype is out of bounds");
@@ -263,6 +259,7 @@ impl Archetype {
     }
 
     #[allow(missing_docs)]
+    #[inline]
     pub unsafe fn move_to<'a, 'b>(
         &'a mut self,
         location: &'b mut Location,
@@ -295,21 +292,25 @@ impl Archetype {
         }
     }
 
+    #[inline]
     pub unsafe fn get_value<T: Component>(&self, index: usize) -> Option<T> {
         self.get_storage::<T>()
             .map(|storage| storage.get_value(index).cast::<T>().read())
     }
 
+    #[inline]
     pub fn insert<T: Component>(&mut self, value: T) {
         self.insert_dynamic(TypeId::of::<T>(), &value as *const T as *const u8);
         std::mem::forget(value);
     }
 
+    #[inline]
     fn insert_dynamic(&mut self, type_id: TypeId, value: *const u8) {
         self.get_storage_dynamic_mut(type_id).unwrap().insert(value);
     }
 
     /// How, if at all, `Q` will access entities in this archetype
+    #[inline]
     pub fn access<Q: Query>(&self) -> Option<Access> {
         Q::Fetch::access(self)
     }

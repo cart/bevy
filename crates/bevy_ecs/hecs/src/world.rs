@@ -90,11 +90,11 @@ impl World {
         let entity = self.entities.alloc();
         let archetype_id = components.with_ids(|ids| {
             self.index.get(ids).copied().unwrap_or_else(|| {
-                let x = self.archetypes.len() as u32;
+                let next_archetype_index = self.archetypes.len() as u32;
                 self.archetypes.push(Archetype::new(components.type_info()));
-                self.index.insert(ids.to_vec(), x);
+                self.index.insert(ids.to_vec(), next_archetype_index);
                 self.archetype_generation += 1;
-                x
+                next_archetype_index
             })
         });
 
