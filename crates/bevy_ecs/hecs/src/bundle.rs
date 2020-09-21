@@ -14,7 +14,10 @@
 
 // modified by Bevy contributors
 
-use crate::{alloc::{vec, vec::Vec}, Archetype};
+use crate::{
+    alloc::{vec, vec::Vec},
+    Archetype,
+};
 use core::{
     any::{type_name, TypeId},
     fmt, mem,
@@ -46,6 +49,15 @@ pub trait Bundle: DynamicBundle {
     /// Obtain the fields' TypeInfos, sorted by descending alignment then id
     #[doc(hidden)]
     fn static_type_info() -> Vec<TypeInfo>;
+
+    /// Construct `Self` by moving components out of pointers fetched by `f`
+    ///
+    /// # Safety
+    ///
+    /// `f` must produce pointers to the expected fields. The implementation must not read from any
+    /// pointers if any call to `f` returns `None`.
+    #[doc(hidden)]
+    unsafe fn get(archetype: &Archetype, index: usize) -> Result<Self, MissingComponent> where Self: Sized;
 }
 
 /// Error indicating that an entity did not have a required component
@@ -105,6 +117,13 @@ macro_rules! tuple_impl {
                 let mut type_infos: Vec<TypeInfo> = vec![$(TypeInfo::of::<$name>()),*];
                 type_infos.sort_by_key(|info| info.id());
                 type_infos
+            }
+
+            #[allow(unused_variables)]
+            unsafe fn get(archetype: &Archetype, index: usize) -> Result<Self, MissingComponent> where Self: Sized {
+                Ok((
+                    $(archetype.get_value::<$name>(index).unwrap(),)*
+                ))
             }
         }
     }

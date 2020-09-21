@@ -48,7 +48,11 @@ where
             let index = self.storage.len();
             self.storage.set_len(index + 1);
             println!("{} {}", self.storage.len(), self.storage.capacity());
-            std::ptr::copy_nonoverlapping(value.cast::<T>(), self.storage.as_mut_ptr().add(index), std::mem::size_of::<T>())
+            std::ptr::copy_nonoverlapping(
+                value.cast::<T>(),
+                self.storage.as_mut_ptr().add(index),
+                std::mem::size_of::<T>(),
+            )
         }
     }
 
@@ -202,6 +206,7 @@ impl Archetype {
         self.entities[index]
     }
 
+    #[allow(missing_docs)]
     pub fn allocate(&mut self, entity: Entity) -> usize {
         if self.len() == self.entities.capacity() {
             self.reserve(self.grow_size);
@@ -210,7 +215,12 @@ impl Archetype {
         self.entities.push(entity);
         println!("e {} {}", self.entities.len(), self.entities.capacity());
         for storage in self.component_storages.iter_mut() {
-            println!("s {:?} {} {}", storage.get_type(), storage.len(), storage.capacity());
+            println!(
+                "s {:?} {} {}",
+                storage.get_type(),
+                storage.len(),
+                storage.capacity()
+            );
             storage.meta_mut().allocate();
         }
 
@@ -260,10 +270,12 @@ impl Archetype {
         }
     }
 
-    pub fn move_to<'a, 'b>(
+    #[allow(missing_docs)]
+    pub unsafe fn move_to<'a, 'b>(
         &'a mut self,
         location: &'b mut Location,
         archetype: &'b mut Archetype,
+        drop_unused: bool,
     ) -> Option<Entity> {
         if location.index >= self.len() {
             panic!("entity index in archetype is out of bounds");
@@ -275,14 +287,10 @@ impl Archetype {
             if let Some(target_storage) = archetype.get_storage_dynamic_mut(storage.get_type()) {
                 let value = storage.get_value(old_index);
                 target_storage.insert(value);
-                unsafe {
-                    // forget the removed component because we copied it to the other archetype storage
-                    storage.swap_remove(old_index, true);
-                }
+                // forget the removed component because we copied it to the other archetype storage
+                storage.swap_remove(old_index, true);
             } else {
-                unsafe {
-                    storage.swap_remove(old_index, false);
-                }
+                storage.swap_remove(old_index, !drop_unused);
             }
         }
 
@@ -295,12 +303,17 @@ impl Archetype {
         }
     }
 
+    pub unsafe fn get_value<T: Component>(&self, index: usize) -> Option<T> {
+        self.get_storage::<T>()
+            .map(|storage| storage.get_value(index).cast::<T>().read())
+    }
+
     pub fn insert<T: Component>(&mut self, value: T) {
         self.insert_dynamic(TypeId::of::<T>(), &value as *const T as *const u8);
         std::mem::forget(value);
     }
 
-    pub fn insert_dynamic(&mut self, type_id: TypeId, value: *const u8) {
+    fn insert_dynamic(&mut self, type_id: TypeId, value: *const u8) {
         self.get_storage_dynamic_mut(type_id).unwrap().insert(value);
     }
 
@@ -310,6 +323,7 @@ impl Archetype {
     }
 }
 
+#[allow(missing_docs)]
 pub struct ComponentStorageMeta {
     pub borrow: AtomicBorrow,
     pub mutated_entities: Vec<bool>,
@@ -327,6 +341,7 @@ impl Default for ComponentStorageMeta {
 }
 
 impl ComponentStorageMeta {
+    #[allow(missing_docs)]
     pub fn clear_trackers(&mut self) {
         for mutated in self.mutated_entities.iter_mut() {
             *mutated = false;

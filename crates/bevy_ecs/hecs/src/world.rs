@@ -537,8 +537,10 @@ impl World {
         );
         loc.archetype = target;
         let old_index = loc.index;
-        if let Some(moved) = source_arch.move_to(loc, target_arch) {
-            self.entities.get_mut(moved).unwrap().index = old_index;
+        unsafe {
+            if let Some(moved) = source_arch.move_to(loc, target_arch, true) {
+                self.entities.get_mut(moved).unwrap().index = old_index;
+            }
         }
         components.put(target_arch);
         Ok(())
@@ -574,7 +576,7 @@ impl World {
     /// assert!(world.get::<&str>(e).is_err());
     /// assert_eq!(*world.get::<bool>(e).unwrap(), true);
     /// ```
-    pub fn remove<T: Bundle>(&mut self, entity: Entity) -> Result<(), ComponentError> {
+    pub fn remove<T: Bundle>(&mut self, entity: Entity) -> Result<T, ComponentError> {
         self.flush();
         let location = self.entities.get_mut(entity)?;
         let bundle_type_info = T::static_type_info();
@@ -591,24 +593,30 @@ impl World {
         if start_len == type_info.len() {
             return Err(ComponentError::NoSuchEntity);
         }
-        println!("removeb {:?}", type_info);
+
         let target = Self::get_or_create_archetype(
             &mut self.archetypes,
             &mut self.index,
             &mut self.archetype_generation,
             type_info,
         );
+
         let (source_arch, target_arch) = index2(
             &mut self.archetypes,
             location.archetype as usize,
             target as usize,
         );
-        let old_index = location.index;
-        location.archetype = target;
-        if let Some(moved) = source_arch.move_to(location, target_arch) {
-            self.entities.get_mut(moved).unwrap().index = old_index;
+
+        // SAFE: removed components are returned and will get dropped appropriately when they are no longer used 
+        unsafe {
+            let bundle = T::get(source_arch, location.index as usize)?;
+            let old_index = location.index;
+            location.archetype = target;
+            if let Some(moved) = source_arch.move_to(location, target_arch, false) {
+                self.entities.get_mut(moved).unwrap().index = old_index;
+            }
+            Ok(bundle)
         }
-        Ok(())
     }
 
     #[inline]
@@ -634,8 +642,8 @@ impl World {
     /// Remove the `T` component from `entity`
     ///
     /// See `remove`.
-    pub fn remove_one<T: Component>(&mut self, entity: Entity) -> Result<(), ComponentError> {
-        self.remove::<(T,)>(entity)
+    pub fn remove_one<T: Component>(&mut self, entity: Entity) -> Result<T, ComponentError> {
+        self.remove::<(T,)>(entity).map(|(value,)| value)
     }
 
     /// Borrow the `T` component at the given location, without safety checks

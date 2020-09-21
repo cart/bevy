@@ -148,9 +148,7 @@ fn dynamic_components() {
             .collect::<Vec<_>>(),
         &[(e, 42, true)]
     );
-    // TODO: re-add removals
-    // assert_eq!(world.remove_one::<i32>(e), Ok(42));
-    assert_eq!(world.remove_one::<i32>(e), Ok(()));
+    assert_eq!(world.remove_one::<i32>(e), Ok(42));
     assert_eq!(
         world
             .query::<(Entity, &i32, &bool)>()

@@ -95,8 +95,13 @@ impl ComponentRegistration {
             component_properties_fn: |archetype: &Archetype, index: usize| {
                 // the type has been looked up by the caller, so this is safe
                 unsafe {
-                    let ptr = archetype.get::<T>().unwrap().as_ptr().add(index);
-                    ptr.as_ref().unwrap()
+                    archetype
+                        .get_storage::<T>()
+                        .unwrap()
+                        .get_value(index)
+                        .cast::<T>()
+                        .as_ref()
+                        .unwrap()
                 }
             },
             short_name: PropertyTypeRegistration::get_short_name(std::any::type_name::<T>()),

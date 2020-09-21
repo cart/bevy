@@ -106,17 +106,12 @@ pub fn derive_bundle(input: TokenStream) -> TokenStream {
                 info
             }
 
-            // unsafe fn get(
-            //     mut f: impl FnMut(std::any::TypeId, usize) -> Option<std::ptr::NonNull<u8>>,
-            // ) -> Result<Self, #path::MissingComponent> {
-            //     #(
-            //         let #fields = f(std::any::TypeId::of::<#tys>(), std::mem::size_of::<#tys>())
-            //                 .ok_or_else(#path::MissingComponent::new::<#tys>)?
-            //                 .cast::<#tys>()
-            //             .as_ptr();
-            //     )*
-            //     Ok(Self { #( #fields: #fields.read(), )* })
-            // }
+            unsafe fn get(
+                archetype: &Archetype,
+                index: usize,
+            ) -> Result<Self, #path::MissingComponent> {
+                Ok(Self { #( #fields: archetype.get_value::<#tys>(index).ok_or_else(MissingComponent::new::<#tys>)?, )* })
+            }
         }
     };
     TokenStream::from(code)
