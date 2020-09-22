@@ -1,5 +1,7 @@
 use crate::prelude::{Children, Parent, PreviousParent};
-use bevy_ecs::{Commands, CommandsInternal, Component, DynamicBundle, Entity, WorldWriter};
+use bevy_ecs::{
+    Command, Commands, CommandsInternal, Component, DynamicBundle, Entity, Resources, World,
+};
 use smallvec::SmallVec;
 
 pub struct InsertChildren {
@@ -8,8 +10,8 @@ pub struct InsertChildren {
     index: usize,
 }
 
-impl WorldWriter for InsertChildren {
-    fn write(self: Box<Self>, world: &mut bevy_ecs::World) {
+impl Command for InsertChildren {
+    fn write(self: Box<Self>, world: &mut World, _resources: &mut Resources) {
         for child in self.children.iter() {
             world
                 .insert(
@@ -45,8 +47,8 @@ pub struct ChildBuilder<'a> {
     push_children: PushChildren,
 }
 
-impl WorldWriter for PushChildren {
-    fn write(self: Box<Self>, world: &mut bevy_ecs::World) {
+impl Command for PushChildren {
+    fn write(self: Box<Self>, world: &mut World, _resources: &mut Resources) {
         for child in self.children.iter() {
             world
                 .insert(
@@ -133,7 +135,7 @@ impl BuildChildren for Commands {
             };
 
             commands.current_entity = Some(current_entity);
-            commands.write_world(push_children);
+            commands.add_command(push_children);
         }
         self
     }
@@ -141,7 +143,7 @@ impl BuildChildren for Commands {
     fn push_children(&mut self, parent: Entity, children: &[Entity]) -> &mut Self {
         {
             let mut commands = self.commands.lock();
-            commands.write_world(PushChildren {
+            commands.add_command(PushChildren {
                 children: SmallVec::from(children),
                 parent,
             });
@@ -152,7 +154,7 @@ impl BuildChildren for Commands {
     fn insert_children(&mut self, parent: Entity, index: usize, children: &[Entity]) -> &mut Self {
         {
             let mut commands = self.commands.lock();
-            commands.write_world(InsertChildren {
+            commands.add_command(InsertChildren {
                 children: SmallVec::from(children),
                 index,
                 parent,
@@ -180,12 +182,12 @@ impl<'a> BuildChildren for ChildBuilder<'a> {
         };
 
         self.commands.current_entity = Some(current_entity);
-        self.commands.write_world(push_children);
+        self.commands.add_command(push_children);
         self
     }
 
     fn push_children(&mut self, parent: Entity, children: &[Entity]) -> &mut Self {
-        self.commands.write_world(PushChildren {
+        self.commands.add_command(PushChildren {
             children: SmallVec::from(children),
             parent,
         });
@@ -193,7 +195,7 @@ impl<'a> BuildChildren for ChildBuilder<'a> {
     }
 
     fn insert_children(&mut self, parent: Entity, index: usize, children: &[Entity]) -> &mut Self {
-        self.commands.write_world(InsertChildren {
+        self.commands.add_command(InsertChildren {
             children: SmallVec::from(children),
             index,
             parent,

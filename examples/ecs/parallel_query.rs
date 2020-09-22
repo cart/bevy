@@ -14,7 +14,7 @@ fn spawn_system(
     for _ in 0..128 {
         commands
             .spawn(SpriteComponents {
-                material,
+                material: material.clone(),
                 transform: Transform::from_scale(0.1),
                 ..Default::default()
             })

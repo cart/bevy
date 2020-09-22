@@ -1,12 +1,12 @@
-use crate::{serde::SceneDeserializer, Scene};
+use crate::serde::SceneDeserializer;
 use anyhow::Result;
-use bevy_asset::AssetLoader;
+use bevy_asset::{LoadedAsset, AssetLoader, LoadContext};
 use bevy_ecs::{FromResources, Resources};
 use bevy_property::PropertyTypeRegistry;
 use bevy_type_registry::TypeRegistry;
 use parking_lot::RwLock;
 use serde::de::DeserializeSeed;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 pub struct SceneLoader {
     property_type_registry: Arc<RwLock<PropertyTypeRegistry>>,
@@ -21,15 +21,16 @@ impl FromResources for SceneLoader {
     }
 }
 
-impl AssetLoader<Scene> for SceneLoader {
-    fn from_bytes(&self, _asset_path: &Path, bytes: Vec<u8>) -> Result<Scene> {
+impl AssetLoader for SceneLoader {
+    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<()> {
         let registry = self.property_type_registry.read();
         let mut deserializer = ron::de::Deserializer::from_bytes(&bytes)?;
         let scene_deserializer = SceneDeserializer {
             property_type_registry: &registry,
         };
         let scene = scene_deserializer.deserialize(&mut deserializer)?;
-        Ok(scene)
+        load_context.set_default_asset(LoadedAsset::new(scene));
+        Ok(())
     }
 
     fn extensions(&self) -> &[&str] {

@@ -103,9 +103,9 @@ fn setup(
     commands
         // cube
         .spawn(MeshComponents {
-            mesh: cube_handle,
+            mesh: cube_handle.clone(),
             render_pipelines: RenderPipelines::from_pipelines(vec![RenderPipeline::specialized(
-                pipeline_handle,
+                pipeline_handle.clone(),
                 // NOTE: in the future you wont need to manually declare dynamic bindings
                 PipelineSpecialization {
                     dynamic_bindings: vec![

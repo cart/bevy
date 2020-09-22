@@ -94,7 +94,7 @@ fn setup(
     commands
         // left
         .spawn(SpriteComponents {
-            material: wall_material,
+            material: wall_material.clone(),
             transform: Transform::from_translation(Vec3::new(-bounds.x() / 2.0, 0.0, 0.0)),
             sprite: Sprite::new(Vec2::new(wall_thickness, bounds.y() + wall_thickness)),
             ..Default::default()
@@ -102,7 +102,7 @@ fn setup(
         .with(Collider::Solid)
         // right
         .spawn(SpriteComponents {
-            material: wall_material,
+            material: wall_material.clone(),
             transform: Transform::from_translation(Vec3::new(bounds.x() / 2.0, 0.0, 0.0)),
             sprite: Sprite::new(Vec2::new(wall_thickness, bounds.y() + wall_thickness)),
             ..Default::default()
@@ -110,7 +110,7 @@ fn setup(
         .with(Collider::Solid)
         // bottom
         .spawn(SpriteComponents {
-            material: wall_material,
+            material: wall_material.clone(),
             transform: Transform::from_translation(Vec3::new(0.0, -bounds.y() / 2.0, 0.0)),
             sprite: Sprite::new(Vec2::new(bounds.x() + wall_thickness, wall_thickness)),
             ..Default::default()
@@ -133,7 +133,7 @@ fn setup(
     let bricks_width = brick_columns as f32 * (brick_size.x() + brick_spacing) - brick_spacing;
     // center the bricks and move them up a bit
     let bricks_offset = Vec3::new(-(bricks_width - brick_size.x()) / 2.0, 100.0, 0.0);
-
+    let brick_material = materials.add(Color::rgb(0.2, 0.2, 0.8).into());
     for row in 0..brick_rows {
         let y_position = row as f32 * (brick_size.y() + brick_spacing);
         for column in 0..brick_columns {
@@ -145,7 +145,7 @@ fn setup(
             commands
                 // brick
                 .spawn(SpriteComponents {
-                    material: materials.add(Color::rgb(0.2, 0.2, 0.8).into()),
+                    material: brick_material.clone(),
                     sprite: Sprite::new(brick_size),
                     transform: Transform::from_translation(brick_position),
                     ..Default::default()

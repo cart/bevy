@@ -24,7 +24,7 @@ fn move_cubes(
     mut query: Query<(&mut Transform, &Handle<StandardMaterial>)>,
 ) {
     for (mut transform, material_handle) in &mut query.iter() {
-        let material = materials.get_mut(&material_handle).unwrap();
+        let material = materials.get_mut(material_handle).unwrap();
         transform.translate(Vec3::new(1.0, 0.0, 0.0) * time.delta_seconds);
         material.albedo =
             Color::BLUE * Vec3::splat((3.0 * time.seconds_since_startup as f32).sin());
@@ -56,7 +56,7 @@ fn setup(
     let cube_handle = meshes.add(Mesh::from(shape::Cube { size: 1.0 }));
     for _ in 0..10000 {
         commands.spawn(PbrComponents {
-            mesh: cube_handle,
+            mesh: cube_handle.clone(),
             material: materials.add(StandardMaterial {
                 albedo: Color::rgb(
                     rng.gen_range(0.0, 1.0),

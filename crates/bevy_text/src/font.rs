@@ -4,7 +4,10 @@ use bevy_render::{
     color::Color,
     texture::{Texture, TextureFormat},
 };
+use bevy_type_registry::TypeUuid;
 
+#[derive(TypeUuid)]
+#[uuid = "97059ac6-c9ba-4da9-95b6-bed82c3ce198"]
 pub struct Font {
     pub font: FontVec,
 }

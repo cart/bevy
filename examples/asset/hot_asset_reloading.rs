@@ -16,9 +16,7 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Load our mesh:
-    let mesh_handle = asset_server
-        .load("assets/models/monkey/Monkey.gltf")
-        .unwrap();
+    let mesh_handle = asset_server.load("assets/models/monkey/Monkey.gltf").unwrap();
 
     // Tell the asset server to watch for asset changes on disk:
     asset_server.watch_for_changes().unwrap();

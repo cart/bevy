@@ -1,15 +1,14 @@
 use super::{Texture, TextureFormat};
 use anyhow::Result;
-use bevy_asset::AssetLoader;
+use bevy_asset::{LoadedAsset, AssetLoader, LoadContext};
 use bevy_math::Vec2;
-use std::path::Path;
 
 /// Loads HDR textures as Texture assets
 #[derive(Clone, Default)]
 pub struct HdrTextureLoader;
 
-impl AssetLoader<Texture> for HdrTextureLoader {
-    fn from_bytes(&self, _asset_path: &Path, bytes: Vec<u8>) -> Result<Texture> {
+impl AssetLoader for HdrTextureLoader {
+    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<()> {
         let format = TextureFormat::Rgba32Float;
         debug_assert_eq!(
             format.pixel_size(),
@@ -31,11 +30,14 @@ impl AssetLoader<Texture> for HdrTextureLoader {
             rgba_data.extend_from_slice(&alpha.to_ne_bytes());
         }
 
-        Ok(Texture::new(
+        let texture = Texture::new(
             Vec2::new(info.width as f32, info.height as f32),
             rgba_data,
             format,
-        ))
+        );
+
+        load_context.set_default_asset(LoadedAsset::new(texture));
+        Ok(())
     }
 
     fn extensions(&self) -> &[&str] {

@@ -1,4 +1,3 @@
-pub mod batch;
 pub mod camera;
 pub mod color;
 pub mod draw;
@@ -82,11 +81,11 @@ impl Plugin for RenderPlugin {
     fn build(&self, app: &mut AppBuilder) {
         #[cfg(feature = "png")]
         {
-            app.add_asset_loader::<Texture, ImageTextureLoader>();
+            app.add_asset_loader::<ImageTextureLoader>();
         }
         #[cfg(feature = "hdr")]
         {
-            app.add_asset_loader::<Texture, HdrTextureLoader>();
+            app.add_asset_loader::<HdrTextureLoader>();
         }
 
         app.add_stage_after(bevy_asset::stage::ASSET_EVENTS, stage::RENDER_RESOURCE)

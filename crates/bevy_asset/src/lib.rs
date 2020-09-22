@@ -3,15 +3,19 @@ mod assets;
 #[cfg(feature = "filesystem_watcher")]
 mod filesystem_watcher;
 mod handle;
-mod load_request;
+mod info;
+mod io;
 mod loader;
+mod path;
 
 pub use asset_server::*;
 pub use assets::*;
 use bevy_tasks::IoTaskPool;
 pub use handle::*;
-pub use load_request::*;
+pub use info::*;
+pub use io::*;
 pub use loader::*;
+pub use path::*;
 
 /// The names of asset stages in an App Schedule
 pub mod stage {
@@ -40,15 +44,14 @@ impl Plugin for AssetPlugin {
             .expect("IoTaskPool resource not found")
             .0
             .clone();
+        let asset_server = AssetServer::new(FileAssetIo::new(), task_pool);
         app.add_stage_before(bevy_app::stage::PRE_UPDATE, stage::LOAD_ASSETS)
             .add_stage_after(bevy_app::stage::POST_UPDATE, stage::ASSET_EVENTS)
-            .add_resource(AssetServer::new(task_pool))
-            .register_property::<HandleId>();
+            .add_resource(asset_server)
+            .register_property::<HandleId>()
+            .add_system_to_stage(bevy_app::stage::PRE_UPDATE, asset_server::free_unused_assets_system.system());
 
         #[cfg(feature = "filesystem_watcher")]
-        app.add_system_to_stage(
-            stage::LOAD_ASSETS,
-            asset_server::filesystem_watcher_system.system(),
-        );
+        app.add_system_to_stage(stage::LOAD_ASSETS, io::filesystem_watcher_system.system());
     }
 }

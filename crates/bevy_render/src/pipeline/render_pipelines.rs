@@ -56,7 +56,7 @@ impl RenderPipelines {
         RenderPipelines {
             pipelines: handles
                 .into_iter()
-                .map(|pipeline| RenderPipeline::new(*pipeline))
+                .map(|pipeline| RenderPipeline::new(pipeline.clone_weak()))
                 .collect::<Vec<RenderPipeline>>(),
             ..Default::default()
         }
@@ -101,7 +101,7 @@ pub fn draw_render_pipelines_system(
             draw_context
                 .set_pipeline(
                     &mut draw,
-                    render_pipeline.pipeline,
+                    &render_pipeline.pipeline,
                     &render_pipeline.specialization,
                 )
                 .unwrap();
