@@ -144,11 +144,18 @@ impl From<Vec4> for Color {
     }
 }
 
+impl From<[f32; 4]> for Color {
+    fn from(value: [f32; 4]) -> Self {
+        Color::rgba(value[0], value[1], value[2], value[3])
+    }
+}
+
 impl Into<[f32; 4]> for Color {
     fn into(self) -> [f32; 4] {
         [self.r, self.g, self.b, self.a]
     }
 }
+
 impl Mul<f32> for Color {
     type Output = Color;
 

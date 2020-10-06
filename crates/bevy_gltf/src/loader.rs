@@ -1,18 +1,15 @@
 use anyhow::Result;
-use bevy_asset::{LoadedAsset, AssetLoader, AssetPath, LoadContext};
+use bevy_asset::{AssetLoader, AssetPath, LoadContext, LoadedAsset};
 use bevy_ecs::{World, WorldBuilderSource};
 use bevy_math::Mat4;
-use bevy_pbr::prelude::PbrComponents;
-use bevy_render::{
-    mesh::{Indices, Mesh, VertexAttribute},
-    pipeline::PrimitiveTopology,
-};
+use bevy_pbr::prelude::{PbrComponents, StandardMaterial};
+use bevy_render::{mesh::{Indices, Mesh, VertexAttribute}, pipeline::PrimitiveTopology, prelude::Color};
 use bevy_scene::Scene;
 use bevy_transform::{
     hierarchy::{BuildWorldChildren, WorldChildBuilder},
     prelude::{GlobalTransform, Transform},
 };
-use gltf::{buffer::Source, mesh::Mode};
+use gltf::{buffer::Source, mesh::Mode, Primitive};
 use std::{fs, io, path::Path};
 use thiserror::Error;
 
@@ -46,6 +43,55 @@ impl AssetLoader for GltfLoader {
         let buffer_data = load_buffers(&gltf, load_context.path())?;
 
         let world_builder = &mut world.build();
+
+        for mesh in gltf.meshes() {
+            for primitive in mesh.primitives() {
+                let primitive_label = primitive_label(&mesh, &primitive);
+                if !load_context.has_labeled_asset(&primitive_label) {
+                    let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
+                    let primitive_topology = get_primitive_topology(primitive.mode())?;
+
+                    let mut mesh = Mesh::new(primitive_topology);
+
+                    if let Some(vertex_attribute) = reader
+                        .read_positions()
+                        .map(|v| VertexAttribute::position(v.collect()))
+                    {
+                        mesh.attributes.push(vertex_attribute);
+                    }
+
+                    if let Some(vertex_attribute) = reader
+                        .read_normals()
+                        .map(|v| VertexAttribute::normal(v.collect()))
+                    {
+                        mesh.attributes.push(vertex_attribute);
+                    }
+
+                    if let Some(vertex_attribute) = reader
+                        .read_tex_coords(0)
+                        .map(|v| VertexAttribute::uv(v.into_f32().collect()))
+                    {
+                        mesh.attributes.push(vertex_attribute);
+                    }
+
+                    if let Some(indices) = reader.read_indices() {
+                        mesh.indices = Some(Indices::U32(indices.into_u32().collect()));
+                    };
+
+                    load_context.set_labeled_asset(&primitive_label, LoadedAsset::new(mesh));
+                };
+            }
+        }
+
+        for material in gltf.materials() {
+            let material_label = material_label(&material);
+            let pbr = material.pbr_metallic_roughness();
+            load_context.set_labeled_asset(&material_label, LoadedAsset::new(StandardMaterial {
+                albedo: pbr.base_color_factor().into(),
+                ..Default::default()
+            }))
+        }
+
         for scene in gltf.scenes() {
             let mut err = None;
             world_builder
@@ -91,51 +137,14 @@ fn load_node(
         .with_children(|parent| {
             if let Some(mesh) = node.mesh() {
                 for primitive in mesh.primitives() {
-                    let primitive_path =
-                        format!("Mesh{}/Primitive{}", mesh.index(), primitive.index());
-                    let asset_path_id =
-                        AssetPath::new_ref(load_context.path(), Some(&primitive_path)).get_id();
-                    if !load_context.has_labeled_asset(&primitive_path) {
-                        let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
-                        let primitive_topology = match get_primitive_topology(primitive.mode()) {
-                            Ok(value) => value,
-                            Err(err) => {
-                                gltf_error = Some(err);
-                                return;
-                            }
-                        };
-
-                        let mut mesh = Mesh::new(primitive_topology);
-
-                        if let Some(vertex_attribute) = reader
-                            .read_positions()
-                            .map(|v| VertexAttribute::position(v.collect()))
-                        {
-                            mesh.attributes.push(vertex_attribute);
-                        }
-
-                        if let Some(vertex_attribute) = reader
-                            .read_normals()
-                            .map(|v| VertexAttribute::normal(v.collect()))
-                        {
-                            mesh.attributes.push(vertex_attribute);
-                        }
-
-                        if let Some(vertex_attribute) = reader
-                            .read_tex_coords(0)
-                            .map(|v| VertexAttribute::uv(v.into_f32().collect()))
-                        {
-                            mesh.attributes.push(vertex_attribute);
-                        }
-
-                        if let Some(indices) = reader.read_indices() {
-                            mesh.indices = Some(Indices::U32(indices.into_u32().collect()));
-                        };
-
-                        load_context.set_labeled_asset(&primitive_path, LoadedAsset::new(mesh));
-                    };
+                    let primitive_label = primitive_label(&mesh, &primitive);
+                    let mesh_asset_path = AssetPath::new_ref(load_context.path(), Some(&primitive_label));
+                    let material = primitive.material();
+                    let material_label = material_label(&material);
+                    let material_asset_path = AssetPath::new_ref(load_context.path(), Some(&material_label));
                     parent.spawn(PbrComponents {
-                        mesh: load_context.get_handle(asset_path_id),
+                        mesh: load_context.get_handle(mesh_asset_path),
+                        material: load_context.get_handle(material_asset_path),
                         ..Default::default()
                     });
                 }
@@ -155,6 +164,14 @@ fn load_node(
     } else {
         Ok(())
     }
+}
+
+fn primitive_label(mesh: &gltf::Mesh, primitive: &Primitive) -> String {
+    format!("Mesh{}/Primitive{}", mesh.index(), primitive.index())
+}
+
+fn material_label(material: &gltf::Material) -> String {
+    format!("Material{}", material.index().unwrap())
 }
 
 fn get_primitive_topology(mode: Mode) -> Result<PrimitiveTopology, GltfError> {

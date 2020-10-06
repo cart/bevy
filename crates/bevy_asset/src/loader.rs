@@ -91,7 +91,7 @@ impl<'a> LoadContext<'a> {
         self.labeled_assets.insert(Some(label.to_string()), asset);
     }
 
-    pub fn get_handle<I: Into<HandleId>, T: Asset>(&mut self, id: I) -> Handle<T> {
+    pub fn get_handle<I: Into<HandleId>, T: Asset>(&self, id: I) -> Handle<T> {
         Handle::strong(id.into(), self.ref_change_channel.sender.clone())
     }
 
