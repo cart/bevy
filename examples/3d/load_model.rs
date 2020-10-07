@@ -30,19 +30,10 @@ fn print_world_system(world: &mut World, resources: &mut Resources) {
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut scene_spawner: ResMut<SceneSpawner>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // let handle: Handle<Mesh> = asset_server.load("assets/models/scene/scene.gltf#Mesh0/Primitive0").unwrap();
     let scene_handle: Handle<Scene> = asset_server.load("assets/models/scene/scene.gltf").unwrap();
-    // scene_spawner.spawn(scene_handle);
-    materials.set_untracked(
-        HandleId::default::<StandardMaterial>(),
-        StandardMaterial {
-            albedo: Color::RED,
-            ..Default::default()
-        },
-    );
 
     // add entities to the world
     commands
@@ -60,8 +51,8 @@ fn setup(
         // camera
         .spawn(Camera3dComponents {
             transform: Transform::new(Mat4::face_toward(
-                Vec3::new(0.0, 0.0, 10.0),
-                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(3.0, 2.0, 5.0),
+                Vec3::new(0.0, 1.0, 0.0),
                 Vec3::new(0.0, 1.0, 0.0),
             )),
             ..Default::default()

@@ -25,6 +25,7 @@ bevy_scene = { path = "../bevy_scene", version = "0.2.1" }
 
 # other
 gltf = { version = "0.15.2", default-features = false, features = ["utils"] }
+image = { version = "0.23", default-features = false }
 thiserror = "1.0"
 anyhow = "1.0"
 base64 = "0.12.3"
