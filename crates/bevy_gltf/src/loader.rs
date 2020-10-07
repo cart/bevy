@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bevy_asset::{AssetLoader, AssetPath, Handle, LoadContext, LoadedAsset};
+use bevy_asset::{AssetLoader, AssetPath, LoadContext, LoadedAsset};
 use bevy_ecs::{World, WorldBuilderSource};
 use bevy_math::Mat4;
 use bevy_pbr::prelude::{PbrComponents, StandardMaterial};
@@ -106,55 +106,63 @@ fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfE
     }
 
     for texture in gltf.textures() {
-        match texture.source().source() {
-            gltf::image::Source::View { view, mime_type } => {
-                let start = view.offset() as usize;
-                let end = (view.offset() + view.length()) as usize;
-                let buffer = &buffer_data[view.buffer().index()][start..end];
-                let format = match mime_type {
-                    "image/png" => Ok(ImageFormat::Png),
-                    "image/jpeg" => Ok(ImageFormat::Jpeg),
-                    _ => Err(GltfError::InvalidImageMimeType(mime_type.to_string())),
-                }?;
-                let image = image::load_from_memory_with_format(buffer, format)?;
-                let size = image.dimensions();
-                let image = image
-                    .as_rgba8()
-                    .ok_or(GltfError::ImageRgb8ConversionFailure)?;
+        if let gltf::image::Source::View { view, mime_type } = texture.source().source() {
+            let start = view.offset() as usize;
+            let end = (view.offset() + view.length()) as usize;
+            let buffer = &buffer_data[view.buffer().index()][start..end];
+            let format = match mime_type {
+                "image/png" => Ok(ImageFormat::Png),
+                "image/jpeg" => Ok(ImageFormat::Jpeg),
+                _ => Err(GltfError::InvalidImageMimeType(mime_type.to_string())),
+            }?;
+            let image = image::load_from_memory_with_format(buffer, format)?;
+            let size = image.dimensions();
+            let image = image
+                .as_rgba8()
+                .ok_or(GltfError::ImageRgb8ConversionFailure)?;
 
-                let texture_label = texture_label(&texture);
-                load_context.set_labeled_asset(
-                    &texture_label,
-                    LoadedAsset::new(Texture {
-                        data: image.clone().into_vec(),
-                        size: bevy_math::f32::vec2(size.0 as f32, size.1 as f32),
-                        format: TextureFormat::Rgba8Unorm,
-                    }),
-                );
-            }
-            gltf::image::Source::Uri { .. } => panic!("gltf image uris not supported"),
+            let texture_label = texture_label(&texture);
+            load_context.set_labeled_asset(
+                &texture_label,
+                LoadedAsset::new(Texture {
+                    data: image.clone().into_vec(),
+                    size: bevy_math::f32::vec2(size.0 as f32, size.1 as f32),
+                    format: TextureFormat::Rgba8Unorm,
+                }),
+            );
         }
     }
 
     for material in gltf.materials() {
         let material_label = material_label(&material);
         let pbr = material.pbr_metallic_roughness();
-        let texture_label = pbr
-            .base_color_texture()
-            .map(|info| texture_label(&info.texture()));
-        let texture_handle: Option<Handle<Texture>> = texture_label.map(|label| {
-            load_context.get_handle(AssetPath::new_ref(
-                load_context.path(),
-                Some(label.as_str()),
-            ))
-        });
+        let mut dependencies = Vec::new();
+        let texture_handle = if let Some(info) = pbr.base_color_texture() {
+            match info.texture().source().source() {
+                gltf::image::Source::View {..} => {
+                    let label = texture_label(&info.texture());
+                    let path = AssetPath::new_ref(load_context.path(), Some(&label));
+                    Some(load_context.get_handle(path))
+                },
+                gltf::image::Source::Uri { uri, ..} => {
+                    let parent = load_context.path().parent().unwrap();
+                    let image_path = parent.join(uri);
+                    let asset_path = AssetPath::new(image_path, None);
+                    let handle = load_context.get_handle(asset_path.clone());
+                    dependencies.push(asset_path);
+                    Some(handle)
+                },
+            }
+        } else {
+            None
+        };
         load_context.set_labeled_asset(
             &material_label,
             LoadedAsset::new(StandardMaterial {
                 albedo: pbr.base_color_factor().into(),
                 albedo_texture: texture_handle,
                 ..Default::default()
-            }),
+            }).with_dependencies(dependencies),
         )
     }
 

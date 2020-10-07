@@ -320,7 +320,11 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
                 let label_id = LabelId::from(label.as_ref().map(|label| label.as_str()));
                 let type_uuid = loaded_asset.value.as_ref().unwrap().type_uuid();
                 source_info.asset_types.insert(label_id, type_uuid);
+                for dependency in loaded_asset.dependencies.iter() {
+                    self.load_untyped(dependency.clone()).unwrap();
+                }
             }
+
             self.create_assets_in_load_context(&mut load_context);
         }
         Ok(())

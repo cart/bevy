@@ -51,6 +51,11 @@ impl LoadedAsset {
         self.dependencies.push(asset_path.to_owned());
         self
     }
+
+    pub fn with_dependencies(mut self, asset_paths: Vec<AssetPath<'static>>) -> Self {
+        self.dependencies.extend(asset_paths);
+        self
+    }
 }
 
 pub struct LoadContext<'a> {
