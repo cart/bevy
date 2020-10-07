@@ -10,6 +10,6 @@ pub struct GltfPlugin;
 
 impl Plugin for GltfPlugin {
     fn build(&self, app: &mut AppBuilder) {
-        app.add_asset_loader::<GltfLoader>();
+        app.init_asset_loader::<GltfLoader>();
     }
 }

@@ -21,10 +21,10 @@ fn animate_sprite_system(
 }
 
 fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut textures: ResMut<Assets<Texture>>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut _commands: Commands,
+    _asset_server: Res<AssetServer>,
+    mut _textures: ResMut<Assets<Texture>>,
+    mut _texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     panic!("This example was built to use load_sync, which is no longer available");
     // let texture_handle = asset_server

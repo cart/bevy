@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy_asset::HandleId;
 use bevy_type_registry::TypeRegistry;
 
 fn main() {
@@ -30,7 +29,6 @@ fn print_world_system(world: &mut World, resources: &mut Resources) {
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // let handle: Handle<Mesh> = asset_server.load("assets/models/scene/scene.gltf#Mesh0/Primitive0").unwrap();
     let scene_handle: Handle<Scene> = asset_server.load("assets/models/scene/scene.gltf").unwrap();

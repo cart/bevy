@@ -26,7 +26,7 @@ impl<'a> AssetPath<'a> {
     pub fn new(path: PathBuf, label: Option<String>) -> AssetPath<'a> {
         AssetPath {
             path: Cow::Owned(path),
-            label: label.map(|val| Cow::Owned(val)),
+            label: label.map(Cow::Owned),
         }
     }
 
@@ -139,7 +139,7 @@ impl<'a, 'b> From<&'a AssetPath<'b>> for AssetPathId {
 
 impl<'a> From<&'a str> for AssetPath<'a> {
     fn from(asset_path: &'a str) -> Self {
-        let mut parts = asset_path.split("#");
+        let mut parts = asset_path.split('#');
         let path = Path::new(parts.next().expect("path must be set"));
         let label = parts.next();
         AssetPath {

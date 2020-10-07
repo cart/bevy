@@ -132,7 +132,7 @@ fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfE
                     }),
                 );
             }
-            gltf::image::Source::Uri { uri, mime_type } => panic!("gltf image uris not supported"),
+            gltf::image::Source::Uri { .. } => panic!("gltf image uris not supported"),
         }
     }
 
@@ -172,7 +172,7 @@ fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfE
                 }
             });
         if let Some(Err(err)) = err {
-            return Err(err.into());
+            return Err(err);
         }
     }
 

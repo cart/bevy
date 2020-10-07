@@ -119,20 +119,14 @@ impl<T: Asset> Handle<T> {
     }
 
     pub fn is_weak(&self) -> bool {
-        match self.handle_type {
-            HandleType::Weak => true,
-            _ => false,
-        }
+        matches!(self.handle_type, HandleType::Weak)
     }
 
     pub fn is_strong(&self) -> bool {
-        match self.handle_type {
-            HandleType::Strong(_) => true,
-            _ => false,
-        }
+        matches!(self.handle_type, HandleType::Strong(_))
     }
 
-    pub fn to_strong(&mut self, assets: &mut Assets<T>) {
+    pub fn make_strong(&mut self, assets: &mut Assets<T>) {
         if self.is_strong() {
             return;
         }
@@ -261,17 +255,11 @@ impl HandleUntyped {
     }
 
     pub fn is_weak(&self) -> bool {
-        match self.handle_type {
-            HandleType::Weak => true,
-            _ => false,
-        }
+        matches!(self.handle_type, HandleType::Weak)
     }
 
     pub fn is_strong(&self) -> bool {
-        match self.handle_type {
-            HandleType::Strong(_) => true,
-            _ => false,
-        }
+        matches!(self.handle_type, HandleType::Strong(_))
     }
 
     pub fn into_typed<T: 'static>(mut self) -> Option<Handle<T>> {

@@ -83,7 +83,7 @@ fn setup(
         })
         // textured quad - modulated
         .spawn(PbrComponents {
-            mesh: quad_handle.clone(),
+            mesh: quad_handle,
             material: blue_material_handle,
             transform: Transform::from_translation_rotation(
                 Vec3::new(0.0, 0.0, -1.5),

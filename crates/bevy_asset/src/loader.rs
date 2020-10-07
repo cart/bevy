@@ -87,7 +87,7 @@ impl<'a> LoadContext<'a> {
     }
 
     pub fn set_labeled_asset(&mut self, label: &str, asset: LoadedAsset) {
-        assert!(label.len() > 0);
+        assert!(!label.is_empty());
         self.labeled_assets.insert(Some(label.to_string()), asset);
     }
 
@@ -137,7 +137,7 @@ impl<T: AssetDynamic> AssetLifecycle for AssetLifecycleChannel<T> {
         if let Ok(asset) = asset.downcast::<T>() {
             self.sender
                 .send(AssetLifecycleEvent::Create(AssetResult {
-                    id: id.into(),
+                    id,
                     asset: *asset,
                     version,
                 }))

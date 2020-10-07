@@ -199,7 +199,7 @@ impl ComponentRegistration {
         (self.component_properties_fn)(archetype, entity_index)
     }
 
-    pub fn component_copy<'a>(
+    pub fn component_copy(
         &self,
         source_world: &World,
         destination_world: &mut World,
@@ -216,7 +216,7 @@ impl ComponentRegistration {
         );
     }
 
-    pub fn copy_from_scene<'a>(
+    pub fn copy_from_scene(
         &self,
         scene_world: &World,
         destination_world: &mut World,
@@ -233,7 +233,7 @@ impl ComponentRegistration {
         );
     }
 
-    pub fn copy_to_scene<'a>(
+    pub fn copy_to_scene(
         &self,
         source_world: &World,
         scene_world: &mut World,
@@ -283,7 +283,7 @@ where
         self
     }
 
-    pub fn to_scene_component<C: Component>(mut self) -> Self
+    pub fn into_scene_component<C: Component>(mut self) -> Self
     where
         T: IntoComponent<C>,
     {
@@ -303,7 +303,7 @@ where
         self
     }
 
-    pub fn to_runtime_component<C: Component>(mut self) -> Self
+    pub fn into_runtime_component<C: Component>(mut self) -> Self
     where
         T: IntoComponent<C>,
     {

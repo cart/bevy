@@ -43,14 +43,16 @@ pub struct FileAssetIo {
     filesystem_watcher: Arc<RwLock<Option<FilesystemWatcher>>>,
 }
 
-impl FileAssetIo {
-    pub fn new() -> Self {
+impl Default for FileAssetIo {
+    fn default() -> Self {
         Self {
             root_path: Self::get_root_path(),
             filesystem_watcher: Default::default(),
         }
     }
+}
 
+impl FileAssetIo {
     pub fn get_root_path() -> PathBuf {
         if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
             PathBuf::from(manifest_dir)

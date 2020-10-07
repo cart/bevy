@@ -1,7 +1,8 @@
 #[cfg(target_arch = "wasm32")]
 extern crate console_error_panic_hook;
 
-use bevy::{asset::AssetLoader, prelude::*};
+use bevy::{asset::AssetLoader, prelude::*, type_registry::TypeUuid};
+use bevy_asset::{LoadContext, LoadedAsset};
 use std::path::PathBuf;
 
 fn main() {
@@ -14,7 +15,7 @@ fn main() {
     App::build()
         .add_default_plugins()
         .add_asset::<RustSourceCode>()
-        .add_asset_loader::<RustSourceCode, RustSourceCodeLoader>()
+        .init_asset_loader::<RustSourceCodeLoader>()
         .add_startup_system(asset_system.system())
         .add_system(asset_events.system())
         .run();
@@ -27,18 +28,16 @@ fn asset_system(asset_server: Res<AssetServer>) {
     log::info!("hello wasm");
 }
 
-#[derive(Debug)]
+#[derive(Debug, TypeUuid)]
+#[uuid = "1c3445ab-97d3-449c-ab35-16ba30e4c29d"]
 pub struct RustSourceCode(pub String);
 
 #[derive(Default)]
 pub struct RustSourceCodeLoader;
-impl AssetLoader<RustSourceCode> for RustSourceCodeLoader {
-    fn from_bytes(
-        &self,
-        _asset_path: &std::path::Path,
-        bytes: Vec<u8>,
-    ) -> Result<RustSourceCode, anyhow::Error> {
-        Ok(RustSourceCode(String::from_utf8(bytes)?))
+impl AssetLoader for RustSourceCodeLoader {
+    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error> {
+        load_context.set_default_asset(LoadedAsset::new(RustSourceCode(String::from_utf8(bytes)?)));
+        Ok(())
     }
 
     fn extensions(&self) -> &[&str] {

@@ -179,7 +179,7 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
                 let meta_str = std::str::from_utf8(&meta_bytes)?;
                 Ok(ron::from_str::<SourceMeta>(&meta_str)?)
             }
-            Err(err) => return Err(MetaLoadError::from(err)),
+            Err(err) => Err(MetaLoadError::from(err)),
         }
     }
 
@@ -232,7 +232,7 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         }
     }
 
-    pub fn get_group_load_state<'a>(
+    pub fn get_group_load_state(
         &self,
         handles: impl IntoIterator<Item = HandleId>,
     ) -> Option<LoadState> {
@@ -378,16 +378,14 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         for child_path in self.server.asset_io.read_directory(path.as_ref())? {
             if child_path.is_dir() {
                 ids.extend(self.load_folder(&child_path, extension)?);
-            } else {
-                if let Some(current_extension) = child_path
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                {
-                    if current_extension == extension {
-                        let handle: Handle<T> =
-                            self.load(child_path.to_str().expect("Path should be a valid string"))?;
-                        ids.push(handle);
-                    }
+            } else if let Some(current_extension) = child_path
+                .extension()
+                .and_then(|extension| extension.to_str())
+            {
+                if current_extension == extension {
+                    let handle: Handle<T> =
+                        self.load(child_path.to_str().expect("Path should be a valid string"))?;
+                    ids.push(handle);
                 }
             }
         }

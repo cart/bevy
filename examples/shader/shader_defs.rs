@@ -7,6 +7,7 @@ use bevy::{
         renderer::RenderResources,
         shader::{asset_shader_defs_system, ShaderDefs, ShaderStage, ShaderStages},
     },
+    type_registry::TypeUuid,
 };
 
 /// This example illustrates how to create a custom material asset that uses "shader defs" and a shader that uses that material.
@@ -23,7 +24,8 @@ fn main() {
         .run();
 }
 
-#[derive(RenderResources, ShaderDefs, Default)]
+#[derive(RenderResources, ShaderDefs, Default, TypeUuid)]
+#[uuid = "620f651b-adbe-464b-b740-ba0e547282ba"]
 struct MyMaterial {
     pub color: Color,
     #[render_resources(ignore)]

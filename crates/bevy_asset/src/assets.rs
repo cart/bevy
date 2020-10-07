@@ -173,6 +173,10 @@ impl<T: Asset> Assets<T> {
     pub fn len(&self) -> usize {
         self.assets.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.assets.is_empty()
+    }
 }
 
 /// [AppBuilder] extension methods for adding new asset types
@@ -180,9 +184,12 @@ pub trait AddAsset {
     fn add_asset<T>(&mut self) -> &mut Self
     where
         T: Asset + AssetDynamic;
-    fn add_asset_loader<T>(&mut self) -> &mut Self
+    fn init_asset_loader<T>(&mut self) -> &mut Self
     where
         T: AssetLoader + FromResources;
+    fn add_asset_loader<T>(&mut self, loader: T) -> &mut Self
+    where
+        T: AssetLoader;
 }
 
 impl AddAsset for AppBuilder {
@@ -208,14 +215,21 @@ impl AddAsset for AppBuilder {
             .add_event::<AssetEvent<T>>()
     }
 
-    fn add_asset_loader<T>(&mut self) -> &mut Self
+    fn init_asset_loader<T>(&mut self) -> &mut Self
     where
         T: AssetLoader + FromResources,
+    {
+        self.add_asset_loader(T::from_resources(self.resources()))
+    }
+
+    fn add_asset_loader<T>(&mut self, loader: T) -> &mut Self
+    where
+        T: AssetLoader,
     {
         self.resources()
             .get_mut::<AssetServer>()
             .expect("AssetServer does not exist. Consider adding it as a resource.")
-            .add_loader(T::from_resources(self.resources()));
+            .add_loader(loader);
         self
     }
 }

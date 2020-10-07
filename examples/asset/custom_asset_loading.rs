@@ -1,38 +1,46 @@
-use bevy::{asset::AssetLoader, prelude::*};
+use bevy::{
+    asset::{Asset, AssetLoader, LoadContext, LoadedAsset},
+    prelude::*,
+    type_registry::TypeUuid,
+};
 use ron::de::from_bytes;
-use serde::Deserialize;
-use std::path::Path;
+use serde::{export::PhantomData, Deserialize};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TypeUuid)]
+#[uuid = "39cadc56-aa9c-4543-8640-a018b74b5052"]
 pub struct MyCustomData {
     pub num: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, TypeUuid)]
+#[uuid = "9e08c542-ab71-44f2-ac5b-bc1c75e2a319"]
 pub struct MySecondCustomData {
     pub is_set: bool,
 }
 
 // create a custom loader for data files
 #[derive(Default)]
-pub struct DataFileLoader {
+pub struct DataFileLoader<TAsset> {
     matching_extensions: Vec<&'static str>,
+    marker: PhantomData<TAsset>,
 }
 
-impl DataFileLoader {
+impl<TAsset> DataFileLoader<TAsset> {
     pub fn from_extensions(matching_extensions: Vec<&'static str>) -> Self {
         DataFileLoader {
             matching_extensions,
+            marker: PhantomData::default(),
         }
     }
 }
 
-impl<TAsset> AssetLoader<TAsset> for DataFileLoader
+impl<TAsset: Asset> AssetLoader for DataFileLoader<TAsset>
 where
     for<'de> TAsset: Deserialize<'de>,
 {
-    fn from_bytes(&self, _asset_path: &Path, bytes: Vec<u8>) -> Result<TAsset, anyhow::Error> {
-        Ok(from_bytes::<TAsset>(bytes.as_slice())?)
+    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error> {
+        load_context.set_default_asset(LoadedAsset::new(from_bytes::<TAsset>(bytes.as_slice())?));
+        Ok(())
     }
 
     fn extensions(&self) -> &[&str] {
@@ -45,32 +53,33 @@ fn main() {
     App::build()
         .add_default_plugins()
         .add_asset::<MyCustomData>()
-        .add_asset_loader_from_instance::<MyCustomData, DataFileLoader>(
-            DataFileLoader::from_extensions(vec!["data1"]),
-        )
+        .add_asset_loader(DataFileLoader::<MyCustomData>::from_extensions(vec![
+            "data1",
+        ]))
         .add_asset::<MySecondCustomData>()
-        .add_asset_loader_from_instance::<MySecondCustomData, DataFileLoader>(
-            DataFileLoader::from_extensions(vec!["data2"]),
-        )
+        .add_asset_loader(DataFileLoader::<MySecondCustomData>::from_extensions(vec![
+            "data2",
+        ]))
         .add_startup_system(setup.system())
         .run();
 }
 
 fn setup(
-    asset_server: Res<AssetServer>,
-    mut data1s: ResMut<Assets<MyCustomData>>,
-    mut data2s: ResMut<Assets<MySecondCustomData>>,
+    _asset_server: Res<AssetServer>,
+    mut _data1s: ResMut<Assets<MyCustomData>>,
+    mut _data2s: ResMut<Assets<MySecondCustomData>>,
 ) {
-    let data1_handle = asset_server
-        .load_sync(&mut data1s, "assets/data/test_data.data1")
-        .unwrap();
-    let data2_handle = asset_server
-        .load_sync(&mut data2s, "assets/data/test_data.data2")
-        .unwrap();
+    panic!("this example was written to use load_sync, which is no longer available");
+    // let data1_handle = asset_server
+    //     .load_sync(&mut data1s, "assets/data/test_data.data1")
+    //     .unwrap();
+    // let data2_handle = asset_server
+    //     .load_sync(&mut data2s, "assets/data/test_data.data2")
+    //     .unwrap();
 
-    let data1 = data1s.get(&data1_handle).unwrap();
-    println!("Data 1 loaded with value {}", data1.num);
+    // let data1 = data1s.get(&data1_handle).unwrap();
+    // println!("Data 1 loaded with value {}", data1.num);
 
-    let data2 = data2s.get(&data2_handle).unwrap();
-    println!("Data 2 loaded with value {}", data2.is_set);
+    // let data2 = data2s.get(&data2_handle).unwrap();
+    // println!("Data 2 loaded with value {}", data2.is_set);
 }

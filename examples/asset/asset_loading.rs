@@ -31,7 +31,7 @@ fn setup(
     }
 
     // You can load all assets of a specific type from a folder like this. They will be loaded in parallel without blocking
-    let scenes: Vec<Handle<Scene>> = asset_server
+    let _scenes: Vec<Handle<Scene>> = asset_server
         .load_folder("assets/models/monkey", "gltf")
         .unwrap();
 
