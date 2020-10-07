@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bevy_asset::{LoadedAsset, AssetLoader, LoadContext};
+use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
 use bevy_type_registry::TypeUuid;
 use std::{io::Cursor, sync::Arc};
 

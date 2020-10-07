@@ -49,7 +49,10 @@ impl Plugin for AssetPlugin {
             .add_stage_after(bevy_app::stage::POST_UPDATE, stage::ASSET_EVENTS)
             .add_resource(asset_server)
             .register_property::<HandleId>()
-            .add_system_to_stage(bevy_app::stage::PRE_UPDATE, asset_server::free_unused_assets_system.system());
+            .add_system_to_stage(
+                bevy_app::stage::PRE_UPDATE,
+                asset_server::free_unused_assets_system.system(),
+            );
 
         #[cfg(feature = "filesystem_watcher")]
         app.add_system_to_stage(stage::LOAD_ASSETS, io::filesystem_watcher_system.system());

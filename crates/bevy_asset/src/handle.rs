@@ -82,7 +82,7 @@ impl Debug for HandleType {
 }
 
 impl<T> Handle<T> {
-    // TODO: remove "uuid" parameter whenever rust support type constraints in const fns 
+    // TODO: remove "uuid" parameter whenever rust support type constraints in const fns
     pub const fn weak_from_u64(uuid: Uuid, id: u64) -> Self {
         Self {
             id: HandleId::new(uuid, id),

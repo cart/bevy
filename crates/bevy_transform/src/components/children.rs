@@ -7,7 +7,10 @@ use std::ops::{Deref, DerefMut};
 pub struct Children(pub SmallVec<[Entity; 8]>);
 
 impl MapEntities for Children {
-    fn map_entities(&mut self, entity_map: &bevy_ecs::EntityMap) -> Result<(), bevy_ecs::MapEntitiesError> {
+    fn map_entities(
+        &mut self,
+        entity_map: &bevy_ecs::EntityMap,
+    ) -> Result<(), bevy_ecs::MapEntitiesError> {
         for entity in self.0.iter_mut() {
             *entity = entity_map.get(*entity)?;
         }

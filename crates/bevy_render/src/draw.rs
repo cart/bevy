@@ -74,7 +74,9 @@ impl Draw {
     }
 
     pub fn set_pipeline(&mut self, pipeline: &Handle<PipelineDescriptor>) {
-        self.render_command(RenderCommand::SetPipeline { pipeline: pipeline.clone_weak() });
+        self.render_command(RenderCommand::SetPipeline {
+            pipeline: pipeline.clone_weak(),
+        });
     }
 
     pub fn set_vertex_buffer(&mut self, slot: u32, buffer: BufferId, offset: u64) {
@@ -275,7 +277,8 @@ impl<'a> DrawContext<'a> {
     }
 
     pub fn get_pipeline_descriptor(&self) -> Result<&PipelineDescriptor, DrawError> {
-        self.current_pipeline.as_ref()
+        self.current_pipeline
+            .as_ref()
             .and_then(|handle| self.pipelines.get(handle))
             .ok_or(DrawError::NoPipelineSet)
     }
@@ -293,7 +296,10 @@ impl<'a> DrawContext<'a> {
         draw: &mut Draw,
         render_resource_bindings: &mut [&mut RenderResourceBindings],
     ) -> Result<(), DrawError> {
-        let pipeline = self.current_pipeline.as_ref().ok_or(DrawError::NoPipelineSet)?;
+        let pipeline = self
+            .current_pipeline
+            .as_ref()
+            .ok_or(DrawError::NoPipelineSet)?;
         let pipeline_descriptor = self
             .pipelines
             .get(pipeline)
@@ -323,7 +329,10 @@ impl<'a> DrawContext<'a> {
         index: u32,
         bind_group: &BindGroup,
     ) -> Result<(), DrawError> {
-        let pipeline = self.current_pipeline.as_ref().ok_or(DrawError::NoPipelineSet)?;
+        let pipeline = self
+            .current_pipeline
+            .as_ref()
+            .ok_or(DrawError::NoPipelineSet)?;
         let pipeline_descriptor = self
             .pipelines
             .get(pipeline)
@@ -342,7 +351,10 @@ impl<'a> DrawContext<'a> {
         draw: &mut Draw,
         render_resource_bindings: &[&RenderResourceBindings],
     ) -> Result<(), DrawError> {
-        let pipeline = self.current_pipeline.as_ref().ok_or(DrawError::NoPipelineSet)?;
+        let pipeline = self
+            .current_pipeline
+            .as_ref()
+            .ok_or(DrawError::NoPipelineSet)?;
         let pipeline_descriptor = self
             .pipelines
             .get(pipeline)

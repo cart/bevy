@@ -1,9 +1,7 @@
-
 extern crate proc_macro;
 
 use quote::quote;
-use syn::parse::*;
-use syn::*;
+use syn::{parse::*, *};
 use uuid::Uuid;
 
 use crate::modules::{get_modules, get_path};

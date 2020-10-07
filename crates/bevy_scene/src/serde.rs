@@ -1,4 +1,4 @@
-use crate::{Entity, DynamicScene};
+use crate::{DynamicScene, Entity};
 use anyhow::Result;
 use bevy_property::{
     property_serde::{DynamicPropertiesDeserializer, DynamicPropertiesSerializer},

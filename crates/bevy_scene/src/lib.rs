@@ -1,18 +1,18 @@
-mod loaded_scenes;
-mod dynamic_scene;
-mod scene_spawner;
-mod scene;
 mod command;
+mod dynamic_scene;
+mod loaded_scenes;
+mod scene;
+mod scene_spawner;
 pub mod serde;
 
 pub use command::*;
-pub use loaded_scenes::*;
 pub use dynamic_scene::*;
-pub use scene_spawner::*;
+pub use loaded_scenes::*;
 pub use scene::*;
+pub use scene_spawner::*;
 
 pub mod prelude {
-    pub use crate::{DynamicScene, SceneSpawner, Scene, SpawnSceneCommands};
+    pub use crate::{DynamicScene, Scene, SceneSpawner, SpawnSceneCommands};
 }
 
 use bevy_app::prelude::*;

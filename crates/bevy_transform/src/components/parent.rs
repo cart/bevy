@@ -16,9 +16,12 @@ impl FromResources for Parent {
 }
 
 impl MapEntities for Parent {
-    fn map_entities(&mut self, entity_map: &bevy_ecs::EntityMap) -> Result<(), bevy_ecs::MapEntitiesError> {
-       self.0 = entity_map.get(self.0)?;
-       Ok(()) 
+    fn map_entities(
+        &mut self,
+        entity_map: &bevy_ecs::EntityMap,
+    ) -> Result<(), bevy_ecs::MapEntitiesError> {
+        self.0 = entity_map.get(self.0)?;
+        Ok(())
     }
 }
 

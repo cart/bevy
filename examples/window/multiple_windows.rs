@@ -153,7 +153,9 @@ fn setup(
     // SETUP SCENE
 
     // load the mesh
-    let mesh_handle = asset_server.load("assets/models/monkey/Monkey.gltf").unwrap();
+    let mesh_handle = asset_server
+        .load("assets/models/monkey/Monkey.gltf")
+        .unwrap();
 
     // create a material for the mesh
     let material_handle = materials.add(StandardMaterial {

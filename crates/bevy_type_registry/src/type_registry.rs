@@ -283,7 +283,10 @@ where
         self
     }
 
-    pub fn to_scene_component<C: Component>(mut self) -> Self where T: IntoComponent<C> {
+    pub fn to_scene_component<C: Component>(mut self) -> Self
+    where
+        T: IntoComponent<C>,
+    {
         self.registration.copy_to_scene_fn =
             |source_world: &World,
              scene_world: &mut World,
@@ -300,7 +303,10 @@ where
         self
     }
 
-    pub fn to_runtime_component<C: Component>(mut self) -> Self where T: IntoComponent<C> {
+    pub fn to_runtime_component<C: Component>(mut self) -> Self
+    where
+        T: IntoComponent<C>,
+    {
         self.registration.copy_from_scene_fn =
             |scene_world: &World,
              destination_world: &mut World,

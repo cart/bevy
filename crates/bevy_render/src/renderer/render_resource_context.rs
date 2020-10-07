@@ -63,14 +63,22 @@ pub trait RenderResourceContext: Downcast + Send + Sync + 'static {
 }
 
 impl dyn RenderResourceContext {
-    pub fn set_asset_resource<T>(&self, handle: &Handle<T>, resource: RenderResourceId, index: usize)
-    where
+    pub fn set_asset_resource<T>(
+        &self,
+        handle: &Handle<T>,
+        resource: RenderResourceId,
+        index: usize,
+    ) where
         T: Asset,
     {
         self.set_asset_resource_untyped(handle.clone_weak_untyped(), resource, index);
     }
 
-    pub fn get_asset_resource<T>(&self, handle: &Handle<T>, index: usize) -> Option<RenderResourceId>
+    pub fn get_asset_resource<T>(
+        &self,
+        handle: &Handle<T>,
+        index: usize,
+    ) -> Option<RenderResourceId>
     where
         T: Asset,
     {

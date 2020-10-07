@@ -163,8 +163,7 @@ impl CommandsInternal {
             .expect("entity reserver has not been set")
             .reserve_entity();
         self.current_entity = Some(entity);
-        self.commands
-            .push(Box::new(Insert { entity, components }));
+        self.commands.push(Box::new(Insert { entity, components }));
         self
     }
 
@@ -190,8 +189,7 @@ impl CommandsInternal {
     }
 
     pub fn add_command<C: Command + 'static>(&mut self, command: C) -> &mut Self {
-        self.commands
-            .push(Box::new(command));
+        self.commands.push(Box::new(command));
         self
     }
 }

@@ -9,8 +9,6 @@ pub struct Scene {
 
 impl Scene {
     pub fn new(world: World) -> Self {
-        Self {
-            world,
-        }
+        Self { world }
     }
 }

@@ -587,7 +587,8 @@ fn asset_render_resources_node_system<T: RenderResources + Asset>(
     for asset_handle in modified_assets.iter() {
         let asset = assets.get(*asset_handle).expect(EXPECT_ASSET_MESSAGE);
         uniform_buffer_arrays.prepare_uniform_buffers(*asset_handle, asset);
-        let mut bindings = asset_render_resource_bindings.get_or_insert_mut(&Handle::<T>::weak(*asset_handle));
+        let mut bindings =
+            asset_render_resource_bindings.get_or_insert_mut(&Handle::<T>::weak(*asset_handle));
         setup_uniform_texture_resources::<T>(&asset, render_resource_context, &mut bindings);
     }
 
@@ -602,8 +603,8 @@ fn asset_render_resources_node_system<T: RenderResources + Asset>(
             &mut |mut staging_buffer, _render_resource_context| {
                 for asset_handle in modified_assets.iter() {
                     let asset = assets.get(*asset_handle).expect(EXPECT_ASSET_MESSAGE);
-                    let mut render_resource_bindings =
-                        asset_render_resource_bindings.get_or_insert_mut(&Handle::<T>::weak(*asset_handle));
+                    let mut render_resource_bindings = asset_render_resource_bindings
+                        .get_or_insert_mut(&Handle::<T>::weak(*asset_handle));
                     // TODO: only setup buffer if we haven't seen this handle before
                     state.uniform_buffer_arrays.write_uniform_buffers(
                         *asset_handle,

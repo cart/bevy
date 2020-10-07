@@ -263,7 +263,10 @@ impl AssetRenderResourceBindings {
         self.bindings.get(&handle.clone_weak_untyped())
     }
 
-    pub fn get_or_insert_mut<T: Asset>(&mut self, handle: &Handle<T>) -> &mut RenderResourceBindings {
+    pub fn get_or_insert_mut<T: Asset>(
+        &mut self,
+        handle: &Handle<T>,
+    ) -> &mut RenderResourceBindings {
         self.bindings
             .entry(handle.clone_weak_untyped())
             .or_insert_with(RenderResourceBindings::default)

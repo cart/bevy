@@ -14,15 +14,12 @@ impl Command for SpawnScene {
     }
 }
 
-
 pub trait SpawnSceneCommands {
     fn spawn_scene(&mut self, scene: Handle<Scene>) -> &mut Self;
 }
 
 impl SpawnSceneCommands for Commands {
     fn spawn_scene(&mut self, scene_handle: Handle<Scene>) -> &mut Self {
-        self.add_command(SpawnScene {
-            scene_handle,
-        })
+        self.add_command(SpawnScene { scene_handle })
     }
 }

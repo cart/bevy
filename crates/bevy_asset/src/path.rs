@@ -49,7 +49,10 @@ impl<'a> AssetPath<'a> {
     pub fn to_owned(&self) -> AssetPath<'static> {
         AssetPath {
             path: Cow::Owned(self.path.to_path_buf()),
-            label: self.label.as_ref().map(|value| Cow::Owned(value.to_string())),
+            label: self
+                .label
+                .as_ref()
+                .map(|value| Cow::Owned(value.to_string())),
         }
     }
 }
@@ -112,9 +115,12 @@ fn get_hasher() -> AHasher {
     AHasher::new_with_keys(42, 23)
 }
 
-impl<'a, T> From<T> for AssetPathId where T: Into<AssetPath<'a>> {
+impl<'a, T> From<T> for AssetPathId
+where
+    T: Into<AssetPath<'a>>,
+{
     fn from(value: T) -> Self {
-        let asset_path: AssetPath = value.into(); 
+        let asset_path: AssetPath = value.into();
         AssetPathId(
             SourcePathId::from(asset_path.path()),
             LabelId::from(asset_path.label()),

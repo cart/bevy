@@ -65,8 +65,8 @@ pub fn text_system(
 
     // add changed text to atlases
     for (entity, text, mut calculated_size) in &mut query.iter() {
-        let font_atlases =
-            font_atlas_sets.get_or_insert_with(text.font.id, || FontAtlasSet::new(text.font.clone_weak()));
+        let font_atlases = font_atlas_sets
+            .get_or_insert_with(text.font.id, || FontAtlasSet::new(text.font.clone_weak()));
         // TODO: this call results in one or more TextureAtlases, whose render resources are created in the RENDER_GRAPH_SYSTEMS
         // stage. That logic runs _before_ the DRAW stage, which means we cant call add_glyphs_to_atlas in the draw stage
         // without our render resources being a frame behind. Therefore glyph atlasing either needs its own system or the TextureAtlas

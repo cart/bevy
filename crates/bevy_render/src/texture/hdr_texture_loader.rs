@@ -1,6 +1,6 @@
 use super::{Texture, TextureFormat};
 use anyhow::Result;
-use bevy_asset::{LoadedAsset, AssetLoader, LoadContext};
+use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
 use bevy_math::Vec2;
 
 /// Loads HDR textures as Texture assets

@@ -173,7 +173,9 @@ impl SceneSpawner {
             }
         }
         for component_registration in component_registry.iter() {
-            component_registration.map_entities(world, &instance_info.entity_map).unwrap();
+            component_registration
+                .map_entities(world, &instance_info.entity_map)
+                .unwrap();
         }
         self.spawned_instances.insert(instance_id, instance_info);
         let spawned = self
@@ -194,7 +196,12 @@ impl SceneSpawner {
             if let Some(spawned_instances) = self.spawned_dynamic_scenes.get(scene_handle) {
                 for instance_id in spawned_instances.iter() {
                     if let Some(instance_info) = self.spawned_instances.get_mut(instance_id) {
-                        Self::spawn_dynamic_internal(world, resources, scene_handle, instance_info)?;
+                        Self::spawn_dynamic_internal(
+                            world,
+                            resources,
+                            scene_handle,
+                            instance_info,
+                        )?;
                     }
                 }
             }
@@ -227,7 +234,7 @@ impl SceneSpawner {
                 Err(err) => return Err(err),
             }
         }
-        
+
         let scenes_to_spawn = std::mem::take(&mut self.scenes_to_spawn);
 
         for scene_handle in scenes_to_spawn {

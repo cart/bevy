@@ -60,8 +60,10 @@ where
 }
 
 /// Plays audio currently queued in the [AudioOutput] resource
-pub fn play_queued_audio_system<P: Asset>(audio_sources: Res<Assets<P>>, audio_output: Res<AudioOutput<P>>)
-where
+pub fn play_queued_audio_system<P: Asset>(
+    audio_sources: Res<Assets<P>>,
+    audio_output: Res<AudioOutput<P>>,
+) where
     P: Decodable,
     <P as Decodable>::Decoder: rodio::Source + Send + Sync,
     <<P as Decodable>::Decoder as Iterator>::Item: rodio::Sample + Send + Sync,

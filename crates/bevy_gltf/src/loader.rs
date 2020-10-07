@@ -118,7 +118,9 @@ fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfE
                 }?;
                 let image = image::load_from_memory_with_format(buffer, format)?;
                 let size = image.dimensions();
-                let image = image.as_rgba8().ok_or(GltfError::ImageRgb8ConversionFailure)?;
+                let image = image
+                    .as_rgba8()
+                    .ok_or(GltfError::ImageRgb8ConversionFailure)?;
 
                 let texture_label = texture_label(&texture);
                 load_context.set_labeled_asset(
@@ -130,9 +132,7 @@ fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfE
                     }),
                 );
             }
-            gltf::image::Source::Uri { uri, mime_type } => {
-                panic!("gltf image uris not supported")
-            }
+            gltf::image::Source::Uri { uri, mime_type } => panic!("gltf image uris not supported"),
         }
     }
 

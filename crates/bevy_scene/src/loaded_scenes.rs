@@ -1,6 +1,6 @@
 use crate::serde::SceneDeserializer;
 use anyhow::Result;
-use bevy_asset::{LoadedAsset, AssetLoader, LoadContext};
+use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
 use bevy_ecs::{FromResources, Resources};
 use bevy_property::PropertyTypeRegistry;
 use bevy_type_registry::TypeRegistry;

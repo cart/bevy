@@ -82,7 +82,9 @@ impl DynamicScene {
         }
 
         for component_registration in component_registry.iter() {
-            component_registration.map_entities(world, &entity_map).unwrap();
+            component_registration
+                .map_entities(world, &entity_map)
+                .unwrap();
         }
 
         Ok(())

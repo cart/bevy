@@ -29,7 +29,7 @@ impl EntityMap {
     }
 
     pub fn entry(&mut self, entity: Entity) -> Entry<'_, Entity, Entity> {
-       self.map.entry(entity) 
+        self.map.entry(entity)
     }
 
     pub fn get(&self, entity: Entity) -> Result<Entity, MapEntitiesError> {
