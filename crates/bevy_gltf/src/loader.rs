@@ -233,7 +233,11 @@ fn primitive_label(mesh: &gltf::Mesh, primitive: &Primitive) -> String {
 }
 
 fn material_label(material: &gltf::Material) -> String {
-    format!("Material{}", material.index().unwrap())
+    if let Some(index) = material.index() {
+        format!("Material{}", index)
+    } else {
+        format!("MaterialDefault")
+    }
 }
 
 fn texture_label(texture: &gltf::Texture) -> String {

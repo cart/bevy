@@ -24,7 +24,7 @@ pub mod stage {
 }
 
 pub mod prelude {
-    pub use crate::{AddAsset, AssetEvent, AssetServer, Assets, Handle};
+    pub use crate::{AddAsset, AssetEvent, AssetServer, Assets, Handle, HandleUntyped};
 }
 
 use bevy_app::{prelude::Plugin, AppBuilder};

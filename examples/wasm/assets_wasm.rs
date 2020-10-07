@@ -3,7 +3,6 @@ extern crate console_error_panic_hook;
 
 use bevy::{asset::AssetLoader, prelude::*, type_registry::TypeUuid};
 use bevy_asset::{LoadContext, LoadedAsset};
-use std::path::PathBuf;
 
 fn main() {
     #[cfg(target_arch = "wasm32")]
@@ -23,7 +22,7 @@ fn main() {
 
 fn asset_system(asset_server: Res<AssetServer>) {
     asset_server
-        .load::<Handle<RustSourceCode>, _>(PathBuf::from("assets_wasm.rs"))
+        .load::<RustSourceCode, _>("assets_wasm.rs")
         .unwrap();
     log::info!("hello wasm");
 }

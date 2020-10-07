@@ -12,7 +12,6 @@ use bevy_utils::HashMap;
 use crossbeam_channel::TryRecvError;
 use parking_lot::RwLock;
 use std::{
-    any::TypeId,
     path::{Path, PathBuf},
     str::Utf8Error,
     sync::Arc,
@@ -146,13 +145,9 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         Some(Handle::strong(id.into(), sender))
     }
 
-    pub fn get_handle_untyped<I: Into<HandleId>>(
-        &self,
-        id: I,
-        type_id: TypeId,
-    ) -> Option<HandleUntyped> {
+    pub fn get_handle_untyped<I: Into<HandleId>>(&self, id: I) -> Option<HandleUntyped> {
         let sender = self.server.asset_ref_counter.channel.sender.clone();
-        Some(HandleUntyped::strong(id.into(), type_id, sender))
+        Some(HandleUntyped::strong(id.into(), sender))
     }
 
     pub fn get_meta_path<P: AsRef<Path>>(path: P) -> PathBuf {
@@ -254,14 +249,12 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         Some(load_state)
     }
 
-    pub fn load<'a, T, P: Into<AssetPath<'a>>>(
+    pub fn load<'a, T: Asset, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
     ) -> Result<Handle<T>, AssetServerError> {
-        let handle_untyped = self.load_untyped(path, TypeId::of::<T>())?;
-        handle_untyped
-            .into_typed()
-            .ok_or(AssetServerError::IncorrectHandleType)
+        let handle_untyped = self.load_untyped(path)?;
+        Ok(handle_untyped.typed())
     }
 
     fn load_with_loader<'a, P: Into<AssetPath<'a>>>(
@@ -336,11 +329,10 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
     pub fn load_untyped<'a, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
-        type_id: TypeId,
     ) -> Result<HandleUntyped, AssetServerError> {
         let handle_id = self.load_untracked(path)?;
         Ok(self
-            .get_handle_untyped(handle_id, type_id)
+            .get_handle_untyped(handle_id)
             .expect("RefChangeChannel should exist at this point"))
     }
 
@@ -362,11 +354,10 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         Ok(asset_path.into())
     }
 
-    pub fn load_folder<T, P: AsRef<Path>>(
+    pub fn load_folder<P: AsRef<Path>>(
         &self,
         path: P,
-        extension: &str,
-    ) -> Result<Vec<Handle<T>>, AssetServerError> {
+    ) -> Result<Vec<HandleUntyped>, AssetServerError> {
         let path = path.as_ref();
         if !path.is_dir() {
             return Err(AssetServerError::AssetFolderNotADirectory(
@@ -374,23 +365,23 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
             ));
         }
 
-        let mut ids = Vec::new();
+        let mut handles = Vec::new();
         for child_path in self.server.asset_io.read_directory(path.as_ref())? {
             if child_path.is_dir() {
-                ids.extend(self.load_folder(&child_path, extension)?);
-            } else if let Some(current_extension) = child_path
-                .extension()
-                .and_then(|extension| extension.to_str())
-            {
-                if current_extension == extension {
-                    let handle: Handle<T> =
-                        self.load(child_path.to_str().expect("Path should be a valid string"))?;
-                    ids.push(handle);
-                }
+                handles.extend(self.load_folder(&child_path)?);
+            } else {
+                let handle = match self
+                    .load_untyped(child_path.to_str().expect("Path should be a valid string"))
+                {
+                    Ok(handle) => handle,
+                    Err(AssetServerError::MissingAssetLoader) => continue,
+                    Err(err) => return Err(err),
+                };
+                handles.push(handle);
             }
         }
 
-        Ok(ids)
+        Ok(handles)
     }
 
     pub fn free_unused_assets(&self) {

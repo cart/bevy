@@ -12,14 +12,12 @@ fn main() {
 
 #[derive(Default)]
 pub struct RpgSpriteHandles {
-    handles: Vec<Handle<Texture>>,
+    handles: Vec<HandleUntyped>,
     atlas_loaded: bool,
 }
 
 fn setup(mut rpg_sprite_handles: ResMut<RpgSpriteHandles>, asset_server: Res<AssetServer>) {
-    rpg_sprite_handles.handles = asset_server
-        .load_folder("assets/textures/rpg", "png")
-        .unwrap();
+    rpg_sprite_handles.handles = asset_server.load_folder("assets/textures/rpg").unwrap();
 }
 
 fn load_atlas(
@@ -40,7 +38,7 @@ fn load_atlas(
     {
         for handle in rpg_sprite_handles.handles.iter() {
             let texture = textures.get(handle).unwrap();
-            texture_atlas_builder.add_texture(handle.clone_weak(), &texture);
+            texture_atlas_builder.add_texture(handle.clone_weak().typed::<Texture>(), &texture);
         }
 
         let texture_atlas = texture_atlas_builder.finish(&mut textures).unwrap();
