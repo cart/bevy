@@ -241,7 +241,7 @@ fn material_label(material: &gltf::Material) -> String {
 }
 
 fn texture_label(texture: &gltf::Texture) -> String {
-    format!("texture{}", texture.index())
+    format!("Texture{}", texture.index())
 }
 
 fn get_primitive_topology(mode: Mode) -> Result<PrimitiveTopology, GltfError> {
