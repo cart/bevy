@@ -1,6 +1,4 @@
-use crate::{
-    path::AssetPath, AssetMeta, AssetServer, Assets, Handle, HandleId, RefChangeChannel, SourceMeta,
-};
+use crate::{AssetIo, AssetIoError, AssetMeta, AssetServer, Assets, Handle, HandleId, RefChangeChannel, SourceMeta, path::AssetPath};
 use anyhow::Result;
 use bevy_ecs::{Res, ResMut, Resource};
 use bevy_type_registry::TypeUuid;
@@ -60,6 +58,7 @@ impl LoadedAsset {
 
 pub struct LoadContext<'a> {
     pub(crate) ref_change_channel: &'a RefChangeChannel,
+    pub(crate) asset_io: &'a dyn AssetIo,
     pub(crate) labeled_assets: HashMap<Option<String>, LoadedAsset>,
     pub(crate) path: &'a Path,
     pub(crate) version: usize,
@@ -69,10 +68,12 @@ impl<'a> LoadContext<'a> {
     pub(crate) fn new(
         path: &'a Path,
         ref_change_channel: &'a RefChangeChannel,
+        asset_io: &'a dyn AssetIo,
         version: usize,
     ) -> Self {
         Self {
             ref_change_channel,
+            asset_io,
             labeled_assets: Default::default(),
             version,
             path,
@@ -98,6 +99,10 @@ impl<'a> LoadContext<'a> {
 
     pub fn get_handle<I: Into<HandleId>, T: Asset>(&self, id: I) -> Handle<T> {
         Handle::strong(id.into(), self.ref_change_channel.sender.clone())
+    }
+
+    pub fn read_asset_bytes<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>, AssetIoError> {
+        self.asset_io.load_path(path.as_ref())
     }
 
     pub fn set_meta(&self, meta: &mut SourceMeta) {

@@ -50,8 +50,12 @@ pub(crate) struct AssetRefCounter {
     pub(crate) ref_counts: Arc<RwLock<HashMap<HandleId, usize>>>,
 }
 
-pub struct AssetServerInternal<TAssetIo: AssetIo = FileAssetIo> {
-    pub(crate) asset_io: TAssetIo,
+pub struct AssetServerInternal<
+    TSourceIo: AssetIo = FileAssetIo,
+    TDestinationIo: AssetIo = FileAssetIo,
+> {
+    pub(crate) source_io: TSourceIo,
+    pub(crate) destination_io: TDestinationIo,
     pub(crate) asset_ref_counter: AssetRefCounter,
     pub(crate) asset_sources: Arc<RwLock<AssetSources>>,
     pub(crate) asset_lifecycles: Arc<RwLock<HashMap<Uuid, Box<dyn AssetLifecycle>>>>,
@@ -62,11 +66,11 @@ pub struct AssetServerInternal<TAssetIo: AssetIo = FileAssetIo> {
 }
 
 /// Loads assets from the filesystem on background threads
-pub struct AssetServer<TAssetIo: AssetIo = FileAssetIo> {
-    pub(crate) server: Arc<AssetServerInternal<TAssetIo>>,
+pub struct AssetServer<TSourceIo: AssetIo = FileAssetIo, TDestinationIo: AssetIo = FileAssetIo> {
+    pub(crate) server: Arc<AssetServerInternal<TSourceIo, TDestinationIo>>,
 }
 
-impl<TAssetIo: AssetIo> Clone for AssetServer<TAssetIo> {
+impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> Clone for AssetServer<TSourceIo, TDestinationIo> {
     fn clone(&self) -> Self {
         Self {
             server: self.server.clone(),
@@ -74,8 +78,8 @@ impl<TAssetIo: AssetIo> Clone for AssetServer<TAssetIo> {
     }
 }
 
-impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
-    pub fn new(asset_io: TAssetIo, task_pool: TaskPool) -> Self {
+impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestinationIo> {
+    pub fn new(source_io: TSourceIo, destination_io: TDestinationIo, task_pool: TaskPool) -> Self {
         AssetServer {
             server: Arc::new(AssetServerInternal {
                 loaders: Default::default(),
@@ -85,7 +89,8 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
                 handle_to_path: Default::default(),
                 asset_lifecycles: Default::default(),
                 task_pool,
-                asset_io,
+                source_io,
+                destination_io,
             }),
         }
     }
@@ -114,12 +119,12 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
     }
 
     pub fn watch_for_changes(&self) -> Result<(), AssetServerError> {
-        self.server.asset_io.watch_for_changes()?;
+        self.server.source_io.watch_for_changes()?;
         Ok(())
     }
 
     pub fn load_folder_meta<P: AsRef<Path>>(&self, path: P) -> Result<(), AssetServerError> {
-        for child_path in self.server.asset_io.read_directory(path.as_ref())? {
+        for child_path in self.server.source_io.read_directory(path.as_ref())? {
             if child_path.is_dir() {
                 self.load_folder_meta(&child_path)?;
             } else {
@@ -140,14 +145,14 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         Ok(())
     }
 
-    pub fn get_handle<T: Asset, I: Into<HandleId>>(&self, id: I) -> Option<Handle<T>> {
+    pub fn get_handle<T: Asset, I: Into<HandleId>>(&self, id: I) -> Handle<T> {
         let sender = self.server.asset_ref_counter.channel.sender.clone();
-        Some(Handle::strong(id.into(), sender))
+        Handle::strong(id.into(), sender)
     }
 
-    pub fn get_handle_untyped<I: Into<HandleId>>(&self, id: I) -> Option<HandleUntyped> {
+    pub fn get_handle_untyped<I: Into<HandleId>>(&self, id: I) -> HandleUntyped {
         let sender = self.server.asset_ref_counter.channel.sender.clone();
-        Some(HandleUntyped::strong(id.into(), sender))
+        HandleUntyped::strong(id.into(), sender)
     }
 
     pub fn get_meta_path<P: AsRef<Path>>(path: P) -> PathBuf {
@@ -169,7 +174,7 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
     fn load_asset_meta<P: AsRef<Path>>(&self, path: P) -> Result<SourceMeta, MetaLoadError> {
         let path = path.as_ref();
         let meta_path = Self::get_meta_path(path);
-        match self.server.asset_io.load_path(&meta_path) {
+        match self.server.source_io.load_path(&meta_path) {
             Ok(meta_bytes) => {
                 let meta_str = std::str::from_utf8(&meta_bytes)?;
                 Ok(ron::from_str::<SourceMeta>(&meta_str)?)
@@ -185,7 +190,7 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
                     .unwrap();
             let meta_path = Self::get_meta_path(&asset_info.path);
             self.server
-                .asset_io
+                .source_io
                 .save_path(&meta_path, meta_ron.as_ref())?;
         }
 
@@ -257,6 +262,7 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         Ok(handle_untyped.typed())
     }
 
+    // TODO: rename to load_sync and expose to users?
     fn load_with_loader<'a, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
@@ -293,11 +299,12 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
             source_info.version
         };
 
-        let bytes = self.server.asset_io.load_path(asset_path.path())?;
+        let bytes = self.server.source_io.load_path(asset_path.path())?;
         // TODO: set previous asset ids
         let mut load_context = LoadContext::new(
             asset_path.path(),
             &self.server.asset_ref_counter.channel,
+            &self.server.source_io,
             version,
         );
         asset_loader.load(bytes, &mut load_context).unwrap();
@@ -335,12 +342,10 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         path: P,
     ) -> Result<HandleUntyped, AssetServerError> {
         let handle_id = self.load_untracked(path)?;
-        Ok(self
-            .get_handle_untyped(handle_id)
-            .expect("RefChangeChannel should exist at this point"))
+        Ok(self.get_handle_untyped(handle_id))
     }
 
-    pub fn load_untracked<'a, P: Into<AssetPath<'a>>>(
+    pub(crate) fn load_untracked<'a, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
     ) -> Result<HandleId, AssetServerError> {
@@ -370,7 +375,7 @@ impl<TAssetIo: AssetIo> AssetServer<TAssetIo> {
         }
 
         let mut handles = Vec::new();
-        for child_path in self.server.asset_io.read_directory(path.as_ref())? {
+        for child_path in self.server.source_io.read_directory(path.as_ref())? {
             if child_path.is_dir() {
                 handles.extend(self.load_folder(&child_path)?);
             } else {

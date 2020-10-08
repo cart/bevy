@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bevy_asset::{AssetLoader, AssetPath, LoadContext, LoadedAsset};
+use bevy_asset::{AssetIoError, AssetLoader, AssetPath, LoadContext, LoadedAsset};
 use bevy_ecs::{World, WorldBuilderSource};
 use bevy_math::Mat4;
 use bevy_pbr::prelude::{PbrComponents, StandardMaterial};
@@ -16,7 +16,7 @@ use bevy_transform::{
 };
 use gltf::{mesh::Mode, Primitive};
 use image::{GenericImageView, ImageFormat};
-use std::{fs, io, path::Path};
+use std::path::Path;
 use thiserror::Error;
 
 /// An error that occurs when loading a GLTF file
@@ -26,8 +26,6 @@ pub enum GltfError {
     UnsupportedPrimitive { mode: Mode },
     #[error("Invalid GLTF file.")]
     Gltf(#[from] gltf::Error),
-    #[error("Failed to load file.")]
-    Io(#[from] io::Error),
     #[error("Binary blob is missing.")]
     MissingBlob,
     #[error("Failed to decode base64 mesh data.")]
@@ -40,6 +38,8 @@ pub enum GltfError {
     ImageRgb8ConversionFailure,
     #[error("Failed to load an image.")]
     ImageError(#[from] image::ImageError),
+    #[error("Failed to load an asset path.")]
+    AssetIoError(#[from] AssetIoError),
 }
 
 /// Loads meshes from GLTF files into Mesh assets
@@ -62,7 +62,7 @@ impl AssetLoader for GltfLoader {
 fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfError> {
     let gltf = gltf::Gltf::from_slice(&bytes)?;
     let mut world = World::default();
-    let buffer_data = load_buffers(&gltf, load_context.path())?;
+    let buffer_data = load_buffers(&gltf, load_context, load_context.path())?;
 
     let world_builder = &mut world.build();
 
@@ -139,19 +139,19 @@ fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfE
         let mut dependencies = Vec::new();
         let texture_handle = if let Some(info) = pbr.base_color_texture() {
             match info.texture().source().source() {
-                gltf::image::Source::View {..} => {
+                gltf::image::Source::View { .. } => {
                     let label = texture_label(&info.texture());
                     let path = AssetPath::new_ref(load_context.path(), Some(&label));
                     Some(load_context.get_handle(path))
-                },
-                gltf::image::Source::Uri { uri, ..} => {
+                }
+                gltf::image::Source::Uri { uri, .. } => {
                     let parent = load_context.path().parent().unwrap();
                     let image_path = parent.join(uri);
                     let asset_path = AssetPath::new(image_path, None);
                     let handle = load_context.get_handle(asset_path.clone());
                     dependencies.push(asset_path);
                     Some(handle)
-                },
+                }
             }
         } else {
             None
@@ -162,7 +162,8 @@ fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfE
                 albedo: pbr.base_color_factor().into(),
                 albedo_texture: texture_handle,
                 ..Default::default()
-            }).with_dependencies(dependencies),
+            })
+            .with_dependencies(dependencies),
         )
     }
 
@@ -263,7 +264,11 @@ fn get_primitive_topology(mode: Mode) -> Result<PrimitiveTopology, GltfError> {
     }
 }
 
-fn load_buffers(gltf: &gltf::Gltf, asset_path: &Path) -> Result<Vec<Vec<u8>>, GltfError> {
+fn load_buffers(
+    gltf: &gltf::Gltf,
+    load_context: &LoadContext,
+    asset_path: &Path,
+) -> Result<Vec<Vec<u8>>, GltfError> {
     const OCTET_STREAM_URI: &str = "data:application/octet-stream;base64,";
 
     let mut buffer_data = Vec::new();
@@ -279,7 +284,7 @@ fn load_buffers(gltf: &gltf::Gltf, asset_path: &Path) -> Result<Vec<Vec<u8>>, Gl
                 } else {
                     // TODO: Remove this and add dep
                     let buffer_path = asset_path.parent().unwrap().join(uri);
-                    let buffer_bytes = fs::read(buffer_path)?;
+                    let buffer_bytes = load_context.read_asset_bytes(buffer_path)?;
                     buffer_data.push(buffer_bytes);
                 }
             }

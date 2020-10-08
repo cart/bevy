@@ -43,16 +43,14 @@ pub struct FileAssetIo {
     filesystem_watcher: Arc<RwLock<Option<FilesystemWatcher>>>,
 }
 
-impl Default for FileAssetIo {
-    fn default() -> Self {
-        Self {
-            root_path: Self::get_root_path(),
+impl FileAssetIo {
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        FileAssetIo {
             filesystem_watcher: Default::default(),
+            root_path: Self::get_root_path().join(path.as_ref()),
         }
     }
-}
 
-impl FileAssetIo {
     pub fn get_root_path() -> PathBuf {
         if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
             PathBuf::from(manifest_dir)
@@ -130,7 +128,7 @@ impl AssetIo for FileAssetIo {
 #[cfg(feature = "filesystem_watcher")]
 pub fn filesystem_watcher_system(asset_server: Res<AssetServer>) {
     let mut changed = HashSet::default();
-    let watcher = asset_server.server.asset_io.filesystem_watcher.read();
+    let watcher = asset_server.server.source_io.filesystem_watcher.read();
     if let Some(ref watcher) = *watcher {
         loop {
             let event = match watcher.receiver.try_recv() {
@@ -147,7 +145,7 @@ pub fn filesystem_watcher_system(asset_server: Res<AssetServer>) {
                 for path in paths.iter() {
                     if !changed.contains(path) {
                         let relative_path = path
-                            .strip_prefix(&asset_server.server.asset_io.root_path)
+                            .strip_prefix(&asset_server.server.source_io.root_path)
                             .unwrap();
                         let _ = asset_server.load_untracked(relative_path);
                     }

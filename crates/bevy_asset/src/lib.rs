@@ -44,7 +44,11 @@ impl Plugin for AssetPlugin {
             .expect("IoTaskPool resource not found")
             .0
             .clone();
-        let asset_server = AssetServer::new(FileAssetIo::default(), task_pool);
+        let asset_server = AssetServer::new(
+            FileAssetIo::new("assets"),
+            FileAssetIo::new(".import"),
+            task_pool,
+        );
         app.add_stage_before(bevy_app::stage::PRE_UPDATE, stage::LOAD_ASSETS)
             .add_stage_after(bevy_app::stage::POST_UPDATE, stage::ASSET_EVENTS)
             .add_resource(asset_server)

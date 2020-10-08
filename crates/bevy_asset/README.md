@@ -17,9 +17,20 @@
     * breaks ergo
 * Avoid re-imports when moving assets while still using asset path?
     * maybe we still use asset id
-* real untyped asset handle. load_folder returns untyped
 * dont reload assets if they are already loaded. reloads should only happen on metadata change
 * "derived assets": assets generated from other assets. this is generally an optimized/precooked version of the asset
+    * Editor: Source("assets") + Destination(".imported")
+    * Game: Source(1-".imported" else 2-"assets")
+    * write derived asset path to source meta
+    * import(path)
+        1. load(path)
+        2. derive()
+            * if derivation registered, run and save
+                * if derives arent registered for all assets, fail
+            * else copy source + meta 
+        3. save(path)
+
+* store import hash in meta
 * Hot reload meta changes
 * UUIDs for asset loaders
 * Importer versions

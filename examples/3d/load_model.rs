@@ -31,7 +31,7 @@ fn setup(
     asset_server: Res<AssetServer>,
 ) {
     // let handle: Handle<Mesh> = asset_server.load("assets/models/scene/scene.gltf#Mesh0/Primitive0").unwrap();
-    let scene_handle: Handle<Scene> = asset_server.load("assets/models/scene/scene_dependency.gltf").unwrap();
+    let scene_handle: Handle<Scene> = asset_server.load("models/scene/scene_dependency.gltf").unwrap();
 
     // add entities to the world
     commands
