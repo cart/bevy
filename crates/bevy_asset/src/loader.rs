@@ -4,16 +4,19 @@ use crate::{
 };
 use anyhow::Result;
 use bevy_ecs::{Res, ResMut, Resource};
-use bevy_type_registry::{TypeUuid, TypeUuidDynamic};
+use bevy_type_registry::{TypeUuid, TypeUuidDynamic, Uuid};
 use bevy_utils::HashMap;
 use crossbeam_channel::{Receiver, Sender};
 use downcast_rs::{impl_downcast, Downcast};
 use std::path::Path;
 
-/// A loader for a given asset of type `T`
+/// A loader for an asset source
 pub trait AssetLoader: Send + Sync + TypeUuidDynamic + 'static {
     fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error>;
     fn extensions(&self) -> &[&str];
+    fn importers(&self) -> &[Uuid] {
+        &[]
+    }
 }
 
 pub trait Asset: TypeUuid + AssetDynamic {}

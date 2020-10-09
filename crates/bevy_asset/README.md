@@ -17,6 +17,7 @@
     * breaks ergo
 * Avoid re-imports when moving assets while still using asset path?
     * maybe we still use asset id
+* Make AssetLoader return the "default asset type"
 * "dependent paths": ensure dependent non-asset files get copied to .import when the asset isnt redirected
 * dont reload assets if they are already loaded. reloads should only happen on metadata change
 * "derived assets": assets generated from other assets. this is generally an optimized/precooked version of the asset
@@ -35,3 +36,14 @@
 * Hot reload meta changes
 * UUIDs for asset loaders
 * Importer versions
+
+
+## 
+
+Server
+  Loader:
+    * importers: AssetSerializerTypeUuid
+  * register_serializer()
+    * HashMap{Uuid, Box{dyn AssetSerializer}}
+  * save(path: P, asset: T) { get_serializer(T::UUID).serialize(asset) destination_io.save(path, bytes)}
+ *  

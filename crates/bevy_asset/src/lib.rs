@@ -17,6 +17,7 @@ pub use info::*;
 pub use io::*;
 pub use loader::*;
 pub use path::*;
+pub use serializer::*;
 
 /// The names of asset stages in an App Schedule
 pub mod stage {

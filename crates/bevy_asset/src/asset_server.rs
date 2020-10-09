@@ -1,13 +1,14 @@
 use crate::{
     path::{AssetPath, AssetPathId, SourcePathId},
     Asset, AssetDynamic, AssetIo, AssetIoError, AssetLifecycle, AssetLifecycleChannel,
-    AssetLifecycleEvent, AssetLoader, AssetSources, Assets, FileAssetIo, Handle, HandleId,
-    HandleUntyped, LabelId, LoadContext, LoadState, RefChange, RefChangeChannel, SourceInfo,
-    SourceMeta,
+    AssetLifecycleEvent, AssetLoader, AssetSerializer, AssetSerializerDynamic, AssetSources,
+    Assets, FileAssetIo, Handle, HandleId, HandleUntyped, LabelId, LoadContext, LoadState,
+    RefChange, RefChangeChannel, SourceInfo, SourceMeta,
 };
 use anyhow::Result;
 use bevy_ecs::Res;
 use bevy_tasks::TaskPool;
+use bevy_type_registry::TypeUuid;
 use bevy_utils::HashMap;
 use crossbeam_channel::TryRecvError;
 use parking_lot::RwLock;
@@ -28,8 +29,12 @@ pub enum AssetServerError {
     MissingAssetLoader,
     #[error("The given type does not match the type of the loaded asset.")]
     IncorrectHandleType,
+    #[error("No asset serializer found for the given type.")]
+    MissingAssetSerializer,
     #[error("Encountered an error while loading an asset.")]
     AssetLoaderError(anyhow::Error),
+    #[error("Encountered an error while serializing an asset.")]
+    AssetSerializerError(anyhow::Error),
     #[error("PathLoader encountered an error")]
     PathLoaderError(#[from] AssetIoError),
     #[error("Encountered an error loading meta asset information.")]
@@ -62,6 +67,8 @@ pub struct AssetServerInternal<
     pub(crate) asset_sources: Arc<RwLock<AssetSources>>,
     pub(crate) asset_lifecycles: Arc<RwLock<HashMap<Uuid, Box<dyn AssetLifecycle>>>>,
     loaders: RwLock<Vec<Arc<Box<dyn AssetLoader>>>>,
+    serializers: RwLock<HashMap<Uuid, Box<dyn AssetSerializerDynamic>>>,
+    asset_type_to_serializer: RwLock<HashMap<Uuid, Uuid>>,
     extension_to_loader_index: RwLock<HashMap<String, usize>>,
     handle_to_path: Arc<RwLock<HashMap<HandleId, AssetPath<'static>>>>,
     task_pool: TaskPool,
@@ -85,6 +92,8 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         AssetServer {
             server: Arc::new(AssetServerInternal {
                 loaders: Default::default(),
+                serializers: Default::default(),
+                asset_type_to_serializer: Default::default(),
                 extension_to_loader_index: Default::default(),
                 asset_sources: Default::default(),
                 asset_ref_counter: Default::default(),
@@ -118,6 +127,17 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
                 .insert(extension.to_string(), loader_index);
         }
         loaders.push(Arc::new(Box::new(loader)));
+    }
+
+    pub fn add_serializer<T: AssetSerializer>(&self, serializer: T) {
+        self.server
+            .serializers
+            .write()
+            .insert(T::TYPE_UUID, Box::new(serializer));
+        self.server
+            .asset_type_to_serializer
+            .write()
+            .insert(T::Asset::TYPE_UUID, T::TYPE_UUID);
     }
 
     pub fn watch_for_changes(&self) -> Result<(), AssetServerError> {
@@ -183,20 +203,6 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
             }
             Err(err) => Err(MetaLoadError::from(err)),
         }
-    }
-
-    pub fn save_meta(&self) -> Result<(), AssetServerError> {
-        for asset_info in self.server.asset_sources.read().iter() {
-            let meta_ron =
-                ron::ser::to_string_pretty(&asset_info.meta, ron::ser::PrettyConfig::new())
-                    .unwrap();
-            let meta_path = Self::get_meta_path(&asset_info.path);
-            self.server
-                .source_io
-                .save_path(&meta_path, meta_ron.as_ref())?;
-        }
-
-        Ok(())
     }
 
     fn get_asset_loader(
@@ -271,8 +277,10 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         self.load_untyped(path).typed()
     }
 
-    // TODO: rename to load_sync and expose to users?
-    fn load_sync<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> Result<(), AssetServerError> {
+    fn load_sync<'a, P: Into<AssetPath<'a>>>(
+        &self,
+        path: P,
+    ) -> Result<AssetPathId, AssetServerError> {
         let asset_path: AssetPath = path.into();
         let asset_loader = self.get_path_asset_loader(asset_path.path())?;
         let asset_path_id: AssetPathId = asset_path.get_id();
@@ -341,7 +349,7 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
 
             self.create_assets_in_load_context(&mut load_context);
         }
-        Ok(())
+        Ok(asset_path_id)
     }
 
     pub fn load_untyped<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> HandleUntyped {
@@ -390,10 +398,71 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         Ok(handles)
     }
 
-    pub fn import<'a, P: AsRef<Path>>(&self, _path: P) -> Result<(), AssetServerError> {
-        // let path = path.as_ref();
-        // let meta = self.load_asset_meta(path)?;
-        todo!()
+    pub fn import<'a, P: AsRef<Path>>(&self, path: P) -> Result<(), AssetServerError> {
+        let path = path.as_ref();
+        let asset_path = AssetPath::from(path);
+        // TODO: load_sync probably needs to be broken up so we have access to LoadContext here
+        let asset_path_id = self.load_sync(asset_path.clone())?;
+        let mut asset_sources = self.server.asset_sources.write();
+        let asset_info = asset_sources
+            .get_mut(asset_path_id.source_path_id())
+            .unwrap();
+        let meta_ron =
+            ron::ser::to_string_pretty(&asset_info.meta, ron::ser::PrettyConfig::new()).unwrap();
+        let meta_path = Self::get_meta_path(&asset_info.path);
+        self.server
+            .source_io
+            .save_path(&meta_path, meta_ron.as_ref())?;
+        // TODO: serialize + save each asset according to AssetLoader's registered serializers
+        // TODO: import each redirected asset and save meta
+        // TODO: if not redirected, copy source data directly to destination
+        Ok(())
+    }
+
+    pub fn import_all(&self) -> Result<(), AssetServerError> {
+        let path = Path::new("");
+        if !self.server.source_io.is_directory(&path) {
+            return Err(AssetServerError::AssetFolderNotADirectory(
+                path.to_str().unwrap().to_string(),
+            ));
+        }
+
+        let mut handles = Vec::new();
+        for child_path in self.server.source_io.read_directory(path.as_ref())? {
+            if self.server.source_io.is_directory(&child_path) {
+                handles.extend(self.load_folder(&child_path)?);
+            } else {
+                if self.get_path_asset_loader(&child_path).is_err() {
+                    continue;
+                }
+                let server = self.clone();
+                self.server
+                    .task_pool
+                    .spawn(async move {
+                        server.import(&child_path).unwrap();
+                    })
+                    .detach();
+            }
+        }
+        Ok(())
+    }
+
+    pub fn serialize_dyn<P: AsRef<Path>>(
+        &self,
+        asset: &dyn AssetDynamic,
+    ) -> Result<Vec<u8>, AssetServerError> {
+        let serializer_uuid = self
+            .server
+            .asset_type_to_serializer
+            .read()
+            .get(&asset.type_uuid())
+            .cloned()
+            .ok_or(AssetServerError::MissingAssetSerializer)?;
+        let serializers = self.server.serializers.read();
+        let serializer = serializers
+            .get(&serializer_uuid)
+            .ok_or(AssetServerError::MissingAssetSerializer)?;
+        serializer.serialize_dyn(asset).map_err(|e| AssetServerError::AssetSerializerError(e))
     }
 
     pub fn free_unused_assets(&self) {
