@@ -33,6 +33,10 @@ pub trait AssetIo: Send + Sync + 'static {
         &self,
         path: &Path,
     ) -> Result<Box<dyn Iterator<Item = PathBuf>>, AssetIoError>;
+    fn is_directory(
+        &self,
+        path: &Path,
+    ) -> bool;
     fn watch_path_for_changes(&self, path: &Path) -> Result<(), AssetIoError>;
     fn watch_for_changes(&self) -> Result<(), AssetIoError>;
 }
@@ -122,6 +126,13 @@ impl AssetIo for FileAssetIo {
         }
 
         Ok(())
+    }
+
+    fn is_directory(
+        &self,
+        path: &Path,
+    ) -> bool {
+        self.root_path.join(path).is_dir()
     }
 }
 

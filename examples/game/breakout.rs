@@ -67,7 +67,7 @@ fn setup(
         // scoreboard
         .spawn(TextComponents {
             text: Text {
-                font: asset_server.load("assets/fonts/FiraSans-Bold.ttf").unwrap(),
+                font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                 value: "Score:".to_string(),
                 style: TextStyle {
                     color: Color::rgb(0.2, 0.2, 0.8),

@@ -28,6 +28,8 @@ pub enum AssetServerError {
     MissingAssetLoader,
     #[error("The given type does not match the type of the loaded asset.")]
     IncorrectHandleType,
+    #[error("Encountered an error while loading an asset.")]
+    AssetLoaderError(anyhow::Error),
     #[error("PathLoader encountered an error")]
     PathLoaderError(#[from] AssetIoError),
     #[error("Encountered an error loading meta asset information.")]
@@ -209,6 +211,17 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
             .ok_or(AssetServerError::MissingAssetLoader)
     }
 
+    fn get_path_asset_loader<P: AsRef<Path>>(
+        &self,
+        path: P,
+    ) -> Result<Arc<Box<dyn AssetLoader>>, AssetServerError> {
+        path.as_ref()
+            .extension()
+            .and_then(|e| e.to_str())
+            .ok_or_else(|| AssetServerError::MissingAssetLoader)
+            .and_then(|extension| self.get_asset_loader(extension))
+    }
+
     pub fn get_load_state_untyped<I: Into<SourcePathId>>(&self, id: I) -> Option<LoadState> {
         self.server.asset_sources.read().get_load_state(id.into())
     }
@@ -254,22 +267,14 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         Some(load_state)
     }
 
-    pub fn load<'a, T: Asset, P: Into<AssetPath<'a>>>(
-        &self,
-        path: P,
-    ) -> Result<Handle<T>, AssetServerError> {
-        let handle_untyped = self.load_untyped(path)?;
-        Ok(handle_untyped.typed())
+    pub fn load<'a, T: Asset, P: Into<AssetPath<'a>>>(&self, path: P) -> Handle<T> {
+        self.load_untyped(path).typed()
     }
 
     // TODO: rename to load_sync and expose to users?
-    fn load_with_loader<'a, P: Into<AssetPath<'a>>>(
-        &self,
-        path: P,
-        asset_loader: Arc<Box<dyn AssetLoader>>,
-    ) -> Result<(), AssetServerError> {
+    fn load_sync<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> Result<(), AssetServerError> {
         let asset_path: AssetPath = path.into();
-        let extension = asset_path.path().extension().unwrap().to_str().unwrap();
+        let asset_loader = self.get_path_asset_loader(asset_path.path())?;
         let asset_path_id: AssetPathId = asset_path.get_id();
         let version = {
             let mut asset_sources = self.server.asset_sources.write();
@@ -277,7 +282,7 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
                 let source_meta = match self.load_asset_meta(asset_path.path()) {
                     Ok(source_meta) => source_meta,
                     Err(MetaLoadError::AssetIoError(AssetIoError::NotFound)) => {
-                        SourceMeta::new(extension.to_string())
+                        SourceMeta::new(asset_loader.type_uuid())
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -307,7 +312,9 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
             &self.server.source_io,
             version,
         );
-        asset_loader.load(bytes, &mut load_context).unwrap();
+        asset_loader
+            .load(bytes, &mut load_context)
+            .map_err(|e| AssetServerError::AssetLoaderError(e))?;
         let mut asset_sources = self.server.asset_sources.write();
         let source_info = asset_sources
             .get_mut(asset_path_id.source_path_id())
@@ -328,7 +335,7 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
                 let type_uuid = loaded_asset.value.as_ref().unwrap().type_uuid();
                 source_info.asset_types.insert(label_id, type_uuid);
                 for dependency in loaded_asset.dependencies.iter() {
-                    self.load_untyped(dependency.clone()).unwrap();
+                    self.load_untracked(dependency.clone());
                 }
             }
 
@@ -337,30 +344,22 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         Ok(())
     }
 
-    pub fn load_untyped<'a, P: Into<AssetPath<'a>>>(
-        &self,
-        path: P,
-    ) -> Result<HandleUntyped, AssetServerError> {
-        let handle_id = self.load_untracked(path)?;
-        Ok(self.get_handle_untyped(handle_id))
+    pub fn load_untyped<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> HandleUntyped {
+        let handle_id = self.load_untracked(path);
+        self.get_handle_untyped(handle_id)
     }
 
-    pub(crate) fn load_untracked<'a, P: Into<AssetPath<'a>>>(
-        &self,
-        path: P,
-    ) -> Result<HandleId, AssetServerError> {
+    pub(crate) fn load_untracked<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> HandleId {
         let asset_path: AssetPath<'a> = path.into();
         let server = self.clone();
         let owned_path = asset_path.to_owned();
-        let extension = asset_path.path().extension().unwrap().to_str().unwrap();
-        let asset_loader = self.get_asset_loader(extension)?;
         self.server
             .task_pool
             .spawn(async move {
-                server.load_with_loader(owned_path, asset_loader).unwrap();
+                server.load_sync(owned_path).unwrap();
             })
             .detach();
-        Ok(asset_path.into())
+        asset_path.into()
     }
 
     pub fn load_folder<P: AsRef<Path>>(
@@ -368,7 +367,7 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         path: P,
     ) -> Result<Vec<HandleUntyped>, AssetServerError> {
         let path = path.as_ref();
-        if !path.is_dir() {
+        if !self.server.source_io.is_directory(path) {
             return Err(AssetServerError::AssetFolderNotADirectory(
                 path.to_str().unwrap().to_string(),
             ));
@@ -376,21 +375,25 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
 
         let mut handles = Vec::new();
         for child_path in self.server.source_io.read_directory(path.as_ref())? {
-            if child_path.is_dir() {
+            if self.server.source_io.is_directory(&child_path) {
                 handles.extend(self.load_folder(&child_path)?);
             } else {
-                let handle = match self
-                    .load_untyped(child_path.to_str().expect("Path should be a valid string"))
-                {
-                    Ok(handle) => handle,
-                    Err(AssetServerError::MissingAssetLoader) => continue,
-                    Err(err) => return Err(err),
-                };
+                if self.get_path_asset_loader(&child_path).is_err() {
+                    continue;
+                }
+                let handle =
+                    self.load_untyped(child_path.to_str().expect("Path should be a valid string"));
                 handles.push(handle);
             }
         }
 
         Ok(handles)
+    }
+
+    pub fn import<'a, P: AsRef<Path>>(&self, _path: P) -> Result<(), AssetServerError> {
+        // let path = path.as_ref();
+        // let meta = self.load_asset_meta(path)?;
+        todo!()
     }
 
     pub fn free_unused_assets(&self) {

@@ -9,7 +9,7 @@ fn spawn_system(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands.spawn(Camera2dComponents::default());
-    let texture_handle = asset_server.load("assets/branding/icon.png").unwrap();
+    let texture_handle = asset_server.load("branding/icon.png");
     let material = materials.add(texture_handle.into());
     for _ in 0..128 {
         commands

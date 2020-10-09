@@ -30,7 +30,7 @@ fn setup(
     // let texture_handle = asset_server
     //     .load_sync(
     //         &mut textures,
-    //         "assets/textures/rpg/chars/gabe/gabe-idle-run.png",
+    //         "textures/rpg/chars/gabe/gabe-idle-run.png",
     //     )
     //     .unwrap();
     // let texture = textures.get(&texture_handle).unwrap();

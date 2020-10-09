@@ -1,10 +1,12 @@
 use super::{Texture, TextureFormat};
 use anyhow::Result;
 use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
+use bevy_type_registry::TypeUuid;
 use bevy_math::Vec2;
 
 /// Loads HDR textures as Texture assets
-#[derive(Clone, Default)]
+#[derive(Clone, Default, TypeUuid)]
+#[uuid = "d803ef21-a8d4-44dd-a403-998d1fc40582"]
 pub struct HdrTextureLoader;
 
 impl AssetLoader for HdrTextureLoader {

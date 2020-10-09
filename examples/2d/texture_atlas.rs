@@ -17,7 +17,7 @@ pub struct RpgSpriteHandles {
 }
 
 fn setup(mut rpg_sprite_handles: ResMut<RpgSpriteHandles>, asset_server: Res<AssetServer>) {
-    rpg_sprite_handles.handles = asset_server.load_folder("assets/textures/rpg").unwrap();
+    rpg_sprite_handles.handles = asset_server.load_folder("textures/rpg").unwrap();
 }
 
 fn load_atlas(
@@ -43,9 +43,8 @@ fn load_atlas(
 
         let texture_atlas = texture_atlas_builder.finish(&mut textures).unwrap();
         let texture_atlas_texture = texture_atlas.texture.clone();
-        let vendor_handle = asset_server
-            .get_handle("assets/textures/rpg/chars/vendor/generic-rpg-vendor.png")
-            .unwrap();
+        let vendor_handle =
+            asset_server.get_handle("textures/rpg/chars/vendor/generic-rpg-vendor.png");
         let vendor_index = texture_atlas.get_texture_index(&vendor_handle).unwrap();
         let atlas_handle = texture_atlases.add(texture_atlas);
 

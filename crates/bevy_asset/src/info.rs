@@ -10,7 +10,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceMeta<T = ()> {
     pub assets: Vec<AssetMeta>,
-    pub extension: String,
+    pub loader: Uuid,
     pub config: T,
     // TODO: loader id
     // TODO: redirects
@@ -20,11 +20,11 @@ impl<T> SourceMeta<T>
 where
     T: Default,
 {
-    pub fn new(extension: String) -> Self {
+    pub fn new(loader: Uuid) -> Self {
         Self {
             assets: Default::default(),
             config: T::default(),
-            extension,
+            loader,
         }
     }
 }

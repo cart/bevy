@@ -26,19 +26,16 @@ fn print_world_system(world: &mut World, resources: &mut Resources) {
     println!();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
-    // let handle: Handle<Mesh> = asset_server.load("assets/models/scene/scene.gltf#Mesh0/Primitive0").unwrap();
-    let scene_handle: Handle<Scene> = asset_server.load("models/scene/scene_dependency.gltf").unwrap();
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    // let handle: Handle<Mesh> = asset_server.load("models/scene/scene.gltf#Mesh0/Primitive0").unwrap();
+    let scene_handle: Handle<Scene> = asset_server.load("models/scene/scene_dependency.gltf");
 
     // add entities to the world
     commands
         .spawn_scene(scene_handle)
         // .spawn(PbrComponents {
         //     mesh: asset_server
-        //         .get_handle("assets/models/scene/scene.gltf#Mesh0/Primitive0")
+        //         .get_handle("models/scene/scene.gltf#Mesh0/Primitive0")
         //         .unwrap(),
         //     ..Default::default()
         // })

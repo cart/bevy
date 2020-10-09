@@ -3,11 +3,13 @@ use anyhow::Result;
 use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
 use bevy_ecs::{FromResources, Resources};
 use bevy_property::PropertyTypeRegistry;
-use bevy_type_registry::TypeRegistry;
+use bevy_type_registry::{TypeRegistry, TypeUuid};
 use parking_lot::RwLock;
 use serde::de::DeserializeSeed;
 use std::sync::Arc;
 
+#[derive(TypeUuid)]
+#[uuid = "7834ce17-aaf2-4c8c-aa74-a7ac9f027804"]
 pub struct SceneLoader {
     property_type_registry: Arc<RwLock<PropertyTypeRegistry>>,
 }

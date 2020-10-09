@@ -14,6 +14,7 @@ use bevy_transform::{
     hierarchy::{BuildWorldChildren, WorldChildBuilder},
     prelude::{GlobalTransform, Transform},
 };
+use bevy_type_registry::TypeUuid;
 use gltf::{mesh::Mode, Primitive};
 use image::{GenericImageView, ImageFormat};
 use std::path::Path;
@@ -45,7 +46,8 @@ pub enum GltfError {
 /// Loads meshes from GLTF files into Mesh assets
 ///
 /// NOTE: eventually this will loading into Scenes instead of Meshes
-#[derive(Default)]
+#[derive(Default, TypeUuid)]
+#[uuid = "2814aec4-d3d7-4455-96cd-df2832fffe81"]
 pub struct GltfLoader;
 
 impl AssetLoader for GltfLoader {

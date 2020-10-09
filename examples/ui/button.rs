@@ -82,7 +82,7 @@ fn setup(
             parent.spawn(TextComponents {
                 text: Text {
                     value: "Button".to_string(),
-                    font: asset_server.load("assets/fonts/FiraSans-Bold.ttf").unwrap(),
+                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                     style: TextStyle {
                         font_size: 40.0,
                         color: Color::rgb(0.8, 0.8, 0.8),

@@ -17,7 +17,8 @@ impl AsRef<[u8]> for AudioSource {
 }
 
 /// Loads mp3 files as [AudioSource] [Assets](bevy_asset::Assets)
-#[derive(Default)]
+#[derive(Default, TypeUuid)]
+#[uuid = "acb574bf-9861-4a65-8962-648966e8ccf7"]
 pub struct Mp3Loader;
 
 impl AssetLoader for Mp3Loader {

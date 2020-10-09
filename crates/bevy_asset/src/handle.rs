@@ -223,6 +223,7 @@ unsafe impl<T> Sync for Handle<T> {}
 /// A non-generic version of [Handle]
 ///
 /// This allows handles to be mingled in a cross asset context. For example, storing `Handle<A>` and `Handle<B>` in the same `HashSet<HandleUntyped>`.
+#[derive(Debug)]
 pub struct HandleUntyped {
     pub id: HandleId,
     handle_type: HandleType,

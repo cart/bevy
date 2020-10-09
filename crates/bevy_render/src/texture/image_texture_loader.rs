@@ -1,12 +1,14 @@
 use super::{Texture, TextureFormat};
 use anyhow::Result;
 use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
+use bevy_type_registry::TypeUuid;
 use bevy_math::Vec2;
 
 /// Loader for images that can be read by the `image` crate.
 ///
 /// Reads only PNG images for now.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, TypeUuid)]
+#[uuid = "3520efa8-8ff8-4a74-96a1-f1bdaba23f43"]
 pub struct ImageTextureLoader;
 
 impl AssetLoader for ImageTextureLoader {

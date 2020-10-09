@@ -1,8 +1,10 @@
 use crate::Font;
 use anyhow::Result;
 use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
+use bevy_type_registry::TypeUuid;
 
-#[derive(Default)]
+#[derive(Default, TypeUuid)]
+#[uuid = "22f6a521-651e-42f0-8a91-bbf85a0a7c4d"]
 pub struct FontLoader;
 
 impl AssetLoader for FontLoader {

@@ -21,9 +21,7 @@ fn main() {
 }
 
 fn asset_system(asset_server: Res<AssetServer>) {
-    asset_server
-        .load::<RustSourceCode, _>("assets_wasm.rs")
-        .unwrap();
+    asset_server.load::<RustSourceCode, _>("assets_wasm.rs");
     log::info!("hello wasm");
 }
 
@@ -31,8 +29,10 @@ fn asset_system(asset_server: Res<AssetServer>) {
 #[uuid = "1c3445ab-97d3-449c-ab35-16ba30e4c29d"]
 pub struct RustSourceCode(pub String);
 
-#[derive(Default)]
+#[derive(Default, TypeUuid)]
+#[uuid = "5633743e-b3b8-4e5d-a5b7-a3a429e1ce61"]
 pub struct RustSourceCodeLoader;
+
 impl AssetLoader for RustSourceCodeLoader {
     fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error> {
         load_context.set_default_asset(LoadedAsset::new(RustSourceCode(String::from_utf8(bytes)?)));

@@ -1,36 +1,29 @@
-use crate::{AssetIo, AssetIoError, AssetMeta, AssetServer, Assets, Handle, HandleId, RefChangeChannel, SourceMeta, path::AssetPath};
+use crate::{
+    path::AssetPath, AssetIo, AssetIoError, AssetMeta, AssetServer, Assets, Handle, HandleId,
+    RefChangeChannel, SourceMeta,
+};
 use anyhow::Result;
 use bevy_ecs::{Res, ResMut, Resource};
-use bevy_type_registry::TypeUuid;
+use bevy_type_registry::{TypeUuid, TypeUuidDynamic};
 use bevy_utils::HashMap;
 use crossbeam_channel::{Receiver, Sender};
 use downcast_rs::{impl_downcast, Downcast};
 use std::path::Path;
-use uuid::Uuid;
 
 /// A loader for a given asset of type `T`
-pub trait AssetLoader: Send + Sync + 'static {
+pub trait AssetLoader: Send + Sync + TypeUuidDynamic + 'static {
     fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error>;
     fn extensions(&self) -> &[&str];
 }
 
 pub trait Asset: TypeUuid + AssetDynamic {}
 
-pub trait AssetDynamic: Downcast + Send + Sync + 'static {
-    fn type_uuid(&self) -> Uuid;
-}
+pub trait AssetDynamic: Downcast + TypeUuidDynamic + Send + Sync + 'static {}
 impl_downcast!(AssetDynamic);
 
 impl<T> Asset for T where T: TypeUuid + AssetDynamic {}
 
-impl<T> AssetDynamic for T
-where
-    T: Send + Sync + 'static + TypeUuid,
-{
-    fn type_uuid(&self) -> Uuid {
-        Self::TYPE_UUID
-    }
-}
+impl<T> AssetDynamic for T where T: Send + Sync + 'static + TypeUuidDynamic {}
 
 pub struct LoadedAsset {
     pub(crate) value: Option<Box<dyn AssetDynamic>>,

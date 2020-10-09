@@ -7,6 +7,7 @@ mod info;
 mod io;
 mod loader;
 mod path;
+mod serializer;
 
 pub use asset_server::*;
 pub use assets::*;

@@ -38,7 +38,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             },
             text: Text {
                 value: "FPS:".to_string(),
-                font: asset_server.load("assets/fonts/FiraSans-Bold.ttf").unwrap(),
+                font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                 style: TextStyle {
                     font_size: 60.0,
                     color: Color::WHITE,

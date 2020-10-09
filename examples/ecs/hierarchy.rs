@@ -14,7 +14,7 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands.spawn(Camera2dComponents::default());
-    let texture = asset_server.load("assets/branding/icon.png").unwrap();
+    let texture = asset_server.load("branding/icon.png");
 
     // Spawn a root entity with no parent
     let parent = commands

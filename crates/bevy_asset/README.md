@@ -17,6 +17,7 @@
     * breaks ergo
 * Avoid re-imports when moving assets while still using asset path?
     * maybe we still use asset id
+* "dependent paths": ensure dependent non-asset files get copied to .import when the asset isnt redirected
 * dont reload assets if they are already loaded. reloads should only happen on metadata change
 * "derived assets": assets generated from other assets. this is generally an optimized/precooked version of the asset
     * Editor: Source("assets") + Destination(".imported")

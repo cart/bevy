@@ -3,6 +3,7 @@ use bevy::{
     prelude::*,
     type_registry::TypeUuid,
 };
+use bevy_type_registry::{TypeUuidDynamic, Uuid};
 use ron::de::from_bytes;
 use serde::{export::PhantomData, Deserialize};
 
@@ -22,12 +23,20 @@ pub struct MySecondCustomData {
 #[derive(Default)]
 pub struct DataFileLoader<TAsset> {
     matching_extensions: Vec<&'static str>,
+    type_uuid: Uuid,
     marker: PhantomData<TAsset>,
 }
 
+impl<TAsset> TypeUuidDynamic for DataFileLoader<TAsset> {
+    fn type_uuid(&self) -> Uuid {
+        self.type_uuid
+    }
+}
+
 impl<TAsset> DataFileLoader<TAsset> {
-    pub fn from_extensions(matching_extensions: Vec<&'static str>) -> Self {
+    pub fn from_extensions(type_uuid: Uuid, matching_extensions: Vec<&'static str>) -> Self {
         DataFileLoader {
+            type_uuid,
             matching_extensions,
             marker: PhantomData::default(),
         }
@@ -53,13 +62,15 @@ fn main() {
     App::build()
         .add_default_plugins()
         .add_asset::<MyCustomData>()
-        .add_asset_loader(DataFileLoader::<MyCustomData>::from_extensions(vec![
-            "data1",
-        ]))
+        .add_asset_loader(DataFileLoader::<MyCustomData>::from_extensions(
+            Uuid::parse_str("46131f2b-cad9-4e08-8212-a7124f5f18e3").unwrap(),
+            vec!["data1"],
+        ))
         .add_asset::<MySecondCustomData>()
-        .add_asset_loader(DataFileLoader::<MySecondCustomData>::from_extensions(vec![
-            "data2",
-        ]))
+        .add_asset_loader(DataFileLoader::<MySecondCustomData>::from_extensions(
+            Uuid::parse_str("afacfc44-d90a-4e9d-be84-874a2238b96e").unwrap(),
+            vec!["data2"],
+        ))
         .add_startup_system(setup.system())
         .run();
 }
@@ -71,10 +82,10 @@ fn setup(
 ) {
     panic!("this example was written to use load_sync, which is no longer available");
     // let data1_handle = asset_server
-    //     .load_sync(&mut data1s, "assets/data/test_data.data1")
+    //     .load_sync(&mut data1s, "data/test_data.data1")
     //     .unwrap();
     // let data2_handle = asset_server
-    //     .load_sync(&mut data2s, "assets/data/test_data.data2")
+    //     .load_sync(&mut data2s, "data/test_data.data2")
     //     .unwrap();
 
     // let data1 = data1s.get(&data1_handle).unwrap();

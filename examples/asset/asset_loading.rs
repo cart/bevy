@@ -16,10 +16,8 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // You can load individual assets like this:
-    let cube_handle = asset_server.load("assets/models/cube/cube.gltf#Mesh0/Primitive0").unwrap();
-    let sphere_handle = asset_server
-        .load("assets/models/sphere/sphere.gltf#Mesh0/Primitive0")
-        .unwrap();
+    let cube_handle = asset_server.load("models/cube/cube.gltf#Mesh0/Primitive0");
+    let sphere_handle = asset_server.load("models/sphere/sphere.gltf#Mesh0/Primitive0");
 
     // All assets end up in their Assets<T> collection once they are done loading:
     if let Some(sphere) = meshes.get(&sphere_handle) {
@@ -31,14 +29,11 @@ fn setup(
     }
 
     // You can load all assets in a folder like this. They will be loaded in parallel without blocking
-    let _scenes: Vec<HandleUntyped> = asset_server
-        .load_folder("assets/models/monkey")
-        .unwrap();
+    let _scenes: Vec<HandleUntyped> = asset_server.load_folder("models/monkey").unwrap();
 
     // Then any asset in the folder can be accessed like this:
-    let monkey_handle = asset_server
-        .get_handle("assets/models/monkey/Monkey.gltf#Mesh0/Primitive0")
-        .unwrap();
+    let monkey_handle =
+        asset_server.get_handle("models/monkey/Monkey.gltf#Mesh0/Primitive0");
 
     // You can also add assets directly to their Assets<T> storage:
     let material_handle = materials.add(StandardMaterial {
