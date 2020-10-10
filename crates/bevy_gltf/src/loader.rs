@@ -51,7 +51,7 @@ pub enum GltfError {
 pub struct GltfLoader;
 
 impl AssetLoader for GltfLoader {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<()> {
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<()> {
         Ok(load_gltf(bytes, load_context)?)
     }
 
@@ -61,8 +61,8 @@ impl AssetLoader for GltfLoader {
     }
 }
 
-fn load_gltf(bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), GltfError> {
-    let gltf = gltf::Gltf::from_slice(&bytes)?;
+fn load_gltf(bytes: &[u8], load_context: &mut LoadContext) -> Result<(), GltfError> {
+    let gltf = gltf::Gltf::from_slice(bytes)?;
     let mut world = World::default();
     let buffer_data = load_buffers(&gltf, load_context, load_context.path())?;
 

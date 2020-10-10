@@ -12,7 +12,7 @@ use std::path::Path;
 
 /// A loader for an asset source
 pub trait AssetLoader: Send + Sync + TypeUuidDynamic + 'static {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error>;
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<(), anyhow::Error>;
     fn extensions(&self) -> &[&str];
     fn importers(&self) -> &[Uuid] {
         &[]
@@ -24,7 +24,7 @@ pub trait Asset: TypeUuid + AssetDynamic {}
 pub trait AssetDynamic: Downcast + TypeUuidDynamic + Send + Sync + 'static {}
 impl_downcast!(AssetDynamic);
 
-impl<T> Asset for T where T: TypeUuid + AssetDynamic {}
+impl<T> Asset for T where T: TypeUuid + AssetDynamic + TypeUuidDynamic{}
 
 impl<T> AssetDynamic for T where T: Send + Sync + 'static + TypeUuidDynamic {}
 

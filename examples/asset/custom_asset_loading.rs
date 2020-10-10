@@ -47,8 +47,8 @@ impl<TAsset: Asset> AssetLoader for DataFileLoader<TAsset>
 where
     for<'de> TAsset: Deserialize<'de>,
 {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error> {
-        load_context.set_default_asset(LoadedAsset::new(from_bytes::<TAsset>(bytes.as_slice())?));
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<(), anyhow::Error> {
+        load_context.set_default_asset(LoadedAsset::new(from_bytes::<TAsset>(bytes)?));
         Ok(())
     }
 

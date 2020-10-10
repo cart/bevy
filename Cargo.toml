@@ -171,6 +171,10 @@ name = "asset_loading"
 path = "examples/asset/asset_loading.rs"
 
 [[example]]
+name = "asset_importing"
+path = "examples/asset/asset_importing.rs"
+
+[[example]]
 name = "custom_loader"
 path = "examples/asset/custom_asset_loading.rs"
 

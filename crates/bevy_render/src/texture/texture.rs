@@ -8,11 +8,12 @@ use bevy_ecs::{Res, ResMut};
 use bevy_math::Vec2;
 use bevy_type_registry::TypeUuid;
 use bevy_utils::HashSet;
+use serde::{Serialize, Deserialize};
 
 pub const TEXTURE_ASSET_INDEX: usize = 0;
 pub const SAMPLER_ASSET_INDEX: usize = 1;
 
-#[derive(Clone, TypeUuid)]
+#[derive(Clone, TypeUuid, Serialize, Deserialize)]
 #[uuid = "6ea26da6-6cf8-4ea2-9986-1d7bf6c17d6f"]
 pub struct Texture {
     pub data: Vec<u8>,

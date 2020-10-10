@@ -10,6 +10,7 @@ pub mod renderer;
 pub mod shader;
 pub mod texture;
 
+use mesh::{BinaryMeshLoader, BinaryMeshSerializer};
 pub use once_cell;
 
 pub mod prelude {
@@ -46,7 +47,7 @@ use render_graph::{
 use renderer::{AssetRenderResourceBindings, RenderResourceBindings};
 use std::ops::Range;
 #[cfg(feature = "hdr")]
-use texture::HdrTextureLoader;
+use texture::{BinaryTextureLoader, BinaryTextureSerializer, HdrTextureLoader};
 #[cfg(feature = "png")]
 use texture::ImageTextureLoader;
 use texture::TextureResourceSystemState;
@@ -97,6 +98,10 @@ impl Plugin for RenderPlugin {
             .add_asset::<Texture>()
             .add_asset::<Shader>()
             .add_asset::<PipelineDescriptor>()
+            .init_asset_loader::<BinaryMeshLoader>()
+            .init_asset_serializer::<BinaryMeshSerializer>()
+            .init_asset_loader::<BinaryTextureLoader>()
+            .init_asset_serializer::<BinaryTextureSerializer>()
             .register_component::<Camera>()
             .register_component::<Draw>()
             .register_component::<RenderPipelines>()

@@ -8,8 +8,8 @@ use bevy_type_registry::TypeUuid;
 pub struct FontLoader;
 
 impl AssetLoader for FontLoader {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<()> {
-        let font = Font::try_from_bytes(bytes)?;
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<()> {
+        let font = Font::try_from_bytes(bytes.into())?;
         load_context.set_default_asset(LoadedAsset::new(font));
         Ok(())
     }

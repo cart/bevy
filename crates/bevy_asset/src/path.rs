@@ -111,7 +111,7 @@ impl AssetPathId {
 }
 
 /// this hasher provides consistent results across runs
-fn get_hasher() -> AHasher {
+pub(crate) fn get_hasher() -> AHasher {
     AHasher::new_with_keys(42, 23)
 }
 

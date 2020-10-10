@@ -6,14 +6,8 @@ fn main() {
         .add_resource(Msaa { samples: 4 })
         .add_default_plugins()
         .add_startup_system(setup.system())
-        // .add_system(save_sys.system())
         // .add_system(print_world_system.thread_local_system())
         .run();
-}
-
-#[allow(unused)]
-fn save_sys(asset_server: Res<AssetServer>) {
-    asset_server.save_meta().unwrap();
 }
 
 #[allow(unused)]

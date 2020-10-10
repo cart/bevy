@@ -24,9 +24,9 @@ impl FromResources for SceneLoader {
 }
 
 impl AssetLoader for SceneLoader {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<()> {
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<()> {
         let registry = self.property_type_registry.read();
-        let mut deserializer = ron::de::Deserializer::from_bytes(&bytes)?;
+        let mut deserializer = ron::de::Deserializer::from_bytes(bytes)?;
         let scene_deserializer = SceneDeserializer {
             property_type_registry: &registry,
         };

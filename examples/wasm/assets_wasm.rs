@@ -34,8 +34,10 @@ pub struct RustSourceCode(pub String);
 pub struct RustSourceCodeLoader;
 
 impl AssetLoader for RustSourceCodeLoader {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<(), anyhow::Error> {
-        load_context.set_default_asset(LoadedAsset::new(RustSourceCode(String::from_utf8(bytes)?)));
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<(), anyhow::Error> {
+        load_context.set_default_asset(LoadedAsset::new(RustSourceCode(String::from_utf8(
+            bytes.into(),
+        )?)));
         Ok(())
     }
 

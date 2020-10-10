@@ -38,6 +38,34 @@ use bevy_type_registry::RegisterType;
 #[derive(Default)]
 pub struct AssetPlugin;
 
+pub struct AssetServerSettings {
+    asset_folder: String,
+    import_folder: Option<String>,
+}
+
+impl AssetServerSettings {
+    pub fn standalone_app() -> Self {
+        Self {
+            asset_folder: "assets".to_string(),
+            import_folder: None,
+        }
+    }
+
+    pub fn imported_app() -> Self {
+        Self {
+            asset_folder: ".import".to_string(),
+            import_folder: None,
+        }
+    }
+
+    pub fn importer() -> Self {
+        Self {
+            asset_folder: "assets".to_string(),
+            import_folder: Some(".import".to_string()),
+        }
+    }
+}
+
 impl Plugin for AssetPlugin {
     fn build(&self, app: &mut AppBuilder) {
         let task_pool = app
@@ -46,11 +74,19 @@ impl Plugin for AssetPlugin {
             .expect("IoTaskPool resource not found")
             .0
             .clone();
-        let asset_server = AssetServer::new(
-            FileAssetIo::new("assets"),
-            FileAssetIo::new(".import"),
-            task_pool,
-        );
+
+        let asset_server = {
+            let settings = app
+                .resources_mut()
+                .get_or_insert_with(|| AssetServerSettings::standalone_app());
+            let source = FileAssetIo::new(&settings.asset_folder);
+            let import = settings
+                .import_folder
+                .as_ref()
+                .map(|folder| FileAssetIo::new(folder));
+            AssetServer::new(source, import, task_pool)
+        };
+
         app.add_stage_before(bevy_app::stage::PRE_UPDATE, stage::LOAD_ASSETS)
             .add_stage_after(bevy_app::stage::POST_UPDATE, stage::ASSET_EVENTS)
             .add_resource(asset_server)

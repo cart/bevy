@@ -15,10 +15,11 @@ use bevy_type_registry::TypeUuid;
 use bevy_utils::HashSet;
 use std::borrow::Cow;
 use thiserror::Error;
+use serde::{Serialize, Deserialize};
 
 pub const VERTEX_BUFFER_ASSET_INDEX: usize = 0;
 pub const INDEX_BUFFER_ASSET_INDEX: usize = 1;
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VertexAttributeValues {
     Float(Vec<f32>),
     Float2(Vec<[f32; 2]>),
@@ -62,7 +63,7 @@ impl From<&VertexAttributeValues> for VertexFormat {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VertexAttribute {
     pub name: Cow<'static, str>,
     pub values: VertexAttributeValues,
@@ -107,13 +108,13 @@ pub enum MeshToVertexBufferError {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Indices {
     U16(Vec<u16>),
     U32(Vec<u32>),
 }
 
-#[derive(Debug, TypeUuid)]
+#[derive(Debug, TypeUuid, Serialize, Deserialize)]
 #[uuid = "8ecbac0f-f545-4473-ad43-e1f4243af51e"]
 pub struct Mesh {
     pub primitive_topology: PrimitiveTopology,

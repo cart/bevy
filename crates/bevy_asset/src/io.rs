@@ -102,6 +102,11 @@ impl AssetIo for FileAssetIo {
     }
 
     fn save_path(&self, path: &Path, bytes: &[u8]) -> Result<(), AssetIoError> {
+        let path = self.root_path.join(path);
+        if let Some(parent_path) = path.parent() {
+            fs::create_dir_all(parent_path)?; 
+        }
+
         Ok(fs::write(self.root_path.join(path), bytes)?)
     }
 

@@ -10,10 +10,15 @@ pub trait AssetSerializer: TypeUuid + Send + Sync + 'static {
 
 pub trait AssetSerializerDynamic: Send + Sync + 'static {
     fn serialize_dyn(&self, asset: &dyn AssetDynamic) -> Result<Vec<u8>, anyhow::Error>;
+    fn extension(&self) -> &str;
 }
 impl<T: AssetSerializer> AssetSerializerDynamic for T {
     fn serialize_dyn(&self, asset: &dyn AssetDynamic) -> Result<Vec<u8>, anyhow::Error> {
         let asset_value = asset.downcast_ref::<T::Asset>().unwrap();
         self.serialize(asset_value)
+    }
+
+    fn extension(&self) -> &str {
+        AssetSerializer::extension(self)
     }
 }

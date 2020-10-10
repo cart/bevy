@@ -1,6 +1,6 @@
 use crate::{
-    update_asset_storage_system, Asset, AssetDynamic, AssetLoader, AssetServer, Handle, HandleId,
-    RefChange,
+    update_asset_storage_system, Asset, AssetDynamic, AssetLoader, AssetSerializer, AssetServer,
+    Handle, HandleId, RefChange,
 };
 use bevy_app::{prelude::Events, AppBuilder};
 use bevy_ecs::{FromResources, IntoQuerySystem, ResMut};
@@ -190,6 +190,12 @@ pub trait AddAsset {
     fn add_asset_loader<T>(&mut self, loader: T) -> &mut Self
     where
         T: AssetLoader;
+    fn add_asset_serializer<T>(&mut self, serializer: T) -> &mut Self
+    where
+        T: AssetSerializer;
+    fn init_asset_serializer<T>(&mut self) -> &mut Self
+    where
+        T: AssetSerializer + FromResources;
 }
 
 impl AddAsset for AppBuilder {
@@ -231,5 +237,23 @@ impl AddAsset for AppBuilder {
             .expect("AssetServer does not exist. Consider adding it as a resource.")
             .add_loader(loader);
         self
+    }
+
+    fn add_asset_serializer<T>(&mut self, serializer: T) -> &mut Self
+    where
+        T: AssetSerializer,
+    {
+        self.resources()
+            .get_mut::<AssetServer>()
+            .expect("AssetServer does not exist. Consider adding it as a resource.")
+            .add_serializer(serializer);
+        self
+    }
+
+    fn init_asset_serializer<T>(&mut self) -> &mut Self
+    where
+        T: AssetSerializer + FromResources,
+    {
+        self.add_asset_serializer(T::from_resources(self.resources()))
     }
 }

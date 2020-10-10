@@ -11,6 +11,7 @@ use uuid::Uuid;
 pub struct SourceMeta<T = ()> {
     pub assets: Vec<AssetMeta>,
     pub loader: Uuid,
+    pub hash: u64,
     pub config: T,
     // TODO: loader id
     // TODO: redirects
@@ -20,10 +21,11 @@ impl<T> SourceMeta<T>
 where
     T: Default,
 {
-    pub fn new(loader: Uuid) -> Self {
+    pub fn new(loader: Uuid, hash: u64) -> Self {
         Self {
             assets: Default::default(),
             config: T::default(),
+            hash,
             loader,
         }
     }

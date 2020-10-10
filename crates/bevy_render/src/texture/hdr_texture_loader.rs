@@ -10,7 +10,7 @@ use bevy_math::Vec2;
 pub struct HdrTextureLoader;
 
 impl AssetLoader for HdrTextureLoader {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<()> {
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<()> {
         let format = TextureFormat::Rgba32Float;
         debug_assert_eq!(
             format.pixel_size(),
@@ -18,7 +18,7 @@ impl AssetLoader for HdrTextureLoader {
             "Format should have 32bit x 4 size"
         );
 
-        let decoder = image::hdr::HdrDecoder::new(bytes.as_slice())?;
+        let decoder = image::hdr::HdrDecoder::new(bytes)?;
         let info = decoder.metadata();
         let rgb_data = decoder.read_image_hdr()?;
         let mut rgba_data = Vec::with_capacity(rgb_data.len() * format.pixel_size());

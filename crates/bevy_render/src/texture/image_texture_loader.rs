@@ -1,8 +1,8 @@
-use super::{Texture, TextureFormat};
+use super::{BinaryTextureSerializer, Texture, TextureFormat};
 use anyhow::Result;
 use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
-use bevy_type_registry::TypeUuid;
 use bevy_math::Vec2;
+use bevy_type_registry::{TypeUuid, Uuid};
 
 /// Loader for images that can be read by the `image` crate.
 ///
@@ -12,7 +12,7 @@ use bevy_math::Vec2;
 pub struct ImageTextureLoader;
 
 impl AssetLoader for ImageTextureLoader {
-    fn load(&self, bytes: Vec<u8>, load_context: &mut LoadContext) -> Result<()> {
+    fn load(&self, bytes: &[u8], load_context: &mut LoadContext) -> Result<()> {
         use bevy_core::AsBytes;
 
         // Find the image type we expect. A file with the extension "png" should
@@ -37,7 +37,7 @@ impl AssetLoader for ImageTextureLoader {
         // needs to be added, so the image data needs to be converted in those
         // cases.
 
-        let dyn_img = image::load_from_memory_with_format(bytes.as_slice(), img_format)?;
+        let dyn_img = image::load_from_memory_with_format(bytes, img_format)?;
 
         let width;
         let height;
@@ -152,5 +152,9 @@ impl AssetLoader for ImageTextureLoader {
     fn extensions(&self) -> &[&str] {
         static EXTENSIONS: &[&str] = &["png"];
         EXTENSIONS
+    }
+
+    fn importers(&self) -> &[Uuid] {
+        &[BinaryTextureSerializer::TYPE_UUID]
     }
 }

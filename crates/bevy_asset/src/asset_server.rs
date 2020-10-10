@@ -1,4 +1,5 @@
 use crate::{
+    get_hasher,
     path::{AssetPath, AssetPathId, SourcePathId},
     Asset, AssetDynamic, AssetIo, AssetIoError, AssetLifecycle, AssetLifecycleChannel,
     AssetLifecycleEvent, AssetLoader, AssetSerializer, AssetSerializerDynamic, AssetSources,
@@ -13,6 +14,7 @@ use bevy_utils::HashMap;
 use crossbeam_channel::TryRecvError;
 use parking_lot::RwLock;
 use std::{
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     str::Utf8Error,
     sync::Arc,
@@ -62,7 +64,7 @@ pub struct AssetServerInternal<
     TDestinationIo: AssetIo = FileAssetIo,
 > {
     pub(crate) source_io: TSourceIo,
-    pub(crate) destination_io: TDestinationIo,
+    pub(crate) import_io: Option<TDestinationIo>,
     pub(crate) asset_ref_counter: AssetRefCounter,
     pub(crate) asset_sources: Arc<RwLock<AssetSources>>,
     pub(crate) asset_lifecycles: Arc<RwLock<HashMap<Uuid, Box<dyn AssetLifecycle>>>>,
@@ -75,11 +77,11 @@ pub struct AssetServerInternal<
 }
 
 /// Loads assets from the filesystem on background threads
-pub struct AssetServer<TSourceIo: AssetIo = FileAssetIo, TDestinationIo: AssetIo = FileAssetIo> {
-    pub(crate) server: Arc<AssetServerInternal<TSourceIo, TDestinationIo>>,
+pub struct AssetServer<TSourceIo: AssetIo = FileAssetIo, TImportIo: AssetIo = FileAssetIo> {
+    pub(crate) server: Arc<AssetServerInternal<TSourceIo, TImportIo>>,
 }
 
-impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> Clone for AssetServer<TSourceIo, TDestinationIo> {
+impl<TSourceIo: AssetIo, TImportIo: AssetIo> Clone for AssetServer<TSourceIo, TImportIo> {
     fn clone(&self) -> Self {
         Self {
             server: self.server.clone(),
@@ -87,8 +89,8 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> Clone for AssetServer<TSourceI
     }
 }
 
-impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestinationIo> {
-    pub fn new(source_io: TSourceIo, destination_io: TDestinationIo, task_pool: TaskPool) -> Self {
+impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
+    pub fn new(source_io: TSourceIo, import_io: Option<TImportIo>, task_pool: TaskPool) -> Self {
         AssetServer {
             server: Arc::new(AssetServerInternal {
                 loaders: Default::default(),
@@ -101,7 +103,7 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
                 asset_lifecycles: Default::default(),
                 task_pool,
                 source_io,
-                destination_io,
+                import_io,
             }),
         }
     }
@@ -284,13 +286,13 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         let asset_path: AssetPath = path.into();
         let asset_loader = self.get_path_asset_loader(asset_path.path())?;
         let asset_path_id: AssetPathId = asset_path.get_id();
-        let version = {
+        let (version, old_hash) = {
             let mut asset_sources = self.server.asset_sources.write();
             if asset_sources.get(asset_path_id.source_path_id()).is_none() {
                 let source_meta = match self.load_asset_meta(asset_path.path()) {
                     Ok(source_meta) => source_meta,
                     Err(MetaLoadError::AssetIoError(AssetIoError::NotFound)) => {
-                        SourceMeta::new(asset_loader.type_uuid())
+                        SourceMeta::new(asset_loader.type_uuid(), 0)
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -309,10 +311,24 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
                 .expect("AssetSource Path -> Id mapping should exist");
             source_info.committed_assets = 0;
             source_info.version += 1;
-            source_info.version
+            (source_info.version, source_info.meta.hash)
         };
 
+        // TODO: follow import redirects
+
         let bytes = self.server.source_io.load_path(asset_path.path())?;
+        let mut source_hash = None;
+
+        // if asset was already imported, dont import again
+        if self.server.import_io.is_some() {
+            let hash = asset_source_hash(&bytes);
+            if hash == old_hash {
+                return Some(asset_path_id);
+            }
+            source_hash = Some(hash);
+        }
+        // TODO: if already imported, skip
+
         // TODO: set previous asset ids
         let mut load_context = LoadContext::new(
             asset_path.path(),
@@ -321,14 +337,13 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
             version,
         );
         asset_loader
-            .load(bytes, &mut load_context)
+            .load(&bytes, &mut load_context)
             .map_err(|e| AssetServerError::AssetLoaderError(e))?;
         let mut asset_sources = self.server.asset_sources.write();
         let source_info = asset_sources
             .get_mut(asset_path_id.source_path_id())
             .expect("AssetSource should exist at this point");
 
-        // TODO: fully replace source info to avoid statefulness bugs
         // if version hasn't changed since we started load, update metadata and send assets
         if version == source_info.version {
             load_context.set_meta(&mut source_info.meta);
@@ -347,6 +362,34 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
                 }
             }
 
+            // if importing is enabled, import the loaded assets and save metadata
+            if let Some(import_io) = self.server.import_io.as_ref() {
+                let serializers = self.server.serializers.read();
+                let type_to_serializer = self.server.asset_type_to_serializer.read();
+                for (label, loaded_asset) in load_context.labeled_assets.iter() {
+                    let asset = loaded_asset.value.as_ref().unwrap();
+                    let serializer_id = type_to_serializer.get(&asset.type_uuid()).cloned();
+                    if let Some(serializer) = serializer_id.and_then(|id| serializers.get(&id)) {
+                        let asset_path = AssetPath::new_ref(
+                            asset_path.path(),
+                            label.as_ref().map(|l| l.as_str()),
+                        );
+                        let bytes = serializer
+                            .serialize_dyn(&**asset)
+                            .map_err(|e| AssetServerError::AssetSerializerError(e))?;
+                        // TODO: add asset md5
+                        let imported_asset_hash = imported_asset_hash(
+                            &asset_path,
+                            asset.type_uuid(),
+                            serializer_id.unwrap(),
+                        );
+                        let path_str =
+                            format!("{}.{}", imported_asset_hash, serializer.extension());
+                        let path = Path::new(&path_str);
+                        import_io.save_path(path, &bytes)?;
+                    }
+                }
+            }
             self.create_assets_in_load_context(&mut load_context);
         }
         Ok(asset_path_id)
@@ -398,55 +441,6 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         Ok(handles)
     }
 
-    pub fn import<'a, P: AsRef<Path>>(&self, path: P) -> Result<(), AssetServerError> {
-        let path = path.as_ref();
-        let asset_path = AssetPath::from(path);
-        // TODO: load_sync probably needs to be broken up so we have access to LoadContext here
-        let asset_path_id = self.load_sync(asset_path.clone())?;
-        let mut asset_sources = self.server.asset_sources.write();
-        let asset_info = asset_sources
-            .get_mut(asset_path_id.source_path_id())
-            .unwrap();
-        let meta_ron =
-            ron::ser::to_string_pretty(&asset_info.meta, ron::ser::PrettyConfig::new()).unwrap();
-        let meta_path = Self::get_meta_path(&asset_info.path);
-        self.server
-            .source_io
-            .save_path(&meta_path, meta_ron.as_ref())?;
-        // TODO: serialize + save each asset according to AssetLoader's registered serializers
-        // TODO: import each redirected asset and save meta
-        // TODO: if not redirected, copy source data directly to destination
-        Ok(())
-    }
-
-    pub fn import_all(&self) -> Result<(), AssetServerError> {
-        let path = Path::new("");
-        if !self.server.source_io.is_directory(&path) {
-            return Err(AssetServerError::AssetFolderNotADirectory(
-                path.to_str().unwrap().to_string(),
-            ));
-        }
-
-        let mut handles = Vec::new();
-        for child_path in self.server.source_io.read_directory(path.as_ref())? {
-            if self.server.source_io.is_directory(&child_path) {
-                handles.extend(self.load_folder(&child_path)?);
-            } else {
-                if self.get_path_asset_loader(&child_path).is_err() {
-                    continue;
-                }
-                let server = self.clone();
-                self.server
-                    .task_pool
-                    .spawn(async move {
-                        server.import(&child_path).unwrap();
-                    })
-                    .detach();
-            }
-        }
-        Ok(())
-    }
-
     pub fn serialize_dyn<P: AsRef<Path>>(
         &self,
         asset: &dyn AssetDynamic,
@@ -462,7 +456,9 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
         let serializer = serializers
             .get(&serializer_uuid)
             .ok_or(AssetServerError::MissingAssetSerializer)?;
-        serializer.serialize_dyn(asset).map_err(|e| AssetServerError::AssetSerializerError(e))
+        serializer
+            .serialize_dyn(asset)
+            .map_err(|e| AssetServerError::AssetSerializerError(e))
     }
 
     pub fn free_unused_assets(&self) {
@@ -566,4 +562,22 @@ impl<TSourceIo: AssetIo, TDestinationIo: AssetIo> AssetServer<TSourceIo, TDestin
 
 pub fn free_unused_assets_system(asset_server: Res<AssetServer>) {
     asset_server.free_unused_assets();
+}
+
+fn imported_asset_hash(
+    asset_path: &AssetPath,
+    asset_type_uuid: Uuid,
+    serializer_uuid: Uuid,
+) -> u64 {
+    let mut hasher = get_hasher();
+    asset_path.hash(&mut hasher);
+    asset_type_uuid.hash(&mut hasher);
+    serializer_uuid.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn asset_source_hash(source_bytes: &[u8]) -> u64 {
+    let mut hasher = get_hasher();
+    source_bytes.hash(&mut hasher);
+    hasher.finish()
 }
