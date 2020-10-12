@@ -33,7 +33,7 @@ fn load_atlas(
     }
 
     let mut texture_atlas_builder = TextureAtlasBuilder::default();
-    if let Some(LoadState::Loaded) =
+    if let LoadState::Loaded =
         asset_server.get_group_load_state(rpg_sprite_handles.handles.iter().map(|handle| handle.id))
     {
         for handle in rpg_sprite_handles.handles.iter() {

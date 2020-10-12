@@ -115,6 +115,12 @@ pub(crate) fn get_hasher() -> AHasher {
     AHasher::new_with_keys(42, 23)
 }
 
+pub(crate) fn hash<T: Hash>(value: T) -> u64 {
+    let mut hasher = get_hasher();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
 impl<'a, T> From<T> for AssetPathId
 where
     T: Into<AssetPath<'a>>,

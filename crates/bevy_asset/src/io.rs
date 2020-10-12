@@ -18,7 +18,7 @@ use crate::{filesystem_watcher::FilesystemWatcher, AssetServer};
 #[derive(Error, Debug)]
 pub enum AssetIoError {
     #[error("Path not found")]
-    NotFound,
+    NotFound(PathBuf),
     #[error("Encountered an io error while loading asset.")]
     Io(#[from] io::Error),
     #[error("Failed to watch path")]
@@ -79,7 +79,7 @@ impl AssetIo for FileAssetIo {
             }
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    return Err(AssetIoError::NotFound);
+                    return Err(AssetIoError::NotFound(path.to_owned()));
                 } else {
                     return Err(e.into());
                 }
@@ -163,7 +163,7 @@ pub fn filesystem_watcher_system(asset_server: Res<AssetServer>) {
                         let relative_path = path
                             .strip_prefix(&asset_server.server.source_io.root_path)
                             .unwrap();
-                        let _ = asset_server.load_untracked(relative_path);
+                        let _ = asset_server.load_untracked(relative_path, None);
                     }
                 }
                 changed.extend(paths);

@@ -1,10 +1,10 @@
 use crate::{
-    get_hasher,
+    hash,
     path::{AssetPath, AssetPathId, SourcePathId},
     Asset, AssetDynamic, AssetIo, AssetIoError, AssetLifecycle, AssetLifecycleChannel,
-    AssetLifecycleEvent, AssetLoader, AssetSerializer, AssetSerializerDynamic, AssetSources,
-    Assets, FileAssetIo, Handle, HandleId, HandleUntyped, LabelId, LoadContext, LoadState,
-    RefChange, RefChangeChannel, SourceInfo, SourceMeta,
+    AssetLifecycleEvent, AssetLoader, AssetResult, AssetSerializer, AssetSerializerDynamic, Assets,
+    FileAssetIo, Handle, HandleId, HandleUntyped, LabelId, LoadContext, LoadState, RefChange,
+    RefChangeChannel, SourceInfo, SourceMeta,
 };
 use anyhow::Result;
 use bevy_ecs::Res;
@@ -14,7 +14,8 @@ use bevy_utils::HashMap;
 use crossbeam_channel::TryRecvError;
 use parking_lot::RwLock;
 use std::{
-    hash::{Hash, Hasher},
+    collections::hash_map::Entry,
+    hash::Hash,
     path::{Path, PathBuf},
     str::Utf8Error,
     sync::Arc,
@@ -35,6 +36,8 @@ pub enum AssetServerError {
     MissingAssetSerializer,
     #[error("Encountered an error while loading an asset.")]
     AssetLoaderError(anyhow::Error),
+    #[error("An asset that was supposed to be imported is missing an importer.")]
+    AssetMissingImporter(AssetPath<'static>),
     #[error("Encountered an error while serializing an asset.")]
     AssetSerializerError(anyhow::Error),
     #[error("PathLoader encountered an error")]
@@ -66,7 +69,7 @@ pub struct AssetServerInternal<
     pub(crate) source_io: TSourceIo,
     pub(crate) import_io: Option<TDestinationIo>,
     pub(crate) asset_ref_counter: AssetRefCounter,
-    pub(crate) asset_sources: Arc<RwLock<AssetSources>>,
+    pub(crate) asset_sources: Arc<RwLock<HashMap<SourcePathId, SourceInfo>>>,
     pub(crate) asset_lifecycles: Arc<RwLock<HashMap<Uuid, Box<dyn AssetLifecycle>>>>,
     loaders: RwLock<Vec<Arc<Box<dyn AssetLoader>>>>,
     serializers: RwLock<HashMap<Uuid, Box<dyn AssetSerializerDynamic>>>,
@@ -160,7 +163,7 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
                 }
                 match self.load_asset_meta(&child_path) {
                     Ok(_) => {}
-                    Err(MetaLoadError::AssetIoError(AssetIoError::NotFound)) => {}
+                    Err(MetaLoadError::AssetIoError(AssetIoError::NotFound(_))) => {}
                     Err(err) => return Err(err.into()),
                 }
             }
@@ -230,10 +233,6 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
             .and_then(|extension| self.get_asset_loader(extension))
     }
 
-    pub fn get_load_state_untyped<I: Into<SourcePathId>>(&self, id: I) -> Option<LoadState> {
-        self.server.asset_sources.read().get_load_state(id.into())
-    }
-
     pub fn get_handle_path<H: Into<HandleId>>(&self, handle: H) -> Option<AssetPath<'_>> {
         self.server
             .handle_to_path
@@ -242,94 +241,146 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
             .cloned()
     }
 
-    pub fn get_load_state<H: Into<HandleId>>(&self, handle: H) -> Option<LoadState> {
+    pub fn get_load_state<H: Into<HandleId>>(&self, handle: H) -> LoadState {
         match handle.into() {
-            HandleId::AssetPathId(id) => self
-                .server
-                .asset_sources
-                .read()
-                .get_load_state(id.source_path_id()),
-            HandleId::Id(_, _) => None,
+            HandleId::AssetPathId(id) => {
+                let asset_sources = self.server.asset_sources.read();
+                asset_sources
+                    .get(&id.source_path_id())
+                    .map_or(LoadState::NotLoaded, |info| info.load_state)
+            }
+            HandleId::Id(_, _) => LoadState::NotLoaded,
         }
     }
 
-    pub fn get_group_load_state(
-        &self,
-        handles: impl IntoIterator<Item = HandleId>,
-    ) -> Option<LoadState> {
+    pub fn get_group_load_state(&self, handles: impl IntoIterator<Item = HandleId>) -> LoadState {
         let mut load_state = LoadState::Loaded;
         for handle_id in handles {
             match handle_id {
-                HandleId::AssetPathId(id) => match self.get_load_state_untyped(id) {
-                    Some(LoadState::Loaded) => continue,
-                    Some(LoadState::Loading) => {
+                HandleId::AssetPathId(id) => match self.get_load_state(id) {
+                    LoadState::Loaded => continue,
+                    LoadState::Loading => {
                         load_state = LoadState::Loading;
                     }
-                    Some(LoadState::Failed) => return Some(LoadState::Failed),
-                    None => return None,
+                    LoadState::Failed => return LoadState::Failed,
+                    LoadState::NotLoaded => return LoadState::NotLoaded,
                 },
-                HandleId::Id(_, _) => return None,
+                HandleId::Id(_, _) => return LoadState::NotLoaded,
             }
         }
 
-        Some(load_state)
+        load_state
     }
 
     pub fn load<'a, T: Asset, P: Into<AssetPath<'a>>>(&self, path: P) -> Handle<T> {
         self.load_untyped(path).typed()
     }
 
+    // TODO: properly set failed LoadState in all failure cases
     fn load_sync<'a, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
+        force: bool,
+        redirect: Option<HandleId>,
     ) -> Result<AssetPathId, AssetServerError> {
         let asset_path: AssetPath = path.into();
         let asset_loader = self.get_path_asset_loader(asset_path.path())?;
         let asset_path_id: AssetPathId = asset_path.get_id();
+
+        // load metadata and update source info. this is done in a scope to ensure we release the locks before loading
         let (version, old_hash) = {
             let mut asset_sources = self.server.asset_sources.write();
-            if asset_sources.get(asset_path_id.source_path_id()).is_none() {
-                let source_meta = match self.load_asset_meta(asset_path.path()) {
-                    Ok(source_meta) => source_meta,
-                    Err(MetaLoadError::AssetIoError(AssetIoError::NotFound)) => {
-                        SourceMeta::new(asset_loader.type_uuid(), 0)
-                    }
-                    Err(err) => return Err(err.into()),
-                };
+            let source_info = match asset_sources.entry(asset_path_id.source_path_id()) {
+                Entry::Occupied(entry) => entry.into_mut(),
+                Entry::Vacant(entry) => {
+                    // load asset meta, if it exists
+                    let source_meta = match self.load_asset_meta(asset_path.path()) {
+                        Ok(source_meta) => Some(source_meta),
+                        Err(MetaLoadError::AssetIoError(AssetIoError::NotFound(_))) => None,
+                        Err(err) => return Err(err.into()),
+                    };
+                    entry.insert(SourceInfo {
+                        asset_types: Default::default(),
+                        committed_assets: 0,
+                        load_state: LoadState::NotLoaded,
+                        meta: source_meta,
+                        path: asset_path.path().to_owned(),
+                        version: 0,
+                    })
+                }
+            };
 
-                asset_sources.add(SourceInfo {
-                    load_state: LoadState::Loading,
-                    meta: source_meta,
-                    asset_types: HashMap::default(),
-                    path: asset_path.path().to_owned(),
-                    committed_assets: 0,
-                    version: 0,
-                });
+            // if requested asset is imported, load that asset instead
+            if let Some(ref meta) = source_info.meta {
+                if meta.imported {
+                    let serializers = self.server.serializers.read();
+                    for asset in meta.assets.iter() {
+                        let importer = asset
+                            .importer
+                            .expect("importer field should be set on imported assets");
+                        let imported_asset_hash = hash(&ImportedAssetHash {
+                            source_hash: meta.hash,
+                            label_id: asset_path_id.label_id(),
+                            asset_type_uuid: asset.type_uuid,
+                            loader_uuid: meta.loader,
+                            serializer_uuid: importer,
+                        });
+                        let serializer =
+                            serializers.get(&importer).expect("importer does not exist");
+                        let imported_path =
+                            format!("{}.{}", imported_asset_hash, serializer.extension());
+                        let redirected_asset_path = AssetPath::new_ref(
+                            asset_path.path(),
+                            asset.label.as_ref().map(|l| l.as_str()),
+                        );
+                        let asset_path_id = redirected_asset_path.get_id();
+
+                        source_info
+                            .asset_types
+                            .insert(asset_path_id.label_id(), asset.type_uuid);
+                        self.load_untracked(imported_path.as_str(), Some(asset_path_id.into()));
+                    }
+                    return Ok(asset_path_id);
+                }
             }
-            let source_info = asset_sources
-                .get_mut(asset_path_id.source_path_id())
-                .expect("AssetSource Path -> Id mapping should exist");
+
+            // if asset is already loaded (or is loading), don't load again
+            if !force {
+                match source_info.load_state {
+                    LoadState::Loading => return Ok(asset_path_id),
+                    LoadState::Loaded => {
+                        // TODO: check if still live
+                        return Ok(asset_path_id);
+                    }
+                    LoadState::Failed => {}
+                    LoadState::NotLoaded => {}
+                }
+            }
+
+            source_info.load_state = LoadState::Loading;
             source_info.committed_assets = 0;
             source_info.version += 1;
-            (source_info.version, source_info.meta.hash)
+            (
+                source_info.version,
+                source_info.meta.as_ref().map(|m| m.hash),
+            )
         };
 
-        // TODO: follow import redirects
-
+        // load the asset bytes
         let bytes = self.server.source_io.load_path(asset_path.path())?;
         let mut source_hash = None;
 
-        // if asset was already imported, dont import again
+        // if asset was already imported, don't import again
         if self.server.import_io.is_some() {
-            let hash = asset_source_hash(&bytes);
-            if hash == old_hash {
-                return Some(asset_path_id);
-            }
+            let hash = hash(&bytes);
+            // TODO: check imported meta / file existence and skip
+            // if hash == old_hash {
+            //     return Ok(asset_path_id);
+            // }
             source_hash = Some(hash);
         }
-        // TODO: if already imported, skip
 
-        // TODO: set previous asset ids
+        // load the asset source using the corresponding AssetLoader
         let mut load_context = LoadContext::new(
             asset_path.path(),
             &self.server.asset_ref_counter.channel,
@@ -339,75 +390,128 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
         asset_loader
             .load(&bytes, &mut load_context)
             .map_err(|e| AssetServerError::AssetLoaderError(e))?;
+
+        // if version has changed since we loaded and grabbed a lock, return. theres is a newer version being loaded
         let mut asset_sources = self.server.asset_sources.write();
         let source_info = asset_sources
-            .get_mut(asset_path_id.source_path_id())
+            .get_mut(&asset_path_id.source_path_id())
             .expect("AssetSource should exist at this point");
+        if version != source_info.version {
+            return Ok(asset_path_id);
+        }
 
-        // if version hasn't changed since we started load, update metadata and send assets
-        if version == source_info.version {
-            load_context.set_meta(&mut source_info.meta);
-            // if all assets have been committed (aka there were 0), set state to "Loaded"
-            if source_info.is_loaded() {
-                source_info.load_state = LoadState::Loaded;
+        // if all assets have been committed already (aka there were 0), set state to "Loaded"
+        if source_info.is_loaded() {
+            source_info.load_state = LoadState::Loaded;
+        }
+
+        // reset relevant SourceInfo fields
+        source_info.committed_assets = 0;
+        // TODO: queue free old assets
+        source_info.asset_types.clear();
+
+        // load asset dependencies and prepare asset type hashmap
+        for (label, loaded_asset) in load_context.labeled_assets.iter_mut() {
+            if label.is_none() && redirect.is_some() {
+                loaded_asset.redirect = redirect;
             }
-
-            source_info.asset_types.clear();
-            for (label, loaded_asset) in load_context.labeled_assets.iter() {
-                let label_id = LabelId::from(label.as_ref().map(|label| label.as_str()));
-                let type_uuid = loaded_asset.value.as_ref().unwrap().type_uuid();
-                source_info.asset_types.insert(label_id, type_uuid);
-                for dependency in loaded_asset.dependencies.iter() {
-                    self.load_untracked(dependency.clone());
-                }
+            let label_id = LabelId::from(label.as_ref().map(|label| label.as_str()));
+            let type_uuid = loaded_asset.value.as_ref().unwrap().type_uuid();
+            source_info.asset_types.insert(label_id, type_uuid);
+            for dependency in loaded_asset.dependencies.iter() {
+                self.load_untyped(dependency.clone());
             }
+        }
 
-            // if importing is enabled, import the loaded assets and save metadata
-            if let Some(import_io) = self.server.import_io.as_ref() {
-                let serializers = self.server.serializers.read();
-                let type_to_serializer = self.server.asset_type_to_serializer.read();
-                for (label, loaded_asset) in load_context.labeled_assets.iter() {
-                    let asset = loaded_asset.value.as_ref().unwrap();
-                    let serializer_id = type_to_serializer.get(&asset.type_uuid()).cloned();
-                    if let Some(serializer) = serializer_id.and_then(|id| serializers.get(&id)) {
-                        let asset_path = AssetPath::new_ref(
-                            asset_path.path(),
-                            label.as_ref().map(|l| l.as_str()),
-                        );
-                        let bytes = serializer
-                            .serialize_dyn(&**asset)
-                            .map_err(|e| AssetServerError::AssetSerializerError(e))?;
-                        // TODO: add asset md5
-                        let imported_asset_hash = imported_asset_hash(
-                            &asset_path,
-                            asset.type_uuid(),
-                            serializer_id.unwrap(),
-                        );
-                        let path_str =
-                            format!("{}.{}", imported_asset_hash, serializer.extension());
-                        let path = Path::new(&path_str);
-                        import_io.save_path(path, &bytes)?;
+        // if importing is enabled, import the loaded assets and save metadata
+        if let Some(ref import_io) = self.server.import_io {
+            // update SourceMeta and save to source / import folders
+            let source_hash = source_hash.expect("hash should be set");
+            let mut source_meta = SourceMeta {
+                assets: load_context.get_asset_metas(),
+                hash: source_hash,
+                imported: !asset_loader.importers().is_empty(),
+                loader: asset_loader.type_uuid(),
+            };
+
+            let serializers = self.server.serializers.read();
+            if source_meta.imported {
+                for asset_meta in source_meta.assets.iter_mut() {
+                    for importer in asset_loader.importers() {
+                        if let Some(serializer) = serializers.get(&importer) {
+                            if serializer.asset_type_uuid() == asset_meta.type_uuid {
+                                asset_meta.importer = Some(*importer);
+                            }
+                        }
+                    }
+
+                    if asset_meta.importer.is_none() {
+                        return Err(AssetServerError::AssetMissingImporter(AssetPath::new(
+                            asset_path.path().to_owned(),
+                            asset_meta.label.clone(),
+                        )));
                     }
                 }
             }
-            self.create_assets_in_load_context(&mut load_context);
+
+            // TODO: save non-imported assets directly to .import
+
+            let meta_ron =
+                ron::ser::to_string_pretty(&source_meta, ron::ser::PrettyConfig::new()).unwrap();
+            let meta_path = Self::get_meta_path(&source_info.path);
+            source_info.meta = Some(source_meta);
+            self.server
+                .source_io
+                .save_path(&meta_path, meta_ron.as_bytes())?;
+            import_io.save_path(&meta_path, meta_ron.as_bytes())?;
+
+            // import assets
+            let serializers = self.server.serializers.read();
+            let type_to_serializer = self.server.asset_type_to_serializer.read();
+            for (label, loaded_asset) in load_context.labeled_assets.iter() {
+                let asset = loaded_asset.value.as_ref().unwrap();
+                let serializer_id = type_to_serializer.get(&asset.type_uuid()).cloned();
+                if let Some(serializer) = serializer_id.and_then(|id| serializers.get(&id)) {
+                    let asset_path =
+                        AssetPath::new_ref(asset_path.path(), label.as_ref().map(|l| l.as_str()));
+                    let asset_path_id = asset_path.get_id();
+                    let bytes = serializer
+                        .serialize_dyn(&**asset)
+                        .map_err(|e| AssetServerError::AssetSerializerError(e))?;
+                    let imported_asset_hash = hash(&ImportedAssetHash {
+                        source_hash,
+                        label_id: asset_path_id.label_id(),
+                        asset_type_uuid: asset.type_uuid(),
+                        loader_uuid: asset_loader.type_uuid(),
+                        serializer_uuid: serializer_id.unwrap(),
+                    });
+                    let path_str = format!("{}.{}", imported_asset_hash, serializer.extension());
+                    let path = Path::new(&path_str);
+                    import_io.save_path(path, &bytes)?;
+                }
+            }
         }
+        self.create_assets_in_load_context(&mut load_context);
         Ok(asset_path_id)
     }
 
     pub fn load_untyped<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> HandleUntyped {
-        let handle_id = self.load_untracked(path);
+        let handle_id = self.load_untracked(path, None);
         self.get_handle_untyped(handle_id)
     }
 
-    pub(crate) fn load_untracked<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> HandleId {
+    pub(crate) fn load_untracked<'a, P: Into<AssetPath<'a>>>(
+        &self,
+        path: P,
+        redirect: Option<HandleId>,
+    ) -> HandleId {
         let asset_path: AssetPath<'a> = path.into();
         let server = self.clone();
         let owned_path = asset_path.to_owned();
         self.server
             .task_pool
             .spawn(async move {
-                server.load_sync(owned_path).unwrap();
+                server.load_sync(owned_path, false, redirect).unwrap();
             })
             .detach();
         asset_path.into()
@@ -445,10 +549,8 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
         &self,
         asset: &dyn AssetDynamic,
     ) -> Result<Vec<u8>, AssetServerError> {
-        let serializer_uuid = self
-            .server
-            .asset_type_to_serializer
-            .read()
+        let asset_type_to_serializer = self.server.asset_type_to_serializer.read();
+        let serializer_uuid = asset_type_to_serializer
             .get(&asset.type_uuid())
             .cloned()
             .ok_or(AssetServerError::MissingAssetSerializer)?;
@@ -492,8 +594,10 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
                         let type_uuid = match potential_free {
                             HandleId::Id(type_uuid, _) => Some(type_uuid),
                             HandleId::AssetPathId(id) => asset_sources
-                                .get(id.source_path_id())
-                                .and_then(|source_info| source_info.get_asset_type(id.label_id())),
+                                .get(&id.source_path_id())
+                                .and_then(|source_info| {
+                                    source_info.get_asset_type(id.label_id())
+                                }),
                         };
 
                         if let Some(type_uuid) = type_uuid {
@@ -517,7 +621,12 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
             if let Some(asset_lifecycle) = asset_lifecycles.get(&asset_value.type_uuid()) {
                 let asset_path =
                     AssetPath::new_ref(&load_context.path, label.as_ref().map(|l| l.as_str()));
-                asset_lifecycle.create_asset(asset_path.into(), asset_value, load_context.version);
+                asset_lifecycle.create_asset(
+                    asset_path.into(),
+                    asset_value,
+                    load_context.version,
+                    asset.redirect,
+                );
             } else {
                 panic!("Failed to find AssetSender for label {:?}. Are you sure that is a registered asset type?", label);
             }
@@ -534,11 +643,11 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
 
         loop {
             match channel.receiver.try_recv() {
-                Ok(AssetLifecycleEvent::Create(asset_result)) => {
+                Ok(AssetLifecycleEvent::Create(result)) => {
                     // update SourceInfo if this asset was loaded from an AssetPath
-                    if let HandleId::AssetPathId(id) = asset_result.id {
-                        if let Some(source_info) = asset_sources.get_mut(id.source_path_id()) {
-                            if source_info.version == asset_result.version {
+                    if let HandleId::AssetPathId(id) = result.id {
+                        if let Some(source_info) = asset_sources.get_mut(&id.source_path_id()) {
+                            if source_info.version == result.version {
                                 source_info.committed_assets += 1;
                                 if source_info.is_loaded() {
                                     source_info.load_state = LoadState::Loaded;
@@ -546,7 +655,12 @@ impl<TSourceIo: AssetIo, TImportIo: AssetIo> AssetServer<TSourceIo, TImportIo> {
                             }
                         }
                     }
-                    assets.set(asset_result.id, asset_result.asset);
+
+                    if let Some(redirected_id) = result.redirect {
+                        assets.set(redirected_id, result.asset);
+                    } else {
+                        assets.set(result.id, result.asset);
+                    }
                 }
                 Ok(AssetLifecycleEvent::Free(handle_id)) => {
                     assets.remove(handle_id);
@@ -564,20 +678,11 @@ pub fn free_unused_assets_system(asset_server: Res<AssetServer>) {
     asset_server.free_unused_assets();
 }
 
-fn imported_asset_hash(
-    asset_path: &AssetPath,
+#[derive(Hash)]
+struct ImportedAssetHash {
+    source_hash: u64,
+    label_id: LabelId,
     asset_type_uuid: Uuid,
+    loader_uuid: Uuid,
     serializer_uuid: Uuid,
-) -> u64 {
-    let mut hasher = get_hasher();
-    asset_path.hash(&mut hasher);
-    asset_type_uuid.hash(&mut hasher);
-    serializer_uuid.hash(&mut hasher);
-    hasher.finish()
-}
-
-fn asset_source_hash(source_bytes: &[u8]) -> u64 {
-    let mut hasher = get_hasher();
-    source_bytes.hash(&mut hasher);
-    hasher.finish()
 }

@@ -29,7 +29,13 @@ impl AssetSerializer for BinaryTextureSerializer {
     type Asset = Texture;
 
     fn serialize(&self, asset: &Self::Asset) -> Result<Vec<u8>, anyhow::Error> {
-        let texture = Texture::new_fill(asset.size, &[255, 0, 0, 0], asset.format);
+        // let texture = Texture::new_fill(asset.size, &[255, 0, 0, 0], asset.format);
+        let mut texture = asset.clone();
+        for (i, x) in texture.data.iter_mut().enumerate() {
+            if i % 3 == 0 {
+                *x = 20;
+            }
+        }
         Ok(bincode::serialize(&texture)?)
     }
 

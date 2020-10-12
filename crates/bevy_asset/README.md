@@ -31,8 +31,10 @@
                 * if derives arent registered for all assets, fail
             * else copy source + meta 
         3. save(path)
-
+* track which assets are still alive in SourceInfo
+* imported artifact cleanup
 * store import hash in meta
+* reconcile serializer vs importer terminology
 * Hot reload meta changes
 * UUIDs for asset loaders
 * Importer versions
@@ -46,4 +48,4 @@ Server
   * register_serializer()
     * HashMap{Uuid, Box{dyn AssetSerializer}}
   * save(path: P, asset: T) { get_serializer(T::UUID).serialize(asset) destination_io.save(path, bytes)}
- *  
+  

@@ -1,6 +1,6 @@
 use crate::{
     path::AssetPath, AssetIo, AssetIoError, AssetMeta, AssetServer, Assets, Handle, HandleId,
-    RefChangeChannel, SourceMeta,
+    RefChangeChannel,
 };
 use anyhow::Result;
 use bevy_ecs::{Res, ResMut, Resource};
@@ -31,6 +31,7 @@ impl<T> AssetDynamic for T where T: Send + Sync + 'static + TypeUuidDynamic {}
 pub struct LoadedAsset {
     pub(crate) value: Option<Box<dyn AssetDynamic>>,
     pub(crate) dependencies: Vec<AssetPath<'static>>,
+    pub(crate) redirect: Option<HandleId>,
 }
 
 impl LoadedAsset {
@@ -38,6 +39,7 @@ impl LoadedAsset {
         Self {
             value: Some(Box::new(value)),
             dependencies: Vec::new(),
+            redirect: None,
         }
     }
 
@@ -101,16 +103,17 @@ impl<'a> LoadContext<'a> {
         self.asset_io.load_path(path.as_ref())
     }
 
-    pub fn set_meta(&self, meta: &mut SourceMeta) {
+    pub fn get_asset_metas(&self) -> Vec<AssetMeta> {
         let mut asset_metas = Vec::new();
         for (label, asset) in self.labeled_assets.iter() {
             asset_metas.push(AssetMeta {
                 dependencies: asset.dependencies.clone(),
                 label: label.clone(),
                 type_uuid: asset.value.as_ref().unwrap().type_uuid(),
+                importer: None,
             });
         }
-        meta.assets = asset_metas;
+        asset_metas
     }
 }
 
@@ -119,6 +122,7 @@ pub struct AssetResult<T: Resource> {
     pub asset: T,
     pub id: HandleId,
     pub version: usize,
+    pub redirect: Option<HandleId>,
 }
 
 /// A channel to send and receive [AssetResult]s
@@ -133,18 +137,19 @@ pub enum AssetLifecycleEvent<T: Resource> {
 }
 
 pub trait AssetLifecycle: Downcast + Send + Sync + 'static {
-    fn create_asset(&self, id: HandleId, asset: Box<dyn AssetDynamic>, version: usize);
+    fn create_asset(&self, id: HandleId, asset: Box<dyn AssetDynamic>, version: usize, redirect: Option<HandleId>);
     fn free_asset(&self, id: HandleId);
 }
 impl_downcast!(AssetLifecycle);
 
 impl<T: AssetDynamic> AssetLifecycle for AssetLifecycleChannel<T> {
-    fn create_asset(&self, id: HandleId, asset: Box<dyn AssetDynamic>, version: usize) {
+    fn create_asset(&self, id: HandleId, asset: Box<dyn AssetDynamic>, version: usize, redirect: Option<HandleId>) {
         if let Ok(asset) = asset.downcast::<T>() {
             self.sender
                 .send(AssetLifecycleEvent::Create(AssetResult {
                     id,
                     asset: *asset,
+                    redirect,
                     version,
                 }))
                 .unwrap()

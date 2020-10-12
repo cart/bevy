@@ -22,7 +22,7 @@ impl AssetLoader for BinaryMeshLoader {
 }
 
 #[derive(Default, TypeUuid)]
-#[uuid = "a0294291-14d8-4663-a1d6-59067aecfb4d"]
+#[uuid = "c09c035c-a65f-4758-82fa-7603a202117b"]
 pub struct BinaryMeshSerializer;
 
 impl AssetSerializer for BinaryMeshSerializer {
