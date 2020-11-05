@@ -2,7 +2,7 @@ use crate::pipeline::CompareFunction;
 use std::num::NonZeroU8;
 
 /// Describes a sampler
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct SamplerDescriptor {
     pub address_mode_u: AddressMode,
     pub address_mode_v: AddressMode,
@@ -14,6 +14,7 @@ pub struct SamplerDescriptor {
     pub lod_max_clamp: f32,
     pub compare_function: Option<CompareFunction>,
     pub anisotropy_clamp: Option<NonZeroU8>,
+    pub border_color: Option<SamplerBorderColor>,
 }
 
 impl Default for SamplerDescriptor {
@@ -29,8 +30,16 @@ impl Default for SamplerDescriptor {
             lod_max_clamp: std::f32::MAX,
             compare_function: None,
             anisotropy_clamp: None,
+            border_color: None,
         }
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum SamplerBorderColor {
+    TransparentBlack,
+    OpaqueBlack,
+    OpaqueWhite,
 }
 
 /// How edges should be handled in texture addressing.

@@ -4,14 +4,15 @@ use bevy_render::{
     pipeline::{
         BindType, BlendDescriptor, BlendFactor, BlendOperation, ColorStateDescriptor, ColorWrite,
         CompareFunction, CullMode, DepthStencilStateDescriptor, FrontFace, IndexFormat,
-        InputStepMode, PrimitiveTopology, RasterizationStateDescriptor, StencilOperation,
-        StencilStateDescriptor, StencilStateFaceDescriptor, VertexAttributeDescriptor,
-        VertexBufferDescriptor, VertexFormat,
+        InputStepMode, PolygonMode, PrimitiveTopology, RasterizationStateDescriptor,
+        StencilOperation, StencilStateDescriptor, StencilStateFaceDescriptor,
+        VertexAttributeDescriptor, VertexBufferDescriptor, VertexFormat,
     },
     renderer::BufferUsage,
     texture::{
-        AddressMode, Extent3d, FilterMode, SamplerDescriptor, TextureComponentType,
-        TextureDescriptor, TextureDimension, TextureFormat, TextureUsage, TextureViewDimension,
+        AddressMode, Extent3d, FilterMode, SamplerBorderColor, SamplerDescriptor,
+        TextureComponentType, TextureDescriptor, TextureDimension, TextureFormat, TextureUsage,
+        TextureViewDimension,
     },
 };
 use bevy_window::Window;
@@ -450,6 +451,17 @@ impl WgpuFrom<&RasterizationStateDescriptor> for wgpu::RasterizationStateDescrip
             depth_bias_slope_scale: val.depth_bias_slope_scale,
             depth_bias_clamp: val.depth_bias_clamp,
             clamp_depth: val.clamp_depth,
+            polygon_mode: val.polygon_mode.wgpu_into(),
+        }
+    }
+}
+
+impl WgpuFrom<PolygonMode> for wgpu::PolygonMode {
+    fn from(val: PolygonMode) -> Self {
+        match val {
+            PolygonMode::Fill => wgpu::PolygonMode::Fill,
+            PolygonMode::Line => wgpu::PolygonMode::Line,
+            PolygonMode::Point => wgpu::PolygonMode::Point,
         }
     }
 }
@@ -522,8 +534,8 @@ impl WgpuFrom<IndexFormat> for wgpu::IndexFormat {
     }
 }
 
-impl WgpuFrom<SamplerDescriptor> for wgpu::SamplerDescriptor<'_> {
-    fn from(sampler_descriptor: SamplerDescriptor) -> Self {
+impl WgpuFrom<&SamplerDescriptor> for wgpu::SamplerDescriptor<'_> {
+    fn from(sampler_descriptor: &SamplerDescriptor) -> Self {
         wgpu::SamplerDescriptor {
             label: None,
             address_mode_u: sampler_descriptor.address_mode_u.wgpu_into(),
@@ -536,6 +548,17 @@ impl WgpuFrom<SamplerDescriptor> for wgpu::SamplerDescriptor<'_> {
             lod_max_clamp: sampler_descriptor.lod_max_clamp,
             compare: sampler_descriptor.compare_function.map(|c| c.wgpu_into()),
             anisotropy_clamp: sampler_descriptor.anisotropy_clamp,
+            border_color: sampler_descriptor.border_color.map(|b| b.wgpu_into()),
+        }
+    }
+}
+
+impl WgpuFrom<SamplerBorderColor> for wgpu::SamplerBorderColor {
+    fn from(val: SamplerBorderColor) -> Self {
+        match val {
+            SamplerBorderColor::TransparentBlack => wgpu::SamplerBorderColor::TransparentBlack,
+            SamplerBorderColor::OpaqueBlack => wgpu::SamplerBorderColor::OpaqueBlack,
+            SamplerBorderColor::OpaqueWhite => wgpu::SamplerBorderColor::OpaqueWhite,
         }
     }
 }

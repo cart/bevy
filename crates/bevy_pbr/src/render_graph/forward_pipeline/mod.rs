@@ -1,13 +1,5 @@
 use bevy_asset::{Assets, Handle};
-use bevy_render::{
-    pipeline::{
-        BlendDescriptor, BlendFactor, BlendOperation, ColorStateDescriptor, ColorWrite,
-        CompareFunction, CullMode, DepthStencilStateDescriptor, FrontFace, PipelineDescriptor,
-        RasterizationStateDescriptor, StencilStateDescriptor, StencilStateFaceDescriptor,
-    },
-    shader::{Shader, ShaderStage, ShaderStages},
-    texture::TextureFormat,
-};
+use bevy_render::{pipeline::{BlendDescriptor, BlendFactor, BlendOperation, ColorStateDescriptor, ColorWrite, CompareFunction, CullMode, DepthStencilStateDescriptor, FrontFace, PipelineDescriptor, PolygonMode, RasterizationStateDescriptor, StencilStateDescriptor, StencilStateFaceDescriptor}, shader::{Shader, ShaderStage, ShaderStages}, texture::TextureFormat};
 use bevy_type_registry::TypeUuid;
 
 pub const FORWARD_PIPELINE_HANDLE: Handle<PipelineDescriptor> =
@@ -16,6 +8,7 @@ pub const FORWARD_PIPELINE_HANDLE: Handle<PipelineDescriptor> =
 pub(crate) fn build_forward_pipeline(shaders: &mut Assets<Shader>) -> PipelineDescriptor {
     PipelineDescriptor {
         rasterization_state: Some(RasterizationStateDescriptor {
+            polygon_mode: PolygonMode::Fill,
             front_face: FrontFace::Ccw,
             cull_mode: CullMode::Back,
             depth_bias: 0,

@@ -53,7 +53,6 @@ pub struct WgpuOptions {
 #[derive(Clone)]
 pub enum WgpuPowerOptions {
     HighPerformance,
-    Adaptive,
     LowPower,
 }
 

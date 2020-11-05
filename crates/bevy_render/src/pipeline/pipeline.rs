@@ -1,11 +1,8 @@
-use super::{
-    state_descriptors::{
+use super::{BindType, DynamicBinding, PipelineLayout, PolygonMode, StencilStateDescriptor, state_descriptors::{
         BlendDescriptor, BlendFactor, BlendOperation, ColorStateDescriptor, ColorWrite,
         CompareFunction, CullMode, DepthStencilStateDescriptor, FrontFace, IndexFormat,
         PrimitiveTopology, RasterizationStateDescriptor, StencilStateFaceDescriptor,
-    },
-    BindType, DynamicBinding, PipelineLayout, StencilStateDescriptor,
-};
+    }};
 use crate::{
     shader::{Shader, ShaderStages},
     texture::TextureFormat,
@@ -80,6 +77,7 @@ impl PipelineDescriptor {
                 depth_bias_slope_scale: 0.0,
                 depth_bias_clamp: 0.0,
                 clamp_depth: false,
+                polygon_mode: PolygonMode::Fill,
             }),
             depth_stencil_state: Some(DepthStencilStateDescriptor {
                 format: TextureFormat::Depth32Float,
