@@ -1,4 +1,7 @@
 use bevy::{asset::LoadState, prelude::*, sprite::TextureAtlasBuilder};
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// In this example we generate a new texture atlas (sprite sheet) from a folder containing individual sprites
 fn main() {

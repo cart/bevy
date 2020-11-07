@@ -3,6 +3,9 @@ use bevy::{
     render::pass::ClearColor,
     sprite::collide_aabb::{collide, Collision},
 };
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// An implementation of the classic game "Breakout"
 fn main() {

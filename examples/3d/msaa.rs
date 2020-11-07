@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// This example shows how to configure Multi-Sample Anti-Aliasing. Setting the sample count higher will result in smoother edges,
 /// but it will also increase the cost to render those edges. The range should generally be somewhere between 1 (no multi sampling,

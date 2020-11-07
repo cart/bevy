@@ -1,4 +1,7 @@
 use bevy::{prelude::*, tasks::prelude::*};
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 use rand::random;
 
 struct Velocity(Vec2);

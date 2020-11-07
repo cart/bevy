@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// This example illustrates the various features of Bevy UI.
 fn main() {

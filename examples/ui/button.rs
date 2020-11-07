@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// This example illustrates how to create a button that changes color and text based on its interaction state.
 fn main() {

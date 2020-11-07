@@ -1,5 +1,10 @@
-use bevy::prelude::*;
-use bevy_input::gamepad::{GamepadEvent, GamepadEventType};
+use bevy::{
+    input::gamepad::{GamepadEvent, GamepadEventType},
+    prelude::*,
+};
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 fn main() {
     App::build()

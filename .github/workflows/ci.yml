@@ -83,7 +83,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --target wasm32-unknown-unknown --no-default-features --features bevy_winit,x11,hdr,bevy_gltf
+          args: --target wasm32-unknown-unknown --no-default-features --features bevy/bevy_winit,bevy/x11,bevy/hdr,bevy/bevy_gltf
 
   build-android:
     runs-on: ubuntu-latest

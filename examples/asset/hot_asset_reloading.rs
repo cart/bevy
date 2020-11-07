@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// Hot reloading allows you to modify assets on disk and they will be "live reloaded" while your game is running.
 /// This lets you immediately see the results of your changes without restarting the game.

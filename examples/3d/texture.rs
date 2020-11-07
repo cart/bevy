@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// This example shows various ways to configure texture materials in 3D
 fn main() {

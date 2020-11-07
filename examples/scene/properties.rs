@@ -4,6 +4,9 @@ use bevy::{
     scene::serialize_ron,
     type_registry::TypeRegistry,
 };
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 use serde::{Deserialize, Serialize};
 
 /// This example illustrates how Properties work. Properties provide a way to dynamically interact with Rust struct fields using

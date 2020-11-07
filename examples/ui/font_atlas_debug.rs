@@ -1,4 +1,7 @@
 use bevy::{prelude::*, text::FontAtlasSet};
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// This example illustrates how FontAtlases are populated. Bevy uses FontAtlases under the hood to optimize text rendering.
 fn main() {

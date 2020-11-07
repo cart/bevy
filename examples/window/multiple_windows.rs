@@ -11,6 +11,9 @@ use bevy::{
     },
     window::{CreateWindow, WindowDescriptor, WindowId},
 };
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// This example creates a second window and draws a mesh from two different cameras.
 fn main() {

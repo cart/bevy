@@ -1,4 +1,7 @@
 use bevy::{app::PluginGroupBuilder, prelude::*};
+#[allow(unused_imports)]
+#[allow(clippy::single_component_path_imports)]
+use bevy_dylib;
 
 /// PluginGroups are a way to group sets of plugins that should be registered together.
 fn main() {
