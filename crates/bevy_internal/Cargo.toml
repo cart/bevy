@@ -1,5 +1,5 @@
 [package]
-name = "bevy"
+name = "bevy_internal"
 version = "0.3.0"
 edition = "2018"
 authors = [
@@ -12,37 +12,20 @@ repository = "https://github.com/bevyengine/bevy"
 license = "MIT"
 keywords = ["game", "engine", "gamedev", "graphics", "bevy"]
 categories = ["game-engines", "graphics", "gui", "rendering"]
-readme = "README.md"
 
 [features]
-default = [
-    "bevy_audio",
-    "bevy_dynamic_plugin",
-    "bevy_gilrs",
-    "bevy_gltf",
-    "bevy_wgpu",
-    "bevy_winit",
-    "render",
-    "png",
-    "hdr",
-    "mp3",
-    "x11",
-]
-
 profiler = ["bevy_ecs/profiler", "bevy_diagnostic/profiler"]
 wgpu_trace = ["bevy_wgpu/trace"]
 
-# Rendering support
-render = ["bevy_pbr", "bevy_render", "bevy_sprite", "bevy_text", "bevy_ui"]
 # Image format support for texture loading (PNG and HDR are enabled by default)
-png = ["bevy_render/png"]
 hdr = ["bevy_render/hdr"]
+png = ["bevy_render/png"]
 
 # Audio format support (MP3 is enabled by default)
-mp3 = ["bevy_audio/mp3"]
 flac = ["bevy_audio/flac"]
-wav = ["bevy_audio/wav"]
+mp3 = ["bevy_audio/mp3"]
 vorbis = ["bevy_audio/vorbis"]
+wav = ["bevy_audio/wav"]
 
 serialize = ["bevy_input/serialize"]
 

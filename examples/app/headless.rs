@@ -1,7 +1,5 @@
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
+
 use std::time::Duration;
 
 // This example only enables a minimal set of plugins required for bevy to run.

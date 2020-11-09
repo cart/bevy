@@ -1,7 +1,5 @@
 use bevy::prelude::*;
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
+
 
 /// This example creates a new event, a system that triggers the event once per second,
 /// and a system that prints a message whenever the event is received.

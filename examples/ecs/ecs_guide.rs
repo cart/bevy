@@ -2,9 +2,7 @@ use bevy::{
     app::{AppExit, ScheduleRunnerPlugin, ScheduleRunnerSettings},
     prelude::*,
 };
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
+
 use rand::random;
 use std::time::Duration;
 

@@ -1,7 +1,4 @@
 use bevy::{prelude::*, type_registry::TypeRegistry};
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
 
 /// This example illustrates loading and saving scenes from files
 fn main() {

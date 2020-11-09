@@ -2,9 +2,7 @@ use bevy::{
     diagnostic::{Diagnostic, DiagnosticId, Diagnostics, PrintDiagnosticsPlugin},
     prelude::*,
 };
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
+
 
 /// This example illustrates how to create a custom diagnostic
 fn main() {

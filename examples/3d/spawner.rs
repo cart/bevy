@@ -2,9 +2,7 @@ use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, PrintDiagnosticsPlugin},
     prelude::*,
 };
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
+
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 /// This example spawns a large number of cubes, each with its own changing position and material

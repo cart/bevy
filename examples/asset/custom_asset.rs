@@ -4,9 +4,7 @@ use bevy::{
     type_registry::TypeUuid,
     utils::BoxedFuture,
 };
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
+
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, TypeUuid)]

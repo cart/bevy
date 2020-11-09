@@ -9,9 +9,6 @@ use bevy::{
     },
     type_registry::TypeUuid,
 };
-#[allow(unused_imports)]
-#[allow(clippy::single_component_path_imports)]
-use bevy_dylib;
 
 /// This example illustrates how to add a custom attribute to a mesh and use it in a custom shader.
 fn main() {

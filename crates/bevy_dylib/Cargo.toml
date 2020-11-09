@@ -16,4 +16,4 @@ keywords = ["bevy"]
 crate-type = ["dylib"]
 
 [dependencies]
-bevy = { path = "../bevy", version = "0.3.0", default-features = false }
+bevy_internal = { path = "../bevy_internal", version = "0.3.0", default-features = false }
