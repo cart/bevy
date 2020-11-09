@@ -241,8 +241,7 @@ impl<'a> DrawContext<'a> {
         &mut self,
         draw: &mut Draw,
         pipeline_handle: &Handle<PipelineDescriptor>,
-        specialization: &mut PipelineSpecialization,
-        render_resource_bindings: &mut [&mut RenderResourceBindings],
+        specialization: &PipelineSpecialization,
     ) -> Result<(), DrawError> {
         let specialized_pipeline = if let Some(specialized_pipeline) = self
             .pipeline_compiler
@@ -256,7 +255,6 @@ impl<'a> DrawContext<'a> {
                 &mut self.shaders,
                 pipeline_handle,
                 specialization,
-                render_resource_bindings,
             )
         };
 
