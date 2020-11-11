@@ -585,7 +585,7 @@ impl WgpuFrom<FilterMode> for wgpu::FilterMode {
 impl WgpuFrom<&Window> for wgpu::SwapChainDescriptor {
     fn from(window: &Window) -> Self {
         wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: TextureFormat::default().wgpu_into(),
             width: window.width(),
             height: window.height(),

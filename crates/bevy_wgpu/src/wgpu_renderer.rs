@@ -22,7 +22,7 @@ pub struct WgpuRenderer {
 
 impl WgpuRenderer {
     pub async fn new(options: WgpuOptions) -> Self {
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::BackendBit::GL);
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
