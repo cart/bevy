@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Reflect)]
 #[reflect(Component, MapEntities)]
-pub struct Parent(pub Entity);
+pub struct Parent(pub(crate) Entity);
 
 // TODO: We need to impl either FromResources or Default so Parent can be registered as Properties.
 // This is because Properties deserialize by creating an instance and apply a patch on top.

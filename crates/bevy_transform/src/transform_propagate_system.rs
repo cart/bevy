@@ -70,7 +70,7 @@ fn propagate_recursive(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::hierarchy::{parent_update_system, BuildChildren, BuildWorldChildren};
+    use crate::hierarchy::{BuildChildren, BuildWorldChildren};
     use bevy_ecs::{Resources, Schedule, SystemStage, World};
     use bevy_math::Vec3;
 
@@ -80,7 +80,6 @@ mod test {
         let mut resources = Resources::default();
 
         let mut update_stage = SystemStage::parallel();
-        update_stage.add_system(parent_update_system.system());
         update_stage.add_system(transform_propagate_system.system());
 
         let mut schedule = Schedule::default();
@@ -133,7 +132,6 @@ mod test {
         let mut resources = Resources::default();
 
         let mut update_stage = SystemStage::parallel();
-        update_stage.add_system(parent_update_system.system());
         update_stage.add_system(transform_propagate_system.system());
 
         let mut schedule = Schedule::default();

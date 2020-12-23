@@ -21,4 +21,5 @@ bevy_reflect = { path = "../bevy_reflect", version = "0.4.0", features = ["bevy"
 bevy_utils = { path = "../bevy_utils", version = "0.4.0" }
 
 # other
+thiserror = "1.0"
 smallvec = { version = "1.4", features = ["serde"] }

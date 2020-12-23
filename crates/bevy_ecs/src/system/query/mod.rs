@@ -7,6 +7,7 @@ use crate::{
 };
 use bevy_tasks::ParallelIterator;
 use std::marker::PhantomData;
+use thiserror::Error;
 
 /// Provides scoped access to a World according to a given [HecsQuery]
 #[derive(Debug)]
@@ -17,11 +18,15 @@ pub struct Query<'a, Q: WorldQuery, F: QueryFilter = ()> {
 }
 
 /// An error that occurs when using a [Query]
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum QueryError {
+    #[error("Cannot read the given archetype.")]
     CannotReadArchetype,
+    #[error("Cannot write the given archetype.")]
     CannotWriteArchetype,
+    #[error("Encountered a ComponentError.")]
     ComponentError(ComponentError),
+    #[error("The given entity does not exist.")]
     NoSuchEntity,
 }
 
