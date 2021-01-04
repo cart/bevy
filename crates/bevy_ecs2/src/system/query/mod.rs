@@ -123,7 +123,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
     /// Gets a reference to the entity's component of the given type. This will fail if the entity does not have
     /// the given component type or if the given component type does not match this query.
     pub fn get_component<T: Component>(&self, entity: Entity) -> Result<&T, QueryError> {
-        if let Some(location) = self.world.get_entity_location(entity) {
+        if let Ok(location) = self.world.entities().get(entity) {
             if self
                 .component_access
                 .is_read_or_write(&ArchetypeComponent::new::<T>(location.archetype))

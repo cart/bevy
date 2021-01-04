@@ -358,7 +358,9 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, Q, F> {
         unsafe {
             loop {
                 if self.chunk_position == self.chunk_info.len {
-                    let archetype = self.archetypes.get(ArchetypeId(self.archetype_index as u32))?;
+                    let archetype = self
+                        .archetypes
+                        .get(ArchetypeId(self.archetype_index as u32))?;
                     self.archetype_index += 1;
                     self.chunk_position = 0;
                     self.chunk_info = Q::Fetch::get(archetype, 0)
@@ -430,7 +432,7 @@ impl<Q: WorldQuery, F: QueryFilter> ChunkIter<Q, F> {
 
 /// Batched version of `QueryIter`
 pub struct BatchedIter<'w, Q: WorldQuery, F: QueryFilter> {
-    archetypes: &'w [Archetype],
+    archetypes: &'w Archetypes,
     archetype_index: usize,
     batch_size: usize,
     batch: usize,
@@ -438,7 +440,7 @@ pub struct BatchedIter<'w, Q: WorldQuery, F: QueryFilter> {
 }
 
 impl<'w, Q: WorldQuery, F: QueryFilter> BatchedIter<'w, Q, F> {
-    pub(crate) fn new(archetypes: &'w [Archetype], batch_size: usize) -> Self {
+    pub(crate) fn new(archetypes: &'w Archetypes, batch_size: usize) -> Self {
         Self {
             archetypes,
             archetype_index: 0,
@@ -457,7 +459,9 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Iterator for BatchedIter<'w, Q, F> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let archetype = self.archetypes.get(self.archetype_index)?;
+            let archetype = self
+                .archetypes
+                .get(ArchetypeId(self.archetype_index as u32))?;
             let offset = self.batch_size * self.batch;
             if offset >= archetype.len() {
                 self.archetype_index += 1;

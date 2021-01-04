@@ -1,4 +1,4 @@
-use crate::{AtomicBorrow, Component, ComponentFlags, Entity};
+use crate::{AtomicBorrow, Bundle, Component, ComponentFlags, Entity};
 use bevy_utils::AHasher;
 use std::{
     alloc::{alloc, dealloc, Layout},
@@ -473,12 +473,14 @@ impl Hasher for TypeIdHasher {
 pub(crate) type TypeIdMap<V> = HashMap<TypeId, V, BuildHasherDefault<TypeIdHasher>>;
 pub struct Archetypes {
     pub archetypes: Vec<Archetype>,
+    removed_components: HashMap<TypeId, Vec<Entity>>,
 }
 
 impl Default for Archetypes {
     fn default() -> Self {
         Self {
             archetypes: vec![Archetype::new(Vec::new())],
+            removed_components: Default::default(),
         }
     }
 }
@@ -490,7 +492,7 @@ impl Archetypes {
     }
 
     #[inline]
-    pub fn empty_archetype_mut(&mut self) -> &mut Archetype {
+    pub(crate) fn empty_archetype_mut(&mut self) -> &mut Archetype {
         &mut self.archetypes[0]
     }
 
@@ -504,26 +506,40 @@ impl Archetypes {
     }
 
     #[inline]
-    pub fn get_mut(&mut self, id: ArchetypeId) -> Option<&mut Archetype> {
+    pub(crate) fn get_mut(&mut self, id: ArchetypeId) -> Option<&mut Archetype> {
         self.archetypes.get_mut(id.0 as usize)
     }
 
-    pub fn get_or_insert_archetype(&mut self, type_info: Vec<TypeInfo>) -> ArchetypeId {
+    pub(crate) fn get_or_insert_archetype(&mut self, type_info: Vec<TypeInfo>) -> ArchetypeId {
         self.archetypes.push(Archetype::new(type_info));
         ArchetypeId((self.archetypes.len() - 1) as u32)
     }
 
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item=&Archetype> {
+    pub fn iter(&self) -> impl Iterator<Item = &Archetype> {
         self.archetypes.iter()
     }
 
+    pub(crate) fn clear_trackers(&mut self) {
+        for archetype in self.archetypes.iter_mut() {
+            archetype.clear_trackers();
+        }
+
+        self.removed_components.clear();
+    }
+
+    pub fn removed<C: Component>(&self) -> &[Entity] {
+        self.removed_components
+            .get(&TypeId::of::<C>())
+            .map_or(&[], |entities| entities.as_slice())
+    }
+
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item=&mut Archetype> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Archetype> {
         self.archetypes.iter_mut()
     }
 
-    pub fn flush_entities(&mut self, entities: &mut Entities) {
+    pub(crate) fn flush_entities(&mut self, entities: &mut Entities) {
         let empty_archetype = self.empty_archetype_mut();
         for entity_id in entities.flush() {
             entities.meta[entity_id as usize].location.index = unsafe {
@@ -543,6 +559,19 @@ impl Archetypes {
             };
         }
         entities.clear_reserved();
+    }
+
+    pub(crate) fn clear(&mut self) {
+        for archetype in &mut self.archetypes {
+            for ty in archetype.types() {
+                let removed_entities = self
+                    .removed_components
+                    .entry(ty.id())
+                    .or_insert_with(Vec::new);
+                removed_entities.extend(archetype.iter_entities().copied());
+            }
+            archetype.clear();
+        }
     }
 }
 

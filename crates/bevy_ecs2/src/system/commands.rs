@@ -1,5 +1,8 @@
 use super::SystemId;
-use crate::{Bundle, Component, ComponentError, DynamicBundle, Entity, EntityReserver, World, resource::{Resource, Resources}};
+use crate::{
+    resource::{Resource, Resources},
+    Bundle, Component, ComponentError, DynamicBundle, Entity, EntityReserver, World,
+};
 use bevy_utils::tracing::{debug, warn};
 use std::marker::PhantomData;
 
@@ -414,7 +417,7 @@ mod tests {
         let mut world = World::default();
         let mut resources = Resources::default();
         let mut command_buffer = Commands::default();
-        command_buffer.set_entity_reserver(world.get_entity_reserver());
+        command_buffer.set_entity_reserver(world.entities().get_reserver());
         command_buffer.spawn((1u32, 2u64));
         let entity = command_buffer.current_entity().unwrap();
         command_buffer.insert_resource(3.14f32);
@@ -441,7 +444,7 @@ mod tests {
         let mut world = World::default();
         let mut resources = Resources::default();
         let mut command_buffer = Commands::default();
-        command_buffer.set_entity_reserver(world.get_entity_reserver());
+        command_buffer.set_entity_reserver(world.entities().get_reserver());
         command_buffer.spawn((1u32, 2u64));
         let entity = command_buffer.current_entity().unwrap();
         command_buffer.apply(&mut world, &mut resources);

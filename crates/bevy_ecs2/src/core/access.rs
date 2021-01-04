@@ -297,9 +297,9 @@ mod tests {
         let e2 = world.spawn((A, B));
         let e3 = world.spawn((A, B, C));
 
-        let e1_archetype = world.get_entity_location(e1).unwrap().archetype;
-        let e2_archetype = world.get_entity_location(e2).unwrap().archetype;
-        let e3_archetype = world.get_entity_location(e3).unwrap().archetype;
+        let e1_archetype = world.entities().get(e1).unwrap().archetype;
+        let e2_archetype = world.entities().get(e2).unwrap().archetype;
+        let e3_archetype = world.entities().get(e3).unwrap().archetype;
 
         let e1_a = ArchetypeComponent::new::<A>(e1_archetype);
         let e2_a = ArchetypeComponent::new::<A>(e2_archetype);

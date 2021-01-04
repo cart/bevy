@@ -3,6 +3,9 @@ mod resource;
 mod schedule;
 mod system;
 
+#[cfg(test)]
+mod tests;
+
 pub use crate::core::*;
 pub use bevy_ecs_macros2::*;
 pub use lazy_static;

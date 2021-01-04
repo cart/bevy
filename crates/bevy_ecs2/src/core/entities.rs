@@ -252,6 +252,10 @@ impl Entities {
         }
     }
 
+    pub fn len(&self) -> u32 {
+        self.meta.len() as u32 - self.freed_len() + self.reserved_len() + self.pending_len()
+    }
+
     /// Number of freed entities in `self.meta`
     pub fn freed_len(&self) -> u32 {
         self.free_cursor.load(Ordering::Relaxed)

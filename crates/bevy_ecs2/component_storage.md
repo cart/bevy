@@ -14,6 +14,12 @@
 * Bundle type -> ComponentId cache
 
 
+## TODO
+
+* un-comment tests
+* make reserver api safe
+
+
 ## Scratch
 
 A: Archetype
