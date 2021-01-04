@@ -1,23 +1,16 @@
-use std::{any::TypeId, fmt};
-
-use bevy_utils::HashMap;
-
+use super::{component::Components, entities::Entities};
 use crate::{
     Archetype, ArchetypeId, Archetypes, BatchedIter, Bundle, Component, ComponentFlags,
     DynamicBundle, Entity, EntityFilter, Fetch, Location, MissingComponent, Mut, NoSuchEntity,
     QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo, WorldQuery,
 };
-
-use super::{
-    component::{ComponentId, Components},
-    entities::Entities,
-};
+use bevy_utils::HashMap;
+use std::{any::TypeId, fmt};
 
 #[derive(Debug)]
 struct BundleInfo {
     archetype: ArchetypeId,
-    archetype_components: Vec<ComponentId>,
-    sparse_set_components: Vec<ComponentId>,
+    storage_types: Vec<StorageType>,
 }
 
 #[derive(Default)]
@@ -32,12 +25,13 @@ impl BundleInfos {
         bundle: &T,
         components: &mut Components,
         archetypes: &mut Archetypes,
+        sparse_sets: &mut SparseSets,
     ) -> &'a BundleInfo {
         self.bundle_info
             .entry(TypeId::of::<T>())
             .or_insert_with(|| {
                 let type_info = bundle.type_info();
-                Self::get_bundle_info(type_info, components, archetypes)
+                Self::get_bundle_info(type_info, components, archetypes, sparse_sets)
             })
     }
 
@@ -46,12 +40,13 @@ impl BundleInfos {
         &'a mut self,
         components: &mut Components,
         archetypes: &mut Archetypes,
+        sparse_sets: &mut SparseSets,
     ) -> &'a BundleInfo {
         self.bundle_info
             .entry(TypeId::of::<T>())
             .or_insert_with(|| {
                 let type_info = T::static_type_info();
-                Self::get_bundle_info(type_info, components, archetypes)
+                Self::get_bundle_info(type_info, components, archetypes, sparse_sets)
             })
     }
 
@@ -60,29 +55,24 @@ impl BundleInfos {
         mut type_info: Vec<TypeInfo>,
         components: &mut Components,
         archetypes: &mut Archetypes,
+        sparse_sets: &mut SparseSets,
     ) -> BundleInfo {
-        let mut archetype_components = Vec::new();
-        let mut sparse_set_components = Vec::new();
+        let mut storage_types = Vec::new();
+
+        // filter out non-archetype TypeInfo and collect component info
         type_info.retain(|type_info| {
             let component_id = components.init_type_info(type_info);
             let component_info = components.get_info(component_id).unwrap();
-            match component_info.storage_type {
-                StorageType::Archetype => {
-                    archetype_components.push(component_id);
-                    true
-                }
-                StorageType::SparseSet => {
-                    sparse_set_components.push(component_id);
-                    false
-                }
-            }
+            storage_types.push(component_info.storage_type);
+            if component_info.storage_type == StorageType::SparseSet {}
+
+            component_info.storage_type == StorageType::Archetype
         });
 
-        let archetype_id = archetypes.get_or_insert_archetype(type_info);
+        let archetype_id = archetypes.get_or_insert(type_info);
         BundleInfo {
             archetype: archetype_id,
-            archetype_components,
-            sparse_set_components,
+            storage_types,
         }
     }
 }
@@ -103,25 +93,40 @@ impl World {
 
     pub fn spawn(&mut self, bundle: impl DynamicBundle) -> Entity {
         self.flush();
-        let bundle_info =
-            self.bundle_infos
-                .get_dynamic(&bundle, &mut self.components, &mut self.archetypes);
+        let bundle_info = self.bundle_infos.get_dynamic(
+            &bundle,
+            &mut self.components,
+            &mut self.archetypes,
+            &mut self.sparse_sets,
+        );
         let archetype = self.archetypes.get_mut(bundle_info.archetype).unwrap();
         let entity = self.entities.alloc();
         unsafe {
-            let index = archetype.allocate(entity);
+            let archetype_index = archetype.allocate(entity);
+            let mut bundle_index = 0;
             bundle.put(|ptr, ty, size| {
                 // TODO: if arch add, otherwise add to sparse set
                 // TODO: instead of using type, use index to cut down on hashing
                 // TODO: sort by TypeId instead of alignment for clearer results?
                 // TODO: use ComponentId instead of TypeId in archetype?
-                archetype.put_dynamic(ptr, ty, size, index, ComponentFlags::ADDED);
+                match bundle_info.storage_types[bundle_index] {
+                    StorageType::Archetype => {
+                        archetype.put_dynamic(
+                            ptr,
+                            ty,
+                            size,
+                            archetype_index,
+                            ComponentFlags::ADDED,
+                        );
+                    }
+                    StorageType::SparseSet => {}
+                }
+                bundle_index += 1;
                 true
             });
             self.entities.meta[entity.id as usize].location = Location {
-                // TODO: use ArchetypeId directly here
-                archetype: bundle_info.archetype.0,
-                index,
+                archetype: bundle_info.archetype,
+                index: archetype_index,
             };
         }
         entity
@@ -152,9 +157,11 @@ impl World {
         let iter = iter.into_iter();
         let (lower, upper) = iter.size_hint();
 
-        let bundle_info = self
-            .bundle_infos
-            .get_static::<I::Item>(&mut self.components, &mut self.archetypes);
+        let bundle_info = self.bundle_infos.get_static::<I::Item>(
+            &mut self.components,
+            &mut self.archetypes,
+            &mut self.sparse_sets,
+        );
 
         let archetype = self.archetypes.get_mut(bundle_info.archetype).unwrap();
         let length = upper.unwrap_or(lower);
@@ -163,7 +170,7 @@ impl World {
         SpawnBatchIter {
             inner: iter,
             entities: &mut self.entities,
-            archetype_id: bundle_info.archetype.0,
+            archetype_id: bundle_info.archetype,
             archetype,
         }
     }
@@ -214,11 +221,11 @@ impl World {
         entity: Entity,
     ) -> Result<Mut<'_, T>, ComponentError> {
         let loc = self.entities.get(entity)?;
-        if loc.archetype == 0 {
+        if loc.archetype.is_empty_archetype() {
             return Err(MissingComponent::new::<T>().into());
         }
         Ok(Mut::new(
-            self.archetypes.get(ArchetypeId(loc.archetype)).unwrap(),
+            self.archetypes.get(loc.archetype).unwrap(),
             loc.index,
         )?)
     }
@@ -256,6 +263,16 @@ impl World {
     #[inline]
     pub fn archetypes_mut(&mut self) -> &mut Archetypes {
         &mut self.archetypes
+    }
+
+    #[inline]
+    pub fn components(&self) -> &Components {
+        &self.components
+    }
+
+    #[inline]
+    pub fn components_mut(&mut self) -> &mut Components {
+        &mut self.components
     }
 
     /// Efficiently iterate over all entities that have certain components
@@ -436,7 +453,7 @@ impl World {
         entity: Entity,
     ) -> Result<<Q::Fetch as Fetch>::Item, NoSuchEntity> {
         let loc = self.entities.get(entity)?;
-        let archetype = self.archetypes.get(ArchetypeId(loc.archetype)).unwrap();
+        let archetype = self.archetypes.get(loc.archetype).unwrap();
         let matches_filter = F::get_entity_filter(archetype)
             .map(|entity_filter| entity_filter.matches_entity(loc.index))
             .unwrap_or(false);
@@ -470,13 +487,10 @@ impl World {
         &self,
         location: Location,
     ) -> Result<&T, ComponentError> {
-        if location.archetype == 0 {
+        if location.archetype.is_empty_archetype() {
             return Err(MissingComponent::new::<T>().into());
         }
-        let archetype = self
-            .archetypes
-            .get(ArchetypeId(location.archetype))
-            .unwrap();
+        let archetype = self.archetypes.get(location.archetype).unwrap();
         Ok(&*archetype
             .get::<T>()
             .ok_or_else(MissingComponent::new::<T>)?
@@ -493,13 +507,10 @@ impl World {
         &self,
         location: Location,
     ) -> Result<Mut<T>, ComponentError> {
-        if location.archetype == 0 {
+        if location.archetype.is_empty_archetype() {
             return Err(MissingComponent::new::<T>().into());
         }
-        let archetype = self
-            .archetypes
-            .get(ArchetypeId(location.archetype))
-            .unwrap();
+        let archetype = self.archetypes.get(location.archetype).unwrap();
         Ok(Mut::new(archetype, location.index)?)
     }
 
@@ -575,7 +586,7 @@ where
 {
     inner: I,
     entities: &'a mut Entities,
-    archetype_id: u32,
+    archetype_id: ArchetypeId,
     archetype: &'a mut Archetype,
 }
 

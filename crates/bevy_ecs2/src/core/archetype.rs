@@ -12,8 +12,20 @@ use std::{
 
 use super::entities::Entities;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ArchetypeId(pub(crate) u32);
+
+impl ArchetypeId {
+    #[inline]
+    pub fn empty_archetype() -> ArchetypeId {
+        ArchetypeId(0)
+    }
+
+    #[inline]
+    pub fn is_empty_archetype(&self) -> bool {
+        self.0 == 0
+    }
+}
 
 /// Determines freshness of information derived from `World::archetypes`
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -25,6 +37,7 @@ pub struct ArchetypesGeneration(pub u32);
 /// go through the `World`.
 #[derive(Debug)]
 pub struct Archetype {
+    id: ArchetypeId,
     types: Vec<TypeInfo>,
     state: TypeIdMap<TypeState>,
     len: usize,
@@ -56,18 +69,20 @@ impl Archetype {
     }
 
     #[allow(missing_docs)]
-    pub fn new(types: Vec<TypeInfo>) -> Self {
-        Self::with_grow(types, 64)
+    pub fn new(id: ArchetypeId, types: Vec<TypeInfo>) -> Self {
+        Self::with_grow(id, types, 64)
     }
 
     #[allow(missing_docs)]
-    pub fn with_grow(types: Vec<TypeInfo>, grow_size: usize) -> Self {
+    pub fn with_grow(id: ArchetypeId, mut types: Vec<TypeInfo>, grow_size: usize) -> Self {
+        types.sort_unstable();
         Self::assert_type_info(&types);
         let mut state = HashMap::with_capacity_and_hasher(types.len(), Default::default());
         for ty in &types {
             state.insert(ty.id(), TypeState::new());
         }
         Self {
+            id,
             state,
             types,
             entities: Vec::new(),
@@ -91,6 +106,11 @@ impl Archetype {
             }
         }
         self.len = 0;
+    }
+
+    #[inline]
+    pub fn id(&self) -> ArchetypeId {
+        self.id
     }
 
     #[allow(missing_docs)]
@@ -473,13 +493,15 @@ impl Hasher for TypeIdHasher {
 pub(crate) type TypeIdMap<V> = HashMap<TypeId, V, BuildHasherDefault<TypeIdHasher>>;
 pub struct Archetypes {
     pub archetypes: Vec<Archetype>,
+    archetype_ids: HashMap<Vec<TypeId>, ArchetypeId>,
     removed_components: HashMap<TypeId, Vec<Entity>>,
 }
 
 impl Default for Archetypes {
     fn default() -> Self {
         Self {
-            archetypes: vec![Archetype::new(Vec::new())],
+            archetypes: vec![Archetype::new(ArchetypeId::empty_archetype(), Vec::new())],
+            archetype_ids: Default::default(),
             removed_components: Default::default(),
         }
     }
@@ -510,9 +532,19 @@ impl Archetypes {
         self.archetypes.get_mut(id.0 as usize)
     }
 
-    pub(crate) fn get_or_insert_archetype(&mut self, type_info: Vec<TypeInfo>) -> ArchetypeId {
-        self.archetypes.push(Archetype::new(type_info));
-        ArchetypeId((self.archetypes.len() - 1) as u32)
+    pub(crate) fn get_or_insert(&mut self, mut type_info: Vec<TypeInfo>) -> ArchetypeId {
+        type_info.sort_unstable();
+        let type_ids = type_info
+            .iter()
+            .map(|info| info.id)
+            .collect::<Vec<TypeId>>();
+
+        let archetypes = &mut self.archetypes;
+        *self.archetype_ids.entry(type_ids).or_insert_with(|| {
+            let id = ArchetypeId(archetypes.len() as u32);
+            archetypes.push(Archetype::new(id, type_info));
+            id
+        })
     }
 
     #[inline]

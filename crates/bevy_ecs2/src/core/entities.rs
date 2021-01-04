@@ -4,6 +4,8 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
+use crate::ArchetypeId;
+
 /// Lightweight unique ID of an entity
 ///
 /// Obtained from `World::spawn`. Can be stored to refer to an entity in the future.
@@ -161,7 +163,7 @@ impl Entities {
         let loc = mem::replace(
             &mut meta.location,
             Location {
-                archetype: 0,
+                archetype: ArchetypeId::empty_archetype(),
                 // Guard against bugs in reservation handling
                 index: usize::max_value(),
             },
@@ -222,7 +224,7 @@ impl Entities {
     pub fn get(&self, entity: Entity) -> Result<Location, NoSuchEntity> {
         if self.meta.len() <= entity.id as usize {
             return Ok(Location {
-                archetype: 0,
+                archetype: ArchetypeId::empty_archetype(),
                 index: usize::max_value(),
             });
         }
@@ -230,9 +232,9 @@ impl Entities {
         if meta.generation != entity.generation {
             return Err(NoSuchEntity);
         }
-        if meta.location.archetype == 0 {
+        if meta.location.archetype.is_empty_archetype() {
             return Ok(Location {
-                archetype: 0,
+                archetype: ArchetypeId::empty_archetype(),
                 index: usize::max_value(),
             });
         }
@@ -296,7 +298,7 @@ impl Entities {
             EntityMeta {
                 generation: 0,
                 location: Location {
-                    archetype: 0,
+                    archetype: ArchetypeId::empty_archetype(),
                     index: usize::max_value(), // dummy value, to be filled in
                 },
             },
@@ -356,7 +358,7 @@ pub(crate) struct EntityMeta {
 #[derive(Copy, Clone, Debug)]
 pub struct Location {
     /// The archetype index
-    pub archetype: u32,
+    pub archetype: ArchetypeId,
 
     /// The index of the entity in the archetype
     pub index: usize,

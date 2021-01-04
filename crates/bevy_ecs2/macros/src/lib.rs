@@ -97,10 +97,6 @@ fn gen_dynamic_bundle_impl(
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
         impl #impl_generics ::#crate_path::DynamicBundle for #ident #ty_generics #where_clause {
-            fn with_ids<__hecs__T>(&self, f: impl ::std::ops::FnOnce(&[::std::any::TypeId]) -> __hecs__T) -> __hecs__T {
-                <Self as ::#crate_path::Bundle>::with_static_ids(f)
-            }
-
             fn type_info(&self) -> ::std::vec::Vec<::#crate_path::TypeInfo> {
                 <Self as ::#crate_path::Bundle>::static_type_info()
             }
@@ -126,48 +122,11 @@ fn gen_bundle_impl(
     field_idents: &[Cow<syn::Ident>],
     tys: &[&syn::Type],
 ) -> TokenStream2 {
-    let num_tys = tys.len();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let with_static_ids_inner = quote! {
-        {
-            let mut tys = [#((::std::mem::align_of::<#tys>(), ::std::any::TypeId::of::<#tys>())),*];
-            tys.sort_unstable_by(|x, y| {
-                ::std::cmp::Ord::cmp(&x.0, &y.0)
-                    .reverse()
-                    .then(::std::cmp::Ord::cmp(&x.1, &y.1))
-            });
-            let mut ids = [::std::any::TypeId::of::<()>(); #num_tys];
-            for (id, info) in ::std::iter::Iterator::zip(ids.iter_mut(), tys.iter()) {
-                *id = info.1;
-            }
-            ids
-        }
-    };
-    let with_static_ids_body = if generics.params.is_empty() {
-        quote! {
-            ::#crate_path::lazy_static::lazy_static! {
-                static ref ELEMENTS: [::std::any::TypeId; #num_tys] = {
-                    #with_static_ids_inner
-                };
-            }
-            f(&*ELEMENTS)
-        }
-    } else {
-        quote! {
-            f(&#with_static_ids_inner)
-        }
-    };
     quote! {
         impl #impl_generics ::#crate_path::Bundle for #ident #ty_generics #where_clause {
-            #[allow(non_camel_case_types)]
-            fn with_static_ids<__hecs__T>(f: impl ::std::ops::FnOnce(&[::std::any::TypeId]) -> __hecs__T) -> __hecs__T {
-                #with_static_ids_body
-            }
-
             fn static_type_info() -> ::std::vec::Vec<::#crate_path::TypeInfo> {
-                let mut info = ::std::vec![#(::#crate_path::TypeInfo::of::<#tys>()),*];
-                info.sort_unstable();
-                info
+                ::std::vec![#(::#crate_path::TypeInfo::of::<#tys>()),*]
             }
 
             unsafe fn get(
@@ -194,8 +153,6 @@ fn gen_unit_struct_bundle_impl(
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
         impl #impl_generics ::#crate_path::Bundle for #ident #ty_generics #where_clause {
-            #[allow(non_camel_case_types)]
-            fn with_static_ids<__hecs__T>(f: impl ::std::ops::FnOnce(&[::std::any::TypeId]) -> __hecs__T) -> __hecs__T { f(&[]) }
             fn static_type_info() -> ::std::vec::Vec<::#crate_path::TypeInfo> { ::std::vec::Vec::new() }
 
             unsafe fn get(

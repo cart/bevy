@@ -1,6 +1,8 @@
 use bevy_utils::HashSet;
 use std::{any::TypeId, boxed::Box, hash::Hash, vec::Vec};
 
+use crate::ArchetypeId;
+
 use super::{Archetype, World};
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -12,23 +14,23 @@ pub enum Access {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ArchetypeComponent {
-    pub archetype_index: u32,
+    pub archetype_id: ArchetypeId,
     pub component: TypeId,
 }
 
 impl ArchetypeComponent {
     #[inline]
-    pub fn new<T: 'static>(archetype_index: u32) -> Self {
+    pub fn new<T: 'static>(archetype_id: ArchetypeId) -> Self {
         ArchetypeComponent {
-            archetype_index,
+            archetype_id,
             component: TypeId::of::<T>(),
         }
     }
 
     #[inline]
-    pub fn new_ty(archetype_index: u32, component: TypeId) -> Self {
+    pub fn new_ty(archetype_id: ArchetypeId, component: TypeId) -> Self {
         ArchetypeComponent {
-            archetype_index,
+            archetype_id,
             component,
         }
     }
@@ -75,9 +77,9 @@ impl QueryAccess {
         mut type_access: Option<&mut TypeAccess<ArchetypeComponent>>,
     ) {
         let archetypes = world.archetypes();
-        for (i, archetype) in archetypes.iter().enumerate() {
+        for archetype in archetypes.iter() {
             let type_access = type_access.as_deref_mut();
-            let _ = self.get_access(archetype, i as u32, type_access);
+            let _ = self.get_access(archetype, type_access);
         }
     }
 
@@ -118,7 +120,6 @@ impl QueryAccess {
     pub fn get_access(
         &self,
         archetype: &Archetype,
-        archetype_index: u32,
         type_access: Option<&mut TypeAccess<ArchetypeComponent>>,
     ) -> Option<Access> {
         match self {
@@ -126,7 +127,7 @@ impl QueryAccess {
             QueryAccess::Read(ty, _) => {
                 if archetype.has_type(*ty) {
                     if let Some(type_access) = type_access {
-                        type_access.add_read(ArchetypeComponent::new_ty(archetype_index, *ty));
+                        type_access.add_read(ArchetypeComponent::new_ty(archetype.id(), *ty));
                     }
                     Some(Access::Read)
                 } else {
@@ -136,7 +137,7 @@ impl QueryAccess {
             QueryAccess::Write(ty, _) => {
                 if archetype.has_type(*ty) {
                     if let Some(type_access) = type_access {
-                        type_access.add_write(ArchetypeComponent::new_ty(archetype_index, *ty));
+                        type_access.add_write(ArchetypeComponent::new_ty(archetype.id(), *ty));
                     }
                     Some(Access::Write)
                 } else {
@@ -144,10 +145,10 @@ impl QueryAccess {
                 }
             }
             QueryAccess::Optional(query_access) => {
-                if let Some(access) = query_access.get_access(archetype, archetype_index, None) {
+                if let Some(access) = query_access.get_access(archetype, None) {
                     // only re-run get_archetype_access if we need to set type_access
                     if type_access.is_some() {
-                        query_access.get_access(archetype, archetype_index, type_access)
+                        query_access.get_access(archetype, type_access)
                     } else {
                         Some(access)
                     }
@@ -157,14 +158,14 @@ impl QueryAccess {
             }
             QueryAccess::With(ty, query_access) => {
                 if archetype.has_type(*ty) {
-                    query_access.get_access(archetype, archetype_index, type_access)
+                    query_access.get_access(archetype, type_access)
                 } else {
                     None
                 }
             }
             QueryAccess::Without(ty, query_access) => {
                 if !archetype.has_type(*ty) {
-                    query_access.get_access(archetype, archetype_index, type_access)
+                    query_access.get_access(archetype, type_access)
                 } else {
                     None
                 }
@@ -172,8 +173,7 @@ impl QueryAccess {
             QueryAccess::Union(query_accesses) => {
                 let mut result = None;
                 for query_access in query_accesses {
-                    if let Some(access) = query_access.get_access(archetype, archetype_index, None)
-                    {
+                    if let Some(access) = query_access.get_access(archetype, None) {
                         result = Some(result.unwrap_or(Access::Read).max(access));
                     } else {
                         return None;
@@ -184,7 +184,7 @@ impl QueryAccess {
                 if let Some(type_access) = type_access {
                     if result.is_some() {
                         for query_access in query_accesses {
-                            query_access.get_access(archetype, archetype_index, Some(type_access));
+                            query_access.get_access(archetype, Some(type_access));
                         }
                     }
                 }

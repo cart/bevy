@@ -14,7 +14,7 @@
 
 // modified by Bevy contributors
 
-use crate::{Component, TypeInfo};
+use crate::{Archetypes, Component, Components, TypeInfo};
 use std::{
     any::{type_name, TypeId},
     fmt, mem,
@@ -25,10 +25,7 @@ use std::{
 ///
 /// See [Bundle]
 pub trait DynamicBundle: 'static {
-    /// Invoke a callback on the fields' type IDs, sorted by descending alignment then id
-    #[doc(hidden)]
-    fn with_ids<T>(&self, f: impl FnOnce(&[TypeId]) -> T) -> T;
-    /// Obtain the fields' TypeInfos, sorted by descending alignment then id
+    /// Obtain the fields' TypeInfos, in order that DynamicBundle::put will be called 
     #[doc(hidden)]
     fn type_info(&self) -> Vec<TypeInfo>;
     /// Allow a callback to move all components out of the bundle
@@ -42,10 +39,7 @@ pub trait DynamicBundle: 'static {
 ///
 /// See [DynamicBundle]
 pub trait Bundle: DynamicBundle {
-    #[doc(hidden)]
-    fn with_static_ids<T>(f: impl FnOnce(&[TypeId]) -> T) -> T;
-
-    /// Obtain the fields' TypeInfos, sorted by descending alignment then id
+    /// Obtain the fields' TypeInfos, in order that DynamicBundle::get will be called 
     #[doc(hidden)]
     fn static_type_info() -> Vec<TypeInfo>;
 
@@ -86,10 +80,6 @@ impl std::error::Error for MissingComponent {}
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
         impl<$($name: Component),*> DynamicBundle for ($($name,)*) {
-            fn with_ids<T>(&self, f: impl FnOnce(&[TypeId]) -> T) -> T {
-                Self::with_static_ids(f)
-            }
-
             fn type_info(&self) -> Vec<TypeInfo> {
                 Self::static_type_info()
             }
@@ -111,21 +101,8 @@ macro_rules! tuple_impl {
         }
 
         impl<$($name: Component),*> Bundle for ($($name,)*) {
-            fn with_static_ids<T>(f: impl FnOnce(&[TypeId]) -> T) -> T {
-                const N: usize = count!($($name),*);
-                let mut xs: [(usize, TypeId); N] = [$((mem::align_of::<$name>(), TypeId::of::<$name>())),*];
-                xs.sort_unstable_by(|x, y| x.0.cmp(&y.0).reverse().then(x.1.cmp(&y.1)));
-                let mut ids = [TypeId::of::<()>(); N];
-                for (slot, &(_, id)) in ids.iter_mut().zip(xs.iter()) {
-                    *slot = id;
-                }
-                f(&ids)
-            }
-
             fn static_type_info() -> Vec<TypeInfo> {
-                let mut xs = vec![$(TypeInfo::of::<$name>()),*];
-                xs.sort_unstable();
-                xs
+                vec![$(TypeInfo::of::<$name>()),*]
             }
 
             #[allow(unused_variables, unused_mut)]
@@ -140,11 +117,6 @@ macro_rules! tuple_impl {
             }
         }
     }
-}
-
-macro_rules! count {
-    () => { 0 };
-    ($x: ident $(, $rest: ident)*) => { 1 + count!($($rest),*) };
 }
 
 smaller_tuples_too!(tuple_impl, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A);

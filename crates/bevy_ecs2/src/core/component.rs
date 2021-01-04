@@ -1,7 +1,8 @@
 use crate::TypeInfo;
 use bevy_utils::HashMap;
 use bitflags::bitflags;
-use std::{alloc::Layout, any::TypeId};
+use std::{alloc::Layout, any::TypeId, collections::hash_map::Entry};
+use thiserror::Error;
 
 /// Types that can be components, implemented automatically for all `Send + Sync + 'static` types
 ///
@@ -10,7 +11,7 @@ use std::{alloc::Layout, any::TypeId};
 pub trait Component: Send + Sync + 'static {}
 impl<T: Send + Sync + 'static> Component for T {}
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StorageType {
     Archetype,
     SparseSet,
@@ -28,7 +29,7 @@ pub struct ComponentInfo {
 // TODO: needed?
 // TODO: consider how this relates to DynamicComponents
 #[derive(Debug, Copy, Clone)]
-pub struct ComponentId(usize);
+pub struct ComponentId(pub(crate) usize);
 
 pub struct ComponentDescriptor {
     pub storage_type: StorageType,
@@ -57,8 +58,18 @@ pub struct Components {
     indices: HashMap<TypeId, usize>,
 }
 
+#[derive(Debug, Error)]
+pub enum ComponentsError {
+    #[error("A component of type {0:?} already exists")]
+    ComponentAlreadyExists(TypeId),
+}
+
 impl Components {
-    pub fn add(&mut self, descriptor: ComponentDescriptor) -> ComponentId {
+    pub fn add(&mut self, descriptor: ComponentDescriptor) -> Result<ComponentId, ComponentsError> {
+        let index_entry = self.indices.entry(descriptor.type_id);
+        if let Entry::Occupied(_) = index_entry {
+            return Err(ComponentsError::ComponentAlreadyExists(descriptor.type_id));
+        }
         let index = self.components.len();
         self.components.push(ComponentInfo {
             storage_type: descriptor.storage_type,
@@ -69,7 +80,7 @@ impl Components {
         });
         self.indices.insert(descriptor.type_id, index);
 
-        ComponentId(index)
+        Ok(ComponentId(index))
     }
 
     pub fn get_info(&self, id: ComponentId) -> Option<&ComponentInfo> {
