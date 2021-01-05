@@ -389,3 +389,22 @@ fn remove_tracking() {
 //     let mut world = World::new();
 //     world.reserve::<(f32, i64, f32)>(1);
 // }
+
+#[test]
+fn mixed_sparse_set_and_archetype() {
+    #[derive(Debug, Eq, PartialEq)]
+    struct Foo(usize);
+    #[derive(Debug, Eq, PartialEq)]
+    struct Bar(u8);
+
+    let mut world = World::new();
+    world
+        .components_mut()
+        .add(ComponentDescriptor::of::<Bar>(StorageType::SparseSet))
+        .unwrap();
+
+    world.spawn((Foo(1), Bar(2)));
+    world.spawn((Foo(3), Bar(4)));
+    let query_results = world.query::<(&Foo, &Bar)>().collect::<Vec<_>>();
+    assert_eq!(query_results, vec![(&Foo(1), &Bar(2)), (&Foo(3), &Bar(4))]);
+}

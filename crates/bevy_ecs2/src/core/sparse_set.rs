@@ -1,30 +1,39 @@
-use crate::{Component, ComponentId, Entity};
-use std::any::Any;
+use super::blob_vec::BlobVec;
+use crate::{ComponentId, Entity, TypeInfo};
+use std::{alloc::Layout, marker::PhantomData};
 
 #[derive(Debug)]
-pub struct SparseSet<I, V> {
-    dense: Vec<V>,
+pub struct BlobSparseSet<I> {
+    dense: BlobVec,
     indices: Vec<I>,
     sparse: Vec<Option<usize>>,
 }
 
-impl<I, V> Default for SparseSet<I, V> {
-    fn default() -> Self {
+impl<I: SparseSetIndex> BlobSparseSet<I> {
+    pub fn new(item_layout: Layout, drop: unsafe fn(*mut u8), capacity: usize) -> Self {
         Self {
-            dense: Default::default(),
+            dense: BlobVec::new(item_layout, drop, capacity),
+            indices: Vec::with_capacity(capacity),
             sparse: Default::default(),
-            indices: Default::default(),
         }
     }
-}
 
-impl<I: SparseSetIndex, V> SparseSet<I, V> {
-    pub fn insert(&mut self, index: I, value: V) {
+    pub fn new_typed<T>(capacity: usize) -> Self {
+        Self {
+            dense: BlobVec::new_typed::<T>(capacity),
+            indices: Vec::with_capacity(capacity),
+            sparse: Default::default(),
+        }
+    }
+
+    /// SAFETY: The `value` pointer must point to a valid address that matches the internal BlobVec's Layout.
+    /// Caller is responsible for ensuring the value is not dropped. This collection will drop the value when needed.
+    pub unsafe fn insert(&mut self, index: I, value: *mut u8) {
         let sparse_index = index.sparse_set_index();
         match self.sparse.get_mut(sparse_index) {
             // in bounds, and a value already exists
             Some(Some(dense_index)) => {
-                self.dense[*dense_index] = value;
+                self.dense.set_unchecked(*dense_index, value);
             }
             // in bounds, but no value
             Some(dense_index) => {
@@ -42,56 +51,115 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
         }
     }
 
-    pub fn get(&self, index: I) -> Option<&V> {
+    pub fn contains(&self, index: I) -> bool {
+        let sparse_index = index.sparse_set_index();
+        if let Some(Some(_)) = self.sparse.get(sparse_index) {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get(&self, index: I) -> Option<*mut u8> {
         let sparse_index = index.sparse_set_index();
         match self.sparse.get(sparse_index) {
             // in bounds, and a value exists
-            Some(Some(dense_index)) => Some(&self.dense[*dense_index]),
+            Some(Some(dense_index)) => Some(
+                // SAFE: if the sparse index points to something, it exists
+                unsafe { self.dense.get_unchecked(*dense_index) },
+            ),
             // the value does not exist
             _ => None,
         }
     }
 
-    pub fn get_mut(&mut self, index: I) -> Option<&mut V> {
-        let sparse_index = index.sparse_set_index();
-        match self.sparse.get(sparse_index) {
-            // in bounds, and a value exists
-            Some(Some(dense_index)) => Some(&mut self.dense[*dense_index]),
-            // the value does not exist
-            _ => None,
-        }
-    }
-
-    pub fn remove(&mut self, index: I) -> Option<V> {
+    /// SAFETY: it is the caller's responsibility to drop the returned ptr (if Some is returned).
+    pub unsafe fn remove(&mut self, index: I) -> Option<*mut u8> {
         let sparse_index = index.sparse_set_index();
         if sparse_index >= self.sparse.len() {
             return None;
         }
         // SAFE: access to indices that exist. access is disjoint
+        let sparse_ptr = self.sparse.as_mut_ptr();
+        let sparse_value = &mut *sparse_ptr.add(sparse_index);
+        if let Some(dense_index) = *sparse_value {
+            let removed = self.dense.swap_remove_and_forget_unchecked(dense_index);
+            self.indices.swap_remove(dense_index);
+            *sparse_value = None;
+            let moved_dense_value = sparse_ptr.add(self.indices[dense_index].sparse_set_index());
+            *moved_dense_value = Some(dense_index);
+            Some(removed)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SparseSet<I: SparseSetIndex, V: 'static> {
+    internal: BlobSparseSet<I>,
+    marker: PhantomData<V>,
+}
+
+impl<I: SparseSetIndex, V> Default for SparseSet<I, V> {
+    fn default() -> Self {
+        Self {
+            internal: BlobSparseSet::new_typed::<V>(64),
+            marker: Default::default(),
+        }
+    }
+}
+
+impl<I: SparseSetIndex, V> SparseSet<I, V> {
+    pub fn insert(&mut self, index: I, mut value: V) {
+        // SAFE: self.internal's layout matches `value`. `value` is properly forgotten
         unsafe {
-            let sparse_ptr = self.sparse.as_mut_ptr();
-            let dense_value = &mut *sparse_ptr.add(sparse_index);
-            if let Some(dense_index) = *dense_value {
-                let removed = self.dense.swap_remove(dense_index);
-                self.indices.swap_remove(dense_index);
-                *dense_value = None;
-                let moved_dense_value =
-                    sparse_ptr.add(self.indices[dense_index].sparse_set_index());
-                *moved_dense_value = Some(dense_index);
-                Some(removed)
-            } else {
-                None
-            }
+            self.internal
+                .insert(index, (&mut value as *mut V).cast::<u8>());
+        }
+        std::mem::forget(value);
+    }
+
+    pub fn contains(&self, index: I) -> bool {
+        self.internal.contains(index)
+    }
+
+    pub fn get(&self, index: I) -> Option<&V> {
+        // SAFE: value is of type V
+        self.internal
+            .get(index)
+            .map(|value| unsafe { &*value.cast::<V>() })
+    }
+
+    pub fn get_mut(&mut self, index: I) -> Option<&mut V> {
+        // SAFE: value is of type V
+        self.internal
+            .get(index)
+            .map(|value| unsafe { &mut *value.cast::<V>() })
+    }
+
+    pub fn remove(&mut self, index: I) -> Option<V> {
+        // SAFE: value is V and is immediately read onto the stack
+        unsafe {
+            self.internal
+                .remove(index)
+                .map(|value| std::ptr::read(value.cast::<V>()))
         }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&I, &V)> {
-        self.indices.iter().zip(self.dense.iter())
+        // SAFE: value is V
+        unsafe {
+            self.internal
+                .indices
+                .iter()
+                .zip(self.internal.dense.iter_type::<V>())
+        }
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&I, &mut V)> {
-        self.indices.iter().zip(self.dense.iter_mut())
-    }
+    // pub fn iter_mut(&mut self) -> impl Iterator<Item = (&I, &mut V)> {
+    //     self.indices.iter().zip(self.dense.iter_mut())
+    // }
 }
 
 pub trait SparseSetIndex {
@@ -141,15 +209,24 @@ impl SparseSetIndex for ComponentId {
 }
 
 pub struct SparseSetStorage {
-    sparse_set: Box<dyn Any>,
+    sparse_set: BlobSparseSet<Entity>,
 }
 
 impl SparseSetStorage {
-    pub fn new<T: Component>() -> SparseSetStorage {
+    pub fn new(type_info: &TypeInfo) -> SparseSetStorage {
         SparseSetStorage {
-            sparse_set: Box::new(SparseSet::<Entity, T>::default()),
+            sparse_set: BlobSparseSet::new(type_info.layout(), type_info.drop(), 64),
         }
     }
+
+    /// SAFETY: The caller must ensure that component_ptr is a pointer to the type described by TypeInfo
+    /// The caller must also ensure that the component referenced by component_ptr is not dropped.
+    /// This [SparseSetStorage] takes ownership of component_ptr and will drop it at the appropriate time.
+    pub unsafe fn put_component(&mut self, entity: Entity, component_ptr: *mut u8) {
+        self.sparse_set.insert(entity, component_ptr);
+    }
+
+    // pub fn get_unchecked(&self, entity: Entity) ->
 }
 
 #[derive(Default)]
@@ -158,9 +235,22 @@ pub struct SparseSets {
 }
 
 impl SparseSets {
-    // pub fn get_or_insert(&mut self, type_info: TypeInfo) -> &mut SparseSetStorage {
+    pub fn get_or_insert(
+        &mut self,
+        component_id: ComponentId,
+        type_info: &TypeInfo,
+    ) -> &mut SparseSetStorage {
+        if !self.sets.contains(component_id) {
+            self.sets
+                .insert(component_id, SparseSetStorage::new(type_info));
+        }
 
-    // }
+        self.sets.get_mut(component_id).unwrap()
+    }
+
+    pub fn get_mut(&mut self, component_id: ComponentId) -> Option<&mut SparseSetStorage> {
+        self.sets.get_mut(component_id)
+    }
 }
 
 #[cfg(test)]

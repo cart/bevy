@@ -33,6 +33,7 @@ macro_rules! smaller_tuples_too {
 mod access;
 mod archetype;
 mod borrow;
+mod blob_vec;
 mod bundle;
 mod component;
 mod entities;

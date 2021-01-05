@@ -1,9 +1,5 @@
 use super::{component::Components, entities::Entities};
-use crate::{
-    Archetype, ArchetypeId, Archetypes, BatchedIter, Bundle, Component, ComponentFlags,
-    DynamicBundle, Entity, EntityFilter, Fetch, Location, MissingComponent, Mut, NoSuchEntity,
-    QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo, WorldQuery,
-};
+use crate::{Archetype, ArchetypeId, Archetypes, BatchedIter, Bundle, Component, ComponentFlags, ComponentId, DynamicBundle, Entity, EntityFilter, Fetch, Location, MissingComponent, Mut, NoSuchEntity, QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo, WorldQuery};
 use bevy_utils::HashMap;
 use std::{any::TypeId, fmt};
 
@@ -11,6 +7,7 @@ use std::{any::TypeId, fmt};
 struct BundleInfo {
     archetype: ArchetypeId,
     storage_types: Vec<StorageType>,
+    component_ids: Vec<ComponentId>,
 }
 
 #[derive(Default)]
@@ -57,14 +54,18 @@ impl BundleInfos {
         archetypes: &mut Archetypes,
         sparse_sets: &mut SparseSets,
     ) -> BundleInfo {
-        let mut storage_types = Vec::new();
+        let mut storage_types = Vec::with_capacity(type_info.len());
+        let mut component_ids = Vec::with_capacity(type_info.len());
 
         // filter out non-archetype TypeInfo and collect component info
         type_info.retain(|type_info| {
             let component_id = components.init_type_info(type_info);
             let component_info = components.get_info(component_id).unwrap();
+            component_ids.push(component_id);
             storage_types.push(component_info.storage_type);
-            if component_info.storage_type == StorageType::SparseSet {}
+            if component_info.storage_type == StorageType::SparseSet {
+                sparse_sets.get_or_insert(component_id, type_info);
+            }
 
             component_info.storage_type == StorageType::Archetype
         });
@@ -73,6 +74,7 @@ impl BundleInfos {
         BundleInfo {
             archetype: archetype_id,
             storage_types,
+            component_ids,
         }
     }
 }
@@ -104,14 +106,14 @@ impl World {
         unsafe {
             let archetype_index = archetype.allocate(entity);
             let mut bundle_index = 0;
+            let sparse_sets = &mut self.sparse_sets;
             bundle.put(|ptr, ty, size| {
-                // TODO: if arch add, otherwise add to sparse set
                 // TODO: instead of using type, use index to cut down on hashing
                 // TODO: sort by TypeId instead of alignment for clearer results?
                 // TODO: use ComponentId instead of TypeId in archetype?
                 match bundle_info.storage_types[bundle_index] {
                     StorageType::Archetype => {
-                        archetype.put_dynamic(
+                        archetype.put_component(
                             ptr,
                             ty,
                             size,
@@ -119,7 +121,11 @@ impl World {
                             ComponentFlags::ADDED,
                         );
                     }
-                    StorageType::SparseSet => {}
+                    StorageType::SparseSet => {
+                        let component_id = bundle_info.component_ids[bundle_index];
+                        let sparse_set = sparse_sets.get_mut(component_id).unwrap();
+                        sparse_set.put_component(entity, ptr);
+                    }
                 }
                 bundle_index += 1;
                 true
@@ -614,7 +620,7 @@ where
             let index = self.archetype.allocate(entity);
             components.put(|ptr, ty, size| {
                 self.archetype
-                    .put_dynamic(ptr, ty, size, index, ComponentFlags::ADDED);
+                    .put_component(ptr, ty, size, index, ComponentFlags::ADDED);
                 true
             });
             self.entities.meta[entity.id as usize].location = Location {

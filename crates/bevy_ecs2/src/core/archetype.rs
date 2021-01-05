@@ -378,7 +378,7 @@ impl Archetype {
     ///  - `index` must be in-bound
     ///  - `size` must be the size of the component
     ///  - the storage array must be big enough
-    pub unsafe fn put_dynamic(
+    pub unsafe fn put_component(
         &mut self,
         component: *mut u8,
         ty: TypeId,

@@ -39,12 +39,12 @@ pub struct ComponentDescriptor {
 }
 
 impl ComponentDescriptor {
-    pub fn of<T: Component>() -> Self {
+    pub fn of<T: Component>(storage_type: StorageType) -> Self {
         unsafe fn drop_ptr<T>(x: *mut u8) {
             x.cast::<T>().drop_in_place()
         }
         Self {
-            storage_type: StorageType::Archetype,
+            storage_type,
             type_id: TypeId::of::<T>(),
             layout: Layout::new::<T>(),
             drop: drop_ptr::<T>,
