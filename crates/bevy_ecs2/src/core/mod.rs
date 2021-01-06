@@ -32,8 +32,8 @@ macro_rules! smaller_tuples_too {
 
 mod access;
 mod archetype;
-mod borrow;
 mod blob_vec;
+mod borrow;
 mod bundle;
 mod component;
 mod entities;
@@ -41,28 +41,27 @@ mod entity_builder;
 mod entity_map;
 mod filter;
 mod query;
+pub mod query2;
 mod serde;
 mod sparse_set;
 mod world;
 mod world_builder;
 
-pub use access::{ArchetypeComponent, QueryAccess, TypeAccess};
+pub use access::*;
 pub use archetype::*;
 pub use borrow::*;
-pub use bundle::{Bundle, DynamicBundle, MissingComponent};
+pub use bundle::*;
 pub use component::*;
-pub use entities::{Entity, EntityReserver, Location, NoSuchEntity};
+pub use entities::*;
 // pub use entity_builder::{BuiltEntity, EntityBuilder};
 pub use entity_map::*;
-pub use filter::{Added, Changed, EntityFilter, Mutated, Or, QueryFilter, With, Without};
-pub use query::{Batch, BatchedIter, Flags, Mut, QueryIter, ReadOnlyFetch, WorldQuery};
+pub use filter::*;
+pub use query::*;
 pub use sparse_set::*;
 pub use world::*;
 pub use world_builder::*;
 
 // Unstable implementation details needed by the macros
-#[doc(hidden)]
-pub use archetype::TypeInfo;
 #[doc(hidden)]
 pub use bevy_utils;
 #[doc(hidden)]

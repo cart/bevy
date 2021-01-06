@@ -208,13 +208,13 @@ impl SparseSetIndex for ComponentId {
     }
 }
 
-pub struct SparseSetStorage {
+pub struct ComponentSparseSet {
     sparse_set: BlobSparseSet<Entity>,
 }
 
-impl SparseSetStorage {
-    pub fn new(type_info: &TypeInfo) -> SparseSetStorage {
-        SparseSetStorage {
+impl ComponentSparseSet {
+    pub fn new(type_info: &TypeInfo) -> ComponentSparseSet {
+        ComponentSparseSet {
             sparse_set: BlobSparseSet::new(type_info.layout(), type_info.drop(), 64),
         }
     }
@@ -231,7 +231,7 @@ impl SparseSetStorage {
 
 #[derive(Default)]
 pub struct SparseSets {
-    sets: SparseSet<ComponentId, SparseSetStorage>,
+    sets: SparseSet<ComponentId, ComponentSparseSet>,
 }
 
 impl SparseSets {
@@ -239,16 +239,20 @@ impl SparseSets {
         &mut self,
         component_id: ComponentId,
         type_info: &TypeInfo,
-    ) -> &mut SparseSetStorage {
+    ) -> &mut ComponentSparseSet {
         if !self.sets.contains(component_id) {
             self.sets
-                .insert(component_id, SparseSetStorage::new(type_info));
+                .insert(component_id, ComponentSparseSet::new(type_info));
         }
 
         self.sets.get_mut(component_id).unwrap()
     }
 
-    pub fn get_mut(&mut self, component_id: ComponentId) -> Option<&mut SparseSetStorage> {
+    pub fn get(&self, component_id: ComponentId) -> Option<&ComponentSparseSet> {
+        self.sets.get(component_id)
+    }
+
+    pub fn get_mut(&mut self, component_id: ComponentId) -> Option<&mut ComponentSparseSet> {
         self.sets.get_mut(component_id)
     }
 }

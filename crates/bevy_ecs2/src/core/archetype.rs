@@ -22,6 +22,11 @@ impl ArchetypeId {
     }
 
     #[inline]
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+
+    #[inline]
     pub fn is_empty_archetype(&self) -> bool {
         self.0 == 0
     }
@@ -188,6 +193,11 @@ impl Archetype {
 
     pub(crate) fn get_entity(&self, index: usize) -> Entity {
         self.entities[index]
+    }
+
+    #[inline]
+    pub unsafe fn get_entity_unchecked(&self, index: usize) -> Entity {
+        *self.entities.get_unchecked(index)
     }
 
     #[allow(missing_docs)]
@@ -518,13 +528,24 @@ impl Archetypes {
         &mut self.archetypes[0]
     }
 
+    #[inline]
     pub fn generation(&self) -> ArchetypesGeneration {
         ArchetypesGeneration(self.archetypes.len() as u32)
     }
 
     #[inline]
+    pub fn len(&self) -> usize {
+        self.archetypes.len()
+    }
+
+    #[inline]
     pub fn get(&self, id: ArchetypeId) -> Option<&Archetype> {
         self.archetypes.get(id.0 as usize)
+    }
+
+    #[inline]
+    pub unsafe fn get_unchecked(&self, id: ArchetypeId) -> &Archetype {
+        self.archetypes.get_unchecked(id.0 as usize)
     }
 
     #[inline]

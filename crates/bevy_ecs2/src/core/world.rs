@@ -1,5 +1,10 @@
 use super::{component::Components, entities::Entities};
-use crate::{Archetype, ArchetypeId, Archetypes, BatchedIter, Bundle, Component, ComponentFlags, ComponentId, DynamicBundle, Entity, EntityFilter, Fetch, Location, MissingComponent, Mut, NoSuchEntity, QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo, WorldQuery};
+use crate::{
+    Archetype, ArchetypeId, Archetypes, BatchedIter, Bundle, Component, ComponentFlags,
+    ComponentId, DynamicBundle, Entity, EntityFilter, Fetch, Location, MissingComponent, Mut,
+    NoSuchEntity, QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo,
+    WorldQuery,
+};
 use bevy_utils::HashMap;
 use std::{any::TypeId, fmt};
 
@@ -281,6 +286,16 @@ impl World {
         &mut self.components
     }
 
+    #[inline]
+    pub fn sparse_sets(&self) -> &SparseSets {
+        &self.sparse_sets
+    }
+
+    #[inline]
+    pub fn sparse_sets_mut(&mut self) -> &mut SparseSets {
+        &mut self.sparse_sets
+    }
+
     /// Efficiently iterate over all entities that have certain components
     ///
     /// Calling `iter` on the returned value yields `(Entity, Q)` tuples, where `Q` is some query
@@ -312,6 +327,14 @@ impl World {
     {
         // SAFE: read-only access to world and read only query prevents mutable access
         unsafe { self.query_unchecked() }
+    }
+
+    #[inline]
+    pub fn query_with_state<'w, 's, Q: crate::query2::WorldQuery>(
+        &'w self,
+        state: &'s mut crate::query2::QueryState,
+    ) -> crate::query2::QueryIter<'w, 's, Q> {
+        unsafe { crate::query2::QueryIter::new(self, state) }
     }
 
     #[inline]
