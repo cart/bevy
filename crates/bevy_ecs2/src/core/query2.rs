@@ -2,10 +2,7 @@ use std::{any::TypeId, ptr::NonNull};
 
 use fixedbitset::{FixedBitSet, Ones};
 
-use crate::{
-    Archetype, ArchetypeId, Archetypes, ArchetypesGeneration, Component, ComponentFlags,
-    ComponentId, ComponentSparseSet, Entity, Mut, SparseSets, StorageType, World,
-};
+use crate::{Archetype, ArchetypeId, Archetypes, ArchetypesGeneration, Component, ComponentFlags, ComponentId, ComponentSparseSet, Entity, Mut, SparseSets, StorageType, World};
 
 pub trait WorldQuery {
     // TODO: try hoisting this up
@@ -15,7 +12,7 @@ pub trait WorldQuery {
 pub trait Fetch<'w>: Sized {
     type Item;
     fn update_archetypes(&mut self, archetypes: &Archetypes, query_state: &mut QueryState);
-    fn init(world: &World, query_state: &mut QueryState) -> Self;
+    unsafe fn init(world: &World, query_state: &mut QueryState) -> Self;
     fn next_archetype(&mut self, archetype: &Archetype);
     unsafe fn fetch(&mut self, archetype_index: usize) -> Option<Self::Item>;
 }
@@ -75,6 +72,11 @@ impl QueryState {
     #[inline]
     fn ignore_archetype(&mut self, archetype_id: ArchetypeId) {
         self.ignored_archetypes.set(archetype_id.index(), true);
+    }
+
+    #[inline]
+    fn access_all_archetypes(&mut self, archetypes: &Archetypes) {
+        self.matched_archetypes.set_range(0..archetypes.len(), true);
     }
 
     #[inline]
@@ -144,39 +146,52 @@ impl<T: Component> WorldQuery for &T {
 
 pub enum FetchRead<T> {
     Archetype(NonNull<T>),
-    SparseSet(NonNull<ComponentSparseSet>),
+    SparseSet {
+        entities: NonNull<Entity>,
+        sparse_set: *mut ComponentSparseSet,
+    },
 }
 
 impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     type Item = &'w T;
 
     fn update_archetypes(&mut self, archetypes: &Archetypes, query_state: &mut QueryState) {
-        for archetype in archetypes.iter() {
-            if archetype.has_type(TypeId::of::<T>()) {
-                query_state.access_archetype(archetype.id());
-            } else {
-                query_state.ignore_archetype(archetype.id());
+        match self {
+            Self::Archetype(_) => {
+                for archetype in archetypes.iter() {
+                    if archetype.has_type(TypeId::of::<T>()) {
+                        query_state.access_archetype(archetype.id());
+                    } else {
+                        query_state.ignore_archetype(archetype.id());
+                    }
+                }
+            }
+            Self::SparseSet { .. } => {
+                query_state.access_all_archetypes(archetypes);
             }
         }
     }
 
-    fn init(world: &World, query_state: &mut QueryState) -> Self {
+    unsafe fn init(world: &World, query_state: &mut QueryState) -> Self {
         let components = world.components();
         let component_id = components.get_id(TypeId::of::<T>()).unwrap();
         let component_info = components.get_info(component_id).unwrap();
         match component_info.storage_type {
             StorageType::Archetype => Self::Archetype(NonNull::dangling()),
-            StorageType::SparseSet => {
-                panic!();
-                // Self::SparseSet(world.sparse_sets().get(component_id).unwrap().as_ptr())
-            }
+            StorageType::SparseSet => Self::SparseSet {
+                entities: NonNull::dangling(),
+                sparse_set: world.sparse_sets().get_unchecked(component_id).unwrap(),
+            },
         }
     }
 
     #[inline]
     fn next_archetype(&mut self, archetype: &Archetype) {
-        if let Self::Archetype(components) = self {
-            *components = archetype.get::<T>().unwrap();
+        match self {
+            Self::Archetype(components) => {
+                *components = archetype.get::<T>().unwrap();
+            }
+            Self::SparseSet { entities, .. } => *entities = archetype.entities(),
         }
     }
 
@@ -184,7 +199,15 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     unsafe fn fetch(&mut self, archetype_index: usize) -> Option<Self::Item> {
         match self {
             Self::Archetype(components) => Some(&*components.as_ptr().add(archetype_index)),
-            Self::SparseSet(sparse_set) => panic!(),
+            Self::SparseSet {
+                entities,
+                sparse_set,
+            } => {
+                let entity = *entities.as_ptr().add(archetype_index);
+                (**sparse_set)
+                    .get_component(entity)
+                    .map(|value| &*value.cast::<T>())
+            }
         }
     }
 }
@@ -214,7 +237,7 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
         }
     }
 
-    fn init(world: &World, query_state: &mut QueryState) -> Self {
+    unsafe fn init(world: &World, query_state: &mut QueryState) -> Self {
         let components = world.components();
         let component_id = components.get_id(TypeId::of::<T>()).unwrap();
         let component_info = components.get_info(component_id).unwrap();
@@ -267,7 +290,7 @@ macro_rules! tuple_impl {
             }
 
             #[allow(unused_variables)]
-            fn init(world: &World, query_state: &mut QueryState) -> Self {
+            unsafe fn init(world: &World, query_state: &mut QueryState) -> Self {
                 ($($name::init(world, query_state),)*)
             }
 
@@ -300,7 +323,7 @@ smaller_tuples_too!(tuple_impl, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A);
 
 #[cfg(test)]
 mod tests {
-    use crate::World;
+    use crate::{ComponentDescriptor, StorageType, World};
 
     use super::QueryState;
 
@@ -328,4 +351,31 @@ mod tests {
             .collect::<Vec<&B>>();
         assert_eq!(values, vec![&B(3)]);
     }
+
+#[test]
+fn multi_storage_query() {
+    let mut world = World::new();
+    world
+        .components_mut()
+        .add(ComponentDescriptor::of::<A>(StorageType::SparseSet))
+        .unwrap();
+
+    let e1 = world.spawn((A(1), B(2)));
+    let e2 = world.spawn((A(2),));
+
+    let mut query_state = QueryState::default();
+    let values = world
+        .query_with_state::<&A>(&mut query_state)
+        .collect::<Vec<&A>>();
+    assert_eq!(values, vec![&A(1), &A(2)]);
+
+    for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
+        b.0 = 3;
+    }
+
+    let values = world
+        .query_with_state::<&B>(&mut query_state)
+        .collect::<Vec<&B>>();
+    assert_eq!(values, vec![&B(3)]);
+}
 }

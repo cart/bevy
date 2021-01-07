@@ -98,6 +98,46 @@ impl World {
         World::default()
     }
 
+    #[inline]
+    pub fn entities(&self) -> &Entities {
+        &self.entities
+    }
+
+    #[inline]
+    pub fn entities_mut(&mut self) -> &mut Entities {
+        &mut self.entities
+    }
+
+    #[inline]
+    pub fn archetypes(&self) -> &Archetypes {
+        &self.archetypes
+    }
+
+    #[inline]
+    pub fn archetypes_mut(&mut self) -> &mut Archetypes {
+        &mut self.archetypes
+    }
+
+    #[inline]
+    pub fn components(&self) -> &Components {
+        &self.components
+    }
+
+    #[inline]
+    pub fn components_mut(&mut self) -> &mut Components {
+        &mut self.components
+    }
+
+    #[inline]
+    pub fn sparse_sets(&self) -> &SparseSets {
+        &self.sparse_sets
+    }
+
+    #[inline]
+    pub fn sparse_sets_mut(&mut self) -> &mut SparseSets {
+        &mut self.sparse_sets
+    }
+
     pub fn spawn(&mut self, bundle: impl DynamicBundle) -> Entity {
         self.flush();
         let bundle_info = self.bundle_infos.get_dynamic(
@@ -254,46 +294,6 @@ impl World {
     /// See `remove`.
     pub fn remove_one<T: Component>(&mut self, entity: Entity) -> Result<T, ComponentError> {
         self.remove::<(T,)>(entity).map(|(x,)| x)
-    }
-
-    #[inline]
-    pub fn entities(&self) -> &Entities {
-        &self.entities
-    }
-
-    #[inline]
-    pub fn entities_mut(&mut self) -> &mut Entities {
-        &mut self.entities
-    }
-
-    #[inline]
-    pub fn archetypes(&self) -> &Archetypes {
-        &self.archetypes
-    }
-
-    #[inline]
-    pub fn archetypes_mut(&mut self) -> &mut Archetypes {
-        &mut self.archetypes
-    }
-
-    #[inline]
-    pub fn components(&self) -> &Components {
-        &self.components
-    }
-
-    #[inline]
-    pub fn components_mut(&mut self) -> &mut Components {
-        &mut self.components
-    }
-
-    #[inline]
-    pub fn sparse_sets(&self) -> &SparseSets {
-        &self.sparse_sets
-    }
-
-    #[inline]
-    pub fn sparse_sets_mut(&mut self) -> &mut SparseSets {
-        &mut self.sparse_sets
     }
 
     /// Efficiently iterate over all entities that have certain components

@@ -1,6 +1,6 @@
 use super::blob_vec::BlobVec;
 use crate::{ComponentId, Entity, TypeInfo};
-use std::{alloc::Layout, marker::PhantomData};
+use std::{alloc::Layout, cell::UnsafeCell, marker::PhantomData};
 
 #[derive(Debug)]
 pub struct BlobSparseSet<I> {
@@ -226,12 +226,14 @@ impl ComponentSparseSet {
         self.sparse_set.insert(entity, component_ptr);
     }
 
-    // pub fn get_unchecked(&self, entity: Entity) ->
+    pub fn get_component(&self, entity: Entity) -> Option<*mut u8> {
+        self.sparse_set.get(entity)
+    }
 }
 
 #[derive(Default)]
 pub struct SparseSets {
-    sets: SparseSet<ComponentId, ComponentSparseSet>,
+    sets: SparseSet<ComponentId, UnsafeCell<ComponentSparseSet>>,
 }
 
 impl SparseSets {
@@ -241,19 +243,31 @@ impl SparseSets {
         type_info: &TypeInfo,
     ) -> &mut ComponentSparseSet {
         if !self.sets.contains(component_id) {
-            self.sets
-                .insert(component_id, ComponentSparseSet::new(type_info));
+            self.sets.insert(
+                component_id,
+                UnsafeCell::new(ComponentSparseSet::new(type_info)),
+            );
         }
 
-        self.sets.get_mut(component_id).unwrap()
+        // SAFE: unique access to self
+        unsafe { &mut *self.sets.get_mut(component_id).unwrap().get() }
     }
 
     pub fn get(&self, component_id: ComponentId) -> Option<&ComponentSparseSet> {
-        self.sets.get(component_id)
+        // SAFE: read access to self
+        unsafe { self.sets.get(component_id).map(|set| &*set.get()) }
+    }
+
+    pub unsafe fn get_unchecked(
+        &self,
+        component_id: ComponentId,
+    ) -> Option<*mut ComponentSparseSet> {
+        self.sets.get(component_id).map(|set| set.get())
     }
 
     pub fn get_mut(&mut self, component_id: ComponentId) -> Option<&mut ComponentSparseSet> {
-        self.sets.get_mut(component_id)
+        // SAFE: unique access to self
+        unsafe { self.sets.get_mut(component_id).map(|set| &mut *set.get()) }
     }
 }
 
