@@ -44,7 +44,12 @@ pub struct ArchetypesGeneration(pub u32);
 pub struct Archetype {
     id: ArchetypeId,
     types: Vec<TypeInfo>,
-    state: TypeIdMap<TypeState>,
+    // A hasher optimized for hashing a single TypeId.
+    // We don't use RandomState from std or Random state from Ahash
+    // because fxhash is [proved to be faster](https://github.com/bevyengine/bevy/pull/1119#issuecomment-751361215)
+    // and we don't need Hash Dos attack protection here
+    // since TypeIds generated during compilation and there is no reason to user attack himself.
+    state: HashMap<TypeId, TypeState, fxhash::FxBuildHasher>,
     len: usize,
     entities: Vec<Entity>,
     // UnsafeCell allows unique references into `data` to be constructed while shared references
@@ -495,12 +500,6 @@ impl Hasher for TypeIdHasher {
     }
 }
 
-/// A HashMap with TypeId keys
-///
-/// Because TypeId is already a fully-hashed u64 (including data in the high seven bits,
-/// which hashbrown needs), there is no need to hash it again. Instead, this uses the much
-/// faster no-op hash.
-pub(crate) type TypeIdMap<V> = HashMap<TypeId, V, BuildHasherDefault<TypeIdHasher>>;
 pub struct Archetypes {
     pub archetypes: Vec<Archetype>,
     archetype_ids: HashMap<Vec<TypeId>, ArchetypeId>,

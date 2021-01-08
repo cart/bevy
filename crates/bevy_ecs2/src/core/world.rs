@@ -5,8 +5,7 @@ use crate::{
     NoSuchEntity, QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo,
     WorldQuery,
 };
-use bevy_utils::HashMap;
-use std::{any::TypeId, fmt};
+use std::{any::TypeId, collections::HashMap, fmt};
 
 #[derive(Debug)]
 struct BundleInfo {
@@ -17,7 +16,7 @@ struct BundleInfo {
 
 #[derive(Default)]
 struct BundleInfos {
-    bundle_info: HashMap<TypeId, BundleInfo>,
+    bundle_info: HashMap<TypeId, BundleInfo, fxhash::FxBuildHasher>,
 }
 
 impl BundleInfos {
