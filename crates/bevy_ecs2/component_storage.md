@@ -12,6 +12,8 @@
 * how to reconcile iteration order:
     * iterating archetypes will be a different order than iterating sparse sets
 * Bundle type -> ComponentId cache
+* Consider using BlobVec in Archetpe
+* Use ComponentIds + SparseSets in Archetype for type lookup
 
 
 ## TODO
