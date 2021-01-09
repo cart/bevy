@@ -374,8 +374,7 @@ impl fmt::Display for NoSuchEntity {
     }
 }
 
-#[cfg(feature = "std")]
-impl Error for NoSuchEntity {}
+impl std::error::Error for NoSuchEntity {}
 
 #[cfg(test)]
 mod tests {

@@ -30,8 +30,26 @@ fn random_access() {
 }
 
 #[test]
-fn despawn() {
+fn despawn_archetype() {
     let mut world = World::new();
+    let e = world.spawn(("abc", 123));
+    let f = world.spawn(("def", 456));
+    assert_eq!(world.query::<()>().count(), 2);
+    world.despawn(e).unwrap();
+    assert_eq!(world.query::<()>().count(), 1);
+    assert!(world.get::<&str>(e).is_err());
+    assert!(world.get::<i32>(e).is_err());
+    assert_eq!(*world.get::<&str>(f).unwrap(), "def");
+    assert_eq!(*world.get::<i32>(f).unwrap(), 456);
+}
+
+#[test]
+fn despawn_mixed() {
+    let mut world = World::new();
+    world
+        .components_mut()
+        .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
+        .unwrap();
     let e = world.spawn(("abc", 123));
     let f = world.spawn(("def", 456));
     assert_eq!(world.query::<()>().count(), 2);

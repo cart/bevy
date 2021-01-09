@@ -161,7 +161,7 @@ impl BlobVec {
     /// SAFETY: It is the caller's responsibility to ensure the type matches self.item_layout and that the type stored is T
     /// It is also the caller's responsibility to ensure that `index` is < self.len()
     #[inline]
-    pub unsafe fn get_type_mut_unchecked<T>(&self, index: usize) -> &mut T {
+    pub unsafe fn get_type_mut_unchecked<T>(&mut self, index: usize) -> &mut T {
         &mut *self.get_unchecked(index).cast::<T>()
     }
 
@@ -179,6 +179,15 @@ impl BlobVec {
     /// SAFETY: It is the caller's responsibility to ensure the type matches self.item_layout and that the type stored is T
     pub unsafe fn iter_type<T>(&self) -> BlobVecIter<'_, T> {
         BlobVecIter {
+            value: self,
+            index: 0,
+            marker: Default::default(),
+        }
+    }
+
+    /// SAFETY: It is the caller's responsibility to ensure the type matches self.item_layout and that the type stored is T
+    pub unsafe fn iter_type_mut<T>(&mut self) -> BlobVecIterMut<'_, T> {
+        BlobVecIterMut {
             value: self,
             index: 0,
             marker: Default::default(),
@@ -202,6 +211,29 @@ impl<'a, T: 'static> Iterator for BlobVecIter<'a, T> {
             // SAFE: index is in-bounds and value is T (as determined by the caller of BlobVec::iter_type)
             unsafe {
                 let value = self.value.get_type_unchecked::<T>(self.index);
+                self.index += 1;
+                Some(value)
+            }
+        }
+    }
+}
+
+pub struct BlobVecIterMut<'a, T> {
+    value: &'a mut BlobVec,
+    index: usize,
+    marker: PhantomData<T>,
+}
+
+impl<'a, T: 'static> Iterator for BlobVecIterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index == self.value.len {
+            None
+        } else {
+            // SAFE: index is in-bounds and non-overlapping, value is T (as determined by the caller of BlobVec::iter_type)
+            unsafe {
+                let value = &mut *self.value.get_unchecked(self.index).cast::<T>();
                 self.index += 1;
                 Some(value)
             }

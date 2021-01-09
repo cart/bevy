@@ -14,8 +14,8 @@
 
 // modified by Bevy contributors
 
-use super::{Archetype, Component, Entity, MissingComponent, QueryAccess, QueryFilter};
-use crate::{ArchetypeId, Archetypes, ComponentFlags, EntityFilter, World};
+use super::{Archetype, Component, Entity, QueryAccess, QueryFilter};
+use crate::{ArchetypeId, Archetypes, ComponentError, ComponentFlags, EntityFilter, World};
 use std::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -176,10 +176,10 @@ impl<'a, T: Component> Mut<'a, T> {
     ///
     /// # Safety
     /// This doesn't check the bounds of index in archetype
-    pub unsafe fn new(archetype: &'a Archetype, index: usize) -> Result<Self, MissingComponent> {
+    pub unsafe fn new(archetype: &'a Archetype, index: usize) -> Result<Self, ComponentError> {
         let (target, type_state) = archetype
             .get_with_type_state::<T>()
-            .ok_or_else(MissingComponent::new::<T>)?;
+            .ok_or_else(ComponentError::missing_component::<T>)?;
         Ok(Self {
             value: &mut *target.as_ptr().add(index),
             flags: &mut *type_state.component_flags().as_ptr().add(index),

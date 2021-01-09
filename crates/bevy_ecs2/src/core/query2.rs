@@ -2,10 +2,12 @@ use std::{any::TypeId, ptr::NonNull};
 
 use fixedbitset::{FixedBitSet, Ones};
 
-use crate::{Archetype, ArchetypeId, Archetypes, ArchetypesGeneration, Component, ComponentFlags, ComponentId, ComponentSparseSet, Entity, Mut, SparseSets, StorageType, World};
+use crate::{
+    Archetype, ArchetypeId, Archetypes, ArchetypesGeneration, Component, ComponentFlags,
+    ComponentId, ComponentSparseSet, Entity, Mut, SparseSets, StorageType, World,
+};
 
 pub trait WorldQuery {
-    // TODO: try hoisting this up
     type Fetch: for<'a> Fetch<'a>;
 }
 
@@ -352,30 +354,30 @@ mod tests {
         assert_eq!(values, vec![&B(3)]);
     }
 
-#[test]
-fn multi_storage_query() {
-    let mut world = World::new();
-    world
-        .components_mut()
-        .add(ComponentDescriptor::of::<A>(StorageType::SparseSet))
-        .unwrap();
+    #[test]
+    fn multi_storage_query() {
+        let mut world = World::new();
+        world
+            .components_mut()
+            .add(ComponentDescriptor::of::<A>(StorageType::SparseSet))
+            .unwrap();
 
-    let e1 = world.spawn((A(1), B(2)));
-    let e2 = world.spawn((A(2),));
+        let e1 = world.spawn((A(1), B(2)));
+        let e2 = world.spawn((A(2),));
 
-    let mut query_state = QueryState::default();
-    let values = world
-        .query_with_state::<&A>(&mut query_state)
-        .collect::<Vec<&A>>();
-    assert_eq!(values, vec![&A(1), &A(2)]);
+        let mut query_state = QueryState::default();
+        let values = world
+            .query_with_state::<&A>(&mut query_state)
+            .collect::<Vec<&A>>();
+        assert_eq!(values, vec![&A(1), &A(2)]);
 
-    for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
-        b.0 = 3;
+        for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
+            b.0 = 3;
+        }
+
+        let values = world
+            .query_with_state::<&B>(&mut query_state)
+            .collect::<Vec<&B>>();
+        assert_eq!(values, vec![&B(3)]);
     }
-
-    let values = world
-        .query_with_state::<&B>(&mut query_state)
-        .collect::<Vec<&B>>();
-    assert_eq!(values, vec![&B(3)]);
-}
 }

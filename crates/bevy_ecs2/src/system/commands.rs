@@ -1,8 +1,5 @@
 use super::SystemId;
-use crate::{
-    resource::{Resource, Resources},
-    Bundle, Component, ComponentError, DynamicBundle, Entity, EntityReserver, World,
-};
+use crate::{Bundle, Component, ComponentError, ComponentsError, DynamicBundle, Entity, EntityReserver, World, resource::{Resource, Resources}};
 use bevy_utils::tracing::{debug, warn};
 use std::marker::PhantomData;
 

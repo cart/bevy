@@ -83,10 +83,18 @@ impl Components {
         Ok(ComponentId(index))
     }
 
+    #[inline]
     pub fn get_info(&self, id: ComponentId) -> Option<&ComponentInfo> {
         self.components.get(id.0)
     }
 
+    #[inline]
+    pub unsafe fn get_info_unchecked(&self, id: ComponentId) -> &ComponentInfo {
+        self.components.get_unchecked(id.0)
+    }
+
+
+    #[inline]
     pub fn get_id(&self, type_id: TypeId) -> Option<ComponentId> {
         self.indices.get(&type_id).map(|index| ComponentId(*index))
     }

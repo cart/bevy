@@ -14,7 +14,7 @@
 
 // modified by Bevy contributors
 
-use crate::{Archetypes, Component, Components, TypeInfo};
+use crate::{Archetypes, Component, ComponentError, Components, TypeInfo};
 use std::{
     any::{type_name, TypeId},
     fmt, mem,
@@ -52,30 +52,10 @@ pub trait Bundle: DynamicBundle {
     #[doc(hidden)]
     unsafe fn get(
         f: impl FnMut(TypeId, usize) -> Option<NonNull<u8>>,
-    ) -> Result<Self, MissingComponent>
+    ) -> Result<Self, ComponentError>
     where
         Self: Sized;
 }
-
-/// Error indicating that an entity did not have a required component
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct MissingComponent(&'static str);
-
-impl MissingComponent {
-    /// Construct an error representing a missing `T`
-    pub fn new<T: Component>() -> Self {
-        Self(type_name::<T>())
-    }
-}
-
-impl fmt::Display for MissingComponent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "missing {} component", self.0)
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for MissingComponent {}
 
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
@@ -106,10 +86,10 @@ macro_rules! tuple_impl {
             }
 
             #[allow(unused_variables, unused_mut)]
-            unsafe fn get(mut f: impl FnMut(TypeId, usize) -> Option<NonNull<u8>>) -> Result<Self, MissingComponent> {
+            unsafe fn get(mut f: impl FnMut(TypeId, usize) -> Option<NonNull<u8>>) -> Result<Self, ComponentError> {
                 #[allow(non_snake_case)]
                 let ($(mut $name,)*) = ($(
-                    f(TypeId::of::<$name>(), mem::size_of::<$name>()).ok_or_else(MissingComponent::new::<$name>)?
+                    f(TypeId::of::<$name>(), mem::size_of::<$name>()).ok_or_else(ComponentError::missing_component::<$name>)?
                         .as_ptr()
                         .cast::<$name>(),)*
                 );

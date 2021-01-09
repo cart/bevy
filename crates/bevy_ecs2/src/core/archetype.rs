@@ -1,11 +1,11 @@
-use crate::{AtomicBorrow, Bundle, Component, ComponentFlags, Entity};
+use crate::{AtomicBorrow, Component, ComponentFlags, Entity, Location};
 use bevy_utils::AHasher;
 use std::{
     alloc::{alloc, dealloc, Layout},
     any::TypeId,
     cell::UnsafeCell,
     collections::HashMap,
-    hash::{BuildHasherDefault, Hasher},
+    hash::Hasher,
     mem,
     ptr::{self, NonNull},
 };
@@ -548,6 +548,11 @@ impl Archetypes {
     }
 
     #[inline]
+    pub unsafe fn get_unchecked_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
+        self.archetypes.get_unchecked_mut(id.0 as usize)
+    }
+
+    #[inline]
     pub(crate) fn get_mut(&mut self, id: ArchetypeId) -> Option<&mut Archetype> {
         self.archetypes.get_mut(id.0 as usize)
     }
@@ -578,6 +583,28 @@ impl Archetypes {
         }
 
         self.removed_components.clear();
+    }
+
+    /// Removes the `entity` at the given `location` and returns an Entity that moved into the new location (if an entity was moved)
+    #[inline]
+    pub unsafe fn remove_entity_unchecked(
+        &mut self,
+        entity: Entity,
+        location: Location,
+    ) -> Option<Entity> {
+        let archetype = self
+            .archetypes
+            .get_unchecked_mut(location.archetype.index());
+        let moved_entity = archetype.remove(location.index);
+        for ty in archetype.types() {
+            let removed_entities = self
+                .removed_components
+                .entry(ty.id())
+                .or_insert_with(Vec::new);
+            removed_entities.push(entity);
+        }
+
+        moved_entity
     }
 
     pub fn removed<C: Component>(&self) -> &[Entity] {

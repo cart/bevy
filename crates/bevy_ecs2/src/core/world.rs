@@ -1,11 +1,11 @@
 use super::{component::Components, entities::Entities};
 use crate::{
     Archetype, ArchetypeId, Archetypes, BatchedIter, Bundle, Component, ComponentFlags,
-    ComponentId, DynamicBundle, Entity, EntityFilter, Fetch, Location, MissingComponent, Mut,
-    NoSuchEntity, QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo,
-    WorldQuery,
+    ComponentId, DynamicBundle, Entity, EntityFilter, Fetch, Location, Mut, NoSuchEntity,
+    QueryFilter, QueryIter, ReadOnlyFetch, SparseSets, StorageType, TypeInfo, WorldQuery,
 };
 use std::{any::TypeId, collections::HashMap, fmt};
+use thiserror::Error;
 
 #[derive(Debug)]
 struct BundleInfo {
@@ -64,7 +64,8 @@ impl BundleInfos {
         // filter out non-archetype TypeInfo and collect component info
         type_info.retain(|type_info| {
             let component_id = components.init_type_info(type_info);
-            let component_info = components.get_info(component_id).unwrap();
+            // SAFE: component info either previously existed or was just initialized
+            let component_info = unsafe { components.get_info_unchecked(component_id) };
             component_ids.push(component_id);
             storage_types.push(component_info.storage_type);
             if component_info.storage_type == StorageType::SparseSet {
@@ -145,7 +146,9 @@ impl World {
             &mut self.archetypes,
             &mut self.sparse_sets,
         );
-        let archetype = self.archetypes.get_mut(bundle_info.archetype).unwrap();
+
+        // SAFE: archetype was created if it didn't already exist
+        let archetype = unsafe { self.archetypes.get_unchecked_mut(bundle_info.archetype) };
         let entity = self.entities.alloc();
         unsafe {
             let archetype_index = archetype.allocate(entity);
@@ -226,7 +229,17 @@ impl World {
     }
 
     pub fn despawn(&mut self, entity: Entity) -> Result<(), NoSuchEntity> {
-        todo!()
+        self.flush();
+
+        let location = self.entities.free(entity)?;
+        // SAFE: the entity is guaranteed to exist inside this archetype because all stored Locations are valid
+        if let Some(moved) = unsafe { self.archetypes.remove_entity_unchecked(entity, location) } {
+            // update the moved entity's location to account for the fact that it was
+            self.entities.get_mut(moved).unwrap().index = location.index;
+        }
+
+        self.sparse_sets.remove_entity(entity);
+        Ok(())
     }
 
     pub fn insert(
@@ -251,7 +264,34 @@ impl World {
     /// Borrow the `T` component of `entity`
     #[inline]
     pub fn get<T: Component>(&self, entity: Entity) -> Result<&'_ T, ComponentError> {
-        todo!()
+        let location = self.entities.get(entity)?;
+        let components = self.components();
+        let component_id = components
+            .get_id(TypeId::of::<T>())
+            .ok_or_else(ComponentError::missing_component::<T>)?;
+        // SAFE: component_id exist and is therefore valid
+        let component_info = unsafe { components.get_info_unchecked(component_id) };
+        match component_info.storage_type {
+            StorageType::Archetype => {
+                unsafe {
+                    // SAFE: valid locations point to valid archetypes
+                    let archetype = self.archetypes().get_unchecked(location.archetype);
+                    let components = archetype
+                        .get::<T>()
+                        .ok_or_else(ComponentError::missing_component::<T>)?;
+                    Ok(&*components.as_ptr().add(location.index as usize))
+                }
+            }
+            StorageType::SparseSet => {
+                let component = self
+                    .sparse_sets()
+                    .get(component_id)
+                    .and_then(|sparse_set| sparse_set.get_component(entity))
+                    .ok_or_else(ComponentError::missing_component::<T>)?;
+                // SAFE: component is of type T
+                unsafe { Ok(&*component.cast::<T>()) }
+            }
+        }
     }
 
     /// Mutably borrow the `T` component of `entity`
@@ -272,7 +312,7 @@ impl World {
     ) -> Result<Mut<'_, T>, ComponentError> {
         let loc = self.entities.get(entity)?;
         if loc.archetype.is_empty_archetype() {
-            return Err(MissingComponent::new::<T>().into());
+            return Err(ComponentError::missing_component::<T>());
         }
         Ok(Mut::new(
             self.archetypes.get(loc.archetype).unwrap(),
@@ -516,12 +556,12 @@ impl World {
         location: Location,
     ) -> Result<&T, ComponentError> {
         if location.archetype.is_empty_archetype() {
-            return Err(MissingComponent::new::<T>().into());
+            return Err(ComponentError::missing_component::<T>());
         }
         let archetype = self.archetypes.get(location.archetype).unwrap();
         Ok(&*archetype
             .get::<T>()
-            .ok_or_else(MissingComponent::new::<T>)?
+            .ok_or_else(ComponentError::missing_component::<T>)?
             .as_ptr()
             .add(location.index as usize))
     }
@@ -536,7 +576,7 @@ impl World {
         location: Location,
     ) -> Result<Mut<T>, ComponentError> {
         if location.archetype.is_empty_archetype() {
-            return Err(MissingComponent::new::<T>().into());
+            return Err(ComponentError::missing_component::<T>());
         }
         let archetype = self.archetypes.get(location.archetype).unwrap();
         Ok(Mut::new(archetype, location.index)?)
@@ -573,36 +613,24 @@ unsafe impl Send for World {}
 unsafe impl Sync for World {}
 
 /// Errors that arise when accessing components
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum ComponentError {
     /// The entity was already despawned
+    #[error("Entity does not exist.")]
     NoSuchEntity,
     /// The entity did not have a requested component
-    MissingComponent(MissingComponent),
+    #[error("Entity does not have the given component {0:?}.")]
+    MissingComponent(&'static str),
 }
-
-#[cfg(feature = "std")]
-impl Error for ComponentError {}
-
-impl fmt::Display for ComponentError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use ComponentError::*;
-        match *self {
-            NoSuchEntity => f.write_str("no such entity"),
-            MissingComponent(ref x) => x.fmt(f),
-        }
-    }
-}
-
 impl From<NoSuchEntity> for ComponentError {
     fn from(NoSuchEntity: NoSuchEntity) -> Self {
         ComponentError::NoSuchEntity
     }
 }
 
-impl From<MissingComponent> for ComponentError {
-    fn from(x: MissingComponent) -> Self {
-        ComponentError::MissingComponent(x)
+impl ComponentError {
+    pub fn missing_component<T: Component>() -> Self {
+        ComponentError::MissingComponent(std::any::type_name::<T>())
     }
 }
 
