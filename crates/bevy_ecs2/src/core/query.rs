@@ -171,22 +171,6 @@ pub struct Mut<'a, T: Component> {
     pub(crate) flags: &'a mut ComponentFlags,
 }
 
-impl<'a, T: Component> Mut<'a, T> {
-    /// Creates a new mutable reference to a component. This is unsafe because the index bounds are not checked.
-    ///
-    /// # Safety
-    /// This doesn't check the bounds of index in archetype
-    pub unsafe fn new(archetype: &'a Archetype, index: usize) -> Result<Self, ComponentError> {
-        let (target, type_state) = archetype
-            .get_with_type_state::<T>()
-            .ok_or_else(ComponentError::missing_component::<T>)?;
-        Ok(Self {
-            value: &mut *target.as_ptr().add(index),
-            flags: &mut *type_state.component_flags().as_ptr().add(index),
-        })
-    }
-}
-
 unsafe impl<T: Component> Send for Mut<'_, T> {}
 unsafe impl<T: Component> Sync for Mut<'_, T> {}
 

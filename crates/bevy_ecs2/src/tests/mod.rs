@@ -19,12 +19,22 @@ use crate::*;
 #[test]
 fn random_access() {
     let mut world = World::new();
+    world
+        .components_mut()
+        .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
+        .unwrap();
     let e = world.spawn(("abc", 123));
     let f = world.spawn(("def", 456, true));
     assert_eq!(*world.get::<&str>(e).unwrap(), "abc");
     assert_eq!(*world.get::<i32>(e).unwrap(), 123);
     assert_eq!(*world.get::<&str>(f).unwrap(), "def");
     assert_eq!(*world.get::<i32>(f).unwrap(), 456);
+ 
+    // test archetype get_mut()
+    *world.get_mut::<&'static str>(e).unwrap() = "xyz";
+    assert_eq!(*world.get::<&'static str>(e).unwrap(), "xyz");
+
+    // test sparse set get_mut()
     *world.get_mut::<i32>(f).unwrap() = 42;
     assert_eq!(*world.get::<i32>(f).unwrap(), 42);
 }
@@ -407,22 +417,3 @@ fn remove_tracking() {
 //     let mut world = World::new();
 //     world.reserve::<(f32, i64, f32)>(1);
 // }
-
-#[test]
-fn mixed_sparse_set_and_archetype() {
-    #[derive(Debug, Eq, PartialEq)]
-    struct Foo(usize);
-    #[derive(Debug, Eq, PartialEq)]
-    struct Bar(u8);
-
-    let mut world = World::new();
-    world
-        .components_mut()
-        .add(ComponentDescriptor::of::<Bar>(StorageType::SparseSet))
-        .unwrap();
-
-    world.spawn((Foo(1), Bar(2)));
-    world.spawn((Foo(3), Bar(4)));
-    let query_results = world.query::<(&Foo, &Bar)>().collect::<Vec<_>>();
-    assert_eq!(query_results, vec![(&Foo(1), &Bar(2)), (&Foo(3), &Bar(4))]);
-}

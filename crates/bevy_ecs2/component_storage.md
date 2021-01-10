@@ -7,7 +7,7 @@
 
 ## random thoughts
 
-* Component Graph?
+* Archetype/Component Graph?
 * quickly hack it in to see if it regresses perf?
 * how to reconcile iteration order:
     * iterating archetypes will be a different order than iterating sparse sets
@@ -20,6 +20,7 @@
 
 * un-comment tests
 * make reserver api safe
+* consistent unchecked_mut
 
 
 ## Scratch

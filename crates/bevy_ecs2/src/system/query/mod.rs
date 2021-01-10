@@ -124,6 +124,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
     /// the given component type or if the given component type does not match this query.
     pub fn get_component<T: Component>(&self, entity: Entity) -> Result<&T, QueryError> {
         if let Ok(location) = self.world.entities().get(entity) {
+            // TODO: this must also check if component is SparseSet + that access is valid
             if self
                 .component_access
                 .is_read_or_write(&ArchetypeComponent::new::<T>(location.archetype))
@@ -131,7 +132,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
                 // SAFE: we have already checked that the entity/component matches our archetype access. and systems are scheduled to run with safe archetype access
                 unsafe {
                     self.world
-                        .get_at_location_unchecked(location)
+                        .get_at_location_unchecked(entity, location)
                         .map_err(QueryError::ComponentError)
                 }
             } else {
@@ -148,6 +149,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
         &mut self,
         entity: Entity,
     ) -> Result<Mut<'_, T>, QueryError> {
+        // TODO: this must also check if component is SparseSet + that access is valid
         let location = match self.world.entities().get(entity) {
             Err(err) => return Err(QueryError::ComponentError(ComponentError::NoSuchEntity)),
             Ok(location) => location,
@@ -160,7 +162,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
             // SAFE: RefMut does exclusivity checks and we have already validated the entity
             unsafe {
                 self.world
-                    .get_mut_at_location_unchecked(location)
+                    .get_mut_at_location_unchecked(entity, location)
                     .map_err(QueryError::ComponentError)
             }
         } else {

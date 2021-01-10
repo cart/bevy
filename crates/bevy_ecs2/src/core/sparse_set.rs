@@ -1,5 +1,5 @@
 use super::blob_vec::BlobVec;
-use crate::{ComponentId, Entity, TypeInfo};
+use crate::{ComponentFlags, ComponentId, Entity, TypeInfo};
 use std::{alloc::Layout, cell::UnsafeCell, marker::PhantomData};
 
 #[derive(Debug)]
@@ -135,7 +135,7 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
     #[inline]
     pub fn len(&self) -> usize {
         self.internal.len()
-    } 
+    }
 
     pub fn contains(&self, index: I) -> bool {
         self.internal.contains(index)
@@ -155,8 +155,8 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
             .map(|value| unsafe { &mut *value.cast::<V>() })
     }
 
-    /// SAFETY: `index` must have a value stored in the set
-    pub unsafe fn get_unchecked_mut(&mut self, index: I) -> &mut V {
+    /// SAFETY: `index` must have a value stored in the set and access must be unique
+    pub unsafe fn get_unchecked_mut(&self, index: I) -> &mut V {
         &mut *self.internal.get_unchecked(index).cast::<V>()
     }
 
@@ -240,6 +240,8 @@ impl SparseSetIndex for ComponentId {
 
 pub struct ComponentSparseSet {
     sparse_set: BlobSparseSet<Entity>,
+    // PERF: consider merging this into the above sparse set to avoid double indexing
+    component_flags: SparseSet<Entity, ComponentFlags>,
     type_info: TypeInfo,
 }
 
@@ -247,6 +249,7 @@ impl ComponentSparseSet {
     pub fn new(type_info: &TypeInfo) -> ComponentSparseSet {
         ComponentSparseSet {
             sparse_set: BlobSparseSet::new(type_info.layout(), type_info.drop(), 64),
+            component_flags: SparseSet::default(),
             type_info: type_info.clone(),
         }
     }
@@ -254,12 +257,23 @@ impl ComponentSparseSet {
     /// SAFETY: The caller must ensure that component_ptr is a pointer to the type described by TypeInfo
     /// The caller must also ensure that the component referenced by component_ptr is not dropped.
     /// This [SparseSetStorage] takes ownership of component_ptr and will drop it at the appropriate time.
-    pub unsafe fn put_component(&mut self, entity: Entity, component_ptr: *mut u8) {
+    pub unsafe fn put_component(
+        &mut self,
+        entity: Entity,
+        component_ptr: *mut u8,
+        component_flags: ComponentFlags,
+    ) {
         self.sparse_set.insert(entity, component_ptr);
+        self.component_flags.insert(entity, component_flags);
     }
 
     pub fn get_component(&self, entity: Entity) -> Option<*mut u8> {
         self.sparse_set.get(entity)
+    }
+
+    /// SAFETY: `index` must have a value stored in the set and access must be unique
+    pub unsafe fn get_component_flags_unchecked_mut(&self, entity: Entity) -> &mut ComponentFlags {
+        self.component_flags.get_unchecked_mut(entity)
     }
 
     /// SAFETY: it is the caller's responsibility to drop the returned ptr (if Some is returned).
@@ -270,7 +284,7 @@ impl ComponentSparseSet {
     #[inline]
     pub fn len(&self) -> usize {
         self.sparse_set.len()
-    } 
+    }
 }
 
 #[derive(Default)]

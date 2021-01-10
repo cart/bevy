@@ -171,7 +171,7 @@ impl World {
                     StorageType::SparseSet => {
                         let component_id = bundle_info.component_ids[bundle_index];
                         let sparse_set = sparse_sets.get_mut(component_id).unwrap();
-                        sparse_set.put_component(entity, ptr);
+                        sparse_set.put_component(entity, ptr, ComponentFlags::ADDED);
                     }
                 }
                 bundle_index += 1;
@@ -261,45 +261,6 @@ impl World {
         self.insert(entity, (component,))
     }
 
-    /// Borrow the `T` component of `entity`
-    #[inline]
-    pub fn get<T: Component>(&self, entity: Entity) -> Result<&'_ T, ComponentError> {
-        let location = self.entities.get(entity)?;
-        let components = self.components();
-        let component_id = components
-            .get_id(TypeId::of::<T>())
-            .ok_or_else(ComponentError::missing_component::<T>)?;
-        // SAFE: component_id exist and is therefore valid
-        let component_info = unsafe { components.get_info_unchecked(component_id) };
-        match component_info.storage_type {
-            StorageType::Archetype => {
-                unsafe {
-                    // SAFE: valid locations point to valid archetypes
-                    let archetype = self.archetypes().get_unchecked(location.archetype);
-                    let components = archetype
-                        .get::<T>()
-                        .ok_or_else(ComponentError::missing_component::<T>)?;
-                    Ok(&*components.as_ptr().add(location.index as usize))
-                }
-            }
-            StorageType::SparseSet => {
-                let component = self
-                    .sparse_sets()
-                    .get(component_id)
-                    .and_then(|sparse_set| sparse_set.get_component(entity))
-                    .ok_or_else(ComponentError::missing_component::<T>)?;
-                // SAFE: component is of type T
-                unsafe { Ok(&*component.cast::<T>()) }
-            }
-        }
-    }
-
-    /// Mutably borrow the `T` component of `entity`
-    #[inline]
-    pub fn get_mut<T: Component>(&mut self, entity: Entity) -> Result<Mut<'_, T>, ComponentError> {
-        todo!()
-    }
-
     /// Borrow the `T` component of `entity` without checking if it can be mutated
     ///
     /// # Safety
@@ -310,14 +271,9 @@ impl World {
         &self,
         entity: Entity,
     ) -> Result<Mut<'_, T>, ComponentError> {
-        let loc = self.entities.get(entity)?;
-        if loc.archetype.is_empty_archetype() {
-            return Err(ComponentError::missing_component::<T>());
-        }
-        Ok(Mut::new(
-            self.archetypes.get(loc.archetype).unwrap(),
-            loc.index,
-        )?)
+        let location = self.entities.get(entity)?;
+        // SAFE: location is valid
+        self.get_mut_at_location_unchecked(entity, location)
     }
 
     pub fn remove<T: Bundle>(&mut self, entity: Entity) -> Result<T, ComponentError> {
@@ -548,22 +504,57 @@ impl World {
         BatchedIter::new(&self.archetypes, batch_size)
     }
 
+    /// Borrow the `T` component of `entity`
+    #[inline]
+    pub fn get<T: Component>(&self, entity: Entity) -> Result<&'_ T, ComponentError> {
+        let location = self.entities.get(entity)?;
+        // SAFE: location is valid
+        unsafe { self.get_at_location_unchecked(entity, location) }
+    }
+
+    /// Mutably borrow the `T` component of `entity`
+    #[inline]
+    pub fn get_mut<T: Component>(&mut self, entity: Entity) -> Result<Mut<'_, T>, ComponentError> {
+        // SAFE: unique access to self
+        unsafe { self.get_mut_unchecked(entity) }
+    }
+
     /// Borrow the `T` component at the given location, without safety checks
     /// # Safety
     /// This does not check that the location is within bounds of the archetype.
+    #[inline]
     pub unsafe fn get_at_location_unchecked<T: Component>(
         &self,
+        entity: Entity,
         location: Location,
     ) -> Result<&T, ComponentError> {
-        if location.archetype.is_empty_archetype() {
-            return Err(ComponentError::missing_component::<T>());
+        let components = self.components();
+        let component_id = components
+            .get_id(TypeId::of::<T>())
+            .ok_or_else(ComponentError::missing_component::<T>)?;
+        // SAFE: component_id exist and is therefore valid
+        let component_info = unsafe { components.get_info_unchecked(component_id) };
+        match component_info.storage_type {
+            StorageType::Archetype => {
+                unsafe {
+                    // SAFE: valid locations point to valid archetypes
+                    let archetype = self.archetypes().get_unchecked(location.archetype);
+                    let components = archetype
+                        .get::<T>()
+                        .ok_or_else(ComponentError::missing_component::<T>)?;
+                    Ok(&*components.as_ptr().add(location.index as usize))
+                }
+            }
+            StorageType::SparseSet => {
+                let component = self
+                    .sparse_sets()
+                    .get(component_id)
+                    .and_then(|sparse_set| sparse_set.get_component(entity))
+                    .ok_or_else(ComponentError::missing_component::<T>)?;
+                // SAFE: component is of type T
+                unsafe { Ok(&*component.cast::<T>()) }
+            }
         }
-        let archetype = self.archetypes.get(location.archetype).unwrap();
-        Ok(&*archetype
-            .get::<T>()
-            .ok_or_else(ComponentError::missing_component::<T>)?
-            .as_ptr()
-            .add(location.index as usize))
     }
 
     /// Borrow the `T` component at the given location, without safety checks
@@ -571,15 +562,54 @@ impl World {
     /// This does not check that the location is within bounds of the archetype.
     /// It also does not check for mutable access correctness. To be safe, make sure this is the only
     /// thing accessing this entity's T component.
+    #[inline]
     pub unsafe fn get_mut_at_location_unchecked<T: Component>(
         &self,
+        entity: Entity,
         location: Location,
     ) -> Result<Mut<T>, ComponentError> {
-        if location.archetype.is_empty_archetype() {
-            return Err(ComponentError::missing_component::<T>());
+        let components = self.components();
+        let component_id = components
+            .get_id(TypeId::of::<T>())
+            .ok_or_else(ComponentError::missing_component::<T>)?;
+        // SAFE: component_id exist and is therefore valid
+        let component_info = unsafe { components.get_info_unchecked(component_id) };
+        match component_info.storage_type {
+            StorageType::Archetype => {
+                unsafe {
+                    // SAFE: valid locations point to valid archetypes
+                    let archetype = self.archetypes().get_unchecked(location.archetype);
+                    let (components, type_state) = archetype
+                        .get_with_type_state::<T>()
+                        .ok_or_else(ComponentError::missing_component::<T>)?;
+                    Ok(Mut {
+                        value: &mut *components.as_ptr().add(location.index as usize),
+                        flags: &mut *type_state
+                            .component_flags()
+                            .as_ptr()
+                            .add(location.index as usize),
+                    })
+                }
+            }
+            StorageType::SparseSet => {
+                let set = self
+                    .sparse_sets()
+                    .get(component_id)
+                    .ok_or_else(ComponentError::missing_component::<T>)?;
+                let component = set
+                    .get_component(entity)
+                    .ok_or_else(ComponentError::missing_component::<T>)?;
+                // SAFE: component exists, therefore it has flags
+                let flags = unsafe { set.get_component_flags_unchecked_mut(entity) };
+                unsafe {
+                    Ok(Mut {
+                        // SAFE: component is of type T
+                        value: unsafe { &mut *component.cast::<T>() },
+                        flags,
+                    })
+                }
+            }
         }
-        let archetype = self.archetypes.get(location.archetype).unwrap();
-        Ok(Mut::new(archetype, location.index)?)
     }
 
     pub fn clear_trackers(&mut self) {
