@@ -22,6 +22,7 @@
 * make reserver api safe
 * consistent unchecked_mut
 * simplify SAFETY text
+* world.query().get(entity)
 
 
 ## Scratch
