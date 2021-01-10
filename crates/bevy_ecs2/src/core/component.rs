@@ -28,7 +28,7 @@ pub struct ComponentInfo {
 
 // TODO: needed?
 // TODO: consider how this relates to DynamicComponents
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash)]
 pub struct ComponentId(pub(crate) usize);
 
 pub struct ComponentDescriptor {

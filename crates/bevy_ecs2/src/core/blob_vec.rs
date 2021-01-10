@@ -111,6 +111,13 @@ impl BlobVec {
         swap_scratch
     }
 
+    /// SAFETY: index must be in-bounds
+    #[inline]
+    pub unsafe fn swap_remove_unchecked(&mut self, index: usize) {
+        let value = self.swap_remove_and_forget_unchecked(index);
+        (self.drop)(value)
+    }
+
     pub unsafe fn swap_remove_type_unchecked<T>(&mut self, index: usize) -> T {
         let removed = self.swap_remove_and_forget_unchecked(index);
         std::ptr::read(removed.cast::<T>())
@@ -148,7 +155,10 @@ impl BlobVec {
         (*self.data.get())
             .as_ptr()
             .add(index * self.item_layout.size())
-            .cast::<u8>()
+    }
+
+    pub unsafe fn data(&self) -> NonNull<u8> {
+        *self.data.get()
     }
 
     /// SAFETY: It is the caller's responsibility to ensure the type matches self.item_layout and that the type stored is T

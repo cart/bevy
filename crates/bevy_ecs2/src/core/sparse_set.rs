@@ -115,14 +115,18 @@ pub struct SparseSet<I: SparseSetIndex, V: 'static> {
 
 impl<I: SparseSetIndex, V> Default for SparseSet<I, V> {
     fn default() -> Self {
-        Self {
-            internal: BlobSparseSet::new_typed::<V>(64),
-            marker: Default::default(),
-        }
+        Self::new(64)
     }
 }
 
 impl<I: SparseSetIndex, V> SparseSet<I, V> {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            internal: BlobSparseSet::new_typed::<V>(capacity),
+            marker: Default::default(),
+        }
+    }
+
     pub fn insert(&mut self, index: I, mut value: V) {
         // SAFE: self.internal's layout matches `value`. `value` is properly forgotten
         unsafe {
@@ -155,7 +159,14 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
             .map(|value| unsafe { &mut *value.cast::<V>() })
     }
 
+    /// SAFETY: `index` must have a value stored in the set
+    #[inline]
+    pub unsafe fn get_unchecked(&self, index: I) -> &mut V {
+        &mut *self.internal.get_unchecked(index).cast::<V>()
+    }
+
     /// SAFETY: `index` must have a value stored in the set and access must be unique
+    #[inline]
     pub unsafe fn get_unchecked_mut(&self, index: I) -> &mut V {
         &mut *self.internal.get_unchecked(index).cast::<V>()
     }

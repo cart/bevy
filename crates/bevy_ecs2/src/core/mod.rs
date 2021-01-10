@@ -32,6 +32,7 @@ macro_rules! smaller_tuples_too {
 
 mod access;
 mod archetype;
+mod arch;
 mod blob_vec;
 mod borrow;
 mod bundle;
@@ -41,7 +42,9 @@ mod entity_builder;
 mod entity_map;
 mod filter;
 mod query;
+mod type_info;
 pub mod query2;
+pub mod table;
 mod serde;
 mod sparse_set;
 mod world;
@@ -57,6 +60,7 @@ pub use entities::*;
 pub use entity_map::*;
 pub use filter::*;
 pub use query::*;
+pub use type_info::*;
 pub use sparse_set::*;
 pub use world::*;
 pub use world_builder::*;
