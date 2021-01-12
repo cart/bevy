@@ -1,25 +1,21 @@
 mod archetype;
-mod blob_vec;
 mod bundle;
 mod component;
 mod entity;
 mod filter;
 mod pointer;
 mod query;
-mod sparse_set;
-mod table;
+mod storage;
 mod type_info;
 mod world;
 
 pub use archetype::*;
-pub use blob_vec::*;
 pub use bundle::*;
 pub use component::*;
 pub use entity::*;
 pub use filter::*;
 pub use pointer::*;
 pub use query::*;
-pub use sparse_set::*;
-pub use table::*;
+pub use storage::*;
 pub use type_info::*;
 pub use world::*;

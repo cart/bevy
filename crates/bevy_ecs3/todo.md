@@ -18,11 +18,21 @@
 
 ## TODO
 
+* Empty archetype
+* Flush
+* Fixup removal
+
+* consider new hecs entity reserver
+
+
 * un-comment tests
 * make reserver api safe
 * consistent unchecked_mut
 * simplify SAFETY text
 * world.query().get(entity)
+* consider if we really need sparse sets:
+    * each archetype could store the index into a single column table instead
+    * rather than needing a sparse lookup, it could instead be "dense".
 
 
 ## Scratch

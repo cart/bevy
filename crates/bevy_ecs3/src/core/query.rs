@@ -19,7 +19,7 @@ pub trait Fetch<'w>: Sized {
     fn update_archetypes(&mut self, archetypes: &Archetypes, query_state: &mut QueryState);
     unsafe fn init(world: &World, query_state: &mut QueryState) -> Self;
     fn next_archetype(&mut self, archetype: &Archetype);
-    unsafe fn fetch(&mut self, archetype_index: usize) -> Option<Self::Item>;
+    unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item;
 }
 
 /// A fetch that is read only. This should only be implemented for read-only fetches.
@@ -144,148 +144,148 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, 's, Q, F>
 
                 let item = self.fetch.fetch(self.archetype_index);
                 self.archetype_index += 1;
-                return item;
+                return Some(item);
             }
         }
     }
 }
 
-impl<T: Component> WorldQuery for &T {
-    type Fetch = FetchRead<T>;
-}
+// impl<T: Component> WorldQuery for &T {
+//     type Fetch = FetchRead<T>;
+// }
 
-pub enum FetchRead<T> {
-    Archetype(NonNull<T>),
-    SparseSet {
-        entities: NonNull<Entity>,
-        sparse_set: *mut ComponentSparseSet,
-    },
-}
+// pub enum FetchRead<T> {
+//     Table(NonNull<T>),
+//     SparseSet {
+//         entities: NonNull<Entity>,
+//         sparse_set: *mut ComponentSparseSet,
+//     },
+// }
 
-impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
-    type Item = &'w T;
+// unsafe impl<T> ReadOnlyFetch for FetchRead<T> {}
 
-    fn update_archetypes(&mut self, archetypes: &Archetypes, query_state: &mut QueryState) {
-        match self {
-            Self::Archetype(_) => {
-                for archetype in archetypes.iter() {
-                    if archetype.has_type(TypeId::of::<T>()) {
-                        query_state.access_archetype(archetype.id());
-                    } else {
-                        query_state.ignore_archetype(archetype.id());
-                    }
-                }
-            }
-            Self::SparseSet { .. } => {
-                query_state.access_all_archetypes(archetypes);
-            }
-        }
-    }
+// impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
+//     type Item = &'w T;
 
-    unsafe fn init(world: &World, query_state: &mut QueryState) -> Self {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>()).unwrap();
-        let component_info = components.get_info(component_id).unwrap();
-        match component_info.storage_type {
-            StorageType::Archetype => Self::Archetype(NonNull::dangling()),
-            StorageType::SparseSet => Self::SparseSet {
-                entities: NonNull::dangling(),
-                sparse_set: world.sparse_sets().get_unchecked(component_id).unwrap(),
-            },
-        }
-    }
+//     fn update_archetypes(&mut self, archetypes: &Archetypes, query_state: &mut QueryState) {
+//         match self {
+//             Self::Table(_) => {
+//                 for archetype in archetypes.iter() {
+//                     if archetype.has_type(TypeId::of::<T>()) {
+//                         query_state.access_archetype(archetype.id());
+//                     } else {
+//                         query_state.ignore_archetype(archetype.id());
+//                     }
+//                 }
+//             }
+//             Self::SparseSet { .. } => {
+//                 query_state.access_all_archetypes(archetypes);
+//             }
+//         }
+//     }
 
-    #[inline]
-    fn next_archetype(&mut self, archetype: &Archetype) {
-        match self {
-            Self::Archetype(components) => {
-                *components = archetype.get::<T>().unwrap();
-            }
-            Self::SparseSet { entities, .. } => *entities = archetype.entities(),
-        }
-    }
+//     unsafe fn init(world: &World, query_state: &mut QueryState) -> Self {
+//         let components = world.components();
+//         let component_id = components.get_id(TypeId::of::<T>()).unwrap();
+//         let component_info = components.get_info(component_id).unwrap();
+//         match component_info.storage_type {
+//             StorageType::Table => Self::Table(NonNull::dangling()),
+//             StorageType::SparseSet => Self::SparseSet {
+//                 entities: NonNull::dangling(),
+//                 sparse_set: world.sparse_sets().get_unchecked(component_id).unwrap(),
+//             },
+//         }
+//     }
 
-    #[inline]
-    unsafe fn fetch(&mut self, archetype_index: usize) -> Option<Self::Item> {
-        match self {
-            Self::Archetype(components) => Some(&*components.as_ptr().add(archetype_index)),
-            Self::SparseSet {
-                entities,
-                sparse_set,
-            } => {
-                let entity = *entities.as_ptr().add(archetype_index);
-                (**sparse_set)
-                    .get_component(entity)
-                    .map(|value| &*value.cast::<T>())
-            }
-        }
-    }
-}
+//     #[inline]
+//     fn next_archetype(&mut self, archetype: &Archetype) {
+//         match self {
+//             Self::Table(components) => {
+//                 *components = archetype.get::<T>().unwrap();
+//             }
+//             Self::SparseSet { entities, .. } => *entities = archetype.entities(),
+//         }
+//     }
 
-impl<T: Component> WorldQuery for &mut T {
-    type Fetch = FetchWrite<T>;
-}
+//     #[inline]
+//     unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
+//         match self {
+//             Self::Table(components) => &*components.as_ptr().add(archetype_index),
+//             Self::SparseSet {
+//                 entities,
+//                 sparse_set,
+//             } => {
+//                 let entity = *entities.as_ptr().add(archetype_index);
+//                 &*(**sparse_set).get_component_unchecked(entity).cast::<T>()
+//             }
+//         }
+//     }
+// }
 
-pub enum FetchWrite<T> {
-    Archetype {
-        components: NonNull<T>,
-        flags: NonNull<ComponentFlags>,
-    },
-    SparseSet(NonNull<ComponentSparseSet>),
-}
+// impl<T: Component> WorldQuery for &mut T {
+//     type Fetch = FetchWrite<T>;
+// }
 
-impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
-    type Item = Mut<'w, T>;
+// pub enum FetchWrite<T> {
+//     Table {
+//         components: NonNull<T>,
+//         flags: NonNull<ComponentFlags>,
+//     },
+//     SparseSet(NonNull<ComponentSparseSet>),
+// }
 
-    fn update_archetypes(&mut self, archetypes: &Archetypes, query_state: &mut QueryState) {
-        for archetype in archetypes.iter() {
-            if archetype.has_type(TypeId::of::<T>()) {
-                query_state.access_archetype(archetype.id());
-            } else {
-                query_state.ignore_archetype(archetype.id());
-            }
-        }
-    }
+// impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
+//     type Item = Mut<'w, T>;
 
-    unsafe fn init(world: &World, query_state: &mut QueryState) -> Self {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>()).unwrap();
-        let component_info = components.get_info(component_id).unwrap();
-        match component_info.storage_type {
-            StorageType::Archetype => Self::Archetype {
-                components: NonNull::dangling(),
-                flags: NonNull::dangling(),
-            },
-            StorageType::SparseSet => {
-                panic!();
-                // Self::SparseSet(world.sparse_sets().get(component_id).unwrap().as_ptr())
-            }
-        }
-    }
+//     fn update_archetypes(&mut self, archetypes: &Archetypes, query_state: &mut QueryState) {
+//         for archetype in archetypes.iter() {
+//             if archetype.has_type(TypeId::of::<T>()) {
+//                 query_state.access_archetype(archetype.id());
+//             } else {
+//                 query_state.ignore_archetype(archetype.id());
+//             }
+//         }
+//     }
 
-    #[inline]
-    fn next_archetype(&mut self, archetype: &Archetype) {
-        if let Self::Archetype { components, flags } = self {
-            archetype
-                .get_with_type_state::<T>()
-                .map(|(archetype_components, type_state)| {
-                    *components = archetype_components;
-                    *flags = type_state.component_flags();
-                });
-        }
-    }
+//     unsafe fn init(world: &World, query_state: &mut QueryState) -> Self {
+//         let components = world.components();
+//         let component_id = components.get_id(TypeId::of::<T>()).unwrap();
+//         let component_info = components.get_info(component_id).unwrap();
+//         match component_info.storage_type {
+//             StorageType::Table => Self::Table {
+//                 components: NonNull::dangling(),
+//                 flags: NonNull::dangling(),
+//             },
+//             StorageType::SparseSet => {
+//                 panic!();
+//                 // Self::SparseSet(world.sparse_sets().get(component_id).unwrap().as_ptr())
+//             }
+//         }
+//     }
 
-    #[inline]
-    unsafe fn fetch(&mut self, archetype_index: usize) -> Option<Self::Item> {
-        match self {
-            Self::Archetype { components, flags } => Some(Mut {
-                value: &mut *components.as_ptr().add(archetype_index),
-                flags: &mut *flags.as_ptr().add(archetype_index),
-            }),
-            Self::SparseSet(sparse_set_ptr) => panic!(),
-        }
-    }
-}
+//     #[inline]
+//     fn next_archetype(&mut self, archetype: &Archetype) {
+//         if let Self::Table { components, flags } = self {
+//             archetype
+//                 .get_with_type_state::<T>()
+//                 .map(|(archetype_components, type_state)| {
+//                     *components = archetype_components;
+//                     *flags = type_state.component_flags();
+//                 });
+//         }
+//     }
+
+//     #[inline]
+//     unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
+//         match self {
+//             Self::Table { components, flags } => Mut {
+//                 value: &mut *components.as_ptr().add(archetype_index),
+//                 // flags: &mut *flags.as_ptr().add(archetype_index),
+//             },
+//             Self::SparseSet(sparse_set_ptr) => panic!(),
+//         }
+//     }
+// }
 
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
@@ -314,9 +314,9 @@ macro_rules! tuple_impl {
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
             #[inline]
-            unsafe fn fetch(&mut self, archetype_index: usize) -> Option<Self::Item> {
+            unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
                 let ($($name,)*) = self;
-                Some(($($name.fetch(archetype_index)?,)*))
+                ($($name.fetch(archetype_index),)*)
             }
         }
 
@@ -324,66 +324,66 @@ macro_rules! tuple_impl {
             type Fetch = ($($name::Fetch,)*);
         }
 
-        // unsafe impl<$($name: ReadOnlyFetch),*> ReadOnlyFetch for ($($name,)*) {}
+        unsafe impl<$($name: ReadOnlyFetch),*> ReadOnlyFetch for ($($name,)*) {}
 
     };
 }
 
 smaller_tuples_too!(tuple_impl, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A);
 
-#[cfg(test)]
-mod tests {
-    use crate::core::{ComponentDescriptor, QueryState, StorageType, World};
+// #[cfg(test)]
+// mod tests {
+//     use crate::core::{ComponentDescriptor, QueryState, StorageType, World};
 
-    #[derive(Debug, Eq, PartialEq)]
-    struct A(usize);
-    #[derive(Debug, Eq, PartialEq)]
-    struct B(usize);
+//     #[derive(Debug, Eq, PartialEq)]
+//     struct A(usize);
+//     #[derive(Debug, Eq, PartialEq)]
+//     struct B(usize);
 
-    #[test]
-    fn query2() {
-        let mut world = World::new();
-        let mut query_state = QueryState::default();
-        let e1 = world.spawn((A(1), B(1)));
-        let e2 = world.spawn((A(2),));
-        let values = world
-            .query_with_state::<&A>(&mut query_state)
-            .collect::<Vec<&A>>();
-        assert_eq!(values, vec![&A(1), &A(2)]);
+//     #[test]
+//     fn query2() {
+//         let mut world = World::new();
+//         let mut query_state = QueryState::default();
+//         let e1 = world.spawn((A(1), B(1)));
+//         let e2 = world.spawn((A(2),));
+//         let values = world
+//             .query_with_state::<&A>(&mut query_state)
+//             .collect::<Vec<&A>>();
+//         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
-            b.0 = 3;
-        }
-        let values = world
-            .query_with_state::<&B>(&mut query_state)
-            .collect::<Vec<&B>>();
-        assert_eq!(values, vec![&B(3)]);
-    }
+//         for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
+//             b.0 = 3;
+//         }
+//         let values = world
+//             .query_with_state::<&B>(&mut query_state)
+//             .collect::<Vec<&B>>();
+//         assert_eq!(values, vec![&B(3)]);
+//     }
 
-    #[test]
-    fn multi_storage_query() {
-        let mut world = World::new();
-        world
-            .components_mut()
-            .add(ComponentDescriptor::of::<A>(StorageType::SparseSet))
-            .unwrap();
+//     #[test]
+//     fn multi_storage_query() {
+//         let mut world = World::new();
+//         world
+//             .components_mut()
+//             .add(ComponentDescriptor::of::<A>(StorageType::SparseSet))
+//             .unwrap();
 
-        let e1 = world.spawn((A(1), B(2)));
-        let e2 = world.spawn((A(2),));
+//         let e1 = world.spawn((A(1), B(2)));
+//         let e2 = world.spawn((A(2),));
 
-        let mut query_state = QueryState::default();
-        let values = world
-            .query_with_state::<&A>(&mut query_state)
-            .collect::<Vec<&A>>();
-        assert_eq!(values, vec![&A(1), &A(2)]);
+//         let mut query_state = QueryState::default();
+//         let values = world
+//             .query_with_state::<&A>(&mut query_state)
+//             .collect::<Vec<&A>>();
+//         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
-            b.0 = 3;
-        }
+//         for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
+//             b.0 = 3;
+//         }
 
-        let values = world
-            .query_with_state::<&B>(&mut query_state)
-            .collect::<Vec<&B>>();
-        assert_eq!(values, vec![&B(3)]);
-    }
-}
+//         let values = world
+//             .query_with_state::<&B>(&mut query_state)
+//             .collect::<Vec<&B>>();
+//         assert_eq!(values, vec![&B(3)]);
+//     }
+// }

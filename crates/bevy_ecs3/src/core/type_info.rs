@@ -47,28 +47,3 @@ impl TypeInfo {
         self.type_name
     }
 }
-
-impl PartialOrd for TypeInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for TypeInfo {
-    /// Order by alignment, descending. Ties broken with TypeId.
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.layout
-            .align()
-            .cmp(&other.layout.align())
-            .reverse()
-            .then_with(|| self.id.cmp(&other.id))
-    }
-}
-
-impl PartialEq for TypeInfo {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Eq for TypeInfo {}

@@ -4,6 +4,8 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
+use crate::core::{Archetype, Storages};
+
 use super::archetype::ArchetypeId;
 
 /// Lightweight unique ID of an entity
@@ -154,7 +156,7 @@ impl Entities {
     /// Destroy an entity, allowing it to be reused
     ///
     /// Must not be called on reserved entities prior to `flush`.
-    pub(crate) fn free(&mut self, entity: Entity) -> Result<Location, NoSuchEntity> {
+    pub(crate) fn free(&mut self, entity: Entity) -> Result<EntityLocation, NoSuchEntity> {
         let meta = &mut self.meta[entity.id as usize];
         if meta.generation != entity.generation {
             return Err(NoSuchEntity);
@@ -162,8 +164,8 @@ impl Entities {
         meta.generation += 1;
         let loc = mem::replace(
             &mut meta.location,
-            Location {
-                archetype: ArchetypeId::empty_archetype(),
+            EntityLocation {
+                archetype_id: ArchetypeId::empty_archetype(),
                 // Guard against bugs in reservation handling
                 index: usize::max_value(),
             },
@@ -211,7 +213,7 @@ impl Entities {
     /// Access the location storage of an entity
     ///
     /// Must not be called on pending entities.
-    pub(crate) fn get_mut(&mut self, entity: Entity) -> Result<&mut Location, NoSuchEntity> {
+    pub(crate) fn get_mut(&mut self, entity: Entity) -> Result<&mut EntityLocation, NoSuchEntity> {
         let meta = &mut self.meta[entity.id as usize];
         if meta.generation == entity.generation {
             Ok(&mut meta.location)
@@ -221,10 +223,10 @@ impl Entities {
     }
 
     /// Returns `Ok(Location { archetype: 0, index: undefined })` for pending entities
-    pub fn get(&self, entity: Entity) -> Result<Location, NoSuchEntity> {
+    pub fn get(&self, entity: Entity) -> Result<EntityLocation, NoSuchEntity> {
         if self.meta.len() <= entity.id as usize {
-            return Ok(Location {
-                archetype: ArchetypeId::empty_archetype(),
+            return Ok(EntityLocation {
+                archetype_id: ArchetypeId::empty_archetype(),
                 index: usize::max_value(),
             });
         }
@@ -232,9 +234,9 @@ impl Entities {
         if meta.generation != entity.generation {
             return Err(NoSuchEntity);
         }
-        if meta.location.archetype.is_empty_archetype() {
-            return Ok(Location {
-                archetype: ArchetypeId::empty_archetype(),
+        if meta.location.archetype_id.is_empty_archetype() {
+            return Ok(EntityLocation {
+                archetype_id: ArchetypeId::empty_archetype(),
                 index: usize::max_value(),
             });
         }
@@ -243,7 +245,7 @@ impl Entities {
 
     /// Allocate space for and enumerate pending entities
     #[allow(clippy::reversed_empty_ranges)]
-    pub(crate) fn flush(&mut self) -> impl Iterator<Item = u32> {
+    fn flush_pending(&mut self) -> impl Iterator<Item = u32> {
         let pending = self.pending.load(Ordering::Relaxed); // Not racey due to &mut self
         if pending != 0 {
             let first = self.meta.len() as u32;
@@ -252,6 +254,38 @@ impl Entities {
         } else {
             0..0
         }
+    }
+
+    /// SAFETY: `empty_archetype` must actually be empty (no components of any type). Otherwise uninitialized memory will be allocated
+    /// for each entity in `storages`
+    pub(crate) unsafe fn flush(
+        &mut self,
+        empty_archetype: &mut Archetype,
+        storages: &mut Storages,
+    ) {
+        for entity_id in self.flush_pending() {
+            // SAFE: empty archetype will not allocate anything in storages
+            self.meta[entity_id as usize].location = empty_archetype.allocate(
+                Entity {
+                    id: entity_id,
+                    generation: self.meta[entity_id as usize].generation,
+                },
+                storages,
+            );
+        }
+
+        for i in 0..self.reserved_len() {
+            let id = self.reserved(i);
+            // SAFE: empty archetype will not allocate anything in storages
+            self.meta[id as usize].location = empty_archetype.allocate(
+                Entity {
+                    id,
+                    generation: self.meta[id as usize].generation,
+                },
+                storages,
+            );
+        }
+        self.clear_reserved();
     }
 
     pub fn len(&self) -> u32 {
@@ -297,8 +331,8 @@ impl Entities {
             new_len,
             EntityMeta {
                 generation: 0,
-                location: Location {
-                    archetype: ArchetypeId::empty_archetype(),
+                location: EntityLocation {
+                    archetype_id: ArchetypeId::empty_archetype(),
                     index: usize::max_value(), // dummy value, to be filled in
                 },
             },
@@ -351,14 +385,14 @@ impl EntityReserver {
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct EntityMeta {
     pub generation: u32,
-    pub location: Location,
+    pub location: EntityLocation,
 }
 
 /// A location of an entity in an archetype
 #[derive(Copy, Clone, Debug)]
-pub struct Location {
+pub struct EntityLocation {
     /// The archetype index
-    pub archetype: ArchetypeId,
+    pub archetype_id: ArchetypeId,
 
     /// The index of the entity in the archetype
     pub index: usize,

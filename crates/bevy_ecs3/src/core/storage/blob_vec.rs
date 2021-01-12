@@ -61,6 +61,7 @@ impl BlobVec {
                     self.item_layout.size() * new_capacity,
                 )
             };
+
             self.data = UnsafeCell::new(NonNull::new(new_data).unwrap());
         }
         self.capacity = new_capacity;
@@ -76,11 +77,24 @@ impl BlobVec {
     /// This [BlobVec] will take ownership of `value`'s data, which means the caller should ensure that data is not dropped early  
     #[inline]
     pub unsafe fn push(&mut self, value: *mut u8) {
+        self.push_uninit();
+        self.set_unchecked(self.len - 1, value);
+    }
+
+    /// increases the length by one (and grows the vec if needed) with uninitialized memory.
+    /// SAFETY: the newly allocated space must be immediately populated with a valid value
+    #[inline]
+    pub unsafe fn push_uninit(&mut self) {
         if self.len == self.capacity {
             self.grow(self.capacity.max(1));
         }
-        self.set_unchecked(self.len, value);
         self.len += 1;
+    }
+
+    /// SAFETY: len must be <= capacity. if length is decreased, "out of bounds" items must be dropped. if length is increased,
+    /// newly added items must be immediately populated with valid values.
+    pub unsafe fn set_len(&mut self, len: usize) {
+        self.len = len;
     }
 
     /// SAFETY: It is the caller's responsibility to ensure the type matches self.item_layout
@@ -257,17 +271,16 @@ unsafe fn drop_ptr<T>(ptr: *mut u8) {
 
 impl Drop for BlobVec {
     fn drop(&mut self) {
-        if self.capacity > 0 {
-            self.clear();
-            unsafe {
-                std::alloc::dealloc(
-                    (*self.data.get()).as_ptr(),
-                    Layout::from_size_align_unchecked(
-                        self.item_layout.size() * self.capacity,
-                        self.item_layout.align(),
-                    ),
-                );
-            }
+        self.clear();
+        unsafe {
+            std::alloc::dealloc(
+                (*self.data.get()).as_ptr(),
+                Layout::from_size_align_unchecked(
+                    self.item_layout.size() * self.capacity,
+                    self.item_layout.align(),
+                ),
+            );
+            std::alloc::dealloc((*self.swap_scratch.get()).as_ptr(), self.item_layout);
         }
     }
 }
@@ -287,6 +300,16 @@ mod tests {
     impl Drop for Foo {
         fn drop(&mut self) {
             *self.drop_counter.borrow_mut() += 1;
+        }
+    }
+
+    #[test]
+    fn resize_test() {
+        let mut blob_vec = BlobVec::new_typed::<usize>(64);
+        unsafe {
+            for _ in 0..10_000 {
+                blob_vec.push_type(1);
+            }
         }
     }
 

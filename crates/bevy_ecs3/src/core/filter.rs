@@ -61,9 +61,10 @@ impl<T: Component> QueryFilter for Added<T> {
 
     #[inline]
     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-        archetype
-            .get_type_state(TypeId::of::<T>())
-            .map(|state| Added(state.component_flags(), Default::default()))
+        todo!()
+        // archetype
+        //     .get_type_state(TypeId::of::<T>())
+        //     .map(|state| Added(state.component_flags(), Default::default()))
     }
 }
 
@@ -85,9 +86,10 @@ impl<T: Component> QueryFilter for Mutated<T> {
 
     #[inline]
     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-        archetype
-            .get_type_state(TypeId::of::<T>())
-            .map(|state| Mutated(state.component_flags(), Default::default()))
+        todo!()
+        // archetype
+        //     .get_type_state(TypeId::of::<T>())
+        //     .map(|state| Mutated(state.component_flags(), Default::default()))
     }
 }
 
@@ -108,9 +110,10 @@ impl<T: Component> QueryFilter for Changed<T> {
 
     #[inline]
     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-        archetype
-            .get_type_state(TypeId::of::<T>())
-            .map(|state| Changed(state.component_flags(), Default::default()))
+        todo!()
+        // archetype
+        //     .get_type_state(TypeId::of::<T>())
+        //     .map(|state| Changed(state.component_flags(), Default::default()))
     }
 }
 
@@ -135,11 +138,12 @@ impl<T: Component> QueryFilter for Without<T> {
 
     #[inline]
     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-        if archetype.has_type(TypeId::of::<T>()) {
-            None
-        } else {
-            Some(AnyEntityFilter)
-        }
+        todo!()
+        // if archetype.has_type(TypeId::of::<T>()) {
+        //     None
+        // } else {
+        //     Some(AnyEntityFilter)
+        // }
     }
 }
 
@@ -154,11 +158,12 @@ impl<T: Component> QueryFilter for With<T> {
 
     #[inline]
     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-        if archetype.has_type(TypeId::of::<T>()) {
-            Some(AnyEntityFilter)
-        } else {
-            None
-        }
+        todo!()
+        // if archetype.has_type(TypeId::of::<T>()) {
+        //     Some(AnyEntityFilter)
+        // } else {
+        //     None
+        // }
     }
 }
 
@@ -178,14 +183,15 @@ impl<T: Bundle> QueryFilter for WithType<T> {
 
     #[inline]
     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-        if T::static_type_info()
-            .iter()
-            .all(|info| archetype.has_type(info.id()))
-        {
-            Some(AnyEntityFilter)
-        } else {
-            None
-        }
+        todo!()
+        // if T::static_type_info()
+        //     .iter()
+        //     .all(|info| archetype.has_type(info.id()))
+        // {
+        //     Some(AnyEntityFilter)
+        // } else {
+        //     None
+        // }
     }
 }
 

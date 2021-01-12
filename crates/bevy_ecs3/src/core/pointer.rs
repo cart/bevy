@@ -4,7 +4,7 @@ use crate::core::{Component, ComponentFlags};
 /// Unique borrow of an entity's component
 pub struct Mut<'a, T: Component> {
     pub(crate) value: &'a mut T,
-    pub(crate) flags: &'a mut ComponentFlags,
+    // pub(crate) flags: &'a mut ComponentFlags,
 }
 
 unsafe impl<T: Component> Send for Mut<'_, T> {}
@@ -22,7 +22,7 @@ impl<'a, T: Component> Deref for Mut<'a, T> {
 impl<'a, T: Component> DerefMut for Mut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
-        self.flags.insert(ComponentFlags::MUTATED);
+        // self.flags.insert(ComponentFlags::MUTATED);
         self.value
     }
 }

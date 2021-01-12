@@ -1,59 +1,33 @@
-// Copyright 2019 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+use std::{any::TypeId, collections::HashMap, ptr::NonNull};
 
-// modified by Bevy contributors
-
-use std::{
-    any::{type_name, TypeId},
-    fmt, mem,
-    ptr::NonNull,
+use crate::{
+    core::{
+        ArchetypeId, Archetypes, Component, ComponentError, ComponentId, Components, SparseSets,
+        StorageType, Tables, TypeInfo,
+    },
+    smaller_tuples_too,
 };
 
-use crate::{core::{ComponentError, TypeInfo, Component}, smaller_tuples_too};
-
-/// A dynamically typed collection of components
+/// A dynamically typed ordered collection of components
 ///
 /// See [Bundle]
 pub trait DynamicBundle: 'static {
-    /// Obtain the fields' TypeInfos, in order that DynamicBundle::put will be called
-    #[doc(hidden)]
+    /// Gets this [DynamicBundle]'s components type info, in the order of this bundle's Components
     fn type_info(&self) -> Vec<TypeInfo>;
-    /// Allow a callback to move all components out of the bundle
-    ///
-    /// Must invoke `f` only with a valid pointer, its type, and the pointee's size. A `false`
-    /// return value indicates that the value was not moved and should be dropped.
+
+    /// Calls `func` on each value, in the order of this bundle's Components
     #[doc(hidden)]
-    unsafe fn put(self, f: impl FnMut(*mut u8, TypeId, usize) -> bool);
+    unsafe fn put(self, func: impl FnMut(*mut u8));
 }
-/// A statically typed collection of components
+/// A statically typed ordered collection of components
 ///
 /// See [DynamicBundle]
 pub trait Bundle: DynamicBundle {
-    /// Obtain the fields' TypeInfos, in order that DynamicBundle::get will be called
-    #[doc(hidden)]
+    /// Gets this [Bundle]'s components type info, in the order of this bundle's Components
     fn static_type_info() -> Vec<TypeInfo>;
 
-    /// Construct `Self` by moving components out of pointers fetched by `f`
-    ///
-    /// # Safety
-    ///
-    /// `f` must produce pointers to the expected fields. The implementation must not read from any
-    /// pointers if any call to `f` returns `None`.
-    #[doc(hidden)]
-    unsafe fn get(
-        f: impl FnMut(TypeId, usize) -> Option<NonNull<u8>>,
-    ) -> Result<Self, ComponentError>
+    /// Calls `func`, which should return data for each component in the bundle, in the order of this bundle's Components
+    unsafe fn get(func: impl FnMut() -> Option<NonNull<u8>>) -> Result<Self, ComponentError>
     where
         Self: Sized;
 }
@@ -66,17 +40,11 @@ macro_rules! tuple_impl {
             }
 
             #[allow(unused_variables, unused_mut)]
-            unsafe fn put(self, mut f: impl FnMut(*mut u8, TypeId, usize) -> bool) {
+            unsafe fn put(self, mut func: impl FnMut(*mut u8)) {
                 #[allow(non_snake_case)]
                 let ($(mut $name,)*) = self;
                 $(
-                    if f(
-                        (&mut $name as *mut $name).cast::<u8>(),
-                        TypeId::of::<$name>(),
-                        mem::size_of::<$name>()
-                    ) {
-                        mem::forget($name)
-                    }
+                    func((&mut $name as *mut $name).cast::<u8>());
                 )*
             }
         }
@@ -87,10 +55,10 @@ macro_rules! tuple_impl {
             }
 
             #[allow(unused_variables, unused_mut)]
-            unsafe fn get(mut f: impl FnMut(TypeId, usize) -> Option<NonNull<u8>>) -> Result<Self, ComponentError> {
+            unsafe fn get(mut func: impl FnMut() -> Option<NonNull<u8>>) -> Result<Self, ComponentError> {
                 #[allow(non_snake_case)]
                 let ($(mut $name,)*) = ($(
-                    f(TypeId::of::<$name>(), mem::size_of::<$name>()).ok_or_else(ComponentError::missing_component::<$name>)?
+                    func().ok_or_else(ComponentError::missing_component::<$name>)?
                         .as_ptr()
                         .cast::<$name>(),)*
                 );

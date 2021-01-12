@@ -9,22 +9,47 @@ impl<T: Send + Sync + 'static> Component for T {}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StorageType {
-    Archetype,
+    Table,
     SparseSet,
 }
 
 #[derive(Debug)]
 pub struct ComponentInfo {
-    pub type_id: TypeId,
-    pub layout: Layout,
-    pub drop: unsafe fn(*mut u8),
-    pub storage_type: StorageType,
-    pub id: ComponentId,
+    id: ComponentId,
+    type_id: TypeId,
+    layout: Layout,
+    drop: unsafe fn(*mut u8),
+    storage_type: StorageType,
 }
 
-// TODO: needed?
-// TODO: consider how this relates to DynamicComponents
-#[derive(Debug, Copy, Clone, Hash)]
+impl ComponentInfo {
+    #[inline]
+    pub fn id(&self) -> ComponentId {
+        self.id
+    }
+
+    #[inline]
+    pub fn type_id(&self) -> TypeId {
+        self.type_id
+    }
+
+    #[inline]
+    pub fn layout(&self) -> Layout {
+        self.layout
+    }
+
+    #[inline]
+    pub fn drop(&self) -> unsafe fn(*mut u8) {
+        self.drop
+    }
+
+    #[inline]
+    pub fn storage_type(&self) -> StorageType {
+        self.storage_type
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct ComponentId(usize);
 
 impl ComponentId {
@@ -101,12 +126,12 @@ impl Components {
         self.indices.get(&type_id).map(|index| ComponentId(*index))
     }
 
-    pub fn init_type_info(&mut self, type_info: &TypeInfo) -> ComponentId {
+    pub fn add_with_type_info(&mut self, type_info: &TypeInfo) -> ComponentId {
         let components = &mut self.components;
         let index = self.indices.entry(type_info.id()).or_insert_with(|| {
             let index = components.len();
             components.push(ComponentInfo {
-                storage_type: StorageType::Archetype,
+                storage_type: StorageType::Table,
                 type_id: type_info.id(),
                 id: ComponentId(index),
                 drop: type_info.drop(),

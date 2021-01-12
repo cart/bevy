@@ -1,97 +1,45 @@
 use std::{any::TypeId, collections::HashMap, fmt};
 use thiserror::Error;
 
-use crate::core::{Archetype, ArchetypeId, Archetypes, Bundle, Component, ComponentFlags, ComponentId, Components, DynamicBundle, Entities, Entity, Fetch, Location, Mut, NoSuchEntity, QueryFilter, QueryIter, QueryState, ReadOnlyFetch, SparseSets, StorageType, TypeInfo, WorldQuery};
+use crate::core::{
+    Archetype, ArchetypeId, Archetypes, Bundle, Component, ComponentFlags, ComponentId, Components,
+    DynamicBundle, Entities, Entity, EntityLocation, Fetch, Mut, NoSuchEntity, QueryFilter,
+    QueryIter, QueryState, ReadOnlyFetch, SparseSets, StorageType, Tables, TypeInfo, WorldQuery,
+};
 
-#[derive(Debug)]
+use super::Storages;
+
 struct BundleInfo {
-    archetype: ArchetypeId,
-    storage_types: Vec<StorageType>,
+    archetype_id: ArchetypeId,
     component_ids: Vec<ComponentId>,
 }
 
-#[derive(Default)]
-struct BundleInfos {
-    bundle_info: HashMap<TypeId, BundleInfo, fxhash::FxBuildHasher>,
-}
-
-impl BundleInfos {
-    #[inline]
-    fn get_dynamic<'a, T: DynamicBundle>(
-        &'a mut self,
-        bundle: &T,
-        components: &mut Components,
-        archetypes: &mut Archetypes,
-        sparse_sets: &mut SparseSets,
-    ) -> &'a BundleInfo {
-        self.bundle_info
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| {
-                let type_info = bundle.type_info();
-                Self::get_bundle_info(type_info, components, archetypes, sparse_sets)
-            })
-    }
-
-    #[inline]
-    fn get_static<'a, T: Bundle>(
-        &'a mut self,
-        components: &mut Components,
-        archetypes: &mut Archetypes,
-        sparse_sets: &mut SparseSets,
-    ) -> &'a BundleInfo {
-        self.bundle_info
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| {
-                let type_info = T::static_type_info();
-                Self::get_bundle_info(type_info, components, archetypes, sparse_sets)
-            })
-    }
-
-    #[inline]
-    fn get_bundle_info(
-        mut type_info: Vec<TypeInfo>,
-        components: &mut Components,
-        archetypes: &mut Archetypes,
-        sparse_sets: &mut SparseSets,
-    ) -> BundleInfo {
-        let mut storage_types = Vec::with_capacity(type_info.len());
-        let mut component_ids = Vec::with_capacity(type_info.len());
-
-        // filter out non-archetype TypeInfo and collect component info
-        type_info.retain(|type_info| {
-            let component_id = components.init_type_info(type_info);
-            // SAFE: component info either previously existed or was just initialized
-            let component_info = unsafe { components.get_info_unchecked(component_id) };
-            component_ids.push(component_id);
-            storage_types.push(component_info.storage_type);
-            if component_info.storage_type == StorageType::SparseSet {
-                sparse_sets.get_or_insert(component_id, type_info);
-            }
-
-            component_info.storage_type == StorageType::Archetype
-        });
-
-        let archetype_id = archetypes.get_or_insert(type_info);
-        BundleInfo {
-            archetype: archetype_id,
-            storage_types,
-            component_ids,
-        }
-    }
-}
-
-#[derive(Default)]
 pub struct World {
     entities: Entities,
     components: Components,
     archetypes: Archetypes,
-    sparse_sets: SparseSets,
-    bundle_infos: BundleInfos,
+    storages: Storages,
+    bundles: Bundles,
+    empty_archetype_id: ArchetypeId,
 }
 
 impl World {
     pub fn new() -> World {
-        World::default()
+        let components = Components::default();
+        let mut storages = Storages::default();
+        // SAFE: no component ids passed in
+        let empty_table_id = unsafe { storages.tables.get_id_or_insert(&[], &components) };
+        let mut archetypes = Archetypes::default();
+        let empty_archetype_id =
+            archetypes.get_id_or_insert(empty_table_id, Vec::new(), Vec::new());
+        World {
+            archetypes,
+            components,
+            storages,
+            empty_archetype_id,
+            entities: Entities::default(),
+            bundles: Bundles::default(),
+        }
     }
 
     #[inline]
@@ -100,18 +48,8 @@ impl World {
     }
 
     #[inline]
-    pub fn entities_mut(&mut self) -> &mut Entities {
-        &mut self.entities
-    }
-
-    #[inline]
     pub fn archetypes(&self) -> &Archetypes {
         &self.archetypes
-    }
-
-    #[inline]
-    pub fn archetypes_mut(&mut self) -> &mut Archetypes {
-        &mut self.archetypes
     }
 
     #[inline]
@@ -125,116 +63,124 @@ impl World {
     }
 
     #[inline]
-    pub fn sparse_sets(&self) -> &SparseSets {
-        &self.sparse_sets
+    pub fn storages(&self) -> &Storages {
+        &self.storages
     }
 
-    #[inline]
-    pub fn sparse_sets_mut(&mut self) -> &mut SparseSets {
-        &mut self.sparse_sets
-    }
-
-    pub fn spawn(&mut self, bundle: impl DynamicBundle) -> Entity {
+    pub fn spawn<T: DynamicBundle>(&mut self, bundle: T) -> Entity {
         self.flush();
-        let bundle_info = self.bundle_infos.get_dynamic(
-            &bundle,
-            &mut self.components,
-            &mut self.archetypes,
-            &mut self.sparse_sets,
-        );
+        let components = &mut self.components;
+        let storages = &mut self.storages;
+        let bundle_info =
+            self.bundles
+                .get_info_dynamic(&mut self.archetypes, components, storages, &bundle);
 
         // SAFE: archetype was created if it didn't already exist
-        let archetype = unsafe { self.archetypes.get_unchecked_mut(bundle_info.archetype) };
+        let archetype = unsafe { self.archetypes.get_unchecked_mut(bundle_info.archetype_id) };
         let entity = self.entities.alloc();
         unsafe {
-            let archetype_index = archetype.allocate(entity);
-            let mut bundle_index = 0;
-            let sparse_sets = &mut self.sparse_sets;
-            bundle.put(|ptr, ty, size| {
-                // TODO: instead of using type, use index to cut down on hashing
-                // TODO: sort by TypeId instead of alignment for clearer results?
-                // TODO: use ComponentId instead of TypeId in archetype?
-                match bundle_info.storage_types[bundle_index] {
-                    StorageType::Archetype => {
-                        archetype.put_component(
-                            ptr,
-                            ty,
-                            size,
-                            archetype_index,
-                            ComponentFlags::ADDED,
+            let entity_location = archetype.allocate(entity, storages);
+            self.entities.meta[entity.id as usize].location = entity_location;
+            let table = storages.tables.get_unchecked_mut(archetype.table_id());
+            let sparse_sets = &mut storages.sparse_sets;
+            // NOTE: put is called on each component in "bundle order". bundle_info.component_ids are also in "bundle order"
+            let mut bundle_component = 0;
+            bundle.put(|component_ptr| {
+                // SAFE: component_id was initialized by get_dynamic_bundle_info
+                let component_id = *bundle_info.component_ids.get_unchecked(bundle_component);
+                let component_info = components.get_info_unchecked(component_id);
+                match component_info.storage_type() {
+                    StorageType::Table => {
+                        table.put_component_unchecked(
+                            component_id,
+                            archetype.entity_table_row_unchecked(entity_location.index),
+                            component_ptr,
                         );
                     }
                     StorageType::SparseSet => {
-                        let component_id = bundle_info.component_ids[bundle_index];
                         let sparse_set = sparse_sets.get_mut(component_id).unwrap();
-                        sparse_set.put_component(entity, ptr, ComponentFlags::ADDED);
+                        sparse_set.put_component(entity, component_ptr);
                     }
                 }
-                bundle_index += 1;
-                true
+                bundle_component += 1;
             });
-            self.entities.meta[entity.id as usize].location = Location {
-                archetype: bundle_info.archetype,
-                index: archetype_index,
-            };
         }
         entity
     }
 
-    /// Efficiently spawn a large number of entities with the same components
-    ///
-    /// Faster than calling `spawn` repeatedly with the same components.
-    ///
-    /// # Example
-    /// ```
-    /// # use bevy_ecs::*;
-    /// let mut world = World::new();
-    /// let entities = world.spawn_batch((0..1_000).map(|i| (i, "abc"))).collect::<Vec<_>>();
-    /// for i in 0..1_000 {
-    ///     assert_eq!(*world.get::<i32>(entities[i]).unwrap(), i as i32);
-    /// }
-    /// ```
-    pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
-    where
-        I: IntoIterator,
-        I::Item: Bundle,
-    {
-        // Ensure all entity allocations are accounted for so `self.entities` can realloc if
-        // necessary
-        self.flush();
+    // /// Efficiently spawn a large number of entities with the same components
+    // ///
+    // /// Faster than calling `spawn` repeatedly with the same components.
+    // ///
+    // /// # Example
+    // /// ```
+    // /// # use bevy_ecs::*;
+    // /// let mut world = World::new();
+    // /// let entities = world.spawn_batch((0..1_000).map(|i| (i, "abc"))).collect::<Vec<_>>();
+    // /// for i in 0..1_000 {
+    // ///     assert_eq!(*world.get::<i32>(entities[i]).unwrap(), i as i32);
+    // /// }
+    // /// ```
+    // pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
+    // where
+    //     I: IntoIterator,
+    //     I::Item: Bundle,
+    // {
+    //     // Ensure all entity allocations are accounted for so `self.entities` can realloc if
+    //     // necessary
+    //     self.flush();
 
-        let iter = iter.into_iter();
-        let (lower, upper) = iter.size_hint();
+    //     let iter = iter.into_iter();
+    //     let (lower, upper) = iter.size_hint();
 
-        let bundle_info = self.bundle_infos.get_static::<I::Item>(
-            &mut self.components,
-            &mut self.archetypes,
-            &mut self.sparse_sets,
-        );
+    //     let bundle_info = self.get_static_bundle_archetype::<I::Item>();
 
-        let archetype = self.archetypes.get_mut(bundle_info.archetype).unwrap();
-        let length = upper.unwrap_or(lower);
-        archetype.reserve(length);
-        self.entities.reserve(length as u32);
-        SpawnBatchIter {
-            inner: iter,
-            entities: &mut self.entities,
-            archetype_id: bundle_info.archetype,
-            archetype,
-        }
-    }
+    //     let archetype = self.archetypes.get_mut(bundle_info.archetype).unwrap();
+    //     let length = upper.unwrap_or(lower);
+    //     archetype.reserve(length);
+    //     self.entities.reserve(length as u32);
+    //     SpawnBatchIter {
+    //         inner: iter,
+    //         entities: &mut self.entities,
+    //         archetype_id: bundle_info.archetype,
+    //         archetype,
+    //     }
+    // }
 
     pub fn despawn(&mut self, entity: Entity) -> Result<(), NoSuchEntity> {
         self.flush();
 
         let location = self.entities.free(entity)?;
-        // SAFE: the entity is guaranteed to exist inside this archetype because all stored Locations are valid
-        if let Some(moved) = unsafe { self.archetypes.remove_entity_unchecked(entity, location) } {
-            // update the moved entity's location to account for the fact that it was
-            self.entities.get_mut(moved).unwrap().index = location.index;
-        }
+        let (table_row, moved_entity) = {
+            // SAFE: entity is live and is contained in an archetype that exists
+            let archetype = unsafe { self.archetypes.get_unchecked_mut(location.archetype_id) };
+            let table_row = archetype.swap_remove(location.index);
 
-        self.sparse_sets.remove_entity(entity);
+            // SAFE: tables stored in archetypes always exist
+            let table = unsafe { self.storages.tables.get_unchecked_mut(archetype.table_id()) };
+
+            for component_id in archetype.sparse_set_components() {
+                // SAFE: component_ids stored in live archetypes are guaranteed to exist
+                let sparse_set =
+                    unsafe { self.storages.sparse_sets.get_mut_unchecked(*component_id) };
+                sparse_set.remove_component(entity);
+            }
+            // SAFE: table rows stored in archetypes always exist
+            let moved_entity = unsafe { table.swap_remove(table_row) };
+            (table_row, moved_entity)
+        };
+
+        if let Some(moved_entity) = moved_entity {
+            // PERF: entity is guaranteed to exist. we could skip a check here
+            let moved_location = self.entities.get(moved_entity).unwrap();
+            // SAFE: entity is live and is contained in an archetype that exists
+            unsafe {
+                let archetype = self
+                    .archetypes
+                    .get_unchecked_mut(moved_location.archetype_id);
+                archetype.set_entity_table_row_unchecked(moved_location.index, table_row);
+            };
+        }
         Ok(())
     }
 
@@ -388,7 +334,8 @@ impl World {
     /// have unique access to the components they query.
     #[inline]
     pub unsafe fn query_unchecked<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, '_, Q, F> {
-        QueryIter::new(&self.archetypes)
+        panic!()
+        // QueryIter::new(&self.archetypes)
     }
 
     // /// Like `query`, but instead of returning a single iterator it returns a "batched iterator",
@@ -427,33 +374,33 @@ impl World {
     pub unsafe fn get_at_location_unchecked<T: Component>(
         &self,
         entity: Entity,
-        location: Location,
+        location: EntityLocation,
     ) -> Result<&T, ComponentError> {
         let components = self.components();
         let component_id = components
             .get_id(TypeId::of::<T>())
             .ok_or_else(ComponentError::missing_component::<T>)?;
-        // SAFE: component_id exist and is therefore valid
-        let component_info = unsafe { components.get_info_unchecked(component_id) };
-        match component_info.storage_type {
-            StorageType::Archetype => {
-                unsafe {
-                    // SAFE: valid locations point to valid archetypes
-                    let archetype = self.archetypes().get_unchecked(location.archetype);
-                    let components = archetype
-                        .get::<T>()
-                        .ok_or_else(ComponentError::missing_component::<T>)?;
-                    Ok(&*components.as_ptr().add(location.index as usize))
-                }
+        // SAFE: component_id exists and is therefore valid
+        let component_info = components.get_info_unchecked(component_id);
+        // SAFE: valid locations point to valid archetypes
+        let archetype = self.archetypes().get_unchecked(location.archetype_id);
+        match component_info.storage_type() {
+            StorageType::Table => {
+                let table = self.storages.tables.get_unchecked(archetype.table_id());
+                // SAFE: archetypes will always point to valid columns
+                let components = table.get_column_unchecked(component_id);
+                let table_row = archetype.entity_table_row_unchecked(location.index);
+                // SAFE: archetypes only store valid table_rows and the stored component type is T
+                Ok(components.get_type_unchecked(table_row))
             }
             StorageType::SparseSet => {
-                let component = self
-                    .sparse_sets()
+                let sparse_sets = &self.storages.sparse_sets;
+                let component = sparse_sets
                     .get(component_id)
                     .and_then(|sparse_set| sparse_set.get_component(entity))
                     .ok_or_else(ComponentError::missing_component::<T>)?;
                 // SAFE: component is of type T
-                unsafe { Ok(&*component.cast::<T>()) }
+                Ok(&*component.cast::<T>())
             }
         }
     }
@@ -467,70 +414,132 @@ impl World {
     pub unsafe fn get_mut_at_location_unchecked<T: Component>(
         &self,
         entity: Entity,
-        location: Location,
+        location: EntityLocation,
     ) -> Result<Mut<T>, ComponentError> {
         let components = self.components();
         let component_id = components
             .get_id(TypeId::of::<T>())
             .ok_or_else(ComponentError::missing_component::<T>)?;
-        // SAFE: component_id exist and is therefore valid
-        let component_info = unsafe { components.get_info_unchecked(component_id) };
-        match component_info.storage_type {
-            StorageType::Archetype => {
-                unsafe {
-                    // SAFE: valid locations point to valid archetypes
-                    let archetype = self.archetypes().get_unchecked(location.archetype);
-                    let (components, type_state) = archetype
-                        .get_with_type_state::<T>()
-                        .ok_or_else(ComponentError::missing_component::<T>)?;
-                    Ok(Mut {
-                        value: &mut *components.as_ptr().add(location.index as usize),
-                        flags: &mut *type_state
-                            .component_flags()
-                            .as_ptr()
-                            .add(location.index as usize),
-                    })
-                }
+        // SAFE: component_id exists and is therefore valid
+        let component_info = components.get_info_unchecked(component_id);
+        // SAFE: valid locations point to valid archetypes
+        let archetype = self.archetypes().get_unchecked(location.archetype_id);
+        match component_info.storage_type() {
+            StorageType::Table => {
+                let table = self.storages.tables.get_unchecked(archetype.table_id());
+                // SAFE: archetypes will always point to valid columns (caller verifies that mutability rules are not violated)
+                let table_components = table.get_column_unchecked_mut(component_id);
+                // SAFE: archetype entities always have valid table locations
+                let table_row = archetype.entity_table_row_unchecked(location.index);
+                // SAFE: archetypes only store valid table_rows and the stored component type is T
+                Ok(Mut {
+                    value: table_components.get_type_mut_unchecked(table_row),
+                })
             }
             StorageType::SparseSet => {
-                let set = self
-                    .sparse_sets()
+                let sparse_sets = &self.storages.sparse_sets;
+                let set = sparse_sets
                     .get(component_id)
                     .ok_or_else(ComponentError::missing_component::<T>)?;
                 let component = set
                     .get_component(entity)
                     .ok_or_else(ComponentError::missing_component::<T>)?;
                 // SAFE: component exists, therefore it has flags
-                let flags = unsafe { set.get_component_flags_unchecked_mut(entity) };
-                unsafe {
-                    Ok(Mut {
-                        // SAFE: component is of type T
-                        value: unsafe { &mut *component.cast::<T>() },
-                        flags,
-                    })
-                }
+                // let flags = unsafe { set.get_component_flags_unchecked_mut(entity) };
+                Ok(Mut {
+                    // SAFE: component is of type T
+                    value: &mut *component.cast::<T>(),
+                    // flags,
+                })
             }
         }
     }
 
-    pub fn clear_trackers(&mut self) {
-        self.archetypes.clear_trackers();
-    }
-
-    pub fn removed<C: Component>(&self) -> &[Entity] {
-        self.archetypes.removed::<C>()
-    }
-
-    /// Despawn all entities
-    ///
-    /// Preserves allocated storage for reuse.
-    pub fn clear(&mut self) {
-        self.archetypes.clear();
-        self.entities.clear();
-    }
-
     fn flush(&mut self) {
-        self.archetypes.flush_entities(&mut self.entities);
+        // SAFE: empty archetype is initialized when the world is constructed
+        unsafe {
+            let empty_archetype = self.archetypes.get_unchecked_mut(self.empty_archetype_id);
+            self.entities.flush(empty_archetype, &mut self.storages);
+        }
+    }
+}
+
+#[derive(Default)]
+struct Bundles {
+    bundle_info: HashMap<TypeId, BundleInfo>,
+}
+
+impl Bundles {
+    fn get_info_dynamic<T: DynamicBundle>(
+        &mut self,
+        archetypes: &mut Archetypes,
+        components: &mut Components,
+        storages: &mut Storages,
+        bundle: &T,
+    ) -> &BundleInfo {
+        self.bundle_info
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| {
+                let type_info = bundle.type_info();
+                Self::initialize_bundle(&type_info, archetypes, components, storages)
+            })
+    }
+
+    fn get_info<T: Bundle>(
+        &mut self,
+        archetypes: &mut Archetypes,
+        components: &mut Components,
+        storages: &mut Storages,
+    ) -> &BundleInfo {
+        self.bundle_info
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| {
+                let type_info = T::static_type_info();
+                Self::initialize_bundle(&type_info, archetypes, components, storages)
+            })
+    }
+
+    fn initialize_bundle(
+        type_info: &[TypeInfo],
+        archetypes: &mut Archetypes,
+        components: &mut Components,
+        storages: &mut Storages,
+    ) -> BundleInfo {
+        let mut table_components = Vec::new();
+        let mut sparse_set_components = Vec::new();
+        let mut component_ids = Vec::new();
+
+        for type_info in type_info {
+            let component_id = components.add_with_type_info(&type_info);
+            component_ids.push(component_id);
+            // SAFE: component info either previously existed or was just initialized
+            let component_info = unsafe { components.get_info_unchecked(component_id) };
+            match component_info.storage_type() {
+                StorageType::SparseSet => {
+                    sparse_set_components.push(component_id);
+                    storages.sparse_sets.get_or_insert(component_info);
+                }
+                StorageType::Table => table_components.push(component_id),
+            }
+        }
+
+        // sort to make hashes match across different orders
+        table_components.sort();
+        sparse_set_components.sort();
+
+        // SAFE: component_ids were initialized above
+        let table_id = unsafe {
+            storages
+                .tables
+                .get_id_or_insert(&table_components, &components)
+        };
+
+        let archetype_id =
+            archetypes.get_id_or_insert(table_id, table_components, sparse_set_components);
+        BundleInfo {
+            archetype_id,
+            component_ids,
+        }
     }
 }
 
@@ -565,64 +574,64 @@ impl ComponentError {
     }
 }
 
-/// Entity IDs created by `World::spawn_batch`
-pub struct SpawnBatchIter<'a, I>
-where
-    I: Iterator,
-    I::Item: Bundle,
-{
-    inner: I,
-    entities: &'a mut Entities,
-    archetype_id: ArchetypeId,
-    archetype: &'a mut Archetype,
-}
+// /// Entity IDs created by `World::spawn_batch`
+// pub struct SpawnBatchIter<'a, I>
+// where
+//     I: Iterator,
+//     I::Item: Bundle,
+// {
+//     inner: I,
+//     entities: &'a mut Entities,
+//     archetype_id: ArchetypeId,
+//     archetype: &'a mut Archetype,
+// }
 
-impl<I> Drop for SpawnBatchIter<'_, I>
-where
-    I: Iterator,
-    I::Item: Bundle,
-{
-    fn drop(&mut self) {
-        for _ in self {}
-    }
-}
+// impl<I> Drop for SpawnBatchIter<'_, I>
+// where
+//     I: Iterator,
+//     I::Item: Bundle,
+// {
+//     fn drop(&mut self) {
+//         for _ in self {}
+//     }
+// }
 
-impl<I> Iterator for SpawnBatchIter<'_, I>
-where
-    I: Iterator,
-    I::Item: Bundle,
-{
-    type Item = Entity;
+// impl<I> Iterator for SpawnBatchIter<'_, I>
+// where
+//     I: Iterator,
+//     I::Item: Bundle,
+// {
+//     type Item = Entity;
 
-    fn next(&mut self) -> Option<Entity> {
-        let components = self.inner.next()?;
-        let entity = self.entities.alloc();
-        unsafe {
-            let index = self.archetype.allocate(entity);
-            components.put(|ptr, ty, size| {
-                self.archetype
-                    .put_component(ptr, ty, size, index, ComponentFlags::ADDED);
-                true
-            });
-            self.entities.meta[entity.id as usize].location = Location {
-                archetype: self.archetype_id,
-                index,
-            };
-        }
-        Some(entity)
-    }
+//     fn next(&mut self) -> Option<Entity> {
+//         let components = self.inner.next()?;
+//         let entity = self.entities.alloc();
+//         unsafe {
+//             let index = self.archetype.allocate(entity);
+//             components.put(|ptr, ty, size| {
+//                 self.archetype
+//                     .put_component(ptr, ty, size, index, ComponentFlags::ADDED);
+//                 true
+//             });
+//             self.entities.meta[entity.id as usize].location = EntityLocation {
+//                 archetype: self.archetype_id,
+//                 index,
+//             };
+//         }
+//         Some(entity)
+//     }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
+//     fn size_hint(&self) -> (usize, Option<usize>) {
+//         self.inner.size_hint()
+//     }
+// }
 
-impl<I, T> ExactSizeIterator for SpawnBatchIter<'_, I>
-where
-    I: ExactSizeIterator<Item = T>,
-    T: Bundle,
-{
-    fn len(&self) -> usize {
-        self.inner.len()
-    }
-}
+// impl<I, T> ExactSizeIterator for SpawnBatchIter<'_, I>
+// where
+//     I: ExactSizeIterator<Item = T>,
+//     T: Bundle,
+// {
+//     fn len(&self) -> usize {
+//         self.inner.len()
+//     }
+// }
