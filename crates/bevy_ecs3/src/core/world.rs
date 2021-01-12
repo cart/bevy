@@ -459,7 +459,10 @@ impl World {
         // SAFE: empty archetype is initialized when the world is constructed
         unsafe {
             let empty_archetype = self.archetypes.get_unchecked_mut(self.empty_archetype_id);
-            self.entities.flush(empty_archetype, &mut self.storages);
+            let storages = &mut self.storages;
+            self.entities.flush(|entity, location| {
+                *location = empty_archetype.allocate(entity, storages);
+            });
         }
     }
 }

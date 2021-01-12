@@ -13,7 +13,7 @@ pub struct ArchetypeId(pub(crate) u32);
 
 impl ArchetypeId {
     #[inline]
-    pub fn empty_archetype() -> ArchetypeId {
+    pub const fn empty_archetype() -> ArchetypeId {
         ArchetypeId(0)
     }
 

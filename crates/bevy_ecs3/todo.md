@@ -18,13 +18,6 @@
 
 ## TODO
 
-* Empty archetype
-* Flush
-* Fixup removal
-
-* consider new hecs entity reserver
-
-
 * un-comment tests
 * make reserver api safe
 * consistent unchecked_mut

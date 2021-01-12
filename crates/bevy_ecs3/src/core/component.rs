@@ -83,7 +83,7 @@ impl ComponentDescriptor {
 #[derive(Debug, Default)]
 pub struct Components {
     components: Vec<ComponentInfo>,
-    indices: HashMap<TypeId, usize>,
+    indices: std::collections::HashMap<TypeId, usize, fxhash::FxBuildHasher>,
 }
 
 #[derive(Debug, Error)]
