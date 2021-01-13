@@ -4,7 +4,8 @@ use thiserror::Error;
 use crate::core::{
     Archetype, ArchetypeId, Archetypes, Bundle, Component, ComponentFlags, ComponentId, Components,
     DynamicBundle, Entities, Entity, EntityLocation, Fetch, Mut, NoSuchEntity, QueryFilter,
-    QueryIter, QueryState, ReadOnlyFetch, SparseSets, StorageType, Tables, TypeInfo, WorldQuery,
+    QueryIter, QueryState, ReadOnlyFetch, SparseSets, StatefulQueryIter, StorageType, Tables,
+    TypeInfo, WorldQuery,
 };
 
 use super::Storages;
@@ -258,7 +259,7 @@ impl World {
     /// assert!(entities.contains(&(b, 456, false)));
     /// ```
     #[inline]
-    pub fn query<Q: WorldQuery>(&self) -> QueryIter<'_, '_, Q, ()>
+    pub fn query<Q: WorldQuery>(&self) -> QueryIter<'_, Q, ()>
     where
         Q::Fetch: ReadOnlyFetch,
     {
@@ -270,12 +271,12 @@ impl World {
     pub fn query_with_state<'w, 's, Q: WorldQuery>(
         &'w self,
         state: &'s mut QueryState,
-    ) -> QueryIter<'w, 's, Q, ()> {
-        unsafe { QueryIter::new(self, state) }
+    ) -> StatefulQueryIter<'w, 's, Q, ()> {
+        unsafe { StatefulQueryIter::new(self, state) }
     }
 
     #[inline]
-    pub fn query_filtered<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, '_, Q, F>
+    pub fn query_filtered<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, Q, F>
     where
         Q::Fetch: ReadOnlyFetch,
     {
@@ -308,13 +309,13 @@ impl World {
     /// assert!(entities.contains(&(b, 456, false)));
     /// ```
     #[inline]
-    pub fn query_mut<Q: WorldQuery>(&mut self) -> QueryIter<'_, '_, Q, ()> {
+    pub fn query_mut<Q: WorldQuery>(&mut self) -> QueryIter<'_, Q, ()> {
         // SAFE: unique mutable access
         unsafe { self.query_unchecked() }
     }
 
     #[inline]
-    pub fn query_filtered_mut<Q: WorldQuery, F: QueryFilter>(&mut self) -> QueryIter<'_, '_, Q, F> {
+    pub fn query_filtered_mut<Q: WorldQuery, F: QueryFilter>(&mut self) -> QueryIter<'_, Q, F> {
         // SAFE: unique mutable access
         unsafe { self.query_unchecked() }
     }
@@ -333,9 +334,8 @@ impl World {
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
     #[inline]
-    pub unsafe fn query_unchecked<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, '_, Q, F> {
-        panic!()
-        // QueryIter::new(&self.archetypes)
+    pub unsafe fn query_unchecked<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, Q, F> {
+        QueryIter::new(&self)
     }
 
     // /// Like `query`, but instead of returning a single iterator it returns a "batched iterator",

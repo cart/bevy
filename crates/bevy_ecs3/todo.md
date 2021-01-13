@@ -14,6 +14,7 @@
 * Bundle type -> ComponentId cache
 * Consider using BlobVec in Archetpe
 * Use ComponentIds + SparseSets in Archetype for type lookup
+* use archetype generation to get the range of archetypes to update
 
 
 ## TODO

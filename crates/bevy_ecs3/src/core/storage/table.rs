@@ -20,8 +20,8 @@ impl TableId {
 }
 
 pub struct Column {
-    component_id: ComponentId,
-    data: BlobVec,
+    pub(crate) component_id: ComponentId,
+    pub(crate) data: BlobVec,
 }
 
 #[derive(Default)]
@@ -59,6 +59,10 @@ impl Tables {
             tables.push(table);
             TableId(tables.len() - 1)
         })
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Table> {
+        self.tables.iter()
     }
 }
 
@@ -197,6 +201,10 @@ impl Table {
     #[inline]
     pub fn len(&self) -> usize {
         self.entities.len()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Column> {
+        self.columns.values()
     }
 }
 

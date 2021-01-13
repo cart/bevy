@@ -9,17 +9,22 @@ use std::{
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct ArchetypeId(pub(crate) u32);
+pub struct ArchetypeId(u32);
 
 impl ArchetypeId {
+    #[inline]
+    pub const fn new(index: u32) -> Self {
+        ArchetypeId(index)
+    }
+
     #[inline]
     pub const fn empty_archetype() -> ArchetypeId {
         ArchetypeId(0)
     }
 
     #[inline]
-    pub fn index(&self) -> usize {
-        self.0 as usize
+    pub fn index(&self) -> u32 {
+        self.0
     }
 
     #[inline]
@@ -91,6 +96,11 @@ impl Archetype {
     }
 
     #[inline]
+    pub fn entities(&self) -> &[Entity] {
+        &self.entities
+    }
+
+    #[inline]
     pub fn table_components(&self) -> &[ComponentId] {
         &self.table_components
     }
@@ -145,7 +155,20 @@ impl Archetype {
 
 /// A generational id that changes every time the set of archetypes changes
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct ArchetypeGeneration(pub(crate) u32);
+pub struct ArchetypeGeneration(usize);
+
+impl ArchetypeGeneration {
+    #[inline]
+    pub fn new(generation: usize) -> Self {
+        ArchetypeGeneration(generation)
+    }
+
+    #[inline]
+    pub fn value(&self) -> usize {
+        self.0
+    }
+}
+
 #[derive(Hash)]
 pub struct ArchetypeHash<'a> {
     table_components: &'a [ComponentId],
@@ -167,7 +190,7 @@ pub struct Archetypes {
 impl Archetypes {
     #[inline]
     pub fn generation(&self) -> ArchetypeGeneration {
-        ArchetypeGeneration(self.archetypes.len() as u32)
+        ArchetypeGeneration(self.archetypes.len())
     }
 
     #[inline]
