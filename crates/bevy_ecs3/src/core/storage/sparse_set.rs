@@ -45,9 +45,26 @@ impl<I: SparseSetIndex, V> SparseArray<I, V> {
         self.values.get_unchecked(index).as_ref().unwrap()
     }
 
-    pub fn remove(&mut self, index: I) -> Option<V> {
-        self.values.swap_remove(index.sparse_set_index())
+    /// SAFETY: index must exist in the set
+    #[inline]
+    pub unsafe fn remove_unchecked(&mut self, index: I) -> Option<V> {
+        let index = index.sparse_set_index();
+        self.values.get_unchecked_mut(index).take()
     }
+
+    #[inline]
+    pub fn remove(&mut self, index: I) -> Option<V> {
+        let index = index.sparse_set_index();
+        if index >= self.values.len() {
+            None
+        } else {
+            // SAFE: checked that index is valid above
+            unsafe {
+                self.values.get_unchecked_mut(index).take()
+            }
+        }
+    }
+
 
     #[inline]
     pub fn get_or_insert_with(&mut self, index: I, func: impl FnOnce() -> V) -> &mut V {

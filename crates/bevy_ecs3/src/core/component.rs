@@ -54,6 +54,11 @@ pub struct ComponentId(usize);
 
 impl ComponentId {
     #[inline]
+    pub const fn new(index: usize) -> ComponentId {
+        ComponentId(index)
+    }
+
+    #[inline]
     pub fn index(&self) -> usize {
         self.0
     }

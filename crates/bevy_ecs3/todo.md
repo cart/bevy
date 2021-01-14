@@ -19,6 +19,7 @@
 
 ## TODO
 
+* query state is an unsafe api
 * un-comment tests
 * make reserver api safe
 * consistent unchecked_mut

@@ -259,24 +259,7 @@ impl World {
     /// assert!(entities.contains(&(b, 456, false)));
     /// ```
     #[inline]
-    pub fn query<Q: WorldQuery>(&self) -> QueryIter<'_, Q, ()>
-    where
-        Q::Fetch: ReadOnlyFetch,
-    {
-        // SAFE: read-only access to world and read only query prevents mutable access
-        unsafe { self.query_unchecked() }
-    }
-
-    #[inline]
-    pub fn query_with_state<'w, 's, Q: WorldQuery>(
-        &'w self,
-        state: &'s mut QueryState,
-    ) -> StatefulQueryIter<'w, 's, Q, ()> {
-        unsafe { StatefulQueryIter::new(self, state) }
-    }
-
-    #[inline]
-    pub fn query_filtered<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, Q, F>
+    pub fn query<Q: WorldQuery>(&self) -> QueryIter<'_, Q, (), ()>
     where
         Q::Fetch: ReadOnlyFetch,
     {
@@ -309,13 +292,7 @@ impl World {
     /// assert!(entities.contains(&(b, 456, false)));
     /// ```
     #[inline]
-    pub fn query_mut<Q: WorldQuery>(&mut self) -> QueryIter<'_, Q, ()> {
-        // SAFE: unique mutable access
-        unsafe { self.query_unchecked() }
-    }
-
-    #[inline]
-    pub fn query_filtered_mut<Q: WorldQuery, F: QueryFilter>(&mut self) -> QueryIter<'_, Q, F> {
+    pub fn query_mut<Q: WorldQuery>(&mut self) -> QueryIter<'_, Q, (), ()> {
         // SAFE: unique mutable access
         unsafe { self.query_unchecked() }
     }
@@ -334,7 +311,7 @@ impl World {
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
     #[inline]
-    pub unsafe fn query_unchecked<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, Q, F> {
+    pub unsafe fn query_unchecked<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, Q, F, ()> {
         QueryIter::new(&self)
     }
 

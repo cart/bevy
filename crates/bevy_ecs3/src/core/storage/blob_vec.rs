@@ -138,15 +138,6 @@ impl BlobVec {
     }
 
     /// SAFETY: It is the caller's responsibility to ensure this isn't called when len() is 0
-    /// This will _not_ call the drop function on the popped value, so it is the caller's responsibility to free
-    /// that value at the appropriate time
-    #[inline]
-    pub unsafe fn pop_forget_unchecked(&mut self) {
-        let ptr = self.get_unchecked(self.len - 1);
-        self.len -= 1;
-    }
-
-    /// SAFETY: It is the caller's responsibility to ensure this isn't called when len() is 0
     #[inline]
     pub unsafe fn pop_unchecked(&mut self) {
         let ptr = self.get_unchecked(self.len - 1);
@@ -171,6 +162,7 @@ impl BlobVec {
             .add(index * self.item_layout.size())
     }
 
+    #[inline]
     pub unsafe fn data(&self) -> NonNull<u8> {
         *self.data.get()
     }
@@ -219,6 +211,27 @@ impl BlobVec {
     }
 }
 
+unsafe fn drop_ptr<T>(ptr: *mut u8) {
+    ptr.cast::<T>().drop_in_place()
+}
+
+impl Drop for BlobVec {
+    fn drop(&mut self) {
+        self.clear();
+        unsafe {
+            std::alloc::dealloc(
+                (*self.data.get()).as_ptr(),
+                Layout::from_size_align_unchecked(
+                    self.item_layout.size() * self.capacity,
+                    self.item_layout.align(),
+                ),
+            );
+            std::alloc::dealloc((*self.swap_scratch.get()).as_ptr(), self.item_layout);
+        }
+    }
+}
+
+
 pub struct BlobVecIter<'a, T> {
     value: &'a BlobVec,
     index: usize,
@@ -261,26 +274,6 @@ impl<'a, T: 'static> Iterator for BlobVecIterMut<'a, T> {
                 self.index += 1;
                 Some(value)
             }
-        }
-    }
-}
-
-unsafe fn drop_ptr<T>(ptr: *mut u8) {
-    ptr.cast::<T>().drop_in_place()
-}
-
-impl Drop for BlobVec {
-    fn drop(&mut self) {
-        self.clear();
-        unsafe {
-            std::alloc::dealloc(
-                (*self.data.get()).as_ptr(),
-                Layout::from_size_align_unchecked(
-                    self.item_layout.size() * self.capacity,
-                    self.item_layout.align(),
-                ),
-            );
-            std::alloc::dealloc((*self.swap_scratch.get()).as_ptr(), self.item_layout);
         }
     }
 }

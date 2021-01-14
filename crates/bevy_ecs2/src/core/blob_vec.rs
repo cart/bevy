@@ -124,15 +124,6 @@ impl BlobVec {
     }
 
     /// SAFETY: It is the caller's responsibility to ensure this isn't called when len() is 0
-    /// This will _not_ call the drop function on the popped value, so it is the caller's responsibility to free
-    /// that value at the appropriate time
-    #[inline]
-    pub unsafe fn pop_forget_unchecked(&mut self) {
-        let ptr = self.get_unchecked(self.len - 1);
-        self.len -= 1;
-    }
-
-    /// SAFETY: It is the caller's responsibility to ensure this isn't called when len() is 0
     #[inline]
     pub unsafe fn pop_unchecked(&mut self) {
         let ptr = self.get_unchecked(self.len - 1);

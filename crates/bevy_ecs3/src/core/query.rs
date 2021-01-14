@@ -1,23 +1,22 @@
 use crate::{
     core::{
         Archetype, ArchetypeGeneration, ArchetypeId, Archetypes, Component, ComponentId,
-        ComponentSparseSet, Entity, EntityFilter, Mut, QueryFilter, StorageType, Storages, Tables,
-        World,
+        ComponentSparseSet, Entity, EntityFilter, FilterLock, Mut, QueryFilter, StorageType,
+        Storages, Tables, World,
     },
     smaller_tuples_too,
 };
 use fixedbitset::{FixedBitSet, Ones};
-use std::{any::TypeId, ops::Range, ptr::NonNull};
-
-use super::archetype;
+use std::{any::TypeId, marker::PhantomData, ops::Range, ptr::NonNull};
 
 pub trait WorldQuery {
     type Fetch: for<'a> Fetch<'a>;
 }
 
 pub trait Fetch<'w>: Sized {
+    const DANGLING: Self;
     type Item;
-    unsafe fn init(world: &World) -> Self;
+    unsafe fn init(world: &World) -> Option<Self>;
     fn matches_archetype(&self, archetype: &Archetype) -> bool;
     unsafe fn next_archetype(&mut self, archetype: &Archetype);
     unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item;
@@ -58,29 +57,83 @@ impl QueryState {
     }
 }
 
-pub struct QueryIter<'w, Q: WorldQuery, F: QueryFilter> {
+pub struct QueryIter<'w, Q: WorldQuery, F: QueryFilter, FilterLock> {
     archetypes: &'w Archetypes,
     current_archetype: ArchetypeId,
     fetch: Q::Fetch,
     filter: F::EntityFilter,
     archetype_len: usize,
     archetype_index: usize,
+    marker: PhantomData<FilterLock>,
 }
 
-impl<'w, Q: WorldQuery, F: QueryFilter> QueryIter<'w, Q, F> {
+impl<'w, Q: WorldQuery, F: QueryFilter, FilterLock> QueryIter<'w, Q, F, FilterLock> {
     pub unsafe fn new(world: &'w World) -> Self {
+        let (fetch, current_archetype) = if let Some(fetch) = <Q::Fetch as Fetch>::init(world) {
+            (fetch, ArchetypeId::new(0))
+        } else {
+            // could not fetch. this iterator will return None
+            (
+                <Q::Fetch as Fetch>::DANGLING,
+                ArchetypeId::new(world.archetypes().len() as u32),
+            )
+        };
         QueryIter {
-            fetch: <Q::Fetch as Fetch>::init(world),
+            fetch,
+            current_archetype,
             archetypes: world.archetypes(),
-            current_archetype: ArchetypeId::new(0),
             filter: <F::EntityFilter as EntityFilter>::DANGLING,
+            archetype_len: 0,
+            archetype_index: 0,
+            marker: Default::default(),
+        }
+    }
+
+    /// SAFETY: ensure that the given `query_state` is only used with this exact [QueryIter] type   
+    pub unsafe fn with_state<'s>(
+        self,
+        query_state: &'s mut QueryState,
+    ) -> StatefulQueryIter<'w, 's, Q, F> {
+        let fetch = self.fetch;
+        let archetypes = self.archetypes;
+        let archetype_indices = query_state.update_archetypes(archetypes);
+        for archetype_index in archetype_indices {
+            // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
+            if fetch.matches_archetype(unsafe {
+                archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32))
+            }) {
+                query_state.matched_archetypes.set(archetype_index, true);
+            }
+        }
+
+        StatefulQueryIter {
+            fetch,
+            archetypes,
+            filter: <F::EntityFilter as EntityFilter>::DANGLING,
+            archetype_id_iter: query_state.matched_archetypes.ones(),
             archetype_len: 0,
             archetype_index: 0,
         }
     }
 }
 
-impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, Q, F> {
+impl<'w, Q: WorldQuery> QueryIter<'w, Q, (), ()> {
+    pub fn filter<F: QueryFilter>(self) -> QueryIter<'w, Q, F, FilterLock> {
+        QueryIter {
+            fetch: self.fetch,
+            current_archetype: self.current_archetype,
+            archetypes: self.archetypes,
+            filter: <F::EntityFilter as EntityFilter>::DANGLING,
+            archetype_len: self.archetype_len,
+            archetype_index: self.archetype_index,
+            marker: Default::default(),
+        }
+    }
+}
+
+impl<'w, 's, Q: WorldQuery, F: QueryFilter, FilterLock> Iterator
+    for QueryIter<'w, Q, F, FilterLock>
+{
     type Item = <Q::Fetch as Fetch<'w>>::Item;
 
     #[inline]
@@ -121,17 +174,23 @@ pub struct StatefulQueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
 
 impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
     pub unsafe fn new(world: &'w World, query_state: &'s mut QueryState) -> Self {
-        let fetch = <Q::Fetch as Fetch>::init(world);
         let archetypes = world.archetypes();
-        let archetype_indices = query_state.update_archetypes(archetypes);
-        for archetype_index in archetype_indices {
-            // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
-            if fetch.matches_archetype(
-                archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32)),
-            ) {
-                query_state.matched_archetypes.set(archetype_index, true);
+        let fetch = if let Some(fetch) = <Q::Fetch as Fetch>::init(world) {
+            let archetype_indices = query_state.update_archetypes(archetypes);
+            for archetype_index in archetype_indices {
+                // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
+                if fetch.matches_archetype(
+                    archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32)),
+                ) {
+                    query_state.matched_archetypes.set(archetype_index, true);
+                }
             }
-        }
+            fetch
+        } else {
+            query_state.matched_archetypes.clear();
+            // could not fetch. this iterator will return None
+            <Q::Fetch as Fetch>::DANGLING
+        };
         StatefulQueryIter {
             fetch,
             archetypes,
@@ -167,6 +226,42 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for StatefulQueryIter<'w, '
     }
 }
 
+impl WorldQuery for Entity {
+    type Fetch = FetchEntity;
+}
+
+pub struct FetchEntity {
+    entities: *const Entity,
+}
+
+unsafe impl ReadOnlyFetch for FetchEntity {}
+
+impl<'w> Fetch<'w> for FetchEntity {
+    type Item = Entity;
+
+    const DANGLING: Self = FetchEntity {
+        entities: std::ptr::null::<Entity>(),
+    };
+
+    fn matches_archetype(&self, _archetype: &Archetype) -> bool {
+        true
+    }
+
+    unsafe fn init(_world: &World) -> Option<Self> {
+        Some(Self::DANGLING)
+    }
+
+    #[inline]
+    unsafe fn next_archetype(&mut self, archetype: &Archetype) {
+        self.entities = archetype.entities().as_ptr();
+    }
+
+    #[inline]
+    unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
+        *self.entities.add(archetype_index)
+    }
+}
+
 impl<T: Component> WorldQuery for &T {
     type Fetch = FetchRead<T>;
 }
@@ -189,6 +284,12 @@ unsafe impl<T> ReadOnlyFetch for FetchRead<T> {}
 impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     type Item = &'w T;
 
+    const DANGLING: Self = Self::Table {
+        component_id: ComponentId::new(usize::MAX),
+        components: NonNull::dangling(),
+        tables: std::ptr::null::<Tables>(),
+    };
+
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
         match self {
             Self::Table { component_id, .. } => archetype.contains(*component_id),
@@ -196,11 +297,11 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
         }
     }
 
-    unsafe fn init(world: &World) -> Self {
+    unsafe fn init(world: &World) -> Option<Self> {
         let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>()).unwrap();
-        let component_info = components.get_info(component_id).unwrap();
-        match component_info.storage_type() {
+        let component_id = components.get_id(TypeId::of::<T>())?;
+        let component_info = components.get_info_unchecked(component_id);
+        Some(match component_info.storage_type() {
             StorageType::Table => Self::Table {
                 component_id,
                 components: NonNull::dangling(),
@@ -215,7 +316,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
                     .get_unchecked(component_id)
                     .unwrap(),
             },
-        }
+        })
     }
 
     #[inline]
@@ -275,6 +376,12 @@ unsafe impl<T> ReadOnlyFetch for FetchWrite<T> {}
 impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     type Item = Mut<'w, T>;
 
+    const DANGLING: Self = Self::Table {
+        component_id: ComponentId::new(usize::MAX),
+        components: NonNull::dangling(),
+        tables: std::ptr::null::<Tables>(),
+    };
+
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
         match self {
             Self::Table { component_id, .. } => archetype.contains(*component_id),
@@ -282,11 +389,11 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
         }
     }
 
-    unsafe fn init(world: &World) -> Self {
+    unsafe fn init(world: &World) -> Option<Self> {
         let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>()).unwrap();
-        let component_info = components.get_info(component_id).unwrap();
-        match component_info.storage_type() {
+        let component_id = components.get_id(TypeId::of::<T>())?;
+        let component_info = components.get_info_unchecked(component_id);
+        Some(match component_info.storage_type() {
             StorageType::Table => Self::Table {
                 component_id,
                 components: NonNull::dangling(),
@@ -301,7 +408,7 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
                     .get_unchecked(component_id)
                     .unwrap(),
             },
-        }
+        })
     }
 
     #[inline]
@@ -348,9 +455,11 @@ macro_rules! tuple_impl {
         impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
             type Item = ($($name::Item,)*);
 
+            const DANGLING: Self = ($($name::DANGLING,)*);
+
             #[allow(unused_variables)]
-            unsafe fn init(world: &World) -> Self {
-                ($($name::init(world),)*)
+            unsafe fn init(world: &World) -> Option<Self> {
+                Some(($($name::init(world)?,)*))
             }
 
 
@@ -402,17 +511,13 @@ mod tests {
         let mut world = World::new();
         let e1 = world.spawn((A(1), B(1)));
         let e2 = world.spawn((A(2),));
-        let values = world
-            .query::<&A>()
-            .collect::<Vec<&A>>();
+        let values = world.query::<&A>().collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
         for (a, mut b) in world.query_mut::<(&A, &mut B)>() {
             b.0 = 3;
         }
-        let values = world
-            .query::<&B>()
-            .collect::<Vec<&B>>();
+        let values = world.query::<&B>().collect::<Vec<&B>>();
         assert_eq!(values, vec![&B(3)]);
     }
 
@@ -422,21 +527,29 @@ mod tests {
         let mut query_state = QueryState::default();
         let e1 = world.spawn((A(1), B(1)));
         let e2 = world.spawn((A(2),));
-        let values = world
-            .query_with_state::<&A>(&mut query_state)
-            .collect::<Vec<&A>>();
-        assert_eq!(values, vec![&A(1), &A(2)]);
-
-        let mut query_state = QueryState::default();
-        for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
-            b.0 = 3;
+        unsafe {
+            let values = world
+                .query::<&A>()
+                .with_state(&mut query_state)
+                .collect::<Vec<&A>>();
+            assert_eq!(values, vec![&A(1), &A(2)]);
         }
 
-        let mut query_state = QueryState::default();
-        let values = world
-            .query_with_state::<&B>(&mut query_state)
-            .collect::<Vec<&B>>();
-        assert_eq!(values, vec![&B(3)]);
+        unsafe {
+            let mut query_state = QueryState::default();
+            for (a, mut b) in world.query::<(&A, &mut B)>().with_state(&mut query_state) {
+                b.0 = 3;
+            }
+        }
+
+        unsafe {
+            let mut query_state = QueryState::default();
+            let values = world
+                .query::<&B>()
+                .with_state(&mut query_state)
+                .collect::<Vec<&B>>();
+            assert_eq!(values, vec![&B(3)]);
+        }
     }
 
     #[test]
@@ -450,19 +563,14 @@ mod tests {
         let e1 = world.spawn((A(1), B(2)));
         let e2 = world.spawn((A(2),));
 
-        let mut query_state = QueryState::default();
-        let values = world
-            .query_with_state::<&A>(&mut query_state)
-            .collect::<Vec<&A>>();
+        let values = world.query::<&A>().collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (a, mut b) in world.query_with_state::<(&A, &mut B)>(&mut query_state) {
+        for (a, mut b) in world.query::<(&A, &mut B)>() {
             b.0 = 3;
         }
 
-        let values = world
-            .query_with_state::<&B>(&mut query_state)
-            .collect::<Vec<&B>>();
+        let values = world.query::<&B>().collect::<Vec<&B>>();
         assert_eq!(values, vec![&B(3)]);
     }
 }
