@@ -457,7 +457,7 @@ macro_rules! tuple_impl {
 
             const DANGLING: Self = ($($name::DANGLING,)*);
 
-            #[allow(unused_variables)]
+            #[allow(unused_variables)] 
             unsafe fn init(world: &World) -> Option<Self> {
                 Some(($($name::init(world)?,)*))
             }
@@ -509,8 +509,8 @@ mod tests {
     #[test]
     fn query() {
         let mut world = World::new();
-        let e1 = world.spawn((A(1), B(1)));
-        let e2 = world.spawn((A(2),));
+        let e1 = world.spawn().add_bundle((A(1), B(1)));
+        let e2 = world.spawn().add_bundle((A(2),));
         let values = world.query::<&A>().collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
@@ -525,8 +525,8 @@ mod tests {
     fn stateful_query() {
         let mut world = World::new();
         let mut query_state = QueryState::default();
-        let e1 = world.spawn((A(1), B(1)));
-        let e2 = world.spawn((A(2),));
+        let e1 = world.spawn().add_bundle((A(1), B(1)));
+        let e2 = world.spawn().add_bundle((A(2),));
         unsafe {
             let values = world
                 .query::<&A>()
@@ -560,8 +560,8 @@ mod tests {
             .add(ComponentDescriptor::of::<A>(StorageType::SparseSet))
             .unwrap();
 
-        let e1 = world.spawn((A(1), B(2)));
-        let e2 = world.spawn((A(2),));
+        let e1 = world.spawn().add_bundle((A(1), B(2)));
+        let e2 = world.spawn().add_bundle((A(2),));
 
         let values = world.query::<&A>().collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);

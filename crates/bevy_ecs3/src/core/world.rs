@@ -1,46 +1,23 @@
-use std::{any::TypeId, collections::HashMap, fmt};
-use thiserror::Error;
-
 use crate::core::{
-    Archetype, ArchetypeId, Archetypes, Bundle, Component, ComponentFlags, ComponentId, Components,
-    DynamicBundle, Entities, Entity, EntityLocation, Fetch, Mut, NoSuchEntity, QueryFilter,
-    QueryIter, QueryState, ReadOnlyFetch, SparseSets, StatefulQueryIter, StorageType, Tables,
-    TypeInfo, WorldQuery,
+    entity_ref::EntityMut, ArchetypeId, Archetypes, Bundle, Component, ComponentId, Components,
+    DynamicBundle, Entities, Entity, EntityRef, Mut, QueryFilter, QueryIter, ReadOnlyFetch,
+    StorageType, Storages, TypeInfo, WorldQuery,
 };
+use std::{any::TypeId, collections::HashMap, fmt};
 
-use super::Storages;
-
-struct BundleInfo {
-    archetype_id: ArchetypeId,
-    component_ids: Vec<ComponentId>,
-}
-
+#[derive(Default)]
 pub struct World {
-    entities: Entities,
-    components: Components,
-    archetypes: Archetypes,
-    storages: Storages,
-    bundles: Bundles,
-    empty_archetype_id: ArchetypeId,
+    pub(crate) entities: Entities,
+    pub(crate) components: Components,
+    pub(crate) archetypes: Archetypes,
+    pub(crate) storages: Storages,
+    pub(crate) bundles: Bundles,
 }
 
 impl World {
+    #[inline]
     pub fn new() -> World {
-        let components = Components::default();
-        let mut storages = Storages::default();
-        // SAFE: no component ids passed in
-        let empty_table_id = unsafe { storages.tables.get_id_or_insert(&[], &components) };
-        let mut archetypes = Archetypes::default();
-        let empty_archetype_id =
-            archetypes.get_id_or_insert(empty_table_id, Vec::new(), Vec::new());
-        World {
-            archetypes,
-            components,
-            storages,
-            empty_archetype_id,
-            entities: Entities::default(),
-            bundles: Bundles::default(),
-        }
+        World::default()
     }
 
     #[inline]
@@ -68,45 +45,55 @@ impl World {
         &self.storages
     }
 
-    pub fn spawn<T: DynamicBundle>(&mut self, bundle: T) -> Entity {
-        self.flush();
-        let components = &mut self.components;
-        let storages = &mut self.storages;
-        let bundle_info =
-            self.bundles
-                .get_info_dynamic(&mut self.archetypes, components, storages, &bundle);
+    #[inline]
+    pub fn entity(&self, entity: Entity) -> Option<EntityRef> {
+        let location = self.entities.get(entity)?;
+        Some(EntityRef::new(self, entity, location))
+    }
 
-        // SAFE: archetype was created if it didn't already exist
-        let archetype = unsafe { self.archetypes.get_unchecked_mut(bundle_info.archetype_id) };
+    #[inline]
+    pub fn entity_mut(&mut self, entity: Entity) -> Option<EntityMut> {
+        let location = self.entities.get(entity)?;
+        Some(EntityMut::new(self, entity, location))
+    }
+
+    pub fn spawn(&mut self) -> EntityMut {
+        self.flush();
         let entity = self.entities.alloc();
+        // SAFE: empty archetype exists and no components are allocated by archetype.allocate() because the archetype is empty
         unsafe {
-            let entity_location = archetype.allocate(entity, storages);
-            self.entities.meta[entity.id as usize].location = entity_location;
-            let table = storages.tables.get_unchecked_mut(archetype.table_id());
-            let sparse_sets = &mut storages.sparse_sets;
-            // NOTE: put is called on each component in "bundle order". bundle_info.component_ids are also in "bundle order"
-            let mut bundle_component = 0;
-            bundle.put(|component_ptr| {
-                // SAFE: component_id was initialized by get_dynamic_bundle_info
-                let component_id = *bundle_info.component_ids.get_unchecked(bundle_component);
-                let component_info = components.get_info_unchecked(component_id);
-                match component_info.storage_type() {
-                    StorageType::Table => {
-                        table.put_component_unchecked(
-                            component_id,
-                            archetype.entity_table_row_unchecked(entity_location.index),
-                            component_ptr,
-                        );
-                    }
-                    StorageType::SparseSet => {
-                        let sparse_set = sparse_sets.get_mut(component_id).unwrap();
-                        sparse_set.put_component(entity, component_ptr);
-                    }
-                }
-                bundle_component += 1;
-            });
+            let archetype = self
+                .archetypes
+                .get_unchecked_mut(ArchetypeId::empty_archetype());
+            // PERF: avoid allocating entities in the empty archetype unless needed
+            let location = archetype.allocate(entity, &mut self.storages);
+            // SAFE: entity index was just allocated
+            self.entities
+                .meta
+                .get_unchecked_mut(entity.id() as usize)
+                .location = location;
+            EntityMut::new(self, entity, location)
         }
-        entity
+    }
+
+    #[inline]
+    pub fn get<T: Component>(&self, entity: Entity) -> Option<&T> {
+        self.entity(entity)?.get()
+    }
+
+    #[inline]
+    pub fn get_mut<T: Component>(&mut self, entity: Entity) -> Option<Mut<T>> {
+        self.entity_mut(entity)?.get_mut()
+    }
+
+    #[inline]
+    pub fn despawn(&mut self, entity: Entity) -> bool {
+        self.entity_mut(entity)
+            .map(|e| {
+                e.despawn();
+                true
+            })
+            .unwrap_or(false)
     }
 
     // /// Efficiently spawn a large number of entities with the same components
@@ -147,92 +134,6 @@ impl World {
     //         archetype,
     //     }
     // }
-
-    pub fn despawn(&mut self, entity: Entity) -> Result<(), NoSuchEntity> {
-        self.flush();
-
-        let location = self.entities.free(entity)?;
-        let (table_row, moved_entity) = {
-            // SAFE: entity is live and is contained in an archetype that exists
-            let archetype = unsafe { self.archetypes.get_unchecked_mut(location.archetype_id) };
-            let table_row = archetype.swap_remove(location.index);
-
-            // SAFE: tables stored in archetypes always exist
-            let table = unsafe { self.storages.tables.get_unchecked_mut(archetype.table_id()) };
-
-            for component_id in archetype.sparse_set_components() {
-                // SAFE: component_ids stored in live archetypes are guaranteed to exist
-                let sparse_set =
-                    unsafe { self.storages.sparse_sets.get_mut_unchecked(*component_id) };
-                sparse_set.remove_component(entity);
-            }
-            // SAFE: table rows stored in archetypes always exist
-            let moved_entity = unsafe { table.swap_remove(table_row) };
-            (table_row, moved_entity)
-        };
-
-        if let Some(moved_entity) = moved_entity {
-            // PERF: entity is guaranteed to exist. we could skip a check here
-            let moved_location = self.entities.get(moved_entity).unwrap();
-            // SAFE: entity is live and is contained in an archetype that exists
-            unsafe {
-                let archetype = self
-                    .archetypes
-                    .get_unchecked_mut(moved_location.archetype_id);
-                archetype.set_entity_table_row_unchecked(moved_location.index, table_row);
-            };
-        }
-        Ok(())
-    }
-
-    pub fn insert(
-        &mut self,
-        entity: Entity,
-        bundle: impl DynamicBundle,
-    ) -> Result<(), NoSuchEntity> {
-        todo!()
-    }
-
-    /// Add `component` to `entity`
-    ///
-    /// See `insert`.
-    pub fn insert_one(
-        &mut self,
-        entity: Entity,
-        component: impl Component,
-    ) -> Result<(), NoSuchEntity> {
-        self.insert(entity, (component,))
-    }
-
-    /// Borrow the `T` component of `entity` without checking if it can be mutated
-    ///
-    /// # Safety
-    /// This does not check for mutable access correctness. To be safe, make sure this is the only
-    /// thing accessing this entity's T component.
-    #[inline]
-    pub unsafe fn get_mut_unchecked<T: Component>(
-        &self,
-        entity: Entity,
-    ) -> Result<Mut<'_, T>, ComponentError> {
-        let location = self.entities.get(entity)?;
-        // SAFE: location is valid
-        self.get_mut_at_location_unchecked(entity, location)
-    }
-
-    pub fn remove<T: Bundle>(&mut self, entity: Entity) -> Result<T, ComponentError> {
-        todo!()
-    }
-
-    pub fn remove_one_by_one<T: Bundle>(&mut self, entity: Entity) -> Result<(), ComponentError> {
-        todo!()
-    }
-
-    /// Remove the `T` component from `entity`
-    ///
-    /// See `remove`.
-    pub fn remove_one<T: Component>(&mut self, entity: Entity) -> Result<T, ComponentError> {
-        self.remove::<(T,)>(entity).map(|(x,)| x)
-    }
 
     /// Efficiently iterate over all entities that have certain components
     ///
@@ -329,113 +230,12 @@ impl World {
     //     BatchedIter::new(&self.archetypes, batch_size)
     // }
 
-    /// Borrow the `T` component of `entity`
-    #[inline]
-    pub fn get<T: Component>(&self, entity: Entity) -> Result<&'_ T, ComponentError> {
-        let location = self.entities.get(entity)?;
-        // SAFE: location is valid
-        unsafe { self.get_at_location_unchecked(entity, location) }
-    }
-
-    /// Mutably borrow the `T` component of `entity`
-    #[inline]
-    pub fn get_mut<T: Component>(&mut self, entity: Entity) -> Result<Mut<'_, T>, ComponentError> {
-        // SAFE: unique access to self
-        unsafe { self.get_mut_unchecked(entity) }
-    }
-
-    /// Borrow the `T` component at the given location, without safety checks
-    /// # Safety
-    /// This does not check that the location is within bounds of the archetype.
-    #[inline]
-    pub unsafe fn get_at_location_unchecked<T: Component>(
-        &self,
-        entity: Entity,
-        location: EntityLocation,
-    ) -> Result<&T, ComponentError> {
-        let components = self.components();
-        let component_id = components
-            .get_id(TypeId::of::<T>())
-            .ok_or_else(ComponentError::missing_component::<T>)?;
-        // SAFE: component_id exists and is therefore valid
-        let component_info = components.get_info_unchecked(component_id);
-        // SAFE: valid locations point to valid archetypes
-        let archetype = self.archetypes().get_unchecked(location.archetype_id);
-        match component_info.storage_type() {
-            StorageType::Table => {
-                let table = self.storages.tables.get_unchecked(archetype.table_id());
-                // SAFE: archetypes will always point to valid columns
-                let components = table.get_column_unchecked(component_id);
-                let table_row = archetype.entity_table_row_unchecked(location.index);
-                // SAFE: archetypes only store valid table_rows and the stored component type is T
-                Ok(components.get_type_unchecked(table_row))
-            }
-            StorageType::SparseSet => {
-                let sparse_sets = &self.storages.sparse_sets;
-                let component = sparse_sets
-                    .get(component_id)
-                    .and_then(|sparse_set| sparse_set.get_component(entity))
-                    .ok_or_else(ComponentError::missing_component::<T>)?;
-                // SAFE: component is of type T
-                Ok(&*component.cast::<T>())
-            }
-        }
-    }
-
-    /// Borrow the `T` component at the given location, without safety checks
-    /// # Safety
-    /// This does not check that the location is within bounds of the archetype.
-    /// It also does not check for mutable access correctness. To be safe, make sure this is the only
-    /// thing accessing this entity's T component.
-    #[inline]
-    pub unsafe fn get_mut_at_location_unchecked<T: Component>(
-        &self,
-        entity: Entity,
-        location: EntityLocation,
-    ) -> Result<Mut<T>, ComponentError> {
-        let components = self.components();
-        let component_id = components
-            .get_id(TypeId::of::<T>())
-            .ok_or_else(ComponentError::missing_component::<T>)?;
-        // SAFE: component_id exists and is therefore valid
-        let component_info = components.get_info_unchecked(component_id);
-        // SAFE: valid locations point to valid archetypes
-        let archetype = self.archetypes().get_unchecked(location.archetype_id);
-        match component_info.storage_type() {
-            StorageType::Table => {
-                let table = self.storages.tables.get_unchecked(archetype.table_id());
-                // SAFE: archetypes will always point to valid columns (caller verifies that mutability rules are not violated)
-                let table_components = table.get_column_unchecked_mut(component_id);
-                // SAFE: archetype entities always have valid table locations
-                let table_row = archetype.entity_table_row_unchecked(location.index);
-                // SAFE: archetypes only store valid table_rows and the stored component type is T
-                Ok(Mut {
-                    value: table_components.get_type_mut_unchecked(table_row),
-                })
-            }
-            StorageType::SparseSet => {
-                let sparse_sets = &self.storages.sparse_sets;
-                let set = sparse_sets
-                    .get(component_id)
-                    .ok_or_else(ComponentError::missing_component::<T>)?;
-                let component = set
-                    .get_component(entity)
-                    .ok_or_else(ComponentError::missing_component::<T>)?;
-                // SAFE: component exists, therefore it has flags
-                // let flags = unsafe { set.get_component_flags_unchecked_mut(entity) };
-                Ok(Mut {
-                    // SAFE: component is of type T
-                    value: &mut *component.cast::<T>(),
-                    // flags,
-                })
-            }
-        }
-    }
-
-    fn flush(&mut self) {
+    pub(crate) fn flush(&mut self) {
         // SAFE: empty archetype is initialized when the world is constructed
         unsafe {
-            let empty_archetype = self.archetypes.get_unchecked_mut(self.empty_archetype_id);
+            let empty_archetype = self
+                .archetypes
+                .get_unchecked_mut(ArchetypeId::empty_archetype());
             let storages = &mut self.storages;
             self.entities.flush(|entity, location| {
                 *location = empty_archetype.allocate(entity, storages);
@@ -444,13 +244,27 @@ impl World {
     }
 }
 
+impl fmt::Debug for World {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "World")
+    }
+}
+
+unsafe impl Send for World {}
+unsafe impl Sync for World {}
+
+pub(crate) struct BundleInfo {
+    pub(crate) archetype_id: ArchetypeId,
+    pub(crate) component_ids: Vec<ComponentId>,
+}
+
 #[derive(Default)]
-struct Bundles {
+pub(crate) struct Bundles {
     bundle_info: HashMap<TypeId, BundleInfo>,
 }
 
 impl Bundles {
-    fn get_info_dynamic<T: DynamicBundle>(
+    pub(crate) fn get_info_dynamic<T: DynamicBundle>(
         &mut self,
         archetypes: &mut Archetypes,
         components: &mut Components,
@@ -465,7 +279,7 @@ impl Bundles {
             })
     }
 
-    fn get_info<T: Bundle>(
+    pub(crate) fn get_info<T: Bundle>(
         &mut self,
         archetypes: &mut Archetypes,
         components: &mut Components,
@@ -520,37 +334,6 @@ impl Bundles {
             archetype_id,
             component_ids,
         }
-    }
-}
-
-impl fmt::Debug for World {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "World")
-    }
-}
-
-unsafe impl Send for World {}
-unsafe impl Sync for World {}
-
-/// Errors that arise when accessing components
-#[derive(Debug, Error, Clone, Eq, PartialEq)]
-pub enum ComponentError {
-    /// The entity was already despawned
-    #[error("Entity does not exist.")]
-    NoSuchEntity,
-    /// The entity did not have a requested component
-    #[error("Entity does not have the given component {0:?}.")]
-    MissingComponent(&'static str),
-}
-impl From<NoSuchEntity> for ComponentError {
-    fn from(NoSuchEntity: NoSuchEntity) -> Self {
-        ComponentError::NoSuchEntity
-    }
-}
-
-impl ComponentError {
-    pub fn missing_component<T: Component>() -> Self {
-        ComponentError::MissingComponent(std::any::type_name::<T>())
     }
 }
 

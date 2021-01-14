@@ -14,7 +14,7 @@ impl TableId {
     }
 
     #[inline]
-    pub fn empty_table(&self) -> TableId {
+    pub const fn empty_table() -> TableId {
         TableId(0)
     }
 }
@@ -24,10 +24,19 @@ pub struct Column {
     pub(crate) data: BlobVec,
 }
 
-#[derive(Default)]
 pub struct Tables {
     tables: Vec<Table>,
     table_ids: HashMap<u64, TableId>,
+}
+
+impl Default for Tables {
+    fn default() -> Self {
+        let empty_table = Table::new(64, 0, 64);
+        Tables {
+            tables: vec![empty_table],
+            table_ids: HashMap::default(),
+        }
+    }
 }
 
 impl Tables {

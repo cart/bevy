@@ -2,8 +2,8 @@ use std::{any::TypeId, collections::HashMap, ptr::NonNull};
 
 use crate::{
     core::{
-        ArchetypeId, Archetypes, Component, ComponentError, ComponentId, Components, SparseSets,
-        StorageType, Tables, TypeInfo,
+        ArchetypeId, Archetypes, Component, ComponentId, Components, SparseSets, StorageType,
+        Tables, TypeInfo,
     },
     smaller_tuples_too,
 };
@@ -27,7 +27,7 @@ pub trait Bundle: DynamicBundle {
     fn static_type_info() -> Vec<TypeInfo>;
 
     /// Calls `func`, which should return data for each component in the bundle, in the order of this bundle's Components
-    unsafe fn get(func: impl FnMut() -> Option<NonNull<u8>>) -> Result<Self, ComponentError>
+    unsafe fn get(func: impl FnMut() -> Option<NonNull<u8>>) -> Option<Self>
     where
         Self: Sized;
 }
@@ -55,14 +55,12 @@ macro_rules! tuple_impl {
             }
 
             #[allow(unused_variables, unused_mut)]
-            unsafe fn get(mut func: impl FnMut() -> Option<NonNull<u8>>) -> Result<Self, ComponentError> {
+            unsafe fn get(mut func: impl FnMut() -> Option<NonNull<u8>>) -> Option<Self> {
                 #[allow(non_snake_case)]
-                let ($(mut $name,)*) = ($(
-                    func().ok_or_else(ComponentError::missing_component::<$name>)?
-                        .as_ptr()
-                        .cast::<$name>(),)*
+                let ($(mut $name,)*) = (
+                    $(func()?.as_ptr().cast::<$name>(),)*
                 );
-                Ok(($($name.read(),)*))
+                Some(($($name.read(),)*))
             }
         }
     }

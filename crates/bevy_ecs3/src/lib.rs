@@ -30,8 +30,8 @@ mod tests {
             .components_mut()
             .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
             .unwrap();
-        let e = world.spawn(("abc", 123));
-        let f = world.spawn(("def", 456, true));
+        let e = world.spawn().add_bundle(("abc", 123)).id();
+        let f = world.spawn().add_bundle(("def", 456, true)).id();
         assert_eq!(*world.get::<&str>(e).unwrap(), "abc");
         assert_eq!(*world.get::<i32>(e).unwrap(), 123);
         assert_eq!(*world.get::<&str>(f).unwrap(), "def");
@@ -49,13 +49,13 @@ mod tests {
     #[test]
     fn despawn_table_storage() {
         let mut world = World::new();
-        let e = world.spawn(("abc", 123));
-        let f = world.spawn(("def", 456));
+        let e = world.spawn().add_bundle(("abc", 123)).id();
+        let f = world.spawn().add_bundle(("def", 456)).id();
         assert_eq!(world.query::<()>().count(), 2);
-        world.despawn(e).unwrap();
+        assert!(world.despawn(e));
         assert_eq!(world.query::<()>().count(), 1);
-        assert!(world.get::<&str>(e).is_err());
-        assert!(world.get::<i32>(e).is_err());
+        assert!(world.get::<&str>(e).is_none());
+        assert!(world.get::<i32>(e).is_none());
         assert_eq!(*world.get::<&str>(f).unwrap(), "def");
         assert_eq!(*world.get::<i32>(f).unwrap(), 456);
     }
@@ -67,13 +67,13 @@ mod tests {
             .components_mut()
             .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
             .unwrap();
-        let e = world.spawn(("abc", 123));
-        let f = world.spawn(("def", 456));
+        let e = world.spawn().add_bundle(("abc", 123)).id();
+        let f = world.spawn().add_bundle(("def", 456)).id();
         assert_eq!(world.query::<()>().count(), 2);
-        world.despawn(e).unwrap();
+        assert!(world.despawn(e));
         assert_eq!(world.query::<()>().count(), 1);
-        assert!(world.get::<&str>(e).is_err());
-        assert!(world.get::<i32>(e).is_err());
+        assert!(world.get::<&str>(e).is_none());
+        assert!(world.get::<i32>(e).is_none());
         assert_eq!(*world.get::<&str>(f).unwrap(), "def");
         assert_eq!(*world.get::<i32>(f).unwrap(), 456);
     }
@@ -81,8 +81,8 @@ mod tests {
     #[test]
     fn query_all() {
         let mut world = World::new();
-        let e = world.spawn(("abc", 123));
-        let f = world.spawn(("def", 456));
+        let e = world.spawn().add_bundle(("abc", 123)).id();
+        let f = world.spawn().add_bundle(("def", 456)).id();
 
         let ents = world
             .query::<(Entity, &i32, &&str)>()
@@ -101,8 +101,8 @@ mod tests {
     #[test]
     fn query_single_component() {
         let mut world = World::new();
-        let e = world.spawn(("abc", 123));
-        let f = world.spawn(("def", 456, true));
+        let e = world.spawn().add_bundle(("abc", 123)).id();
+        let f = world.spawn().add_bundle(("def", 456, true)).id();
         let ents = world
             .query::<(Entity, &i32)>()
             .map(|(e, &i)| (e, i))
@@ -115,16 +115,16 @@ mod tests {
     #[test]
     fn query_missing_component() {
         let mut world = World::new();
-        world.spawn(("abc", 123));
-        world.spawn(("def", 456));
+        world.spawn().add_bundle(("abc", 123));
+        world.spawn().add_bundle(("def", 456));
         assert!(world.query::<(&bool, &i32)>().next().is_none());
     }
 
     #[test]
     fn query_sparse_component() {
         let mut world = World::new();
-        world.spawn(("abc", 123));
-        let f = world.spawn(("def", 456, true));
+        world.spawn().add_bundle(("abc", 123));
+        let f = world.spawn().add_bundle(("def", 456, true)).id();
         let ents = world
             .query::<(Entity, &bool)>()
             .map(|(e, &b)| (e, b))
@@ -166,8 +166,7 @@ mod tests {
     #[test]
     fn dynamic_components() {
         let mut world = World::new();
-        let e = world.spawn((42,));
-        world.insert(e, (true, "abc")).unwrap();
+        let e = world.spawn().add(42).add((true, "abc")).id();
         assert_eq!(
             world
                 .query::<(Entity, &i32, &bool)>()
@@ -175,7 +174,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             &[(e, 42, true)]
         );
-        assert_eq!(world.remove_one::<i32>(e), Ok(42));
+
+        assert_eq!(world.entity_mut(e).unwrap().remove::<i32>(), Some(42));
         assert_eq!(
             world
                 .query::<(Entity, &i32, &bool)>()
@@ -201,7 +201,7 @@ mod tests {
     //     }
     //     assert_eq!(world.entities().len(), N);
     // }
-    
+
     // #[test]
     // fn clear() {
     //     let mut world = World::new();
@@ -210,14 +210,14 @@ mod tests {
     //     world.clear();
     //     assert_eq!(world.entities().len(), 0);
     // }
-    
+
     // #[test]
     // fn remove_missing() {
     //     let mut world = World::new();
     //     let e = world.spawn(("abc", 123));
     //     assert!(world.remove_one::<bool>(e).is_err());
     // }
-    
+
     // #[test]
     // fn query_batched() {
     //     let mut world = World::new();
@@ -241,7 +241,7 @@ mod tests {
     //     assert!(entities.contains(&b));
     //     assert!(entities.contains(&c));
     // }
-    
+
     // #[test]
     // fn spawn_batch() {
     //     let mut world = World::new();
@@ -249,7 +249,7 @@ mod tests {
     //     let entities = world.query::<&i32>().map(|&x| x).collect::<Vec<_>>();
     //     assert_eq!(entities.len(), 100);
     // }
-    
+
     // #[test]
     // fn query_one() {
     //     let mut world = World::new();
@@ -263,13 +263,13 @@ mod tests {
     //     world.despawn(a).unwrap();
     //     assert!(world.query_one::<&i32>(a).is_err());
     // }
-    
+
     // #[test]
     // fn remove_tracking() {
     //     let mut world = World::new();
     //     let a = world.spawn(("abc", 123));
     //     let b = world.spawn(("abc", 123));
-    
+
     //     world.despawn(a).unwrap();
     //     assert_eq!(
     //         world.removed::<i32>(),
@@ -281,21 +281,21 @@ mod tests {
     //         &[a],
     //         "despawning results in 'removed component' state"
     //     );
-    
+
     //     world.insert_one(b, 10.0).unwrap();
     //     assert_eq!(
     //         world.removed::<i32>(),
     //         &[a],
     //         "archetype moves does not result in 'removed component' state"
     //     );
-    
+
     //     world.remove_one::<i32>(b).unwrap();
     //     assert_eq!(
     //         world.removed::<i32>(),
     //         &[a, b],
     //         "removing a component results in a 'removed component' state"
     //     );
-    
+
     //     world.clear_trackers();
     //     assert_eq!(
     //         world.removed::<i32>(),
@@ -312,7 +312,7 @@ mod tests {
     //         &[],
     //         "clearning trackers clears removals"
     //     );
-    
+
     //     let c = world.spawn(("abc", 123));
     //     let d = world.spawn(("abc", 123));
     //     world.clear();
@@ -332,12 +332,12 @@ mod tests {
     //         "world clears result in 'removed component' states"
     //     );
     // }
-    
+
     // #[test]
     // fn added_tracking() {
     //     let mut world = World::new();
     //     let a = world.spawn((123,));
-    
+
     //     assert_eq!(world.query::<&i32>().count(), 1);
     //     assert_eq!(world.query_filtered::<(), Added<i32>>().count(), 1);
     //     assert_eq!(world.query_mut::<&i32>().count(), 1);
@@ -346,9 +346,9 @@ mod tests {
     //     assert!(world.query_one_filtered::<(), Added<i32>>(a).is_ok());
     //     assert!(world.query_one_mut::<&i32>(a).is_ok());
     //     assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_ok());
-    
+
     //     world.clear_trackers();
-    
+
     //     assert_eq!(world.query::<&i32>().count(), 1);
     //     assert_eq!(world.query_filtered::<(), Added<i32>>().count(), 0);
     //     assert_eq!(world.query_mut::<&i32>().count(), 1);
@@ -356,7 +356,7 @@ mod tests {
     //     assert!(world.query_one_mut::<&i32>(a).is_ok());
     //     assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_err());
     // }
-    
+
     // #[test]
     // #[cfg_attr(
     //     debug_assertions,

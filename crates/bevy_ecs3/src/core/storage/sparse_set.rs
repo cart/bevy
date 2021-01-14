@@ -10,7 +10,7 @@ pub struct SparseArray<I, V = I> {
 impl<I, V> Default for SparseArray<I, V> {
     fn default() -> Self {
         Self {
-            values: Default::default(),
+            values: Vec::new(),
             marker: Default::default(),
         }
     }
@@ -59,12 +59,9 @@ impl<I: SparseSetIndex, V> SparseArray<I, V> {
             None
         } else {
             // SAFE: checked that index is valid above
-            unsafe {
-                self.values.get_unchecked_mut(index).take()
-            }
+            unsafe { self.values.get_unchecked_mut(index).take() }
         }
     }
-
 
     #[inline]
     pub fn get_or_insert_with(&mut self, index: I, func: impl FnOnce() -> V) -> &mut V {

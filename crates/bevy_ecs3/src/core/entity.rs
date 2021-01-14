@@ -1,8 +1,10 @@
-use std::{convert::TryFrom, fmt, mem, sync::atomic::{AtomicI64, AtomicU32, Ordering}};
+use std::{
+    convert::TryFrom,
+    fmt, mem,
+    sync::atomic::{AtomicI64, Ordering},
+};
 
-use crate::core::{Archetype, Storages};
-
-use super::archetype::ArchetypeId;
+use crate::core::ArchetypeId;
 
 /// Lightweight unique ID of an entity
 ///
@@ -54,7 +56,6 @@ impl fmt::Debug for Entity {
         write!(f, "{}v{}", self.id, self.generation)
     }
 }
-
 
 /// An iterator returning a sequence of Entity values from `Entities::reserve_entities`.
 pub struct ReserveEntitiesIterator<'a> {
@@ -264,13 +265,10 @@ impl Entities {
     /// Destroy an entity, allowing it to be reused
     ///
     /// Must not be called while reserved entities are awaiting `flush()`.
-    pub fn free(&mut self, entity: Entity) -> Result<EntityLocation, NoSuchEntity> {
+    pub fn free(&mut self, entity: Entity) -> EntityLocation {
         self.verify_flushed();
 
         let meta = &mut self.meta[entity.id as usize];
-        if meta.generation != entity.generation {
-            return Err(NoSuchEntity);
-        }
         meta.generation += 1;
 
         let loc = mem::replace(&mut meta.location, EntityMeta::EMPTY.location);
@@ -280,8 +278,7 @@ impl Entities {
         let new_free_cursor = self.pending.len() as i64;
         self.free_cursor.store(new_free_cursor, Ordering::Relaxed); // Not racey due to &mut self
         self.len -= 1;
-
-        Ok(loc)
+        loc
     }
 
     /// Ensure at least `n` allocations can succeed without reallocating
@@ -312,34 +309,34 @@ impl Entities {
     /// Access the location storage of an entity
     ///
     /// Must not be called on pending entities.
-    pub fn get_mut(&mut self, entity: Entity) -> Result<&mut EntityLocation, NoSuchEntity> {
+    pub fn get_mut(&mut self, entity: Entity) -> Option<&mut EntityLocation> {
         let meta = &mut self.meta[entity.id as usize];
         if meta.generation == entity.generation {
-            Ok(&mut meta.location)
+            Some(&mut meta.location)
         } else {
-            Err(NoSuchEntity)
+            None
         }
     }
 
     /// Returns `Ok(Location { archetype: 0, index: undefined })` for pending entities
-    pub fn get(&self, entity: Entity) -> Result<EntityLocation, NoSuchEntity> {
+    pub fn get(&self, entity: Entity) -> Option<EntityLocation> {
         if self.meta.len() <= entity.id as usize {
-            return Ok(EntityLocation {
+            return Some(EntityLocation {
                 archetype_id: ArchetypeId::empty_archetype(),
                 index: usize::max_value(),
             });
         }
         let meta = &self.meta[entity.id as usize];
         if meta.generation != entity.generation {
-            return Err(NoSuchEntity);
+            return None;
         }
         if meta.location.archetype_id == ArchetypeId::empty_archetype() {
-            return Ok(EntityLocation {
+            return Some(EntityLocation {
                 archetype_id: ArchetypeId::empty_archetype(),
                 index: usize::max_value(),
             });
         }
-        Ok(meta.location)
+        Some(meta.location)
     }
 
     /// Panics if the given id would represent an index outside of `meta`.
@@ -432,18 +429,6 @@ pub struct EntityLocation {
     /// The index of the entity in the archetype
     pub index: usize,
 }
-
-/// Error indicating that no entity with a particular ID exists
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct NoSuchEntity;
-
-impl fmt::Display for NoSuchEntity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.pad("no such entity")
-    }
-}
-
-impl std::error::Error for NoSuchEntity {}
 
 #[cfg(test)]
 mod tests {

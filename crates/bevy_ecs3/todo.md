@@ -5,6 +5,15 @@
 * TypeId->ComponentId hash lookup
 * Cache where possible (ex: Queries)
 
+## Done
+
+* Multiple component storages (tables and sparse sets)
+* Complete World rewrite (no shared hecs code, other than the entity id allocator)
+* EntityRef / EntityMut api
+* Stateful Queries
+* Smaller Codebase (verify numbers at the end)
+* Reduced monomorphization (measure compile time difference)
+
 ## random thoughts
 
 * Archetype/Component Graph?
@@ -16,15 +25,20 @@
 * Use ComponentIds + SparseSets in Archetype for type lookup
 * use archetype generation to get the range of archetypes to update
 
-
 ## TODO
 
+* if we roll with componentid graph, set initial table capacity to 0 to cut down on (probably) unused tables
 * query state is an unsafe api
+* change tracking
 * un-comment tests
 * make reserver api safe
 * consistent unchecked_mut
 * simplify SAFETY text
 * world.query().get(entity)
+* commands can/should use the graph / an entity builder
+* EntitySpawner
+    * struct { Entity, Blobs }
+
 * consider if we really need sparse sets:
     * each archetype could store the index into a single column table instead
     * rather than needing a sparse lookup, it could instead be "dense".

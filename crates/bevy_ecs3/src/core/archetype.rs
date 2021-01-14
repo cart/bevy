@@ -1,12 +1,8 @@
 use crate::core::{
-    Bundle, ComponentId, Components, DynamicBundle, Entity, EntityLocation, SparseArray,
-    SparseSets, StorageType, Storages, TableId, Tables, TypeInfo,
+    ComponentId, Entity, EntityLocation, SparseArray, StorageType, Storages, TableId,
 };
 use bevy_utils::{AHasher, HashMap};
-use std::{
-    any::TypeId,
-    hash::{Hash, Hasher},
-};
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ArchetypeId(u32);
@@ -181,10 +177,20 @@ pub struct ArchetypeComponents<'a> {
     sparse_set_components: &'a [ComponentId],
 }
 
-#[derive(Default)]
 pub struct Archetypes {
     archetypes: Vec<Archetype>,
     archetype_ids: HashMap<u64, ArchetypeId>,
+}
+
+impl Default for Archetypes {
+    fn default() -> Self {
+        let mut archetypes = Archetypes {
+            archetypes: Vec::new(),
+            archetype_ids: Default::default(),
+        };
+        archetypes.get_id_or_insert(TableId::empty_table(), Vec::new(), Vec::new());
+        archetypes
+    }
 }
 
 impl Archetypes {
