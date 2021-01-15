@@ -13,6 +13,7 @@ pub trait WorldQuery {
     type Fetch: for<'a> Fetch<'a>;
 }
 
+// TODO: this should iterate tables instead of archetypes
 pub trait Fetch<'w>: Sized {
     const DANGLING: Self;
     type Item;
@@ -99,9 +100,9 @@ impl<'w, Q: WorldQuery, F: QueryFilter, FilterLock> QueryIter<'w, Q, F, FilterLo
         let archetype_indices = query_state.update_archetypes(archetypes);
         for archetype_index in archetype_indices {
             // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
-            if fetch.matches_archetype(unsafe {
-                archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32))
-            }) {
+            if fetch.matches_archetype(
+                archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32)),
+            ) {
                 query_state.matched_archetypes.set(archetype_index, true);
             }
         }
@@ -457,7 +458,7 @@ macro_rules! tuple_impl {
 
             const DANGLING: Self = ($($name::DANGLING,)*);
 
-            #[allow(unused_variables)] 
+            #[allow(unused_variables)]
             unsafe fn init(world: &World) -> Option<Self> {
                 Some(($($name::init(world)?,)*))
             }
@@ -509,8 +510,8 @@ mod tests {
     #[test]
     fn query() {
         let mut world = World::new();
-        let e1 = world.spawn().add_bundle((A(1), B(1)));
-        let e2 = world.spawn().add_bundle((A(2),));
+        let e1 = world.spawn().insert_bundle((A(1), B(1)));
+        let e2 = world.spawn().insert_bundle((A(2),));
         let values = world.query::<&A>().collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
@@ -525,8 +526,8 @@ mod tests {
     fn stateful_query() {
         let mut world = World::new();
         let mut query_state = QueryState::default();
-        let e1 = world.spawn().add_bundle((A(1), B(1)));
-        let e2 = world.spawn().add_bundle((A(2),));
+        let e1 = world.spawn().insert_bundle((A(1), B(1)));
+        let e2 = world.spawn().insert_bundle((A(2),));
         unsafe {
             let values = world
                 .query::<&A>()
@@ -560,8 +561,8 @@ mod tests {
             .add(ComponentDescriptor::of::<A>(StorageType::SparseSet))
             .unwrap();
 
-        let e1 = world.spawn().add_bundle((A(1), B(2)));
-        let e2 = world.spawn().add_bundle((A(2),));
+        let e1 = world.spawn().insert_bundle((A(1), B(2)));
+        let e2 = world.spawn().insert_bundle((A(2),));
 
         let values = world.query::<&A>().collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);

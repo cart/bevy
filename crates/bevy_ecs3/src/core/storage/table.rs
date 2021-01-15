@@ -1,10 +1,8 @@
+use crate::core::{BlobVec, ComponentId, ComponentInfo, Components, Entity, SparseSet};
+use bevy_utils::{AHasher, HashMap};
 use std::hash::{Hash, Hasher};
 
-use bevy_utils::{AHasher, HashMap};
-
-use crate::core::{BlobVec, ComponentId, ComponentInfo, Components, Entity, SparseSet, TypeInfo};
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TableId(usize);
 
 impl TableId {
@@ -48,6 +46,20 @@ impl Tables {
     #[inline]
     pub unsafe fn get_unchecked(&self, id: TableId) -> &Table {
         self.tables.get_unchecked(id.index())
+    }
+
+    /// SAFETY: `a` and `b` must both be valid tables and they _must_ be different
+    #[inline]
+    pub(crate) unsafe fn get_2_mut_unchecked(
+        &mut self,
+        a: TableId,
+        b: TableId,
+    ) -> (&mut Table, &mut Table) {
+        let ptr = self.tables.as_mut_ptr();
+        (
+            &mut *ptr.add(a.index() as usize),
+            &mut *ptr.add(b.index() as usize),
+        )
     }
 
     // SAFETY: `component_ids` must contain components that exist in `components`
@@ -137,18 +149,33 @@ impl Table {
         }
     }
 
-    /// Moves the `row` column values to `new_table`, for the columns shared between both tables
+    /// Moves the `row` column values to `new_table`, for the columns shared between both tables. Returns the index of the
+    /// new row in `new_table`.
     /// SAFETY: row must be in-bounds
-    pub unsafe fn move_to(&mut self, row: usize, new_table: &mut Table) {
+    pub unsafe fn move_to(&mut self, row: usize, new_table: &mut Table, mut missing_column_fn: impl FnMut(&mut Column)) -> usize {
         let new_row = new_table.allocate(self.entities.swap_remove(row));
         for column in self.columns.values_mut() {
             if let Some(new_column) = new_table.get_column_mut(column.component_id) {
                 let data = column.data.swap_remove_and_forget_unchecked(row);
                 new_column.set_unchecked(new_row, data);
             } else {
-                column.data.swap_remove_unchecked(row);
+                missing_column_fn(column);
             }
         }
+         new_row
+    }
+
+    /// Moves the `row` column values to `new_table`, for the columns shared between both tables. Returns the index of the
+    /// new row in `new_table`.
+    /// SAFETY: `row` must be in-bounds. `new_table` must contain every component this table has
+    pub unsafe fn move_to_superset_unchecked(&mut self, row: usize, new_table: &mut Table) -> usize {
+        let new_row = new_table.allocate(self.entities.swap_remove(row));
+        for column in self.columns.values_mut() {
+            let new_column = new_table.get_column_unchecked_mut(column.component_id);
+            let data = column.data.swap_remove_and_forget_unchecked(row);
+            new_column.set_unchecked(new_row, data);
+        }
+        new_row
     }
 
     /// SAFETY: a column with the given `component_id` must exist
@@ -224,7 +251,7 @@ mod tests {
     #[test]
     fn table() {
         let mut components = Components::default();
-        let component_id = components.add_with_type_info(&TypeInfo::of::<usize>());
+        let component_id = components.get_with_type_info(&TypeInfo::of::<usize>());
         let columns = &[component_id];
         let mut table = Table::new(64, columns.len(), 64);
         table.add_column(components.get_info(component_id).unwrap());

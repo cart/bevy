@@ -278,19 +278,6 @@ impl SparseSetIndex for usize {
     }
 }
 
-impl SparseSetIndex for Entity {
-    fn sparse_set_index(&self) -> usize {
-        self.id() as usize
-    }
-}
-
-impl SparseSetIndex for ComponentId {
-    #[inline]
-    fn sparse_set_index(&self) -> usize {
-        self.index()
-    }
-}
-
 pub struct ComponentSparseSet {
     sparse_set: BlobSparseSet<Entity>,
 }

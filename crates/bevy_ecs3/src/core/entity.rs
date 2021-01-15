@@ -4,7 +4,7 @@ use std::{
     sync::atomic::{AtomicI64, Ordering},
 };
 
-use crate::core::ArchetypeId;
+use crate::core::{ArchetypeId, SparseSetIndex};
 
 /// Lightweight unique ID of an entity
 ///
@@ -54,6 +54,12 @@ impl Entity {
 impl fmt::Debug for Entity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}v{}", self.id, self.generation)
+    }
+}
+
+impl SparseSetIndex for Entity {
+    fn sparse_set_index(&self) -> usize {
+        self.id() as usize
     }
 }
 

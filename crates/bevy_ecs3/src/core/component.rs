@@ -1,4 +1,4 @@
-use crate::core::TypeInfo;
+use crate::core::{SparseSetIndex, TypeInfo};
 use bevy_utils::HashMap;
 use bitflags::bitflags;
 use std::{alloc::Layout, any::TypeId, collections::hash_map::Entry};
@@ -61,6 +61,13 @@ impl ComponentId {
     #[inline]
     pub fn index(&self) -> usize {
         self.0
+    }
+}
+
+impl SparseSetIndex for ComponentId {
+    #[inline]
+    fn sparse_set_index(&self) -> usize {
+        self.index()
     }
 }
 
@@ -131,7 +138,7 @@ impl Components {
         self.indices.get(&type_id).map(|index| ComponentId(*index))
     }
 
-    pub fn add_with_type_info(&mut self, type_info: &TypeInfo) -> ComponentId {
+    pub fn get_with_type_info(&mut self, type_info: &TypeInfo) -> ComponentId {
         let components = &mut self.components;
         let index = self.indices.entry(type_info.id()).or_insert_with(|| {
             let index = components.len();

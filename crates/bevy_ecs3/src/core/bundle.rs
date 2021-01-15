@@ -1,12 +1,5 @@
+use crate::{core::{Component, ComponentId, Components, SparseSetIndex, TypeInfo}, smaller_tuples_too};
 use std::{any::TypeId, collections::HashMap, ptr::NonNull};
-
-use crate::{
-    core::{
-        ArchetypeId, Archetypes, Component, ComponentId, Components, SparseSets, StorageType,
-        Tables, TypeInfo,
-    },
-    smaller_tuples_too,
-};
 
 /// A dynamically typed ordered collection of components
 ///
@@ -67,3 +60,78 @@ macro_rules! tuple_impl {
 }
 
 smaller_tuples_too!(tuple_impl, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A);
+
+#[derive(Debug, Clone, Copy)]
+pub struct BundleId(usize);
+
+impl BundleId {
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.0
+    }
+}
+
+impl SparseSetIndex for BundleId {
+    #[inline]
+    fn sparse_set_index(&self) -> usize {
+        self.index()
+    }
+}
+
+pub struct BundleInfo {
+    pub(crate) id: BundleId,
+    pub(crate) component_ids: Vec<ComponentId>,
+}
+
+#[derive(Default)]
+pub(crate) struct Bundles {
+    bundle_infos: Vec<BundleInfo>,
+    bundle_ids: HashMap<TypeId, BundleId>,
+}
+
+impl Bundles {
+    pub(crate) fn get_info_dynamic<T: DynamicBundle>(
+        &mut self,
+        components: &mut Components,
+        bundle: &T,
+    ) -> &BundleInfo {
+        let mut bundle_infos = &mut self.bundle_infos;
+        let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
+            let type_info = bundle.type_info();
+            let id = BundleId(bundle_infos.len());
+            let bundle_info = initialize_bundle(&type_info, id, components);
+            bundle_infos.push(bundle_info);
+            id
+        });
+        // SAFE: index either exists, or was initialized
+        unsafe { self.bundle_infos.get_unchecked(id.0) }
+    }
+
+    pub(crate) fn get_info<T: Bundle>(&mut self, components: &mut Components) -> &BundleInfo {
+        let mut bundle_infos = &mut self.bundle_infos;
+        let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
+            let type_info = T::static_type_info();
+            let id = BundleId(bundle_infos.len());
+            let bundle_info = initialize_bundle(&type_info, id, components);
+            bundle_infos.push(bundle_info);
+            id
+        });
+        // SAFE: index either exists, or was initialized
+        unsafe { self.bundle_infos.get_unchecked(id.0) }
+    }
+}
+
+fn initialize_bundle(
+    type_info: &[TypeInfo],
+    id: BundleId,
+    components: &mut Components,
+) -> BundleInfo {
+    let mut component_ids = Vec::new();
+
+    for type_info in type_info {
+        let component_id = components.get_with_type_info(&type_info);
+        component_ids.push(component_id);
+    }
+
+    BundleInfo { id, component_ids }
+}

@@ -1,8 +1,11 @@
 use crate::core::{
-    ComponentId, Entity, EntityLocation, SparseArray, StorageType, Storages, TableId,
+    BundleId, ComponentId, Entity, EntityLocation, SparseArray, StorageType, Storages, TableId,
 };
-use bevy_utils::{AHasher, HashMap};
-use std::hash::{Hash, Hasher};
+use bevy_utils::AHasher;
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ArchetypeId(u32);
@@ -31,10 +34,20 @@ impl ArchetypeId {
 
 #[derive(Default)]
 pub struct Edges {
-    add_table_component: SparseArray<ComponentId, ArchetypeId>,
-    remove_table_component: SparseArray<ComponentId, ArchetypeId>,
-    add_sparse_set_component: SparseArray<ComponentId, ArchetypeId>,
-    remove_sparse_set_component: SparseArray<ComponentId, ArchetypeId>,
+    pub add_bundle: SparseArray<BundleId, ArchetypeId>,
+    pub remove_bundle: SparseArray<BundleId, ArchetypeId>,
+}
+
+impl Edges {
+    #[inline]
+    pub fn get_add_bundle(&self, bundle_id: BundleId) -> Option<ArchetypeId> {
+        self.add_bundle.get(bundle_id).cloned()
+    }
+
+    #[inline]
+    pub fn set_add_bundle(&mut self, bundle_id: BundleId, archetype_id: ArchetypeId) {
+        self.add_bundle.insert(bundle_id, archetype_id);
+    }
 }
 
 struct TableInfo {
@@ -49,7 +62,7 @@ pub struct Archetype {
     table_components: Vec<ComponentId>,
     sparse_set_components: Vec<ComponentId>,
     entities: Vec<Entity>,
-    // edges: Edges,
+    edges: Edges,
 }
 
 impl Archetype {
@@ -77,7 +90,7 @@ impl Archetype {
             table_components,
             sparse_set_components,
             entities: Default::default(),
-            // edges: Default::default(),
+            edges: Default::default(),
         }
     }
 
@@ -97,13 +110,23 @@ impl Archetype {
     }
 
     #[inline]
-    pub fn table_components(&self) -> &[ComponentId] {
+    pub fn table_components(&self) -> &Vec<ComponentId> {
         &self.table_components
     }
 
     #[inline]
-    pub fn sparse_set_components(&self) -> &[ComponentId] {
+    pub fn sparse_set_components(&self) -> &Vec<ComponentId> {
         &self.sparse_set_components
+    }
+
+    #[inline]
+    pub fn edges(&self) -> &Edges {
+        &self.edges
+    }
+
+    #[inline]
+    pub(crate) fn edges_mut(&mut self) -> &mut Edges {
+        &mut self.edges
     }
 
     /// SAFETY: index must be in bounds
@@ -119,11 +142,9 @@ impl Archetype {
     }
 
     /// SAFETY: valid component values must be immediately written to the relevant storages
-    pub unsafe fn allocate(&mut self, entity: Entity, storages: &mut Storages) -> EntityLocation {
+    /// `table_row` must be valid
+    pub unsafe fn allocate(&mut self, entity: Entity, table_row: usize) -> EntityLocation {
         self.entities.push(entity);
-        // SAFE: self.table_id is always valid
-        let table = storages.tables.get_unchecked_mut(self.table_info.id);
-        let table_row = table.allocate(entity);
         self.table_info.entity_rows.push(table_row);
 
         EntityLocation {
@@ -146,6 +167,11 @@ impl Archetype {
     #[inline]
     pub fn contains(&self, component_id: ComponentId) -> bool {
         self.components.contains(component_id)
+    }
+
+    #[inline]
+    pub fn get_storage_type(&self, component_id: ComponentId) -> Option<StorageType> {
+        self.components.get(component_id).cloned()
     }
 }
 
@@ -224,6 +250,13 @@ impl Archetypes {
         self.archetypes.get_mut(id.0 as usize)
     }
 
+    /// SAFETY: `a` and `b` must both be valid archetypes and they _must_ be different
+    #[inline]
+    pub(crate) unsafe fn get_2_mut_unchecked(&mut self, a: ArchetypeId, b: ArchetypeId) -> (&mut Archetype, &mut Archetype) {
+        let ptr = self.archetypes.as_mut_ptr();
+        (&mut *ptr.add(a.index() as usize), &mut *ptr.add(b.index() as usize))
+    }
+
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &Archetype> {
         self.archetypes.iter()
@@ -234,7 +267,9 @@ impl Archetypes {
         self.archetypes.iter_mut()
     }
 
-    pub fn get_id_or_insert(
+    /// Gets the archetype id matching the given inputs or inserts a new one if it doesn't exist.
+    /// `table_components` and `sparse_set_components` must be sorted
+    pub(crate) fn get_id_or_insert(
         &mut self,
         table_id: TableId,
         table_components: Vec<ComponentId>,

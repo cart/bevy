@@ -1,9 +1,8 @@
 use crate::core::{
-    entity_ref::EntityMut, ArchetypeId, Archetypes, Bundle, Component, ComponentId, Components,
-    DynamicBundle, Entities, Entity, EntityRef, Mut, QueryFilter, QueryIter, ReadOnlyFetch,
-    StorageType, Storages, TypeInfo, WorldQuery,
+    entity_ref::EntityMut, ArchetypeId, Archetypes, Bundles, Component, Components, Entities,
+    Entity, EntityRef, Mut, QueryFilter, QueryIter, ReadOnlyFetch, Storages, WorldQuery,
 };
-use std::{any::TypeId, collections::HashMap, fmt};
+use std::fmt;
 
 #[derive(Default)]
 pub struct World {
@@ -66,7 +65,8 @@ impl World {
                 .archetypes
                 .get_unchecked_mut(ArchetypeId::empty_archetype());
             // PERF: avoid allocating entities in the empty archetype unless needed
-            let location = archetype.allocate(entity, &mut self.storages);
+            let table = self.storages.tables.get_unchecked_mut(archetype.table_id());
+            let location = archetype.allocate(entity, table.allocate(entity));
             // SAFE: entity index was just allocated
             self.entities
                 .meta
@@ -236,9 +236,13 @@ impl World {
             let empty_archetype = self
                 .archetypes
                 .get_unchecked_mut(ArchetypeId::empty_archetype());
-            let storages = &mut self.storages;
+            let table = self
+                .storages
+                .tables
+                .get_unchecked_mut(empty_archetype.table_id());
+            // PERF: consider pre-allocating space for flushed entities
             self.entities.flush(|entity, location| {
-                *location = empty_archetype.allocate(entity, storages);
+                *location = empty_archetype.allocate(entity, table.allocate(entity));
             });
         }
     }
@@ -252,90 +256,6 @@ impl fmt::Debug for World {
 
 unsafe impl Send for World {}
 unsafe impl Sync for World {}
-
-pub(crate) struct BundleInfo {
-    pub(crate) archetype_id: ArchetypeId,
-    pub(crate) component_ids: Vec<ComponentId>,
-}
-
-#[derive(Default)]
-pub(crate) struct Bundles {
-    bundle_info: HashMap<TypeId, BundleInfo>,
-}
-
-impl Bundles {
-    pub(crate) fn get_info_dynamic<T: DynamicBundle>(
-        &mut self,
-        archetypes: &mut Archetypes,
-        components: &mut Components,
-        storages: &mut Storages,
-        bundle: &T,
-    ) -> &BundleInfo {
-        self.bundle_info
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| {
-                let type_info = bundle.type_info();
-                Self::initialize_bundle(&type_info, archetypes, components, storages)
-            })
-    }
-
-    pub(crate) fn get_info<T: Bundle>(
-        &mut self,
-        archetypes: &mut Archetypes,
-        components: &mut Components,
-        storages: &mut Storages,
-    ) -> &BundleInfo {
-        self.bundle_info
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| {
-                let type_info = T::static_type_info();
-                Self::initialize_bundle(&type_info, archetypes, components, storages)
-            })
-    }
-
-    fn initialize_bundle(
-        type_info: &[TypeInfo],
-        archetypes: &mut Archetypes,
-        components: &mut Components,
-        storages: &mut Storages,
-    ) -> BundleInfo {
-        let mut table_components = Vec::new();
-        let mut sparse_set_components = Vec::new();
-        let mut component_ids = Vec::new();
-
-        for type_info in type_info {
-            let component_id = components.add_with_type_info(&type_info);
-            component_ids.push(component_id);
-            // SAFE: component info either previously existed or was just initialized
-            let component_info = unsafe { components.get_info_unchecked(component_id) };
-            match component_info.storage_type() {
-                StorageType::SparseSet => {
-                    sparse_set_components.push(component_id);
-                    storages.sparse_sets.get_or_insert(component_info);
-                }
-                StorageType::Table => table_components.push(component_id),
-            }
-        }
-
-        // sort to make hashes match across different orders
-        table_components.sort();
-        sparse_set_components.sort();
-
-        // SAFE: component_ids were initialized above
-        let table_id = unsafe {
-            storages
-                .tables
-                .get_id_or_insert(&table_components, &components)
-        };
-
-        let archetype_id =
-            archetypes.get_id_or_insert(table_id, table_components, sparse_set_components);
-        BundleInfo {
-            archetype_id,
-            component_ids,
-        }
-    }
-}
 
 // /// Entity IDs created by `World::spawn_batch`
 // pub struct SpawnBatchIter<'a, I>

@@ -27,7 +27,9 @@
 
 ## TODO
 
+* consider specializing spawn_bundle
 * if we roll with componentid graph, set initial table capacity to 0 to cut down on (probably) unused tables
+* prevent allocating in empty archetype on init (maybe use a EntityMutUninit?)
 * query state is an unsafe api
 * change tracking
 * un-comment tests

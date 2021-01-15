@@ -30,8 +30,8 @@ mod tests {
             .components_mut()
             .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
             .unwrap();
-        let e = world.spawn().add_bundle(("abc", 123)).id();
-        let f = world.spawn().add_bundle(("def", 456, true)).id();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
         assert_eq!(*world.get::<&str>(e).unwrap(), "abc");
         assert_eq!(*world.get::<i32>(e).unwrap(), 123);
         assert_eq!(*world.get::<&str>(f).unwrap(), "def");
@@ -49,8 +49,8 @@ mod tests {
     #[test]
     fn despawn_table_storage() {
         let mut world = World::new();
-        let e = world.spawn().add_bundle(("abc", 123)).id();
-        let f = world.spawn().add_bundle(("def", 456)).id();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456)).id();
         assert_eq!(world.query::<()>().count(), 2);
         assert!(world.despawn(e));
         assert_eq!(world.query::<()>().count(), 1);
@@ -67,8 +67,8 @@ mod tests {
             .components_mut()
             .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
             .unwrap();
-        let e = world.spawn().add_bundle(("abc", 123)).id();
-        let f = world.spawn().add_bundle(("def", 456)).id();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456)).id();
         assert_eq!(world.query::<()>().count(), 2);
         assert!(world.despawn(e));
         assert_eq!(world.query::<()>().count(), 1);
@@ -81,8 +81,8 @@ mod tests {
     #[test]
     fn query_all() {
         let mut world = World::new();
-        let e = world.spawn().add_bundle(("abc", 123)).id();
-        let f = world.spawn().add_bundle(("def", 456)).id();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456)).id();
 
         let ents = world
             .query::<(Entity, &i32, &&str)>()
@@ -101,8 +101,8 @@ mod tests {
     #[test]
     fn query_single_component() {
         let mut world = World::new();
-        let e = world.spawn().add_bundle(("abc", 123)).id();
-        let f = world.spawn().add_bundle(("def", 456, true)).id();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
         let ents = world
             .query::<(Entity, &i32)>()
             .map(|(e, &i)| (e, i))
@@ -115,16 +115,16 @@ mod tests {
     #[test]
     fn query_missing_component() {
         let mut world = World::new();
-        world.spawn().add_bundle(("abc", 123));
-        world.spawn().add_bundle(("def", 456));
+        world.spawn().insert_bundle(("abc", 123));
+        world.spawn().insert_bundle(("def", 456));
         assert!(world.query::<(&bool, &i32)>().next().is_none());
     }
 
     #[test]
     fn query_sparse_component() {
         let mut world = World::new();
-        world.spawn().add_bundle(("abc", 123));
-        let f = world.spawn().add_bundle(("def", 456, true)).id();
+        world.spawn().insert_bundle(("abc", 123));
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
         let ents = world
             .query::<(Entity, &bool)>()
             .map(|(e, &b)| (e, b))
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn dynamic_components() {
         let mut world = World::new();
-        let e = world.spawn().add(42).add((true, "abc")).id();
+        let e = world.spawn().insert(42).insert_bundle((true, "abc")).id();
         assert_eq!(
             world
                 .query::<(Entity, &i32, &bool)>()
