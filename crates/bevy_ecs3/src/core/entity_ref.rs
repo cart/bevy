@@ -1,9 +1,8 @@
 use crate::core::{
     Archetype, ArchetypeId, Archetypes, Bundle, BundleInfo, Component, ComponentId, Components,
-    DynamicBundle, Entity, EntityLocation, Mut, SparseSets, StorageType, Storages, Table, Tables,
-    World,
+    DynamicBundle, Entity, EntityLocation, Mut, StorageType, Storages, World,
 };
-use std::{any::TypeId, thread::current};
+use std::any::TypeId;
 
 pub struct EntityRef<'w> {
     world: &'w World,
@@ -27,20 +26,10 @@ impl<'w> EntityRef<'w> {
     }
 
     pub fn get<T: Component>(&self) -> Option<&'w T> {
-        let location = self.location;
-        // SAFE: entity location is valid
-        let archetype = unsafe { self.world.archetypes.get_unchecked(location.archetype_id) };
-        // SAFE: returned component is of type T
+        // SAFE: entity location is valid and returned component is of type T
         unsafe {
-            get_component_with_type(
-                &self.world.components,
-                &self.world.storages,
-                archetype,
-                TypeId::of::<T>(),
-                self.entity,
-                location,
-            )
-            .map(|value| &*value.cast::<T>())
+            get_component_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
+                .map(|value| &*value.cast::<T>())
         }
     }
 }
@@ -67,40 +56,21 @@ impl<'w> EntityMut<'w> {
     }
 
     pub fn get<T: Component>(&self) -> Option<&'w T> {
-        let location = self.location;
-        // SAFE: entity location is valid
-        let archetype = unsafe { self.world.archetypes.get_unchecked(location.archetype_id) };
-        // SAFE: returned component is of type T
+        // SAFE: entity location is valid and returned component is of type T
         unsafe {
-            get_component_with_type(
-                &self.world.components,
-                &self.world.storages,
-                archetype,
-                TypeId::of::<T>(),
-                self.entity,
-                location,
-            )
-            .map(|value| &*value.cast::<T>())
+            get_component_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
+                .map(|value| &*value.cast::<T>())
         }
     }
 
     pub fn get_mut<T: Component>(&mut self) -> Option<Mut<'w, T>> {
-        let location = self.location;
-        // SAFE: entity location is valid
-        let archetype = unsafe { self.world.archetypes.get_unchecked(location.archetype_id) };
-        // SAFE: world access is unique and returned component is of type T
+        // SAFE: world access is unique, entity location is valid, and returned component is of type T
         unsafe {
-            get_component_with_type(
-                &self.world.components,
-                &self.world.storages,
-                archetype,
-                TypeId::of::<T>(),
-                self.entity,
-                location,
+            get_component_with_type(self.world, TypeId::of::<T>(), self.entity, self.location).map(
+                |value| Mut {
+                    value: &mut *value.cast::<T>(),
+                },
             )
-            .map(|value| Mut {
-                value: &mut *value.cast::<T>(),
-            })
         }
     }
 
@@ -350,10 +320,7 @@ impl<'w> EntityMut<'w> {
                 let archetype = world
                     .archetypes
                     .get_unchecked_mut(moved_location.archetype_id);
-                archetype.set_entity_table_row_unchecked(
-                    moved_location.index,
-                    table_row,
-                );
+                archetype.set_entity_table_row_unchecked(moved_location.index, table_row);
             };
         }
     }
@@ -362,25 +329,25 @@ impl<'w> EntityMut<'w> {
 /// SAFETY: `entity_location` must be within bounds of the given archetype and `entity` must exist inside the archetype
 #[inline]
 unsafe fn get_component(
-    components: &Components,
-    storages: &Storages,
-    archetype: &Archetype,
+    world: &World,
     component_id: ComponentId,
     entity: Entity,
     location: EntityLocation,
 ) -> Option<*mut u8> {
+    let archetype = unsafe { world.archetypes.get_unchecked(location.archetype_id) };
     // SAFE: component_id exists and is therefore valid
-    let component_info = components.get_info_unchecked(component_id);
+    let component_info = world.components.get_info_unchecked(component_id);
     match component_info.storage_type() {
         StorageType::Table => {
-            let table = storages.tables.get_unchecked(archetype.table_id());
+            let table = world.storages.tables.get_unchecked(archetype.table_id());
             // SAFE: archetypes will always point to valid columns
             let components = table.get_column_unchecked(component_id);
             let table_row = archetype.entity_table_row_unchecked(location.index);
             // SAFE: archetypes only store valid table_rows and the stored component type is T
             Some(components.get_unchecked(table_row))
         }
-        StorageType::SparseSet => storages
+        StorageType::SparseSet => world
+            .storages
             .sparse_sets
             .get(component_id)
             .and_then(|sparse_set| sparse_set.get_component(entity)),
@@ -421,22 +388,13 @@ unsafe fn remove_component(
 // TODO: remove inlining to cut down on monomorphization (just measure perf first)
 #[inline]
 unsafe fn get_component_with_type(
-    components: &Components,
-    storages: &Storages,
-    archetype: &Archetype,
+    world: &World,
     type_id: TypeId,
     entity: Entity,
     location: EntityLocation,
 ) -> Option<*mut u8> {
-    let component_id = components.get_id(type_id)?;
-    get_component(
-        components,
-        storages,
-        archetype,
-        component_id,
-        entity,
-        location,
-    )
+    let component_id = world.components.get_id(type_id)?;
+    get_component(world, component_id, entity, location)
 }
 
 /// Adds a bundle to the given archetype and returns the resulting archetype. This could be the same [ArchetypeId],
