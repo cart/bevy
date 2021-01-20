@@ -197,15 +197,15 @@ mod tests {
         let mut world = World::default();
         let mut entities = Vec::with_capacity(10_000);
         for _ in 0..1000 {
-            entities.push(world.spawn().insert(0u32).id());
+            entities.push(world.spawn().insert(0.0f32).id());
         }
 
-        for entity in entities.iter().cloned() {
-            world.entity_mut(entity).unwrap().insert(1.0f32);
+        for (i, entity) in entities.iter().cloned().enumerate() {
+            world.entity_mut(entity).unwrap().insert(i);
         }
 
-        for entity in entities.iter().cloned() {
-            assert_eq!(world.entity_mut(entity).unwrap().remove::<f32>(), Some(1.0));
+        for (i, entity) in entities.iter().cloned().enumerate() {
+            assert_eq!(world.entity_mut(entity).unwrap().remove::<usize>(), Some(i));
         }
     }
 
@@ -218,26 +218,16 @@ mod tests {
             .unwrap();
         let mut entities = Vec::with_capacity(10_000);
         for _ in 0..1000 {
-            entities.push(world.spawn().insert(0u32).id());
+            entities.push(world.spawn().insert(0.0f32).id());
         }
 
-        for entity in entities.iter().cloned() {
-            world.entity_mut(entity).unwrap().insert(1.0f32);
+        for (i, entity) in entities.iter().cloned().enumerate() {
+            world.entity_mut(entity).unwrap().insert(i);
         }
 
-        for entity in entities.iter().cloned() {
-            assert_eq!(world.entity_mut(entity).unwrap().remove::<f32>(), Some(1.0));
+        for (i, entity) in entities.iter().cloned().enumerate() {
+            assert_eq!(world.entity_mut(entity).unwrap().remove::<usize>(), Some(i));
         }
-    }
-
-    #[test]
-    fn spawn_many() {
-        let mut world = World::new();
-        const N: u32 = 100_000;
-        for _ in 0..N {
-            world.spawn().insert(42u128);
-        }
-        assert_eq!(world.entities().len(), N);
     }
 
     // #[test]
