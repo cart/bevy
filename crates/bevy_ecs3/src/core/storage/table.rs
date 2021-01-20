@@ -37,7 +37,7 @@ impl Default for Tables {
     }
 }
 
-pub struct MoveResult {
+pub struct TableMoveResult {
     pub swapped_entity: Option<Entity>,
     pub new_row: usize,
 }
@@ -161,7 +161,7 @@ impl Table {
         &mut self,
         row: usize,
         new_table: &mut Table,
-    ) -> MoveResult {
+    ) -> TableMoveResult {
         let is_last = row == self.entities.len() - 1;
         let new_row = new_table.allocate(self.entities.swap_remove(row));
         for column in self.columns.values_mut() {
@@ -170,7 +170,7 @@ impl Table {
                 new_column.set_unchecked(new_row, data);
             }
         }
-        MoveResult {
+        TableMoveResult {
             new_row,
             swapped_entity: if is_last {
                 None
@@ -187,7 +187,7 @@ impl Table {
         &mut self,
         row: usize,
         new_table: &mut Table,
-    ) -> MoveResult {
+    ) -> TableMoveResult {
         let is_last = row == self.entities.len() - 1;
         let new_row = new_table.allocate(self.entities.swap_remove(row));
         for column in self.columns.values_mut() {
@@ -195,7 +195,7 @@ impl Table {
             let data = column.data.swap_remove_and_forget_unchecked(row);
             new_column.set_unchecked(new_row, data);
         }
-        MoveResult {
+        TableMoveResult {
             new_row,
             swapped_entity: if is_last {
                 None

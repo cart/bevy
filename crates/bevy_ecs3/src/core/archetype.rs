@@ -65,6 +65,11 @@ struct TableInfo {
     entity_rows: Vec<usize>,
 }
 
+pub(crate) struct ArchetypeSwapRemoveResult {
+    pub swapped_entity: Option<Entity>,
+    pub table_row: usize,
+}
+
 pub struct Archetype {
     id: ArchetypeId,
     table_info: TableInfo,
@@ -164,9 +169,17 @@ impl Archetype {
     }
 
     /// Removes the entity at `index` by swapping it out. Returns the table row the entity is stored in.
-    pub fn swap_remove(&mut self, index: usize) -> usize {
+    pub(crate) fn swap_remove(&mut self, index: usize) -> ArchetypeSwapRemoveResult {
+        let is_last = index == self.entities.len() - 1;
         self.entities.swap_remove(index);
-        self.table_info.entity_rows.swap_remove(index)
+        ArchetypeSwapRemoveResult {
+            swapped_entity: if is_last {
+                None
+            } else {
+                Some(self.entities[index])
+            },
+            table_row: self.table_info.entity_rows.swap_remove(index),
+        }
     }
 
     #[inline]

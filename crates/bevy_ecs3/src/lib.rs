@@ -147,32 +147,87 @@ mod tests {
     // }
 
     #[test]
-    fn dynamic_components() {
+    fn add_remove_components() {
         let mut world = World::new();
-        let e = world.spawn().insert(42).insert_bundle((true, "abc")).id();
+        let e1 = world.spawn().insert(42).insert_bundle((true, "abc")).id();
+        let e2 = world.spawn().insert(0).insert_bundle((false, "xyz")).id();
         assert_eq!(
             world
                 .query::<(Entity, &i32, &bool)>()
                 .map(|(e, &i, &b)| (e, i, b))
                 .collect::<Vec<_>>(),
-            &[(e, 42, true)]
+            &[(e1, 42, true), (e2, 0, false)]
         );
 
-        assert_eq!(world.entity_mut(e).unwrap().remove::<i32>(), Some(42));
+        assert_eq!(world.entity_mut(e1).unwrap().remove::<i32>(), Some(42));
         assert_eq!(
             world
                 .query::<(Entity, &i32, &bool)>()
                 .map(|(e, &i, &b)| (e, i, b))
                 .collect::<Vec<_>>(),
-            &[]
+            &[(e2, 0, false)]
         );
         assert_eq!(
             world
                 .query::<(Entity, &bool, &&str)>()
                 .map(|(e, &b, &s)| (e, b, s))
                 .collect::<Vec<_>>(),
-            &[(e, true, "abc")]
+            &[(e2, false, "xyz"), (e1, true, "abc")]
         );
+        world.entity_mut(e1).unwrap().insert(43);
+        assert_eq!(
+            world
+                .query::<(Entity, &i32, &bool)>()
+                .map(|(e, &i, &b)| (e, i, b))
+                .collect::<Vec<_>>(),
+            &[(e2, 0, false), (e1, 43, true)]
+        );
+        world.entity_mut(e1).unwrap().insert(1.0f32);
+        assert_eq!(
+            world
+                .query::<(Entity, &f32)>()
+                .map(|(e, &f)| (e, f))
+                .collect::<Vec<_>>(),
+            &[(e1, 1.0)]
+        );
+    }
+
+    #[test]
+    fn add_remove_many_table() {
+        let mut world = World::default();
+        let mut entities = Vec::with_capacity(10_000);
+        for _ in 0..1000 {
+            entities.push(world.spawn().insert(0u32).id());
+        }
+
+        for entity in entities.iter().cloned() {
+            world.entity_mut(entity).unwrap().insert(1.0f32);
+        }
+
+        for entity in entities.iter().cloned() {
+            assert_eq!(world.entity_mut(entity).unwrap().remove::<f32>(), Some(1.0));
+        }
+    }
+
+    #[test]
+    fn add_remove_many_sparse_set() {
+        let mut world = World::default();
+        world
+            .components_mut()
+            .add(ComponentDescriptor::of::<f32>(StorageType::SparseSet))
+            .unwrap();
+        let mut entities = Vec::with_capacity(10_000);
+        for _ in 0..1000 {
+            entities.push(world.spawn().insert(0u32).id());
+        }
+
+        for entity in entities.iter().cloned() {
+            world.entity_mut(entity).unwrap().insert(1.0f32);
+        }
+
+        for entity in entities.iter().cloned() {
+            assert_eq!(world.entity_mut(entity).unwrap().remove::<f32>(), Some(1.0));
+        }
     }
 
     #[test]

@@ -3,7 +3,7 @@ use crate::core::{
     DynamicBundle, Entity, EntityLocation, Mut, SparseSets, StorageType, Storages, Table, Tables,
     World,
 };
-use std::any::TypeId;
+use std::{any::TypeId, thread::current};
 
 pub struct EntityRef<'w> {
     world: &'w World,
@@ -116,7 +116,7 @@ impl<'w> EntityMut<'w> {
         let bundle_info = self.world.bundles.get_info_dynamic(components, &bundle);
         let current_location = self.location;
 
-        let entity_location = unsafe {
+        let new_location = unsafe {
             // SAFE: component ids in `bundle_info` and self.location are valid
             let new_archetype_id = add_bundle_to_archetype(
                 archetypes,
@@ -132,7 +132,12 @@ impl<'w> EntityMut<'w> {
                 let old_table_id;
                 {
                     let old_archetype = archetypes.get_unchecked_mut(current_location.archetype_id);
-                    old_table_row = old_archetype.swap_remove(current_location.index);
+                    let result = old_archetype.swap_remove(current_location.index);
+                    if let Some(swapped_entity) = result.swapped_entity {
+                        // SAFE: entity is live and is contained in an archetype that exists
+                        entities.meta[swapped_entity.id as usize].location = current_location;
+                    }
+                    old_table_row = result.table_row;
                     old_table_id = old_archetype.table_id()
                 }
                 let new_archetype = archetypes.get_unchecked_mut(new_archetype_id);
@@ -147,7 +152,7 @@ impl<'w> EntityMut<'w> {
                     let move_result =
                         old_table.move_to_superset_unchecked(old_table_row, new_table);
 
-                    let new_entity_location = new_archetype.allocate(entity, move_result.new_row);
+                    let new_location = new_archetype.allocate(entity, move_result.new_row);
                     // if an entity was moved into this entity's table spot, update its table row
                     if let Some(swapped_entity) = move_result.swapped_entity {
                         // PERF: entity is guaranteed to exist. we could skip a check here
@@ -162,17 +167,17 @@ impl<'w> EntityMut<'w> {
                             );
                         };
                     }
-                    new_entity_location
+                    new_location
                 }
 
                 // Sparse set components are intentionally ignored here. They don't need to move
             }
         };
-        self.location = entity_location;
-        entities.meta[self.entity.id as usize].location = entity_location;
+        self.location = new_location;
+        entities.meta[self.entity.id as usize].location = new_location;
 
         // SAFE: archetype was created if it didn't already exist
-        let archetype = unsafe { archetypes.get_unchecked_mut(entity_location.archetype_id) };
+        let archetype = unsafe { archetypes.get_unchecked_mut(new_location.archetype_id) };
         unsafe {
             // NOTE: put is called on each component in "bundle order". bundle_info.component_ids are also in "bundle order"
             let mut bundle_component = 0;
@@ -185,7 +190,7 @@ impl<'w> EntityMut<'w> {
                         let table = storages.tables.get_unchecked_mut(archetype.table_id());
                         table.put_component_unchecked(
                             component_id,
-                            archetype.entity_table_row_unchecked(entity_location.index),
+                            archetype.entity_table_row_unchecked(new_location.index),
                             component_ptr,
                         );
                     }
@@ -243,12 +248,17 @@ impl<'w> EntityMut<'w> {
             })
         };
 
-        let old_table_row = old_archetype.swap_remove(old_location.index);
+        let remove_result = old_archetype.swap_remove(old_location.index);
+        if let Some(swapped_entity) = remove_result.swapped_entity {
+            // SAFE: entity is live and is contained in an archetype that exists
+            entities.meta[swapped_entity.id as usize].location = old_location;
+        }
+        let old_table_row = remove_result.table_row;
         let old_table_id = old_archetype.table_id();
         // SAFE: new archetype exists thanks to remove_bundle_from_archetype
         let new_archetype = unsafe { archetypes.get_unchecked_mut(new_archetype_id) };
 
-        let new_entity_location = if old_table_id == new_archetype.table_id() {
+        let new_location = if old_table_id == new_archetype.table_id() {
             unsafe { new_archetype.allocate(entity, old_table_row) }
         } else {
             // SAFE: tables stored in archetypes always exist and table ids are different
@@ -263,8 +273,7 @@ impl<'w> EntityMut<'w> {
                 unsafe { old_table.move_to_and_forget_missing_unchecked(old_table_row, new_table) };
 
             // SAFE: new_table_row is a valid position in new_archetype's table
-            let new_entity_location =
-                unsafe { new_archetype.allocate(entity, move_result.new_row) };
+            let new_location = unsafe { new_archetype.allocate(entity, move_result.new_row) };
 
             // if an entity was moved into this entity's table spot, update its table row
             if let Some(swapped_entity) = move_result.swapped_entity {
@@ -277,11 +286,11 @@ impl<'w> EntityMut<'w> {
                 };
             }
 
-            new_entity_location
+            new_location
         };
 
-        self.location = new_entity_location;
-        entities.meta[self.entity.id as usize].location = new_entity_location;
+        self.location = new_location;
+        entities.meta[self.entity.id as usize].location = new_location;
 
         Some(result)
     }
@@ -308,7 +317,12 @@ impl<'w> EntityMut<'w> {
         {
             // SAFE: entity is live and is contained in an archetype that exists
             let archetype = unsafe { world.archetypes.get_unchecked_mut(location.archetype_id) };
-            table_row = archetype.swap_remove(location.index);
+            let remove_result = archetype.swap_remove(location.index);
+            if let Some(swapped_entity) = remove_result.swapped_entity {
+                // SAFE: entity is live and is contained in an archetype that exists
+                world.entities.meta[swapped_entity.id as usize].location = location;
+            }
+            table_row = remove_result.table_row;
 
             // SAFE: tables stored in archetypes always exist
             let table = unsafe {
@@ -336,7 +350,10 @@ impl<'w> EntityMut<'w> {
                 let archetype = world
                     .archetypes
                     .get_unchecked_mut(moved_location.archetype_id);
-                archetype.set_entity_table_row_unchecked(moved_location.index, table_row);
+                archetype.set_entity_table_row_unchecked(
+                    moved_location.index,
+                    table_row,
+                );
             };
         }
     }
