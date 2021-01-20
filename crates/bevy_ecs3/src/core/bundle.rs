@@ -20,7 +20,7 @@ pub trait Bundle: DynamicBundle {
     fn static_type_info() -> Vec<TypeInfo>;
 
     /// Calls `func`, which should return data for each component in the bundle, in the order of this bundle's Components
-    unsafe fn get(func: impl FnMut() -> Option<NonNull<u8>>) -> Option<Self>
+    unsafe fn get(func: impl FnMut() -> *mut u8) -> Self
     where
         Self: Sized;
 }
@@ -48,12 +48,12 @@ macro_rules! tuple_impl {
             }
 
             #[allow(unused_variables, unused_mut)]
-            unsafe fn get(mut func: impl FnMut() -> Option<NonNull<u8>>) -> Option<Self> {
+            unsafe fn get(mut func: impl FnMut() -> *mut u8) -> Self {
                 #[allow(non_snake_case)]
                 let ($(mut $name,)*) = (
-                    $(func()?.as_ptr().cast::<$name>(),)*
+                    $(func().cast::<$name>(),)*
                 );
-                Some(($($name.read(),)*))
+                ($($name.read(),)*)
             }
         }
     }
@@ -95,7 +95,7 @@ impl Bundles {
         components: &mut Components,
         bundle: &T,
     ) -> &BundleInfo {
-        let mut bundle_infos = &mut self.bundle_infos;
+        let bundle_infos = &mut self.bundle_infos;
         let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
             let type_info = bundle.type_info();
             let id = BundleId(bundle_infos.len());
@@ -108,7 +108,7 @@ impl Bundles {
     }
 
     pub(crate) fn get_info<T: Bundle>(&mut self, components: &mut Components) -> &BundleInfo {
-        let mut bundle_infos = &mut self.bundle_infos;
+        let bundle_infos = &mut self.bundle_infos;
         let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
             let type_info = T::static_type_info();
             let id = BundleId(bundle_infos.len());

@@ -37,6 +37,11 @@ impl Default for Tables {
     }
 }
 
+pub struct MoveResult {
+    pub swapped_entity: Option<Entity>,
+    pub new_row: usize,
+}
+
 impl Tables {
     #[inline]
     pub unsafe fn get_unchecked_mut(&mut self, id: TableId) -> &mut Table {
@@ -150,32 +155,54 @@ impl Table {
     }
 
     /// Moves the `row` column values to `new_table`, for the columns shared between both tables. Returns the index of the
-    /// new row in `new_table`.
-    /// SAFETY: row must be in-bounds
-    pub unsafe fn move_to(&mut self, row: usize, new_table: &mut Table, mut missing_column_fn: impl FnMut(&mut Column)) -> usize {
+    /// new row in `new_table` and the entity in this table swapped in to replace it (if an entity was swapped in).
+    /// SAFETY: row must be in-bounds. missing columns will be "forgotten". it is the caller's responsibility to drop it
+    pub unsafe fn move_to_and_forget_missing_unchecked(
+        &mut self,
+        row: usize,
+        new_table: &mut Table,
+    ) -> MoveResult {
+        let is_last = row == self.entities.len() - 1;
         let new_row = new_table.allocate(self.entities.swap_remove(row));
         for column in self.columns.values_mut() {
+            let data = column.data.swap_remove_and_forget_unchecked(row);
             if let Some(new_column) = new_table.get_column_mut(column.component_id) {
-                let data = column.data.swap_remove_and_forget_unchecked(row);
                 new_column.set_unchecked(new_row, data);
-            } else {
-                missing_column_fn(column);
             }
         }
-         new_row
+        MoveResult {
+            new_row,
+            swapped_entity: if is_last {
+                None
+            } else {
+                Some(self.entities[row])
+            },
+        }
     }
 
     /// Moves the `row` column values to `new_table`, for the columns shared between both tables. Returns the index of the
-    /// new row in `new_table`.
+    /// new row in `new_table` and the entity in this table swapped in to replace it (if an entity was swapped in).
     /// SAFETY: `row` must be in-bounds. `new_table` must contain every component this table has
-    pub unsafe fn move_to_superset_unchecked(&mut self, row: usize, new_table: &mut Table) -> usize {
+    pub unsafe fn move_to_superset_unchecked(
+        &mut self,
+        row: usize,
+        new_table: &mut Table,
+    ) -> MoveResult {
+        let is_last = row == self.entities.len() - 1;
         let new_row = new_table.allocate(self.entities.swap_remove(row));
         for column in self.columns.values_mut() {
             let new_column = new_table.get_column_unchecked_mut(column.component_id);
             let data = column.data.swap_remove_and_forget_unchecked(row);
             new_column.set_unchecked(new_row, data);
         }
-        new_row
+        MoveResult {
+            new_row,
+            swapped_entity: if is_last {
+                None
+            } else {
+                Some(self.entities[row])
+            },
+        }
     }
 
     /// SAFETY: a column with the given `component_id` must exist

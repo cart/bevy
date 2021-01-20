@@ -146,23 +146,6 @@ mod tests {
     //     assert!(ents.contains(&(f, Some(true), 456)));
     // }
 
-    // #[test]
-    // fn build_entity() {
-    //     let mut world = World::new();
-    //     let mut entity = EntityBuilder::new();
-    //     entity.add("abc");
-    //     entity.add(123);
-    //     let e = world.spawn(entity.build());
-    //     entity.add("def");
-    //     entity.add([0u8; 1024]);
-    //     entity.add(456);
-    //     let f = world.spawn(entity.build());
-    //     assert_eq!(*world.get::<&str>(e).unwrap(), "abc");
-    //     assert_eq!(*world.get::<i32>(e).unwrap(), 123);
-    //     assert_eq!(*world.get::<&str>(f).unwrap(), "def");
-    //     assert_eq!(*world.get::<i32>(f).unwrap(), 456);
-    // }
-
     #[test]
     fn dynamic_components() {
         let mut world = World::new();
@@ -191,16 +174,16 @@ mod tests {
             &[(e, true, "abc")]
         );
     }
-    // #[test]
-    // #[cfg_attr(miri, ignore)]
-    // fn spawn_many() {
-    //     let mut world = World::new();
-    //     const N: u32 = 100_000;
-    //     for _ in 0..N {
-    //         world.spawn((42u128,));
-    //     }
-    //     assert_eq!(world.entities().len(), N);
-    // }
+
+    #[test]
+    fn spawn_many() {
+        let mut world = World::new();
+        const N: u32 = 100_000;
+        for _ in 0..N {
+            world.spawn().insert(42u128);
+        }
+        assert_eq!(world.entities().len(), N);
+    }
 
     // #[test]
     // fn clear() {
@@ -211,12 +194,12 @@ mod tests {
     //     assert_eq!(world.entities().len(), 0);
     // }
 
-    // #[test]
-    // fn remove_missing() {
-    //     let mut world = World::new();
-    //     let e = world.spawn(("abc", 123));
-    //     assert!(world.remove_one::<bool>(e).is_err());
-    // }
+    #[test]
+    fn remove_missing() {
+        let mut world = World::new();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        assert!(world.entity_mut(e).unwrap().remove::<bool>().is_none());
+    }
 
     // #[test]
     // fn query_batched() {

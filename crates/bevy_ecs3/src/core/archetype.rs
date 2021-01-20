@@ -35,7 +35,7 @@ impl ArchetypeId {
 #[derive(Default)]
 pub struct Edges {
     pub add_bundle: SparseArray<BundleId, ArchetypeId>,
-    pub remove_bundle: SparseArray<BundleId, ArchetypeId>,
+    pub remove_bundle: SparseArray<BundleId, Option<ArchetypeId>>,
 }
 
 impl Edges {
@@ -47,6 +47,16 @@ impl Edges {
     #[inline]
     pub fn set_add_bundle(&mut self, bundle_id: BundleId, archetype_id: ArchetypeId) {
         self.add_bundle.insert(bundle_id, archetype_id);
+    }
+
+    #[inline]
+    pub fn get_remove_bundle(&self, bundle_id: BundleId) -> Option<Option<ArchetypeId>> {
+        self.remove_bundle.get(bundle_id).cloned()
+    }
+
+    #[inline]
+    pub fn set_remove_bundle(&mut self, bundle_id: BundleId, archetype_id: Option<ArchetypeId>) {
+        self.remove_bundle.insert(bundle_id, archetype_id);
     }
 }
 
@@ -248,13 +258,6 @@ impl Archetypes {
     #[inline]
     pub(crate) fn get_mut(&mut self, id: ArchetypeId) -> Option<&mut Archetype> {
         self.archetypes.get_mut(id.0 as usize)
-    }
-
-    /// SAFETY: `a` and `b` must both be valid archetypes and they _must_ be different
-    #[inline]
-    pub(crate) unsafe fn get_2_mut_unchecked(&mut self, a: ArchetypeId, b: ArchetypeId) -> (&mut Archetype, &mut Archetype) {
-        let ptr = self.archetypes.as_mut_ptr();
-        (&mut *ptr.add(a.index() as usize), &mut *ptr.add(b.index() as usize))
     }
 
     #[inline]
