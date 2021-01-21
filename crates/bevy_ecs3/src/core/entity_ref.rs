@@ -128,14 +128,9 @@ impl<'w> EntityMut<'w> {
                         // PERF: entity is guaranteed to exist. we could skip a check here
                         let swapped_location = entities.get(swapped_entity).unwrap();
                         // SAFE: entity is live and is contained in an archetype that exists
-                        unsafe {
-                            let archetype =
-                                archetypes.get_unchecked_mut(swapped_location.archetype_id);
-                            archetype.set_entity_table_row_unchecked(
-                                swapped_location.index,
-                                old_table_row,
-                            );
-                        };
+                        let archetype = archetypes.get_unchecked_mut(swapped_location.archetype_id);
+                        archetype
+                            .set_entity_table_row_unchecked(swapped_location.index, old_table_row);
                     }
                     new_location
                 }
@@ -334,7 +329,7 @@ unsafe fn get_component(
     entity: Entity,
     location: EntityLocation,
 ) -> Option<*mut u8> {
-    let archetype = unsafe { world.archetypes.get_unchecked(location.archetype_id) };
+    let archetype = world.archetypes.get_unchecked(location.archetype_id);
     // SAFE: component_id exists and is therefore valid
     let component_info = world.components.get_info_unchecked(component_id);
     match component_info.storage_type() {

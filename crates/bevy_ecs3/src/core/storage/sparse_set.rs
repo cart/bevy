@@ -1,4 +1,4 @@
-use crate::core::{BlobVec, ComponentFlags, ComponentId, ComponentInfo, Entity, TypeInfo};
+use crate::core::{BlobVec, ComponentId, ComponentInfo, Entity};
 use std::{alloc::Layout, cell::UnsafeCell, marker::PhantomData};
 
 #[derive(Debug)]

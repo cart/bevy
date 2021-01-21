@@ -1,10 +1,6 @@
 use crate::core::{ComponentFlags, Archetype, Bundle, Component};
 use std::{any::TypeId, marker::PhantomData, ptr::NonNull};
 
-/// This is used to prevent adding filters to queries where it isn't safe to do so
-/// See [crate::core::QueryIter]
-pub struct FilterLock;
-
 pub trait QueryFilter: Sized {
     type EntityFilter: EntityFilter;
     // fn access() -> QueryAccess;

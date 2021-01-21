@@ -1,26 +1,33 @@
 use crate::{
     core::{
         Archetype, ArchetypeGeneration, ArchetypeId, Archetypes, Component, ComponentId,
-        ComponentSparseSet, Entity, EntityFilter, FilterLock, Mut, QueryFilter, StorageType,
-        Storages, Tables, World,
+        ComponentSparseSet, Entity, EntityFilter, Mut, QueryFilter, StorageType, Table, TableId,
+        Tables, World,
     },
     smaller_tuples_too,
 };
 use fixedbitset::{FixedBitSet, Ones};
-use std::{any::TypeId, marker::PhantomData, ops::Range, ptr::NonNull};
+use std::{
+    any::TypeId,
+    ops::Range,
+    ptr::{self, NonNull},
+};
 
 pub trait WorldQuery {
     type Fetch: for<'a> Fetch<'a>;
 }
 
-// TODO: this should iterate tables instead of archetypes
 pub trait Fetch<'w>: Sized {
     const DANGLING: Self;
     type Item;
     unsafe fn init(world: &World) -> Option<Self>;
     fn matches_archetype(&self, archetype: &Archetype) -> bool;
+
+    unsafe fn next_table(&mut self, table: &Table);
+    unsafe fn table_fetch(&mut self, table_index: usize) -> Option<Self::Item>;
+
     unsafe fn next_archetype(&mut self, archetype: &Archetype);
-    unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item;
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item;
 }
 
 /// A fetch that is read only. This should only be implemented for read-only fetches.
@@ -28,14 +35,14 @@ pub unsafe trait ReadOnlyFetch {}
 
 pub struct QueryState {
     archetype_generation: ArchetypeGeneration,
-    matched_archetypes: FixedBitSet,
+    matched_tables: FixedBitSet,
 }
 
 impl Default for QueryState {
     fn default() -> Self {
         Self {
             archetype_generation: ArchetypeGeneration::new(usize::MAX),
-            matched_archetypes: FixedBitSet::default(),
+            matched_tables: FixedBitSet::default(),
         }
     }
 }
@@ -48,7 +55,6 @@ impl QueryState {
         if old_generation == self.archetype_generation {
             0..0
         } else {
-            self.matched_archetypes.grow(archetypes.len());
             if old_generation.value() == usize::MAX {
                 0..archetypes.len()
             } else {
@@ -58,17 +64,17 @@ impl QueryState {
     }
 }
 
-pub struct QueryIter<'w, Q: WorldQuery, F: QueryFilter, FilterLock> {
+pub struct QueryIter<'w, Q: WorldQuery, F: QueryFilter> {
     archetypes: &'w Archetypes,
+    tables: &'w Tables,
     current_archetype: ArchetypeId,
     fetch: Q::Fetch,
     filter: F::EntityFilter,
     archetype_len: usize,
     archetype_index: usize,
-    marker: PhantomData<FilterLock>,
 }
 
-impl<'w, Q: WorldQuery, F: QueryFilter, FilterLock> QueryIter<'w, Q, F, FilterLock> {
+impl<'w, Q: WorldQuery, F: QueryFilter> QueryIter<'w, Q, F> {
     pub unsafe fn new(world: &'w World) -> Self {
         let (fetch, current_archetype) = if let Some(fetch) = <Q::Fetch as Fetch>::init(world) {
             (fetch, ArchetypeId::new(0))
@@ -82,11 +88,11 @@ impl<'w, Q: WorldQuery, F: QueryFilter, FilterLock> QueryIter<'w, Q, F, FilterLo
         QueryIter {
             fetch,
             current_archetype,
-            archetypes: world.archetypes(),
+            archetypes: &world.archetypes,
+            tables: &world.storages.tables,
             filter: <F::EntityFilter as EntityFilter>::DANGLING,
             archetype_len: 0,
             archetype_index: 0,
-            marker: Default::default(),
         }
     }
 
@@ -95,46 +101,25 @@ impl<'w, Q: WorldQuery, F: QueryFilter, FilterLock> QueryIter<'w, Q, F, FilterLo
         self,
         query_state: &'s mut QueryState,
     ) -> StatefulQueryIter<'w, 's, Q, F> {
-        let fetch = self.fetch;
-        let archetypes = self.archetypes;
-        let archetype_indices = query_state.update_archetypes(archetypes);
-        for archetype_index in archetype_indices {
-            // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
-            if fetch.matches_archetype(
-                archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32)),
-            ) {
-                query_state.matched_archetypes.set(archetype_index, true);
-            }
-        }
-
-        StatefulQueryIter {
-            fetch,
-            archetypes,
-            filter: <F::EntityFilter as EntityFilter>::DANGLING,
-            archetype_id_iter: query_state.matched_archetypes.ones(),
-            archetype_len: 0,
-            archetype_index: 0,
-        }
+        StatefulQueryIter::new_internal(self.archetypes, self.tables, self.fetch, query_state)
     }
 }
 
-impl<'w, Q: WorldQuery> QueryIter<'w, Q, (), ()> {
-    pub fn filter<F: QueryFilter>(self) -> QueryIter<'w, Q, F, FilterLock> {
+impl<'w, Q: WorldQuery> QueryIter<'w, Q, ()> {
+    pub fn filter<F: QueryFilter>(self) -> QueryIter<'w, Q, F> {
         QueryIter {
             fetch: self.fetch,
             current_archetype: self.current_archetype,
             archetypes: self.archetypes,
+            tables: self.tables,
             filter: <F::EntityFilter as EntityFilter>::DANGLING,
             archetype_len: self.archetype_len,
             archetype_index: self.archetype_index,
-            marker: Default::default(),
         }
     }
 }
 
-impl<'w, 's, Q: WorldQuery, F: QueryFilter, FilterLock> Iterator
-    for QueryIter<'w, Q, F, FilterLock>
-{
+impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, Q, F> {
     type Item = <Q::Fetch as Fetch<'w>>::Item;
 
     #[inline]
@@ -156,7 +141,7 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter, FilterLock> Iterator
                     continue;
                 }
 
-                let item = self.fetch.fetch(self.archetype_index);
+                let item = self.fetch.archetype_fetch(self.archetype_index);
                 self.archetype_index += 1;
                 return Some(item);
             }
@@ -165,40 +150,56 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter, FilterLock> Iterator
 }
 
 pub struct StatefulQueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
-    archetypes: &'w Archetypes,
-    archetype_id_iter: Ones<'s>,
+    tables: &'w Tables,
+    // TODO: try using a Vec here instead
+    table_id_iter: Ones<'s>,
     fetch: Q::Fetch,
     filter: F::EntityFilter,
-    archetype_len: usize,
-    archetype_index: usize,
+    table_len: usize,
+    table_index: usize,
 }
 
 impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
     pub unsafe fn new(world: &'w World, query_state: &'s mut QueryState) -> Self {
-        let archetypes = world.archetypes();
         let fetch = if let Some(fetch) = <Q::Fetch as Fetch>::init(world) {
-            let archetype_indices = query_state.update_archetypes(archetypes);
-            for archetype_index in archetype_indices {
-                // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
-                if fetch.matches_archetype(
-                    archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32)),
-                ) {
-                    query_state.matched_archetypes.set(archetype_index, true);
-                }
-            }
             fetch
         } else {
-            query_state.matched_archetypes.clear();
+            query_state.matched_tables.clear();
             // could not fetch. this iterator will return None
             <Q::Fetch as Fetch>::DANGLING
         };
+        StatefulQueryIter::new_internal(
+            &world.archetypes,
+            &world.storages.tables,
+            fetch,
+            query_state,
+        )
+    }
+
+    unsafe fn new_internal(
+        archetypes: &'w Archetypes,
+        tables: &'w Tables,
+        fetch: Q::Fetch,
+        query_state: &'s mut QueryState,
+    ) -> Self {
+        query_state.matched_tables.grow(tables.len());
+        let archetype_indices = query_state.update_archetypes(archetypes);
+        for archetype_index in archetype_indices {
+            let archetype = archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32));
+            // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
+            if fetch.matches_archetype(archetype) {
+                query_state
+                    .matched_tables
+                    .set(archetype.table_id().index(), true);
+            }
+        }
         StatefulQueryIter {
             fetch,
-            archetypes,
+            tables,
             filter: <F::EntityFilter as EntityFilter>::DANGLING,
-            archetype_id_iter: query_state.matched_archetypes.ones(),
-            archetype_len: 0,
-            archetype_index: 0,
+            table_id_iter: query_state.matched_tables.ones(),
+            table_len: 0,
+            table_index: 0,
         }
     }
 }
@@ -210,18 +211,21 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for StatefulQueryIter<'w, '
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
             loop {
-                if self.archetype_index == self.archetype_len {
-                    let archetype_id = ArchetypeId::new(self.archetype_id_iter.next()? as u32);
-                    let archetype = self.archetypes.get_unchecked(archetype_id);
-                    self.fetch.next_archetype(archetype);
-                    self.archetype_len = archetype.len();
-                    self.archetype_index = 0;
+                if self.table_index == self.table_len {
+                    let archetype_id = TableId::new(self.table_id_iter.next()?);
+                    let table = self.tables.get_unchecked(archetype_id);
+                    self.fetch.next_table(table);
+                    self.table_len = table.len();
+                    self.table_index = 0;
                     continue;
                 }
 
-                let item = self.fetch.fetch(self.archetype_index);
-                self.archetype_index += 1;
-                return Some(item);
+                let item = self.fetch.table_fetch(self.table_index);
+                self.table_index += 1;
+                if item.is_none() {
+                    continue;
+                }
+                return item;
             }
         }
     }
@@ -253,12 +257,22 @@ impl<'w> Fetch<'w> for FetchEntity {
     }
 
     #[inline]
+    unsafe fn next_table(&mut self, table: &Table) {
+        self.entities = table.entities().as_ptr();
+    }
+
+    #[inline]
     unsafe fn next_archetype(&mut self, archetype: &Archetype) {
         self.entities = archetype.entities().as_ptr();
     }
 
     #[inline]
-    unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
+    unsafe fn table_fetch(&mut self, table_index: usize) -> Option<Self::Item> {
+        Some(*self.entities.add(table_index))
+    }
+
+    #[inline]
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
         *self.entities.add(archetype_index)
     }
 }
@@ -288,7 +302,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     const DANGLING: Self = Self::Table {
         component_id: ComponentId::new(usize::MAX),
         components: NonNull::dangling(),
-        tables: std::ptr::null::<Tables>(),
+        tables: ptr::null::<Tables>(),
     };
 
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
@@ -321,26 +335,53 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     }
 
     #[inline]
+    unsafe fn next_table(&mut self, table: &Table) {
+        match self {
+            Self::Table {
+                component_id,
+                components,
+                ..
+            } => {
+                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
+            }
+            Self::SparseSet { entities, .. } => *entities = table.entities().as_ptr(),
+        }
+    }
+
+    #[inline]
+    unsafe fn table_fetch(&mut self, table_index: usize) -> Option<Self::Item> {
+        match self {
+            Self::Table { components, .. } => Some(&*components.as_ptr().add(table_index)),
+            Self::SparseSet {
+                entities,
+                sparse_set,
+                ..
+            } => {
+                let entity = *entities.add(table_index);
+                (**sparse_set)
+                    .get_component(entity)
+                    .map(|c| &*c.cast::<T>())
+            }
+        }
+    }
+
+    #[inline]
     unsafe fn next_archetype(&mut self, archetype: &Archetype) {
         match self {
             Self::Table {
                 component_id,
                 components,
                 tables,
-                ..
             } => {
-                *components = (&**tables)
-                    .get_unchecked(archetype.table_id())
-                    .get_column_unchecked(*component_id)
-                    .data()
-                    .cast::<T>();
+                let table = (&**tables).get_unchecked(archetype.table_id());
+                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
             }
             Self::SparseSet { entities, .. } => *entities = archetype.entities().as_ptr(),
         }
     }
 
     #[inline]
-    unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
         match self {
             Self::Table { components, .. } => &*components.as_ptr().add(archetype_index),
             Self::SparseSet {
@@ -380,7 +421,7 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     const DANGLING: Self = Self::Table {
         component_id: ComponentId::new(usize::MAX),
         components: NonNull::dangling(),
-        tables: std::ptr::null::<Tables>(),
+        tables: ptr::null::<Tables>(),
     };
 
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
@@ -413,26 +454,55 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     }
 
     #[inline]
+    unsafe fn next_table(&mut self, table: &Table) {
+        match self {
+            Self::Table {
+                component_id,
+                components,
+                ..
+            } => {
+                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
+            }
+            Self::SparseSet { entities, .. } => *entities = table.entities().as_ptr(),
+        }
+    }
+
+    #[inline]
+    unsafe fn table_fetch(&mut self, archetype_index: usize) -> Option<Self::Item> {
+        match self {
+            Self::Table { components, .. } => Some(Mut {
+                value: &mut *components.as_ptr().add(archetype_index),
+            }),
+            Self::SparseSet {
+                entities,
+                sparse_set,
+                ..
+            } => {
+                let entity = *entities.add(archetype_index);
+                (**sparse_set).get_component(entity).map(|c| Mut {
+                    value: &mut *c.cast::<T>(),
+                })
+            }
+        }
+    }
+
+    #[inline]
     unsafe fn next_archetype(&mut self, archetype: &Archetype) {
         match self {
             Self::Table {
                 component_id,
                 components,
                 tables,
-                ..
             } => {
-                *components = (&**tables)
-                    .get_unchecked(archetype.table_id())
-                    .get_column_unchecked(*component_id)
-                    .data()
-                    .cast::<T>();
+                let table = (&**tables).get_unchecked(archetype.table_id());
+                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
             }
             Self::SparseSet { entities, .. } => *entities = archetype.entities().as_ptr(),
         }
     }
 
     #[inline]
-    unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
         match self {
             Self::Table { components, .. } => Mut {
                 value: &mut *components.as_ptr().add(archetype_index),
@@ -473,6 +543,13 @@ macro_rules! tuple_impl {
 
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
+            unsafe fn next_table(&mut self, table: &Table) {
+                let ($($name,)*) = self;
+                $($name.next_table(table);)*
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
             unsafe fn next_archetype(&mut self, archetype: &Archetype) {
                 let ($($name,)*) = self;
                 $($name.next_archetype(archetype);)*
@@ -481,9 +558,17 @@ macro_rules! tuple_impl {
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
             #[inline]
-            unsafe fn fetch(&mut self, archetype_index: usize) -> Self::Item {
+            unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
                 let ($($name,)*) = self;
-                ($($name.fetch(archetype_index),)*)
+                ($($name.archetype_fetch(archetype_index),)*)
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            #[inline]
+            unsafe fn table_fetch(&mut self, table_index: usize) -> Option<Self::Item> {
+                let ($($name,)*) = self;
+                Some(($($name.table_fetch(table_index)?,)*))
             }
         }
 

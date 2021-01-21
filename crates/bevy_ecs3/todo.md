@@ -27,6 +27,8 @@
 
 ## TODO
 
+* try removing pre-hash in favor of non-owned get (to allow collision resolution)
+* consider removing Vec{Entity} from Archetype. tables store that data redundantly?
 * consider specializing spawn_bundle
 * remove one by one
 * if we roll with componentid graph, set initial table capacity to 0 to cut down on (probably) unused tables

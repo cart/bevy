@@ -1,5 +1,5 @@
 use crate::core::{
-    BundleId, ComponentId, Entity, EntityLocation, SparseArray, StorageType, Storages, TableId,
+    BundleId, ComponentId, Entity, EntityLocation, SparseArray, StorageType, TableId,
 };
 use bevy_utils::AHasher;
 use std::{
@@ -269,22 +269,13 @@ impl Archetypes {
     }
 
     #[inline]
-    pub(crate) fn get_mut(&mut self, id: ArchetypeId) -> Option<&mut Archetype> {
-        self.archetypes.get_mut(id.0 as usize)
-    }
-
-    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &Archetype> {
         self.archetypes.iter()
     }
 
-    #[inline]
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Archetype> {
-        self.archetypes.iter_mut()
-    }
-
     /// Gets the archetype id matching the given inputs or inserts a new one if it doesn't exist.
     /// `table_components` and `sparse_set_components` must be sorted
+    /// SAFETY: TableId must exist in tables
     pub(crate) fn get_id_or_insert(
         &mut self,
         table_id: TableId,

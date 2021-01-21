@@ -1,4 +1,6 @@
-use crate::core::{BlobVec, ComponentId, ComponentInfo, Components, Entity, SparseSet};
+use crate::core::{
+    ArchetypeId, BlobVec, ComponentId, ComponentInfo, Components, Entity, SparseSet,
+};
 use bevy_utils::{AHasher, HashMap};
 use std::hash::{Hash, Hasher};
 
@@ -6,6 +8,11 @@ use std::hash::{Hash, Hasher};
 pub struct TableId(usize);
 
 impl TableId {
+    #[inline]
+    pub fn new(index: usize) -> Self {
+        TableId(index)
+    }
+
     #[inline]
     pub fn index(&self) -> usize {
         self.0
@@ -43,6 +50,11 @@ pub struct TableMoveResult {
 }
 
 impl Tables {
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.tables.len()
+    }
+
     #[inline]
     pub unsafe fn get_unchecked_mut(&mut self, id: TableId) -> &mut Table {
         self.tables.get_unchecked_mut(id.index())
@@ -95,6 +107,7 @@ impl Tables {
 pub struct Table {
     columns: SparseSet<ComponentId, Column>,
     entities: Vec<Entity>,
+    archetypes: Vec<ArchetypeId>,
     grow_amount: usize,
     capacity: usize,
 }
@@ -104,6 +117,7 @@ impl Table {
         Self {
             columns: SparseSet::new(column_capacity),
             entities: Vec::with_capacity(capacity),
+            archetypes: Vec::new(),
             grow_amount,
             capacity,
         }
@@ -112,6 +126,10 @@ impl Table {
     #[inline]
     pub fn entities(&self) -> &[Entity] {
         &self.entities
+    }
+
+    pub fn add_archetype(&mut self, archetype_id: ArchetypeId) {
+        self.archetypes.push(archetype_id);
     }
 
     pub fn add_column(&mut self, component_info: &ComponentInfo) {
