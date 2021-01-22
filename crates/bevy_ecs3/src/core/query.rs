@@ -6,7 +6,6 @@ use crate::{
     },
     smaller_tuples_too,
 };
-use fixedbitset::{FixedBitSet, Ones};
 use std::{
     any::TypeId,
     ops::Range,
@@ -623,6 +622,7 @@ macro_rules! tuple_impl {
 
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
+            #[inline]
             unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
                 let ($($name,)*) = self;
                 Some(($($name.try_fetch(index)?,)*))
