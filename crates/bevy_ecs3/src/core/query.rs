@@ -35,14 +35,18 @@ pub unsafe trait ReadOnlyFetch {}
 
 pub struct QueryState {
     archetype_generation: ArchetypeGeneration,
-    matched_tables: FixedBitSet,
+    // TODO: re-add this for scheduler?
+    // matched_tables: FixedBitSet,
+    // NOTE: we maintain both a TableId bitset and a vec because iterating the vec is faster
+    matched_table_ids: Vec<TableId>,
 }
 
 impl Default for QueryState {
     fn default() -> Self {
         Self {
             archetype_generation: ArchetypeGeneration::new(usize::MAX),
-            matched_tables: FixedBitSet::default(),
+            // matched_tables: FixedBitSet::default(),
+            matched_table_ids: Vec::new(),
         }
     }
 }
@@ -152,7 +156,7 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, Q, F> {
 pub struct StatefulQueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
     tables: &'w Tables,
     // TODO: try using a Vec here instead
-    table_id_iter: Ones<'s>,
+    table_id_iter: std::slice::Iter<'s, TableId>,
     fetch: Q::Fetch,
     filter: F::EntityFilter,
     table_len: usize,
@@ -164,7 +168,9 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
         let fetch = if let Some(fetch) = <Q::Fetch as Fetch>::init(world) {
             fetch
         } else {
-            query_state.matched_tables.clear();
+            // TODO: re-enable this for scheduler?
+            // query_state.matched_tables.clear();
+            query_state.matched_table_ids.clear();
             // could not fetch. this iterator will return None
             <Q::Fetch as Fetch>::DANGLING
         };
@@ -182,22 +188,25 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
         fetch: Q::Fetch,
         query_state: &'s mut QueryState,
     ) -> Self {
-        query_state.matched_tables.grow(tables.len());
+        // TODO: re-enable this for scheduler?
+        // query_state.matched_tables.grow(tables.len());
         let archetype_indices = query_state.update_archetypes(archetypes);
         for archetype_index in archetype_indices {
             let archetype = archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32));
             // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
             if fetch.matches_archetype(archetype) {
-                query_state
-                    .matched_tables
-                    .set(archetype.table_id().index(), true);
+                // TODO: re-enable this for scheduler?
+                // query_state
+                //     .matched_tables
+                //     .set(archetype.table_id().index(), true);
+                query_state.matched_table_ids.push(archetype.table_id());
             }
         }
         StatefulQueryIter {
             fetch,
             tables,
             filter: <F::EntityFilter as EntityFilter>::DANGLING,
-            table_id_iter: query_state.matched_tables.ones(),
+            table_id_iter: query_state.matched_table_ids.iter(),
             table_len: 0,
             table_index: 0,
         }
@@ -212,8 +221,8 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for StatefulQueryIter<'w, '
         unsafe {
             loop {
                 if self.table_index == self.table_len {
-                    let archetype_id = TableId::new(self.table_id_iter.next()?);
-                    let table = self.tables.get_unchecked(archetype_id);
+                    let table_id = self.table_id_iter.next()?;
+                    let table = self.tables.get_unchecked(*table_id);
                     self.fetch.next_table(table);
                     self.table_len = table.len();
                     self.table_index = 0;
@@ -543,6 +552,7 @@ macro_rules! tuple_impl {
 
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
+            #[inline]
             unsafe fn next_table(&mut self, table: &Table) {
                 let ($($name,)*) = self;
                 $($name.next_table(table);)*
@@ -550,6 +560,7 @@ macro_rules! tuple_impl {
 
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
+            #[inline]
             unsafe fn next_archetype(&mut self, archetype: &Archetype) {
                 let ($($name,)*) = self;
                 $($name.next_archetype(archetype);)*
