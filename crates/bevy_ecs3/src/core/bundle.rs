@@ -1,4 +1,7 @@
-use crate::{core::{Component, ComponentId, Components, SparseSetIndex, TypeInfo}, smaller_tuples_too};
+use crate::{
+    core::{Component, ComponentId, Components, SparseSetIndex, TypeInfo},
+    smaller_tuples_too,
+};
 use std::{any::TypeId, collections::HashMap, ptr::NonNull};
 
 /// A dynamically typed ordered collection of components
@@ -84,13 +87,23 @@ pub struct BundleInfo {
 }
 
 #[derive(Default)]
-pub(crate) struct Bundles {
+pub struct Bundles {
     bundle_infos: Vec<BundleInfo>,
     bundle_ids: HashMap<TypeId, BundleId>,
 }
 
 impl Bundles {
-    pub(crate) fn get_info_dynamic<T: DynamicBundle>(
+    #[inline]
+    pub fn get(&self, bundle_id: BundleId) -> Option<&BundleInfo> {
+        self.bundle_infos.get(bundle_id.index())
+    }
+
+    #[inline]
+    pub fn get_id(&self, type_id: TypeId) -> Option<BundleId> {
+        self.bundle_ids.get(&type_id).cloned()
+    }
+
+    pub(crate) fn init_info_dynamic<T: DynamicBundle>(
         &mut self,
         components: &mut Components,
         bundle: &T,
@@ -107,7 +120,7 @@ impl Bundles {
         unsafe { self.bundle_infos.get_unchecked(id.0) }
     }
 
-    pub(crate) fn get_info<T: Bundle>(&mut self, components: &mut Components) -> &BundleInfo {
+    pub(crate) fn init_info<T: Bundle>(&mut self, components: &mut Components) -> &BundleInfo {
         let bundle_infos = &mut self.bundle_infos;
         let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
             let type_info = T::static_type_info();

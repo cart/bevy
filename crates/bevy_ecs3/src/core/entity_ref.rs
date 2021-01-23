@@ -83,7 +83,7 @@ impl<'w> EntityMut<'w> {
         let components = &mut self.world.components;
         let storages = &mut self.world.storages;
 
-        let bundle_info = self.world.bundles.get_info_dynamic(components, &bundle);
+        let bundle_info = self.world.bundles.init_info_dynamic(components, &bundle);
         let current_location = self.location;
 
         let new_location = unsafe {
@@ -176,7 +176,7 @@ impl<'w> EntityMut<'w> {
         let components = &mut self.world.components;
         let entities = &mut self.world.entities;
 
-        let bundle_info = self.world.bundles.get_info::<T>(components);
+        let bundle_info = self.world.bundles.init_info::<T>(components);
         let old_location = self.location;
         let new_archetype_id = unsafe {
             remove_bundle_from_archetype(

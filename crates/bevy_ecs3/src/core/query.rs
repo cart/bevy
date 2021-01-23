@@ -1,8 +1,7 @@
 use crate::{
     core::{
         Archetype, ArchetypeGeneration, ArchetypeId, Archetypes, Component, ComponentId,
-        ComponentSparseSet, Entity, EntityFilter, Mut, QueryFilter, StorageType, Table, TableId,
-        Tables, World,
+        ComponentSparseSet, Entity, Mut, QueryFilter, StorageType, Table, TableId, Tables, World,
     },
     smaller_tuples_too,
 };
@@ -14,11 +13,6 @@ use std::{
 
 pub trait WorldQuery {
     type Fetch: for<'a> Fetch<'a>;
-}
-
-pub enum IterType {
-    Dense,
-    Sparse,
 }
 
 pub trait Fetch<'w>: Sized {
@@ -71,17 +65,37 @@ impl QueryState {
     }
 }
 
+/// Iterates the entities that match a given query.
+/// This iterator is less efficient than StatefulQueryIter. It must scan each archetype to check for a match.
+/// It won't necessarily do a linear scan of Tables, which can affect its cache-friendly.
 pub struct QueryIter<'w, Q: WorldQuery, F: QueryFilter> {
+    world: &'w World,
     archetypes: &'w Archetypes,
     tables: &'w Tables,
     current_archetype: ArchetypeId,
     fetch: Q::Fetch,
-    filter: F::EntityFilter,
+    filter: F,
     archetype_len: usize,
     archetype_index: usize,
 }
 
 impl<'w, Q: WorldQuery, F: QueryFilter> QueryIter<'w, Q, F> {
+    /// SAFETY: ensure that the given `query_state` is only used with this exact [QueryIter] type   
+    pub unsafe fn with_state<'s>(
+        self,
+        query_state: &'s mut QueryState,
+    ) -> StatefulQueryIter<'w, 's, Q, F> {
+        StatefulQueryIter::new_internal(
+            self.archetypes,
+            self.tables,
+            self.fetch,
+            self.filter,
+            query_state,
+        )
+    }
+}
+
+impl<'w, Q: WorldQuery> QueryIter<'w, Q, ()> {
     pub unsafe fn new(world: &'w World) -> Self {
         let (fetch, current_archetype) = if let Some(fetch) = <Q::Fetch as Fetch>::init(world) {
             (fetch, ArchetypeId::new(0))
@@ -93,33 +107,32 @@ impl<'w, Q: WorldQuery, F: QueryFilter> QueryIter<'w, Q, F> {
             )
         };
         QueryIter {
+            world,
             fetch,
             current_archetype,
             archetypes: &world.archetypes,
             tables: &world.storages.tables,
-            filter: <F::EntityFilter as EntityFilter>::DANGLING,
+            filter: <() as QueryFilter>::DANGLING,
             archetype_len: 0,
             archetype_index: 0,
         }
     }
 
-    /// SAFETY: ensure that the given `query_state` is only used with this exact [QueryIter] type   
-    pub unsafe fn with_state<'s>(
-        self,
-        query_state: &'s mut QueryState,
-    ) -> StatefulQueryIter<'w, 's, Q, F> {
-        StatefulQueryIter::new_internal(self.archetypes, self.tables, self.fetch, query_state)
-    }
-}
-
-impl<'w, Q: WorldQuery> QueryIter<'w, Q, ()> {
-    pub fn filter<F: QueryFilter>(self) -> QueryIter<'w, Q, F> {
+    pub fn filter<F: QueryFilter>(mut self) -> QueryIter<'w, Q, F> {
+        let filter = if let Some(filter) = unsafe { F::init(self.world) } {
+            filter
+        } else {
+            self.archetype_index = self.archetype_len;
+            self.current_archetype = ArchetypeId::new(self.world.archetypes().len() as u32);
+            F::DANGLING
+        };
         QueryIter {
+            world: self.world,
             fetch: self.fetch,
             current_archetype: self.current_archetype,
             archetypes: self.archetypes,
             tables: self.tables,
-            filter: <F::EntityFilter as EntityFilter>::DANGLING,
+            filter,
             archetype_len: self.archetype_len,
             archetype_index: self.archetype_index,
         }
@@ -139,12 +152,20 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, Q, F> {
                     }
                     let archetype = self.archetypes.get_unchecked(self.current_archetype);
                     self.current_archetype = ArchetypeId::new(self.current_archetype.index() + 1);
-                    if !self.fetch.matches_archetype(archetype) {
+                    if !self.fetch.matches_archetype(archetype)
+                        || !self.filter.matches_archetype(archetype)
+                    {
                         continue;
                     }
                     self.fetch.next_archetype(archetype);
+                    self.filter.next_archetype(archetype);
                     self.archetype_len = archetype.len();
                     self.archetype_index = 0;
+                    continue;
+                }
+
+                if !self.filter.matches_entity(self.archetype_index as usize) {
+                    self.archetype_index += 1;
                     continue;
                 }
 
@@ -161,26 +182,29 @@ pub struct StatefulQueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
     // TODO: try using a Vec here instead
     table_id_iter: std::slice::Iter<'s, TableId>,
     fetch: Q::Fetch,
-    filter: F::EntityFilter,
+    filter: F,
     table_len: usize,
     table_index: usize,
 }
 
 impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
     pub unsafe fn new(world: &'w World, query_state: &'s mut QueryState) -> Self {
-        let fetch = if let Some(fetch) = <Q::Fetch as Fetch>::init(world) {
-            fetch
+        let fetch = <Q::Fetch as Fetch>::init(world);
+        let filter = F::init(world);
+        let (fetch, filter) = if let (Some(fetch), Some(filter)) = (fetch, filter) {
+            (fetch, filter)
         } else {
             // TODO: re-enable this for scheduler?
             // query_state.matched_tables.clear();
             query_state.matched_table_ids.clear();
             // could not fetch. this iterator will return None
-            <Q::Fetch as Fetch>::DANGLING
+            (<Q::Fetch as Fetch>::DANGLING, F::DANGLING)
         };
         StatefulQueryIter::new_internal(
             &world.archetypes,
             &world.storages.tables,
             fetch,
+            filter,
             query_state,
         )
     }
@@ -189,6 +213,7 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
         archetypes: &'w Archetypes,
         tables: &'w Tables,
         fetch: Q::Fetch,
+        filter: F,
         query_state: &'s mut QueryState,
     ) -> Self {
         // TODO: re-enable this for scheduler?
@@ -197,7 +222,7 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
         for archetype_index in archetype_indices {
             let archetype = archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32));
             // SAFE: ArchetypeGeneration is used to generate the range, and is by definition valid
-            if fetch.matches_archetype(archetype) {
+            if fetch.matches_archetype(archetype) && filter.matches_archetype(archetype) {
                 // TODO: re-enable this for scheduler?
                 // query_state
                 //     .matched_tables
@@ -208,7 +233,7 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
         StatefulQueryIter {
             fetch,
             tables,
-            filter: <F::EntityFilter as EntityFilter>::DANGLING,
+            filter,
             table_id_iter: query_state.matched_table_ids.iter(),
             table_len: 0,
             table_index: 0,
@@ -228,12 +253,19 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for StatefulQueryIter<'w, '
                         let table_id = self.table_id_iter.next()?;
                         let table = self.tables.get_unchecked(*table_id);
                         self.fetch.next_table(table);
+                        self.filter.next_table(table);
                         self.table_len = table.len();
                         self.table_index = 0;
                         continue;
                     }
 
+                    if !self.filter.matches_entity(self.table_index) {
+                        self.table_index += 1;
+                        continue;
+                    }
+
                     let item = self.fetch.fetch(self.table_index);
+
                     self.table_index += 1;
                     return Some(item);
                 }
@@ -243,8 +275,14 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for StatefulQueryIter<'w, '
                         let table_id = self.table_id_iter.next()?;
                         let table = self.tables.get_unchecked(*table_id);
                         self.fetch.next_table(table);
+                        self.filter.next_table(table);
                         self.table_len = table.len();
                         self.table_index = 0;
+                        continue;
+                    }
+
+                    if !self.filter.matches_entity(self.table_index) {
+                        self.table_index += 1;
                         continue;
                     }
 

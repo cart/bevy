@@ -19,7 +19,7 @@ macro_rules! smaller_tuples_too {
 #[cfg(test)]
 mod tests {
     use crate::{
-        core::Entity,
+        core::{Entity, QueryState, With, Without},
         prelude::{ComponentDescriptor, StorageType, World},
     };
 
@@ -130,6 +130,66 @@ mod tests {
             .map(|(e, &b)| (e, b))
             .collect::<Vec<_>>();
         assert_eq!(ents, &[(f, true)]);
+    }
+
+    #[test]
+    fn query_filter_with() {
+        let mut world = World::new();
+        world.spawn().insert_bundle((123u32, 1.0f32));
+        world.spawn().insert(456u32);
+        let result = world
+            .query::<&u32>()
+            .filter::<With<f32>>()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(result, vec![123]);
+    }
+
+    #[test]
+    fn stateful_query_filter_with() {
+        let mut world = World::new();
+        world.spawn().insert_bundle((123u32, 1.0f32));
+        world.spawn().insert(456u32);
+        let mut query_state = QueryState::default();
+        unsafe {
+            let result = world
+                .query::<&u32>()
+                .filter::<With<f32>>()
+                .with_state(&mut query_state)
+                .cloned()
+                .collect::<Vec<_>>();
+            assert_eq!(result, vec![123]);
+        }
+    }
+
+    #[test]
+    fn query_filter_without() {
+        let mut world = World::new();
+        world.spawn().insert_bundle((123u32, 1.0f32));
+        world.spawn().insert(456u32);
+        let result = world
+            .query::<&u32>()
+            .filter::<Without<f32>>()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(result, vec![456]);
+    }
+
+    #[test]
+    fn stateful_query_filter_without() {
+        let mut world = World::new();
+        world.spawn().insert_bundle((123u32, 1.0f32));
+        world.spawn().insert(456u32);
+        let mut query_state = QueryState::default();
+        unsafe {
+            let result = world
+                .query::<&u32>()
+                .filter::<Without<f32>>()
+                .with_state(&mut query_state)
+                .cloned()
+                .collect::<Vec<_>>();
+            assert_eq!(result, vec![456]);
+        }
     }
 
     // #[test]

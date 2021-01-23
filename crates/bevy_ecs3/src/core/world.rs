@@ -45,6 +45,11 @@ impl World {
     }
 
     #[inline]
+    pub fn bundles(&self) -> &Bundles {
+        &self.bundles
+    }
+
+    #[inline]
     pub fn entity(&self, entity: Entity) -> Option<EntityRef> {
         let location = self.entities.get(entity)?;
         Some(EntityRef::new(self, entity, location))
@@ -212,7 +217,7 @@ impl World {
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
     #[inline]
-    pub unsafe fn query_unchecked<Q: WorldQuery, F: QueryFilter>(&self) -> QueryIter<'_, Q, F> {
+    pub unsafe fn query_unchecked<Q: WorldQuery>(&self) -> QueryIter<'_, Q, ()> {
         QueryIter::new(&self)
     }
 
