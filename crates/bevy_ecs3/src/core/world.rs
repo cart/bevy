@@ -104,19 +104,6 @@ impl World {
             .unwrap_or(false)
     }
 
-    /// Efficiently spawn a large number of entities with the same components
-    ///
-    /// Faster than calling `spawn` repeatedly with the same components.
-    ///
-    /// # Example
-    /// ```
-    /// # use bevy_ecs::*;
-    /// let mut world = World::new();
-    /// let entities = world.spawn_batch((0..1_000).map(|i| (i, "abc"))).collect::<Vec<_>>();
-    /// for i in 0..1_000 {
-    ///     assert_eq!(*world.get::<i32>(entities[i]).unwrap(), i as i32);
-    /// }
-    /// ```
     pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
     where
         I: IntoIterator,
@@ -125,30 +112,6 @@ impl World {
         SpawnBatchIter::new(self, iter.into_iter())
     }
 
-    /// Efficiently iterate over all entities that have certain components
-    ///
-    /// Calling `iter` on the returned value yields `(Entity, Q)` tuples, where `Q` is some query
-    /// type. A query type is `&T`, `&mut T`, a tuple of query types, or an `Option` wrapping a
-    /// query type, where `T` is any component type. Components queried with `&mut` must only appear
-    /// once. Entities which do not have a component type referenced outside of an `Option` will be
-    /// skipped.
-    ///
-    /// Entities are yielded in arbitrary order.
-    ///
-    /// # Example
-    /// ```
-    /// # use bevy_ecs::*;
-    /// let mut world = World::new();
-    /// let a = world.spawn((123, true, "abc"));
-    /// let b = world.spawn((456, false));
-    /// let c = world.spawn((42, "def"));
-    /// let entities = world.query::<(Entity, &i32, &bool)>()
-    ///     .map(|(e, &i, &b)| (e, i, b)) // Copy out of the world
-    ///     .collect::<Vec<_>>();
-    /// assert_eq!(entities.len(), 2);
-    /// assert!(entities.contains(&(a, 123, true)));
-    /// assert!(entities.contains(&(b, 456, false)));
-    /// ```
     #[inline]
     pub fn query<Q: WorldQuery>(&self) -> QueryIter<'_, Q, ()>
     where
@@ -158,46 +121,12 @@ impl World {
         unsafe { self.query_unchecked() }
     }
 
-    /// Efficiently iterate over all entities that have certain components
-    ///
-    /// Calling `iter` on the returned value yields `(Entity, Q)` tuples, where `Q` is some query
-    /// type. A query type is `&T`, `&mut T`, a tuple of query types, or an `Option` wrapping a
-    /// query type, where `T` is any component type. Components queried with `&mut` must only appear
-    /// once. Entities which do not have a component type referenced outside of an `Option` will be
-    /// skipped.
-    ///
-    /// Entities are yielded in arbitrary order.
-    ///
-    /// # Example
-    /// ```
-    /// # use bevy_ecs::*;
-    /// let mut world = World::new();
-    /// let a = world.spawn((123, true, "abc"));
-    /// let b = world.spawn((456, false));
-    /// let c = world.spawn((42, "def"));
-    /// let entities = world.query_mut::<(Entity, &mut i32, &bool)>()
-    ///     .map(|(e, i, &b)| (e, *i, b)) // Copy out of the world
-    ///     .collect::<Vec<_>>();
-    /// assert_eq!(entities.len(), 2);
-    /// assert!(entities.contains(&(a, 123, true)));
-    /// assert!(entities.contains(&(b, 456, false)));
-    /// ```
     #[inline]
     pub fn query_mut<Q: WorldQuery>(&mut self) -> QueryIter<'_, Q, ()> {
         // SAFE: unique mutable access
         unsafe { self.query_unchecked() }
     }
 
-    /// Efficiently iterate over all entities that have certain components
-    ///
-    /// Calling `iter` on the returned value yields `(Entity, Q)` tuples, where `Q` is some query
-    /// type. A query type is `&T`, `&mut T`, a tuple of query types, or an `Option` wrapping a
-    /// query type, where `T` is any component type. Components queried with `&mut` must only appear
-    /// once. Entities which do not have a component type referenced outside of an `Option` will be
-    /// skipped.
-    ///
-    /// Entities are yielded in arbitrary order.
-    ///
     /// # Safety
     /// This does not check for mutable query correctness. To be safe, make sure mutable queries
     /// have unique access to the components they query.
