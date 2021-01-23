@@ -1,8 +1,11 @@
 use crate::{
-    core::{Component, ComponentId, Components, SparseSetIndex, TypeInfo},
+    core::{
+        Component, ComponentId, Components, Entity, SparseSetIndex, SparseSets, StorageType, Table,
+        TypeInfo,
+    },
     smaller_tuples_too,
 };
-use std::{any::TypeId, collections::HashMap, ptr::NonNull};
+use std::{any::TypeId, collections::HashMap};
 
 /// A dynamically typed ordered collection of components
 ///
@@ -84,6 +87,37 @@ impl SparseSetIndex for BundleId {
 pub struct BundleInfo {
     pub(crate) id: BundleId,
     pub(crate) component_ids: Vec<ComponentId>,
+    pub(crate) storage_types: Vec<StorageType>,
+}
+
+impl BundleInfo {
+    /// SAFETY: table row must exist, entity must be valid
+    #[inline]
+    pub(crate) unsafe fn put_components<T: DynamicBundle>(
+        &self,
+        sparse_sets: &mut SparseSets,
+        entity: Entity,
+        table: &Table,
+        table_row: usize,
+        bundle: T,
+    ) {
+        // NOTE: put is called on each component in "bundle order". bundle_info.component_ids are also in "bundle order"
+        let mut bundle_component = 0;
+        bundle.put(|component_ptr| {
+            // SAFE: component_id was initialized by get_dynamic_bundle_info
+            let component_id = *self.component_ids.get_unchecked(bundle_component);
+            match self.storage_types[bundle_component] {
+                StorageType::Table => {
+                    table.put_component_unchecked(component_id, table_row, component_ptr);
+                }
+                StorageType::SparseSet => {
+                    let sparse_set = sparse_sets.get_mut(component_id).unwrap();
+                    sparse_set.put_component(entity, component_ptr);
+                }
+            }
+            bundle_component += 1;
+        });
+    }
 }
 
 #[derive(Default)]
@@ -140,11 +174,19 @@ fn initialize_bundle(
     components: &mut Components,
 ) -> BundleInfo {
     let mut component_ids = Vec::new();
+    let mut storage_types = Vec::new();
 
     for type_info in type_info {
         let component_id = components.get_with_type_info(&type_info);
+        // SAFE: get_with_type_info ensures info was created
+        let info = unsafe { components.get_info_unchecked(component_id) };
         component_ids.push(component_id);
+        storage_types.push(info.storage_type());
     }
 
-    BundleInfo { id, component_ids }
+    BundleInfo {
+        id,
+        component_ids,
+        storage_types,
+    }
 }

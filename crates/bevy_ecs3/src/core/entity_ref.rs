@@ -143,30 +143,14 @@ impl<'w> EntityMut<'w> {
 
         // SAFE: archetype was created if it didn't already exist
         let archetype = unsafe { archetypes.get_unchecked_mut(new_location.archetype_id) };
+        // SAFE: table exists
+        let table = unsafe { storages.tables.get_unchecked_mut(archetype.table_id()) };
+        // SAFE: entity exists in archetype
+        let table_row = unsafe { archetype.entity_table_row_unchecked(new_location.index) };
+        // SAFE: table row is valid
         unsafe {
-            // NOTE: put is called on each component in "bundle order". bundle_info.component_ids are also in "bundle order"
-            let mut bundle_component = 0;
-            bundle.put(|component_ptr| {
-                // SAFE: component_id was initialized by get_dynamic_bundle_info
-                let component_id = *bundle_info.component_ids.get_unchecked(bundle_component);
-                let component_info = components.get_info_unchecked(component_id);
-                match component_info.storage_type() {
-                    StorageType::Table => {
-                        let table = storages.tables.get_unchecked_mut(archetype.table_id());
-                        table.put_component_unchecked(
-                            component_id,
-                            archetype.entity_table_row_unchecked(new_location.index),
-                            component_ptr,
-                        );
-                    }
-                    StorageType::SparseSet => {
-                        let sparse_set = storages.sparse_sets.get_mut(component_id).unwrap();
-                        sparse_set.put_component(entity, component_ptr);
-                    }
-                }
-                bundle_component += 1;
-            });
-        }
+            bundle_info.put_components(&mut storages.sparse_sets, entity, table, table_row, bundle)
+        };
         self
     }
 
@@ -396,7 +380,7 @@ unsafe fn get_component_with_type(
 /// in the event that adding the given bundle does not result in an Archetype change. Results are cached in the
 /// Archetype Graph to avoid redundant work.
 /// SAFETY: `archetype_id` must exist and components in `bundle_info` must exist
-unsafe fn add_bundle_to_archetype(
+pub(crate) unsafe fn add_bundle_to_archetype(
     archetypes: &mut Archetypes,
     storages: &mut Storages,
     components: &mut Components,

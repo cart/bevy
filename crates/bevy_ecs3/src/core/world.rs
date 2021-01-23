@@ -1,8 +1,11 @@
 use crate::core::{
-    entity_ref::EntityMut, ArchetypeId, Archetypes, Bundles, Component, Components, Entities,
-    Entity, EntityRef, Mut, QueryFilter, QueryIter, ReadOnlyFetch, Storages, WorldQuery,
+    add_bundle_to_archetype, entity_ref::EntityMut, Archetype, ArchetypeId, Archetypes, Bundle,
+    Bundles, Component, Components, Entities, Entity, EntityRef, Mut, QueryIter, ReadOnlyFetch,
+    SparseSets, Storages, Table, WorldQuery,
 };
 use std::fmt;
+
+use super::BundleInfo;
 
 #[derive(Default)]
 pub struct World {
@@ -101,44 +104,26 @@ impl World {
             .unwrap_or(false)
     }
 
-    // /// Efficiently spawn a large number of entities with the same components
-    // ///
-    // /// Faster than calling `spawn` repeatedly with the same components.
-    // ///
-    // /// # Example
-    // /// ```
-    // /// # use bevy_ecs::*;
-    // /// let mut world = World::new();
-    // /// let entities = world.spawn_batch((0..1_000).map(|i| (i, "abc"))).collect::<Vec<_>>();
-    // /// for i in 0..1_000 {
-    // ///     assert_eq!(*world.get::<i32>(entities[i]).unwrap(), i as i32);
-    // /// }
-    // /// ```
-    // pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
-    // where
-    //     I: IntoIterator,
-    //     I::Item: Bundle,
-    // {
-    //     // Ensure all entity allocations are accounted for so `self.entities` can realloc if
-    //     // necessary
-    //     self.flush();
-
-    //     let iter = iter.into_iter();
-    //     let (lower, upper) = iter.size_hint();
-
-    //     let bundle_info = self.get_static_bundle_archetype::<I::Item>();
-
-    //     let archetype = self.archetypes.get_mut(bundle_info.archetype).unwrap();
-    //     let length = upper.unwrap_or(lower);
-    //     archetype.reserve(length);
-    //     self.entities.reserve(length as u32);
-    //     SpawnBatchIter {
-    //         inner: iter,
-    //         entities: &mut self.entities,
-    //         archetype_id: bundle_info.archetype,
-    //         archetype,
-    //     }
-    // }
+    /// Efficiently spawn a large number of entities with the same components
+    ///
+    /// Faster than calling `spawn` repeatedly with the same components.
+    ///
+    /// # Example
+    /// ```
+    /// # use bevy_ecs::*;
+    /// let mut world = World::new();
+    /// let entities = world.spawn_batch((0..1_000).map(|i| (i, "abc"))).collect::<Vec<_>>();
+    /// for i in 0..1_000 {
+    ///     assert_eq!(*world.get::<i32>(entities[i]).unwrap(), i as i32);
+    /// }
+    /// ```
+    pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
+    where
+        I: IntoIterator,
+        I::Item: Bundle,
+    {
+        SpawnBatchIter::new(self, iter.into_iter())
+    }
 
     /// Efficiently iterate over all entities that have certain components
     ///
@@ -262,64 +247,115 @@ impl fmt::Debug for World {
 unsafe impl Send for World {}
 unsafe impl Sync for World {}
 
-// /// Entity IDs created by `World::spawn_batch`
-// pub struct SpawnBatchIter<'a, I>
-// where
-//     I: Iterator,
-//     I::Item: Bundle,
-// {
-//     inner: I,
-//     entities: &'a mut Entities,
-//     archetype_id: ArchetypeId,
-//     archetype: &'a mut Archetype,
-// }
+pub struct SpawnBatchIter<'w, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    inner: I,
+    entities: &'w mut Entities,
+    archetype: &'w mut Archetype,
+    table: &'w mut Table,
+    sparse_sets: &'w mut SparseSets,
+    bundle_info: &'w BundleInfo,
+}
 
-// impl<I> Drop for SpawnBatchIter<'_, I>
-// where
-//     I: Iterator,
-//     I::Item: Bundle,
-// {
-//     fn drop(&mut self) {
-//         for _ in self {}
-//     }
-// }
+impl<'w, I> SpawnBatchIter<'w, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    #[inline]
+    fn new(world: &'w mut World, iter: I) -> Self {
+        // Ensure all entity allocations are accounted for so `self.entities` can realloc if
+        // necessary
+        world.flush();
 
-// impl<I> Iterator for SpawnBatchIter<'_, I>
-// where
-//     I: Iterator,
-//     I::Item: Bundle,
-// {
-//     type Item = Entity;
+        let iter = iter.into_iter();
+        let (lower, upper) = iter.size_hint();
 
-//     fn next(&mut self) -> Option<Entity> {
-//         let components = self.inner.next()?;
-//         let entity = self.entities.alloc();
-//         unsafe {
-//             let index = self.archetype.allocate(entity);
-//             components.put(|ptr, ty, size| {
-//                 self.archetype
-//                     .put_component(ptr, ty, size, index, ComponentFlags::ADDED);
-//                 true
-//             });
-//             self.entities.meta[entity.id as usize].location = EntityLocation {
-//                 archetype: self.archetype_id,
-//                 index,
-//             };
-//         }
-//         Some(entity)
-//     }
+        let bundle_info = world.bundles.init_info::<I::Item>(&mut world.components);
 
-//     fn size_hint(&self) -> (usize, Option<usize>) {
-//         self.inner.size_hint()
-//     }
-// }
+        let length = upper.unwrap_or(lower);
+        // SAFE: empty archetype exists and bundle components were initialized above
+        let archetype_id = unsafe {
+            add_bundle_to_archetype(
+                &mut world.archetypes,
+                &mut world.storages,
+                &mut world.components,
+                ArchetypeId::empty_archetype(),
+                bundle_info,
+            )
+        };
+        // SAFE: archetype exists
+        let archetype = unsafe { world.archetypes.get_unchecked_mut(archetype_id) };
+        // SAFE: table exists
+        let table = unsafe {
+            world
+                .storages
+                .tables
+                .get_unchecked_mut(archetype.table_id())
+        };
+        archetype.reserve(length);
+        table.reserve(length);
+        world.entities.reserve(length as u32);
+        Self {
+            inner: iter,
+            entities: &mut world.entities,
+            archetype,
+            table,
+            sparse_sets: &mut world.storages.sparse_sets,
+            bundle_info,
+        }
+    }
+}
 
-// impl<I, T> ExactSizeIterator for SpawnBatchIter<'_, I>
-// where
-//     I: ExactSizeIterator<Item = T>,
-//     T: Bundle,
-// {
-//     fn len(&self) -> usize {
-//         self.inner.len()
-//     }
-// }
+impl<I> Drop for SpawnBatchIter<'_, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    fn drop(&mut self) {
+        for _ in self {}
+    }
+}
+
+impl<I> Iterator for SpawnBatchIter<'_, I>
+where
+    I: Iterator,
+    I::Item: Bundle,
+{
+    type Item = Entity;
+
+    fn next(&mut self) -> Option<Entity> {
+        let bundle = self.inner.next()?;
+        let entity = self.entities.alloc();
+        unsafe {
+            let table_row = self.table.allocate(entity);
+            let location = self.archetype.allocate(entity, table_row);
+            self.bundle_info.put_components(
+                self.sparse_sets,
+                entity,
+                self.table,
+                table_row,
+                bundle,
+            );
+            self.entities.meta[entity.id as usize].location = location;
+        }
+        Some(entity)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<I, T> ExactSizeIterator for SpawnBatchIter<'_, I>
+where
+    I: ExactSizeIterator<Item = T>,
+    T: Bundle,
+{
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+}

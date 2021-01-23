@@ -251,7 +251,7 @@ impl Table {
         self.columns.contains(component_id)
     }
 
-    pub fn grow(&mut self, amount: usize) {
+    pub fn reserve(&mut self, amount: usize) {
         for column in self.columns.values_mut() {
             column.data.grow(amount);
         }
@@ -263,7 +263,7 @@ impl Table {
     /// SAFETY: the allocated row must be written to immediately with valid values in each column
     pub unsafe fn allocate(&mut self, entity: Entity) -> usize {
         if self.len() == self.capacity() {
-            self.grow(self.grow_amount);
+            self.reserve(self.grow_amount);
         }
 
         let index = self.entities.len();

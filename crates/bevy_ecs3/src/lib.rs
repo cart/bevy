@@ -330,13 +330,14 @@ mod tests {
     //     assert!(entities.contains(&c));
     // }
 
-    // #[test]
-    // fn spawn_batch() {
-    //     let mut world = World::new();
-    //     world.spawn_batch((0..100).map(|x| (x, "abc")));
-    //     let entities = world.query::<&i32>().map(|&x| x).collect::<Vec<_>>();
-    //     assert_eq!(entities.len(), 100);
-    // }
+    #[test]
+    fn spawn_batch() {
+        let mut world = World::new();
+        world.spawn_batch((0..100).map(|x| (x, "abc")));
+        let values = world.query::<&i32>().map(|&x| x).collect::<Vec<_>>();
+        let expected = (0..100).collect::<Vec<_>>();
+        assert_eq!(values, expected);
+    }
 
     // #[test]
     // fn query_one() {
