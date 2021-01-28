@@ -1,11 +1,8 @@
 use crate::core::{
-    Archetype, Bundle, BundleInfo, Component, ComponentFlags, ComponentId, Table, World,
+    Archetype, Bundle, BundleInfo, Component, ComponentFlags, ComponentId, ComponentSparseSet,
+    Entity, StorageType, Table, Tables, World,
 };
-use std::{
-    any::TypeId,
-    marker::PhantomData,
-    ptr::{self, NonNull},
-};
+use std::{any::TypeId, marker::PhantomData, ptr};
 
 pub trait QueryFilter: Sized {
     const DANGLING: Self;
@@ -13,7 +10,7 @@ pub trait QueryFilter: Sized {
     unsafe fn matches_archetype(&self, archetype: &Archetype) -> bool;
     unsafe fn next_table(&mut self, table: &Table);
     unsafe fn next_archetype(&mut self, archetype: &Archetype);
-    unsafe fn matches_entity(&self, _offset: usize) -> bool;
+    unsafe fn matches_entity(&self, index: usize) -> bool;
 }
 
 impl QueryFilter for () {
@@ -36,96 +33,14 @@ impl QueryFilter for () {
     unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
 
     #[inline]
-    unsafe fn matches_entity(&self, _offset: usize) -> bool {
+    unsafe fn matches_entity(&self, _index: usize) -> bool {
         true
     }
 }
 
 pub struct Or<T>(pub T);
 
-/// Query transformer that retrieves components of type `T` that have been mutated since the start of the frame.
-/// Added components do not count as mutated.
-pub struct Mutated<T>(NonNull<ComponentFlags>, PhantomData<T>);
-
-/// Query transformer that retrieves components of type `T` that have been added since the start of the frame.
-pub struct Added<T>(NonNull<ComponentFlags>, PhantomData<T>);
-
-/// Query transformer that retrieves components of type `T` that have either been mutated or added since the start of the frame.
-pub struct Changed<T>(NonNull<ComponentFlags>, PhantomData<T>);
-
-// impl<T: Component> QueryFilter for Added<T> {
-//     // fn access() -> QueryAccess {
-//     //     QueryAccess::read::<T>()
-//     // }
-
-//     #[inline]
-//     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-//         todo!()
-//         // archetype
-//         //     .get_type_state(TypeId::of::<T>())
-//         //     .map(|state| Added(state.component_flags(), Default::default()))
-//     }
-// }
-
-// impl<T: Component> EntityFilter for Added<T> {
-//     const DANGLING: Self = Added(NonNull::dangling(), PhantomData::<T>);
-
-//     #[inline]
-//     unsafe fn matches_entity(&self, offset: usize) -> bool {
-//         (*self.0.as_ptr().add(offset)).contains(ComponentFlags::ADDED)
-//     }
-// }
-
-// impl<T: Component> QueryFilter for Mutated<T> {
-//     type EntityFilter = Self;
-
-//     // fn access() -> QueryAccess {
-//     //     QueryAccess::read::<T>()
-//     // }
-
-//     #[inline]
-//     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-//         todo!()
-//         // archetype
-//         //     .get_type_state(TypeId::of::<T>())
-//         //     .map(|state| Mutated(state.component_flags(), Default::default()))
-//     }
-// }
-
-// impl<T: Component> EntityFilter for Mutated<T> {
-//     const DANGLING: Self = Mutated(NonNull::dangling(), PhantomData::<T>);
-
-//     unsafe fn matches_entity(&self, offset: usize) -> bool {
-//         (*self.0.as_ptr().add(offset)).contains(ComponentFlags::MUTATED)
-//     }
-// }
-
-// impl<T: Component> QueryFilter for Changed<T> {
-//     type EntityFilter = Self;
-
-//     // fn access() -> QueryAccess {
-//     //     QueryAccess::read::<T>()
-//     // }
-
-//     #[inline]
-//     fn get_entity_filter(archetype: &Archetype) -> Option<Self::EntityFilter> {
-//         todo!()
-//         // archetype
-//         //     .get_type_state(TypeId::of::<T>())
-//         //     .map(|state| Changed(state.component_flags(), Default::default()))
-//     }
-// }
-
-// impl<T: Component> EntityFilter for Changed<T> {
-//     const DANGLING: Self = Changed(NonNull::dangling(), PhantomData::<T>);
-
-//     #[inline]
-//     unsafe fn matches_entity(&self, offset: usize) -> bool {
-//         let flags = *self.0.as_ptr().add(offset);
-//         flags.contains(ComponentFlags::ADDED) || flags.contains(ComponentFlags::MUTATED)
-//     }
-// }
-
+/// Filter that retrieves components of type `T` that have either been mutated or added since the start of the frame.
 pub struct With<T> {
     component_id: ComponentId,
     marker: PhantomData<T>,
@@ -158,7 +73,7 @@ impl<T: Component> QueryFilter for With<T> {
     unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
 
     #[inline]
-    unsafe fn matches_entity(&self, _offset: usize) -> bool {
+    unsafe fn matches_entity(&self, _index: usize) -> bool {
         true
     }
 }
@@ -195,7 +110,7 @@ impl<T: Component> QueryFilter for Without<T> {
     unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
 
     #[inline]
-    unsafe fn matches_entity(&self, _offset: usize) -> bool {
+    unsafe fn matches_entity(&self, _index: usize) -> bool {
         true
     }
 }
@@ -239,7 +154,7 @@ impl<T: Bundle> QueryFilter for WithType<T> {
     unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
 
     #[inline]
-    unsafe fn matches_entity(&self, _offset: usize) -> bool {
+    unsafe fn matches_entity(&self, _index: usize) -> bool {
         true
     }
 }
@@ -274,6 +189,130 @@ macro_rules! impl_query_filter_tuple {
         }
     };
 }
+
+macro_rules! impl_flag_filter {
+    (
+        $(#[$meta:meta])*
+        $name: ident, $flags: expr) => {
+        $(#[$meta])*
+        pub enum $name<T> {
+            Table {
+                component_id: ComponentId,
+                flags: *mut ComponentFlags,
+                tables: *const Tables,
+                marker: PhantomData<T>,
+            },
+            SparseSet {
+                component_id: ComponentId,
+                entities: *const Entity,
+                sparse_set: *const ComponentSparseSet,
+            },
+        }
+
+        impl<T: Component> QueryFilter for $name<T> {
+            const DANGLING: Self = Self::Table {
+                component_id: ComponentId::new(usize::MAX),
+                flags: ptr::null_mut::<ComponentFlags>(),
+                tables: ptr::null::<Tables>(),
+                marker: PhantomData,
+            };
+
+            unsafe fn init(world: &World) -> Option<Self> {
+                let components = world.components();
+                let component_id = components.get_id(TypeId::of::<T>())?;
+                let component_info = components.get_info_unchecked(component_id);
+                Some(match component_info.storage_type() {
+                    StorageType::Table => Self::Table {
+                        component_id,
+                        flags: ptr::null_mut::<ComponentFlags>(),
+                        tables: (&world.storages().tables) as *const Tables,
+                        marker: PhantomData,
+                    },
+                    StorageType::SparseSet => Self::SparseSet {
+                        component_id,
+                        entities: std::ptr::null::<Entity>(),
+                        sparse_set: world.storages().sparse_sets.get_unchecked(component_id),
+                    },
+                })
+            }
+
+            unsafe fn matches_archetype(&self, archetype: &Archetype) -> bool {
+                match self {
+                    Self::Table { component_id, .. } => archetype.contains(*component_id),
+                    Self::SparseSet { component_id, .. } => archetype.contains(*component_id),
+                }
+            }
+
+            unsafe fn next_table(&mut self, table: &Table) {
+                match self {
+                    Self::Table {
+                        component_id,
+                        flags,
+                        ..
+                    } => {
+                        *flags = table
+                            .get_column_unchecked(*component_id)
+                            .get_flags_mut_ptr();
+                    }
+                    Self::SparseSet { entities, .. } => *entities = table.entities().as_ptr(),
+                }
+            }
+
+            unsafe fn next_archetype(&mut self, archetype: &Archetype) {
+                match self {
+                    Self::Table {
+                        component_id,
+                        flags,
+                        tables,
+                        ..
+                    } => {
+                        let table = (&**tables).get_unchecked(archetype.table_id());
+                        *flags = table
+                            .get_column_unchecked(*component_id)
+                            .get_flags_mut_ptr();
+                    }
+                    Self::SparseSet { entities, .. } => *entities = archetype.entities().as_ptr(),
+                }
+            }
+
+            unsafe fn matches_entity(&self, index: usize) -> bool {
+                match self {
+                    Self::Table { flags, .. } => {
+                        (*flags.add(index)).contains($flags)
+                    }
+                    Self::SparseSet {
+                        entities,
+                        sparse_set,
+                        ..
+                    } => {
+                        let entity = *entities.add(index);
+                        (*(**sparse_set).get_flags_unchecked(entity))
+                            .contains($flags)
+                    }
+                }
+            }
+        }
+    };
+}
+
+impl_flag_filter!(
+    /// Filter that retrieves components of type `T` that have been added since the start of the frame
+    Added,
+    ComponentFlags::ADDED
+);
+
+impl_flag_filter!(
+    /// Filter that retrieves components of type `T` that have been mutated since the start of the frame.
+    /// Added components do not count as mutated.
+    Mutated,
+    ComponentFlags::MUTATED
+);
+
+impl_flag_filter!(
+    /// Filter that retrieves components of type `T` that have been added or mutated since the start of the frame
+    Changed,
+    ComponentFlags::ADDED | ComponentFlags::MUTATED
+);
 
 impl_query_filter_tuple!(A);
 impl_query_filter_tuple!(A, B);

@@ -176,6 +176,14 @@ impl ComponentSparseSet {
     /// SAFETY: `entity` must have a value stored in the set
     /// ensure the same entity is not accessed twice at the same time
     #[inline]
+    pub unsafe fn get_flags_unchecked(&self, entity: Entity) -> *mut ComponentFlags {
+        let dense_index = self.sparse.get_unchecked(entity);
+        (*self.flags.get()).as_mut_ptr().add(*dense_index)
+    }
+
+    /// SAFETY: `entity` must have a value stored in the set
+    /// ensure the same entity is not accessed twice at the same time
+    #[inline]
     pub unsafe fn get_with_flags_unchecked(
         &self,
         entity: Entity,
