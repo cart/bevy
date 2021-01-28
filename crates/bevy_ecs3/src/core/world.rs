@@ -262,11 +262,16 @@ where
         unsafe {
             let table_row = self.table.allocate(entity);
             let location = self.archetype.allocate(entity, table_row);
+            let from_bundle = self
+                .archetype
+                .edges()
+                .get_from_bundle_unchecked(self.bundle_info.id);
             self.bundle_info.put_components(
                 self.sparse_sets,
                 entity,
                 self.table,
                 table_row,
+                &from_bundle.bundle_flags,
                 bundle,
             );
             self.entities.meta[entity.id as usize].location = location;

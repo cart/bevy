@@ -42,8 +42,8 @@ impl Column {
     }
 
     #[inline]
-    pub unsafe fn set_flags_unchecked(&self, row: usize, flags: ComponentFlags) {
-        *(*self.flags.get()).get_unchecked_mut(row) = flags;
+    pub unsafe fn get_flags_unchecked_mut(&self, row: usize) -> &mut ComponentFlags {
+        (*self.flags.get()).get_unchecked_mut(row)
     }
 
     #[inline]
@@ -244,7 +244,7 @@ impl Table {
             let (data, flags) = column.swap_remove_and_forget_unchecked(row);
             if let Some(new_column) = new_table.get_column_mut(column.component_id) {
                 new_column.set_unchecked(new_row, data);
-                new_column.set_flags_unchecked(new_row, flags);
+                *new_column.get_flags_unchecked_mut(new_row) = flags;
             }
         }
         TableMoveResult {
@@ -271,7 +271,7 @@ impl Table {
             let new_column = new_table.get_column_unchecked_mut(column.component_id);
             let (data, flags) = column.swap_remove_and_forget_unchecked(row);
             new_column.set_unchecked(new_row, data);
-            new_column.set_flags_unchecked(new_row, flags);
+            *new_column.get_flags_unchecked_mut(new_row) = flags;
         }
         TableMoveResult {
             new_row,

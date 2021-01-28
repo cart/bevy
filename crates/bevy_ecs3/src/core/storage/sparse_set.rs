@@ -112,18 +112,19 @@ impl ComponentSparseSet {
 
     /// SAFETY: The `value` pointer must point to a valid address that matches the internal BlobVec's Layout.
     /// Caller is responsible for ensuring the value is not dropped. This collection will drop the value when needed.
-    pub unsafe fn insert(&mut self, entity: Entity, value: *mut u8) {
+    pub unsafe fn insert(&mut self, entity: Entity, value: *mut u8, flags: ComponentFlags) {
         let dense = &mut self.dense;
         let entities = &mut self.entities;
-        let flags = &mut *self.flags.get();
+        let flag_list = &mut *self.flags.get();
         let dense_index = *self.sparse.get_or_insert_with(entity, move || {
-            flags.push(ComponentFlags::empty());
+            flag_list.push(ComponentFlags::empty());
             entities.push(entity);
             dense.push_uninit();
             dense.len() - 1
         });
         // SAFE: dense_index exists thanks to the call above
         self.dense.set_unchecked(dense_index, value);
+        (*self.flags.get()).get_unchecked_mut(dense_index).insert(flags);
     }
 
     #[inline]

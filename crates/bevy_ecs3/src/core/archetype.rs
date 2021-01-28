@@ -1,5 +1,6 @@
 use crate::core::{
-    BundleId, ComponentId, Entity, EntityLocation, SparseArray, StorageType, TableId,
+    BundleId, ComponentFlags, ComponentId, Entity, EntityLocation, SparseArray, StorageType,
+    TableId,
 };
 use bevy_utils::AHasher;
 use std::{
@@ -32,10 +33,16 @@ impl ArchetypeId {
     }
 }
 
+pub struct FromBundle {
+    pub archetype_id: ArchetypeId,
+    pub bundle_flags: Vec<ComponentFlags>,
+}
+
 #[derive(Default)]
 pub struct Edges {
     pub add_bundle: SparseArray<BundleId, ArchetypeId>,
     pub remove_bundle: SparseArray<BundleId, Option<ArchetypeId>>,
+    pub from_bundle: SparseArray<BundleId, FromBundle>,
 }
 
 impl Edges {
@@ -44,9 +51,26 @@ impl Edges {
         self.add_bundle.get(bundle_id).cloned()
     }
 
+    /// SAFETY: bundle must exist
     #[inline]
-    pub fn set_add_bundle(&mut self, bundle_id: BundleId, archetype_id: ArchetypeId) {
-        self.add_bundle.insert(bundle_id, archetype_id);
+    pub unsafe fn get_from_bundle_unchecked(&self, bundle_id: BundleId) -> &FromBundle {
+        self.from_bundle.get_unchecked(bundle_id)
+    }
+
+    #[inline]
+    pub fn set_from_bundle(
+        &mut self,
+        bundle_id: BundleId,
+        archetype_id: ArchetypeId,
+        bundle_flags: Vec<ComponentFlags>,
+    ) {
+        self.from_bundle.insert(
+            bundle_id,
+            FromBundle {
+                archetype_id,
+                bundle_flags,
+            },
+        );
     }
 
     #[inline]
@@ -57,6 +81,11 @@ impl Edges {
     #[inline]
     pub fn set_remove_bundle(&mut self, bundle_id: BundleId, archetype_id: Option<ArchetypeId>) {
         self.remove_bundle.insert(bundle_id, archetype_id);
+    }
+
+    #[inline]
+    pub fn set_add_bundle(&mut self, bundle_id: BundleId, archetype_id: ArchetypeId) {
+        self.add_bundle.insert(bundle_id, archetype_id);
     }
 }
 
@@ -170,9 +199,7 @@ impl Archetype {
 
     pub fn reserve(&mut self, additional: usize) {
         self.entities.reserve(additional);
-        self.table_info
-            .entity_rows
-            .reserve(additional);
+        self.table_info.entity_rows.reserve(additional);
     }
 
     /// Removes the entity at `index` by swapping it out. Returns the table row the entity is stored in.

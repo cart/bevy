@@ -152,9 +152,18 @@ impl<'w> EntityMut<'w> {
         let table = unsafe { storages.tables.get_unchecked_mut(archetype.table_id()) };
         // SAFE: entity exists in archetype
         let table_row = unsafe { archetype.entity_table_row_unchecked(new_location.index) };
+        // SAFE: from_bundle was populated by add_bundle_to_archetype
+        let from_bundle = unsafe { archetype.edges().get_from_bundle_unchecked(bundle_info.id) };
         // SAFE: table row is valid
         unsafe {
-            bundle_info.put_components(&mut storages.sparse_sets, entity, table, table_row, bundle)
+            bundle_info.put_components(
+                &mut storages.sparse_sets,
+                entity,
+                table,
+                table_row,
+                &from_bundle.bundle_flags,
+                bundle,
+            )
         };
         self
     }
@@ -433,76 +442,85 @@ pub(crate) unsafe fn add_bundle_to_archetype(
     archetype_id: ArchetypeId,
     bundle_info: &BundleInfo,
 ) -> ArchetypeId {
-    let new_archetype_id = {
-        let current_archetype = archetypes.get_unchecked_mut(archetype_id);
-        current_archetype.edges().get_add_bundle(bundle_info.id)
-    };
-    if let Some(new_archetype_id) = new_archetype_id {
-        new_archetype_id
-    } else {
-        let mut new_table_components = Vec::new();
-        let mut new_sparse_set_components = Vec::new();
+    if let Some(archetype_id) = archetypes
+        .get_unchecked_mut(archetype_id)
+        .edges()
+        .get_add_bundle(bundle_info.id)
+    {
+        return archetype_id;
+    }
+    let mut new_table_components = Vec::new();
+    let mut new_sparse_set_components = Vec::new();
+    let mut tracking_flags = Vec::with_capacity(bundle_info.component_ids.len());
 
-        {
-            let current_archetype = archetypes.get_unchecked_mut(archetype_id);
-            for component_id in bundle_info.component_ids.iter().cloned() {
-                if !current_archetype.contains(component_id) {
-                    let component_info = components.get_info_unchecked(component_id);
-                    match component_info.storage_type() {
-                        StorageType::Table => new_table_components.push(component_id),
-                        StorageType::SparseSet => {
-                            storages.sparse_sets.get_or_insert(component_info);
-                            new_sparse_set_components.push(component_id)
-                        }
-                    }
+    let current_archetype = archetypes.get_unchecked_mut(archetype_id);
+    for component_id in bundle_info.component_ids.iter().cloned() {
+        if current_archetype.contains(component_id) {
+            tracking_flags.push(ComponentFlags::MUTATED);
+        } else {
+            tracking_flags.push(ComponentFlags::ADDED);
+            let component_info = components.get_info_unchecked(component_id);
+            match component_info.storage_type() {
+                StorageType::Table => new_table_components.push(component_id),
+                StorageType::SparseSet => {
+                    storages.sparse_sets.get_or_insert(component_info);
+                    new_sparse_set_components.push(component_id)
                 }
             }
         }
+    }
 
-        if new_table_components.len() == 0 && new_sparse_set_components.len() == 0 {
-            // the archetype does not change when we add this bundle
-            archetype_id
-        } else {
-            let table_id;
-            let table_components;
-            let sparse_set_components;
-            // the archetype changes when we add this bundle. prepare the new archetype and storages
-            {
-                let current_archetype = archetypes.get_unchecked_mut(archetype_id);
-                table_components = if new_table_components.len() == 0 {
-                    // if there are no new table components, we can keep using this table
-                    table_id = current_archetype.table_id();
-                    current_archetype.table_components().clone()
-                } else {
-                    new_table_components.extend(current_archetype.table_components());
-                    // sort to ignore order while hashing
-                    new_table_components.sort();
-                    // SAFE: all component ids in `new_table_components` exist
-                    table_id = storages
-                        .tables
-                        .get_id_or_insert(&new_table_components, components);
-
-                    new_table_components
-                };
-
-                sparse_set_components = if new_sparse_set_components.len() == 0 {
-                    current_archetype.sparse_set_components().clone()
-                } else {
-                    new_sparse_set_components.extend(current_archetype.sparse_set_components());
-                    // sort to ignore order while hashing
-                    new_sparse_set_components.sort();
-                    new_sparse_set_components
-                };
-            };
-            let new_archetype_id =
-                archetypes.get_id_or_insert(table_id, table_components, sparse_set_components);
+    if new_table_components.len() == 0 && new_sparse_set_components.len() == 0 {
+        let edges = current_archetype.edges_mut();
+        // the archetype does not change when we add this bundle
+        edges.set_add_bundle(bundle_info.id, archetype_id);
+        edges.set_from_bundle(bundle_info.id, archetype_id, tracking_flags);
+        archetype_id
+    } else {
+        let table_id;
+        let table_components;
+        let sparse_set_components;
+        // the archetype changes when we add this bundle. prepare the new archetype and storages
+        {
             let current_archetype = archetypes.get_unchecked_mut(archetype_id);
-            // add an edge from the old archetype to the new archetype
-            current_archetype
-                .edges_mut()
-                .set_add_bundle(bundle_info.id, new_archetype_id);
-            new_archetype_id
-        }
+            table_components = if new_table_components.len() == 0 {
+                // if there are no new table components, we can keep using this table
+                table_id = current_archetype.table_id();
+                current_archetype.table_components().clone()
+            } else {
+                new_table_components.extend(current_archetype.table_components());
+                // sort to ignore order while hashing
+                new_table_components.sort();
+                // SAFE: all component ids in `new_table_components` exist
+                table_id = storages
+                    .tables
+                    .get_id_or_insert(&new_table_components, components);
+
+                new_table_components
+            };
+
+            sparse_set_components = if new_sparse_set_components.len() == 0 {
+                current_archetype.sparse_set_components().clone()
+            } else {
+                new_sparse_set_components.extend(current_archetype.sparse_set_components());
+                // sort to ignore order while hashing
+                new_sparse_set_components.sort();
+                new_sparse_set_components
+            };
+        };
+        let new_archetype_id =
+            archetypes.get_id_or_insert(table_id, table_components, sparse_set_components);
+        // add an edge from the old archetype to the new archetype
+        archetypes
+            .get_unchecked_mut(archetype_id)
+            .edges_mut()
+            .set_add_bundle(bundle_info.id, new_archetype_id);
+        // add a "from bundle" edge from the new archetype to the old archetype
+        archetypes
+            .get_unchecked_mut(new_archetype_id)
+            .edges_mut()
+            .set_from_bundle(bundle_info.id, new_archetype_id, tracking_flags);
+        new_archetype_id
     }
 }
 

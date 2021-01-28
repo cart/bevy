@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        Component, ComponentId, Components, Entity, SparseSetIndex, SparseSets, StorageType, Table,
+        Component, ComponentId, Components, Entity, SparseSetIndex, SparseSets, StorageType, Table, ComponentFlags,
         TypeInfo,
     },
     smaller_tuples_too,
@@ -99,6 +99,7 @@ impl BundleInfo {
         entity: Entity,
         table: &Table,
         table_row: usize,
+        bundle_flags: &[ComponentFlags],
         bundle: T,
     ) {
         // NOTE: put is called on each component in "bundle order". bundle_info.component_ids are also in "bundle order"
@@ -106,13 +107,16 @@ impl BundleInfo {
         bundle.put(|component_ptr| {
             // SAFE: component_id was initialized by get_dynamic_bundle_info
             let component_id = *self.component_ids.get_unchecked(bundle_component);
+            let flags = *bundle_flags.get_unchecked(bundle_component);
             match self.storage_types[bundle_component] {
                 StorageType::Table => {
-                    table.get_column_unchecked(component_id).set_unchecked(table_row, component_ptr);
+                    let column = table.get_column_unchecked(component_id);
+                    column.set_unchecked(table_row, component_ptr);
+                    column.get_flags_unchecked_mut(table_row).insert(flags);
                 }
                 StorageType::SparseSet => {
                     let sparse_set = sparse_sets.get_mut(component_id).unwrap();
-                    sparse_set.insert(entity, component_ptr);
+                    sparse_set.insert(entity, component_ptr, flags);
                 }
             }
             bundle_component += 1;

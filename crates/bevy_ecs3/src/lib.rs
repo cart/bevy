@@ -19,7 +19,7 @@ macro_rules! smaller_tuples_too {
 #[cfg(test)]
 mod tests {
     use crate::{
-        core::{Entity, QueryState, With, Without},
+        core::{Added, Entity, QueryState, With, Without},
         prelude::{ComponentDescriptor, StorageType, World},
     };
 
@@ -422,29 +422,29 @@ mod tests {
     //     );
     // }
 
-    // #[test]
-    // fn added_tracking() {
-    //     let mut world = World::new();
-    //     let a = world.spawn((123,));
+    #[test]
+    fn added_tracking() {
+        let mut world = World::new();
+        let a = world.spawn().insert(123i32).id();
 
-    //     assert_eq!(world.query::<&i32>().count(), 1);
-    //     assert_eq!(world.query_filtered::<(), Added<i32>>().count(), 1);
-    //     assert_eq!(world.query_mut::<&i32>().count(), 1);
-    //     assert_eq!(world.query_filtered_mut::<(), Added<i32>>().count(), 1);
-    //     assert!(world.query_one::<&i32>(a).is_ok());
-    //     assert!(world.query_one_filtered::<(), Added<i32>>(a).is_ok());
-    //     assert!(world.query_one_mut::<&i32>(a).is_ok());
-    //     assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_ok());
+        assert_eq!(world.query::<&i32>().count(), 1);
+        assert_eq!(world.query::<()>().filter::<Added<i32>>().count(), 1);
+        assert_eq!(world.query_mut::<&i32>().count(), 1);
+        assert_eq!(world.query_mut::<()>().filter::<Added<i32>>().count(), 1);
+        // assert!(world.query_one::<&i32>(a).is_ok());
+        // assert!(world.query_one_filtered::<(), Added<i32>>(a).is_ok());
+        // assert!(world.query_one_mut::<&i32>(a).is_ok());
+        // assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_ok());
 
-    //     world.clear_trackers();
+        // world.clear_trackers();
 
-    //     assert_eq!(world.query::<&i32>().count(), 1);
-    //     assert_eq!(world.query_filtered::<(), Added<i32>>().count(), 0);
-    //     assert_eq!(world.query_mut::<&i32>().count(), 1);
-    //     assert_eq!(world.query_filtered_mut::<(), Added<i32>>().count(), 0);
-    //     assert!(world.query_one_mut::<&i32>(a).is_ok());
-    //     assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_err());
-    // }
+        // assert_eq!(world.query::<&i32>().count(), 1);
+        // assert_eq!(world.query_filtered::<(), Added<i32>>().count(), 0);
+        // assert_eq!(world.query_mut::<&i32>().count(), 1);
+        // assert_eq!(world.query_filtered_mut::<(), Added<i32>>().count(), 0);
+        // assert!(world.query_one_mut::<&i32>(a).is_ok());
+        // assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_err());
+    }
 
     // #[test]
     // #[cfg_attr(
