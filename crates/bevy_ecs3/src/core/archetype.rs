@@ -170,7 +170,9 @@ impl Archetype {
 
     pub fn reserve(&mut self, additional: usize) {
         self.entities.reserve(additional);
-        self.table_info.entity_rows.reserve(additional);
+        self.table_info
+            .entity_rows
+            .reserve(additional);
     }
 
     /// Removes the entity at `index` by swapping it out. Returns the table row the entity is stored in.

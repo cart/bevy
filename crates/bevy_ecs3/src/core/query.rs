@@ -1,7 +1,8 @@
 use crate::{
     core::{
-        Archetype, ArchetypeGeneration, ArchetypeId, Archetypes, Component, ComponentId,
-        ComponentSparseSet, Entity, Mut, QueryFilter, StorageType, Table, TableId, Tables, World,
+        Archetype, ArchetypeGeneration, ArchetypeId, Archetypes, Component, ComponentFlags,
+        ComponentId, ComponentSparseSet, Entity, Mut, QueryFilter, StorageType, Table, TableId,
+        Tables, World,
     },
     smaller_tuples_too,
 };
@@ -362,7 +363,7 @@ pub enum FetchRead<T> {
     SparseSet {
         component_id: ComponentId,
         entities: *const Entity,
-        sparse_set: *mut ComponentSparseSet,
+        sparse_set: *const ComponentSparseSet,
     },
 }
 
@@ -405,11 +406,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
             StorageType::SparseSet => Self::SparseSet {
                 component_id,
                 entities: std::ptr::null::<Entity>(),
-                sparse_set: world
-                    .storages()
-                    .sparse_sets
-                    .get_unchecked(component_id)
-                    .unwrap(),
+                sparse_set: world.storages().sparse_sets.get_unchecked(component_id),
             },
         })
     }
@@ -422,7 +419,10 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
                 components,
                 ..
             } => {
-                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
+                *components = table
+                    .get_column_unchecked(*component_id)
+                    .get_ptr()
+                    .cast::<T>();
             }
             Self::SparseSet { entities, .. } => *entities = table.entities().as_ptr(),
         }
@@ -437,7 +437,10 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
                 tables,
             } => {
                 let table = (&**tables).get_unchecked(archetype.table_id());
-                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
+                *components = table
+                    .get_column_unchecked(*component_id)
+                    .get_ptr()
+                    .cast::<T>();
             }
             Self::SparseSet { entities, .. } => *entities = archetype.entities().as_ptr(),
         }
@@ -453,9 +456,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
                 ..
             } => {
                 let entity = *entities.add(index);
-                (**sparse_set)
-                    .get_component(entity)
-                    .map(|c| &*c.cast::<T>())
+                (**sparse_set).get(entity).map(|c| &*c.cast::<T>())
             }
         }
     }
@@ -470,7 +471,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
                 ..
             } => {
                 let entity = *entities.add(index);
-                &*(**sparse_set).get_component_unchecked(entity).cast::<T>()
+                &*(**sparse_set).get_unchecked(entity).cast::<T>()
             }
         }
     }
@@ -484,12 +485,13 @@ pub enum FetchWrite<T> {
     Table {
         component_id: ComponentId,
         components: NonNull<T>,
+        flags: *mut ComponentFlags,
         tables: *const Tables,
     },
     SparseSet {
         component_id: ComponentId,
         entities: *const Entity,
-        sparse_set: *mut ComponentSparseSet,
+        sparse_set: *const ComponentSparseSet,
     },
 }
 
@@ -501,6 +503,7 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     const DANGLING: Self = Self::Table {
         component_id: ComponentId::new(usize::MAX),
         components: NonNull::dangling(),
+        flags: ptr::null_mut::<ComponentFlags>(),
         tables: ptr::null::<Tables>(),
     };
 
@@ -527,16 +530,13 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
             StorageType::Table => Self::Table {
                 component_id,
                 components: NonNull::dangling(),
+                flags: ptr::null_mut(),
                 tables: (&world.storages().tables) as *const Tables,
             },
             StorageType::SparseSet => Self::SparseSet {
                 component_id,
                 entities: std::ptr::null::<Entity>(),
-                sparse_set: world
-                    .storages()
-                    .sparse_sets
-                    .get_unchecked(component_id)
-                    .unwrap(),
+                sparse_set: world.storages().sparse_sets.get_unchecked(component_id),
             },
         })
     }
@@ -547,9 +547,12 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
             Self::Table {
                 component_id,
                 components,
+                flags,
                 ..
             } => {
-                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
+                let column = table.get_column_unchecked(*component_id);
+                *components = column.get_ptr().cast::<T>();
+                *flags = column.get_flags_mut_ptr();
             }
             Self::SparseSet { entities, .. } => *entities = table.entities().as_ptr(),
         }
@@ -561,10 +564,13 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
             Self::Table {
                 component_id,
                 components,
+                flags,
                 tables,
             } => {
                 let table = (&**tables).get_unchecked(archetype.table_id());
-                *components = table.get_column_unchecked(*component_id).data().cast::<T>();
+                let column = table.get_column_unchecked(*component_id);
+                *components = column.get_ptr().cast::<T>();
+                *flags = column.get_flags_mut_ptr();
             }
             Self::SparseSet { entities, .. } => *entities = archetype.entities().as_ptr(),
         }
@@ -573,8 +579,11 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     #[inline]
     unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
         match self {
-            Self::Table { components, .. } => Some(Mut {
+            Self::Table {
+                components, flags, ..
+            } => Some(Mut {
                 value: &mut *components.as_ptr().add(index),
+                flags: &mut *flags.add(index),
             }),
             Self::SparseSet {
                 entities,
@@ -582,8 +591,9 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
                 ..
             } => {
                 let entity = *entities.add(index);
-                (**sparse_set).get_component(entity).map(|c| Mut {
+                (**sparse_set).get_with_flags(entity).map(|(c, f)| Mut {
                     value: &mut *c.cast::<T>(),
+                    flags: &mut *f,
                 })
             }
         }
@@ -592,8 +602,11 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     #[inline]
     unsafe fn fetch(&mut self, index: usize) -> Self::Item {
         match self {
-            Self::Table { components, .. } => Mut {
+            Self::Table {
+                components, flags, ..
+            } => Mut {
                 value: &mut *components.as_ptr().add(index),
+                flags: &mut *flags.add(index),
             },
             Self::SparseSet {
                 entities,
@@ -601,8 +614,10 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
                 ..
             } => {
                 let entity = *entities.add(index);
+                let (value, flags) = (**sparse_set).get_with_flags_unchecked(entity);
                 Mut {
-                    value: &mut *(**sparse_set).get_component_unchecked(entity).cast::<T>(),
+                    value: &mut *value.cast::<T>(),
+                    flags: &mut *flags,
                 }
             }
         }
@@ -621,6 +636,8 @@ macro_rules! tuple_impl {
                 Some(($($name::init(world)?,)*))
             }
 
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
             #[inline]
             fn is_dense(&self) -> bool {
                 let ($($name,)*) = self;

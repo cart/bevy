@@ -1,8 +1,12 @@
 use crate::core::{
-    ArchetypeId, BlobVec, ComponentId, ComponentInfo, Components, Entity, SparseSet,
+    ArchetypeId, BlobVec, ComponentFlags, ComponentId, ComponentInfo, Components, Entity, SparseSet,
 };
 use bevy_utils::{AHasher, HashMap};
-use std::hash::{Hash, Hasher};
+use std::{
+    cell::UnsafeCell,
+    hash::{Hash, Hasher},
+    ptr::NonNull,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TableId(usize);
@@ -27,6 +31,70 @@ impl TableId {
 pub struct Column {
     pub(crate) component_id: ComponentId,
     pub(crate) data: BlobVec,
+    pub(crate) flags: UnsafeCell<Vec<ComponentFlags>>,
+}
+
+impl Column {
+    /// SAFETY: assumes data has already been allocated for the given row/column.
+    #[inline]
+    pub unsafe fn set_unchecked(&self, row: usize, data: *mut u8) {
+        self.data.set_unchecked(row, data);
+    }
+
+    #[inline]
+    pub unsafe fn set_flags_unchecked(&self, row: usize, flags: ComponentFlags) {
+        *(*self.flags.get()).get_unchecked_mut(row) = flags;
+    }
+
+    #[inline]
+    pub unsafe fn swap_remove_unchecked(&mut self, row: usize) {
+        self.data.swap_remove_unchecked(row);
+        (*self.flags.get()).swap_remove(row);
+    }
+
+    #[inline]
+    pub unsafe fn swap_remove_and_forget_unchecked(
+        &mut self,
+        row: usize,
+    ) -> (*mut u8, ComponentFlags) {
+        let data = self.data.swap_remove_and_forget_unchecked(row);
+        let flags = (*self.flags.get()).swap_remove(row);
+        (data, flags)
+    }
+
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) {
+        self.data.grow(additional);
+        // SAFE: unique access to self
+        unsafe {
+            let flags = &mut (*self.flags.get());
+            flags.reserve(additional);
+        }
+    }
+
+    /// SAFETY: must ensure rust mutability rules are not violated
+    #[inline]
+    pub unsafe fn get_ptr(&self) -> NonNull<u8> {
+        self.data.get_ptr()
+    }
+
+    /// SAFETY: must ensure rust mutability rules are not violated
+    #[inline]
+    pub unsafe fn get_flags_mut_ptr(&self) -> *mut ComponentFlags {
+        (*self.flags.get()).as_mut_ptr()
+    }
+
+    /// SAFETY: must ensure rust mutability rules are not violated
+    #[inline]
+    pub unsafe fn get_unchecked(&self, row: usize) -> *mut u8 {
+        self.data.get_unchecked(row)
+    }
+
+    /// SAFETY: must ensure rust mutability rules are not violated
+    #[inline]
+    pub unsafe fn get_flags_unchecked(&self, row: usize) -> *mut ComponentFlags {
+        self.get_flags_mut_ptr().add(row)
+    }
 }
 
 pub struct Tables {
@@ -142,26 +210,16 @@ impl Table {
                     component_info.drop(),
                     self.capacity(),
                 ),
+                flags: UnsafeCell::new(Vec::with_capacity(self.capacity())),
             },
         )
-    }
-
-    /// SAFETY: assumes data has already been allocated for the given row/column.
-    pub unsafe fn put_component_unchecked(
-        &self,
-        component_id: ComponentId,
-        row: usize,
-        data: *mut u8,
-    ) {
-        let component_column = self.get_column_unchecked(component_id);
-        component_column.set_unchecked(row, data);
     }
 
     /// Removes the entity at the given row and returns the entity swapped in to replace it (if an entity was swapped in)
     /// SAFETY: `row` must be in-bounds
     pub unsafe fn swap_remove(&mut self, row: usize) -> Option<Entity> {
         for column in self.columns.values_mut() {
-            column.data.swap_remove_unchecked(row);
+            column.swap_remove_unchecked(row);
         }
         let is_last = row == self.entities.len() - 1;
         self.entities.swap_remove(row);
@@ -183,9 +241,10 @@ impl Table {
         let is_last = row == self.entities.len() - 1;
         let new_row = new_table.allocate(self.entities.swap_remove(row));
         for column in self.columns.values_mut() {
-            let data = column.data.swap_remove_and_forget_unchecked(row);
+            let (data, flags) = column.swap_remove_and_forget_unchecked(row);
             if let Some(new_column) = new_table.get_column_mut(column.component_id) {
                 new_column.set_unchecked(new_row, data);
+                new_column.set_flags_unchecked(new_row, flags);
             }
         }
         TableMoveResult {
@@ -210,8 +269,9 @@ impl Table {
         let new_row = new_table.allocate(self.entities.swap_remove(row));
         for column in self.columns.values_mut() {
             let new_column = new_table.get_column_unchecked_mut(column.component_id);
-            let data = column.data.swap_remove_and_forget_unchecked(row);
+            let (data, flags) = column.swap_remove_and_forget_unchecked(row);
             new_column.set_unchecked(new_row, data);
+            new_column.set_flags_unchecked(new_row, flags);
         }
         TableMoveResult {
             new_row,
@@ -225,25 +285,24 @@ impl Table {
 
     /// SAFETY: a column with the given `component_id` must exist
     #[inline]
-    pub unsafe fn get_column_unchecked(&self, component_id: ComponentId) -> &BlobVec {
-        &self.columns.get_unchecked(component_id).data
+    pub unsafe fn get_column_unchecked(&self, component_id: ComponentId) -> &Column {
+        self.columns.get_unchecked(component_id)
     }
 
     /// SAFETY: a column with the given `component_id` must exist
-    /// The returned &mut BlobVec must not be used in a way that violates rust's mutability rules
     #[inline]
-    pub unsafe fn get_column_unchecked_mut(&self, component_id: ComponentId) -> &mut BlobVec {
-        &mut self.columns.get_unchecked_mut(component_id).data
+    pub unsafe fn get_column_unchecked_mut(&mut self, component_id: ComponentId) -> &mut Column {
+        self.columns.get_unchecked_mut(component_id)
     }
 
     #[inline]
-    pub fn get_column(&self, component_id: ComponentId) -> Option<&BlobVec> {
-        self.columns.get(component_id).map(|c| &c.data)
+    pub fn get_column(&self, component_id: ComponentId) -> Option<&Column> {
+        self.columns.get(component_id)
     }
 
     #[inline]
-    pub fn get_column_mut(&mut self, component_id: ComponentId) -> Option<&mut BlobVec> {
-        self.columns.get_mut(component_id).map(|c| &mut c.data)
+    pub fn get_column_mut(&mut self, component_id: ComponentId) -> Option<&mut Column> {
+        self.columns.get_mut(component_id)
     }
 
     #[inline]
@@ -253,7 +312,7 @@ impl Table {
 
     pub fn reserve(&mut self, amount: usize) {
         for column in self.columns.values_mut() {
-            column.data.grow(amount);
+            column.reserve(amount);
         }
         self.entities.reserve(amount);
         self.capacity += amount;
@@ -270,6 +329,7 @@ impl Table {
         self.entities.push(entity);
         for column in self.columns.values_mut() {
             column.data.set_len(self.entities.len());
+            (*column.flags.get()).push(ComponentFlags::empty());
         }
         index
     }
@@ -306,7 +366,9 @@ mod tests {
                 table.allocate(entity);
                 let mut value = row;
                 let value_ptr = ((&mut value) as *mut usize).cast::<u8>();
-                table.put_component_unchecked(component_id, row, value_ptr);
+                table
+                    .get_column_unchecked(component_id)
+                    .set_unchecked(row, value_ptr);
             };
         }
 

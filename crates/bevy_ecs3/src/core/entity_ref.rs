@@ -1,6 +1,6 @@
 use crate::core::{
-    Archetype, ArchetypeId, Archetypes, Bundle, BundleInfo, Component, ComponentId, Components,
-    DynamicBundle, Entity, EntityLocation, Mut, StorageType, Storages, World,
+    Archetype, ArchetypeId, Archetypes, Bundle, BundleInfo, Component, ComponentFlags, ComponentId,
+    Components, DynamicBundle, Entity, EntityLocation, Mut, StorageType, Storages, World,
 };
 use std::any::TypeId;
 
@@ -66,11 +66,16 @@ impl<'w> EntityMut<'w> {
     pub fn get_mut<T: Component>(&mut self) -> Option<Mut<'w, T>> {
         // SAFE: world access is unique, entity location is valid, and returned component is of type T
         unsafe {
-            get_component_with_type(self.world, TypeId::of::<T>(), self.entity, self.location).map(
-                |value| Mut {
-                    value: &mut *value.cast::<T>(),
-                },
+            get_component_and_flags_with_type(
+                self.world,
+                TypeId::of::<T>(),
+                self.entity,
+                self.location,
             )
+            .map(|(value, flags)| Mut {
+                value: &mut *value.cast::<T>(),
+                flags: &mut *flags,
+            })
         }
     }
 
@@ -285,7 +290,7 @@ impl<'w> EntityMut<'w> {
                 // SAFE: component_ids stored in live archetypes are guaranteed to exist
                 let sparse_set =
                     unsafe { world.storages.sparse_sets.get_mut_unchecked(*component_id) };
-                sparse_set.remove_component(self.entity);
+                sparse_set.remove(self.entity);
             }
             // SAFE: table rows stored in archetypes always exist
             moved_entity = unsafe { table.swap_remove(table_row) };
@@ -329,7 +334,37 @@ unsafe fn get_component(
             .storages
             .sparse_sets
             .get(component_id)
-            .and_then(|sparse_set| sparse_set.get_component(entity)),
+            .and_then(|sparse_set| sparse_set.get(entity)),
+    }
+}
+
+#[inline]
+unsafe fn get_component_and_flags(
+    world: &World,
+    component_id: ComponentId,
+    entity: Entity,
+    location: EntityLocation,
+) -> Option<(*mut u8, *mut ComponentFlags)> {
+    let archetype = world.archetypes.get_unchecked(location.archetype_id);
+    // SAFE: component_id exists and is therefore valid
+    let component_info = world.components.get_info_unchecked(component_id);
+    match component_info.storage_type() {
+        StorageType::Table => {
+            let table = world.storages.tables.get_unchecked(archetype.table_id());
+            // SAFE: archetypes will always point to valid columns
+            let components = table.get_column_unchecked(component_id);
+            let table_row = archetype.entity_table_row_unchecked(location.index);
+            // SAFE: archetypes only store valid table_rows and the stored component type is T
+            Some((
+                components.get_unchecked(table_row),
+                components.get_flags_unchecked(table_row),
+            ))
+        }
+        StorageType::SparseSet => world
+            .storages
+            .sparse_sets
+            .get(component_id)
+            .and_then(|sparse_set| sparse_set.get_with_flags(entity)),
     }
 }
 
@@ -358,7 +393,7 @@ unsafe fn remove_component(
         StorageType::SparseSet => storages
             .sparse_sets
             .get_mut_unchecked(component_id)
-            .remove_component_and_forget(entity)
+            .remove_and_forget(entity)
             .unwrap(),
     }
 }
@@ -374,6 +409,17 @@ unsafe fn get_component_with_type(
 ) -> Option<*mut u8> {
     let component_id = world.components.get_id(type_id)?;
     get_component(world, component_id, entity, location)
+}
+
+#[inline]
+unsafe fn get_component_and_flags_with_type<'w>(
+    world: &World,
+    type_id: TypeId,
+    entity: Entity,
+    location: EntityLocation,
+) -> Option<(*mut u8, *mut ComponentFlags)> {
+    let component_id = world.components.get_id(type_id)?;
+    get_component_and_flags(world, component_id, entity, location)
 }
 
 /// Adds a bundle to the given archetype and returns the resulting archetype. This could be the same [ArchetypeId],

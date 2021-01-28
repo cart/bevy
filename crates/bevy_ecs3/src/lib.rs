@@ -253,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn add_remove_many_table() {
+    fn table_add_remove_many() {
         let mut world = World::default();
         let mut entities = Vec::with_capacity(10_000);
         for _ in 0..1000 {
@@ -270,14 +270,14 @@ mod tests {
     }
 
     #[test]
-    fn add_remove_many_sparse_set() {
+    fn sparse_set_add_remove_many() {
         let mut world = World::default();
         world
             .components_mut()
-            .add(ComponentDescriptor::of::<f32>(StorageType::SparseSet))
+            .add(ComponentDescriptor::of::<usize>(StorageType::SparseSet))
             .unwrap();
-        let mut entities = Vec::with_capacity(10_000);
-        for _ in 0..1000 {
+        let mut entities = Vec::with_capacity(1000);
+        for _ in 0..4 {
             entities.push(world.spawn().insert(0.0f32).id());
         }
 

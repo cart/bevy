@@ -162,8 +162,10 @@ impl BlobVec {
             .add(index * self.item_layout.size())
     }
 
+    /// Gets a pointer to the start of the vec
+    /// SAFETY: must ensure rust mutability rules are not violated
     #[inline]
-    pub unsafe fn data(&self) -> NonNull<u8> {
+    pub unsafe fn get_ptr(&self) -> NonNull<u8> {
         *self.data.get()
     }
 

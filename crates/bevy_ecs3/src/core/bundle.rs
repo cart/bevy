@@ -108,11 +108,11 @@ impl BundleInfo {
             let component_id = *self.component_ids.get_unchecked(bundle_component);
             match self.storage_types[bundle_component] {
                 StorageType::Table => {
-                    table.put_component_unchecked(component_id, table_row, component_ptr);
+                    table.get_column_unchecked(component_id).set_unchecked(table_row, component_ptr);
                 }
                 StorageType::SparseSet => {
                     let sparse_set = sparse_sets.get_mut(component_id).unwrap();
-                    sparse_set.put_component(entity, component_ptr);
+                    sparse_set.insert(entity, component_ptr);
                 }
             }
             bundle_component += 1;

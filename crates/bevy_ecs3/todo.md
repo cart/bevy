@@ -27,26 +27,33 @@
 
 ## TODO
 
+* Optimize SparseSet::insert (code is written but it has memory issues)
+* Tracking
+    * fix memory access issue in add_remove_many_tables
+    * finish updating ComponentSparseSet with flags
+
+* inline bundle put?
 * try removing pre-hash in favor of non-owned get (to allow collision resolution)
 * consider removing Vec{Entity} from Archetype. tables store that data redundantly?
 * consider specializing spawn_bundle
 * remove one by one
-* if we roll with componentid graph, set initial table capacity to 0 to cut down on (probably) unused tables
 * prevent allocating in empty archetype on init (maybe use a EntityMutUninit?)
+    * last attempt dropped perf
 * query state is an unsafe api
+    * maybe this is ok
 * change tracking
+    * store adds/removes/unchanged in ArchetypeEdges. use these for change tracking
+    * ensure tracking components are correctly added to archetypes / tables
+    * consider removing branching / assuming things are tracked?
 * un-comment tests
 * make reserver api safe
+    * pass world into Commands
 * consistent unchecked_mut
 * simplify SAFETY text
 * world.query().get(entity)
 * commands can/should use the graph / an entity builder
 * EntitySpawner
     * struct { Entity, Blobs }
-
-* consider if we really need sparse sets:
-    * each archetype could store the index into a single column table instead
-    * rather than needing a sparse lookup, it could instead be "dense".
 
 
 ## Scratch

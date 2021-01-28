@@ -1,5 +1,4 @@
 use crate::core::{SparseSetIndex, TypeInfo};
-use bevy_utils::HashMap;
 use bitflags::bitflags;
 use std::{alloc::Layout, any::TypeId, collections::hash_map::Entry};
 use thiserror::Error;
