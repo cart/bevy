@@ -26,7 +26,9 @@
 * use archetype generation to get the range of archetypes to update
 
 ## TODO
-
+* try removing QueryIter and see how it affects benches
+* experiment with inlines
+    * pub (crate) where possible (no inline)
 * Optimize SparseSet::insert (code is written but it has memory issues)
 * Tracking
     * fix memory access issue in add_remove_many_tables

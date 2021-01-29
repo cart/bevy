@@ -176,10 +176,16 @@ macro_rules! impl_query_filter_tuple {
             }
 
             #[inline]
-            unsafe fn next_table(&mut self, table: &Table) {}
+            unsafe fn next_table(&mut self, table: &Table) {
+                let ($($filter,)*) = self;
+                $($filter.next_table(table);)*
+            }
 
             #[inline]
-            unsafe fn next_archetype(&mut self, archetype: &Archetype) {}
+            unsafe fn next_archetype(&mut self, archetype: &Archetype) {
+                let ($($filter,)*) = self;
+                $($filter.next_archetype(archetype);)*
+            }
 
             #[inline]
             unsafe fn matches_entity(&self, offset: usize) -> bool {
@@ -193,7 +199,7 @@ macro_rules! impl_query_filter_tuple {
 macro_rules! impl_flag_filter {
     (
         $(#[$meta:meta])*
-        $name: ident, $flags: expr) => {
+        $name: ident, $($flags: expr),+) => {
         $(#[$meta])*
         pub enum $name<T> {
             Table {
@@ -278,7 +284,7 @@ macro_rules! impl_flag_filter {
             unsafe fn matches_entity(&self, index: usize) -> bool {
                 match self {
                     Self::Table { flags, .. } => {
-                        (*flags.add(index)).contains($flags)
+                        false $(|| (*flags.add(index)).contains($flags))+
                     }
                     Self::SparseSet {
                         entities,
@@ -286,8 +292,8 @@ macro_rules! impl_flag_filter {
                         ..
                     } => {
                         let entity = *entities.add(index);
-                        (*(**sparse_set).get_flags_unchecked(entity))
-                            .contains($flags)
+                        let flags = (*(**sparse_set).get_flags_unchecked(entity));
+                        false $(|| flags.contains($flags))+
                     }
                 }
             }
@@ -311,7 +317,7 @@ impl_flag_filter!(
 impl_flag_filter!(
     /// Filter that retrieves components of type `T` that have been added or mutated since the start of the frame
     Changed,
-    ComponentFlags::ADDED | ComponentFlags::MUTATED
+    ComponentFlags::ADDED, ComponentFlags::MUTATED
 );
 
 impl_query_filter_tuple!(A);

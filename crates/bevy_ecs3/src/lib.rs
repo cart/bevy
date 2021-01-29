@@ -18,10 +18,12 @@ macro_rules! smaller_tuples_too {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        core::{Added, Entity, QueryState, With, Without},
-        prelude::{ComponentDescriptor, StorageType, World},
-    };
+    use crate::{core::{Added, Component, Entity, Mut, Mutated, Or, Changed, QueryFilter, QueryState, With, Without}, prelude::{ComponentDescriptor, StorageType, World}};
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct A(usize);
+    struct B(usize);
+    struct C;
 
     #[test]
     fn random_access() {
@@ -339,19 +341,19 @@ mod tests {
         assert_eq!(values, expected);
     }
 
-    // #[test]
-    // fn query_one() {
-    //     let mut world = World::new();
-    //     let a = world.spawn(("abc", 123));
-    //     let b = world.spawn(("def", 456));
-    //     let c = world.spawn(("ghi", 789, true));
-    //     assert_eq!(world.query_one::<&i32>(a), Ok(&123));
-    //     assert_eq!(world.query_one::<&i32>(b), Ok(&456));
-    //     assert!(world.query_one::<(&i32, &bool)>(a).is_err());
-    //     assert_eq!(world.query_one::<(&i32, &bool)>(c), Ok((&789, &true)));
-    //     world.despawn(a).unwrap();
-    //     assert!(world.query_one::<&i32>(a).is_err());
-    // }
+    #[test]
+    fn query_one() {
+        let mut world = World::new();
+        let a = world.spawn().insert_bundle(("abc", 123)).id();
+        let b = world.spawn().insert_bundle(("def", 456)).id();
+        let c = world.spawn().insert_bundle(("ghi", 789, true)).id();
+        assert_eq!(world.query::<&i32>().get(a), Some(&123));
+        assert_eq!(world.query::<&i32>().get(b), Some(&456));
+        assert!(world.query::<(&i32, &bool)>().get(a).is_none());
+        assert_eq!(world.query::<(&i32, &bool)>().get(c), Some((&789, &true)));
+        assert!(world.despawn(a));
+        assert!(world.query::<&i32>().get(a).is_none());
+    }
 
     // #[test]
     // fn remove_tracking() {
@@ -431,20 +433,256 @@ mod tests {
         assert_eq!(world.query::<()>().filter::<Added<i32>>().count(), 1);
         assert_eq!(world.query_mut::<&i32>().count(), 1);
         assert_eq!(world.query_mut::<()>().filter::<Added<i32>>().count(), 1);
-        // assert!(world.query_one::<&i32>(a).is_ok());
-        // assert!(world.query_one_filtered::<(), Added<i32>>(a).is_ok());
-        // assert!(world.query_one_mut::<&i32>(a).is_ok());
-        // assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_ok());
+        assert!(world.query::<&i32>().get(a).is_some());
+        assert!(world.query::<()>().filter::<Added<i32>>().get(a).is_some());
+        assert!(world.query_mut::<&i32>().get(a).is_some());
+        assert!(world
+            .query_mut::<()>()
+            .filter::<Added<i32>>()
+            .get(a)
+            .is_some());
 
-        // world.clear_trackers();
+        world.clear_trackers();
 
-        // assert_eq!(world.query::<&i32>().count(), 1);
-        // assert_eq!(world.query_filtered::<(), Added<i32>>().count(), 0);
-        // assert_eq!(world.query_mut::<&i32>().count(), 1);
-        // assert_eq!(world.query_filtered_mut::<(), Added<i32>>().count(), 0);
-        // assert!(world.query_one_mut::<&i32>(a).is_ok());
-        // assert!(world.query_one_filtered_mut::<(), Added<i32>>(a).is_err());
+        assert_eq!(world.query::<&i32>().count(), 1);
+        assert_eq!(world.query::<()>().filter::<Added<i32>>().count(), 0);
+        assert_eq!(world.query_mut::<&i32>().count(), 1);
+        assert_eq!(world.query_mut::<()>().filter::<Added<i32>>().count(), 0);
+        assert!(world.query::<&i32>().get(a).is_some());
+        assert!(world.query::<()>().filter::<Added<i32>>().get(a).is_none());
+        assert!(world.query_mut::<&i32>().get(a).is_some());
+        assert!(world
+            .query_mut::<()>()
+            .filter::<Added<i32>>()
+            .get(a)
+            .is_none());
     }
+
+    #[test]
+    fn added_queries() {
+        let mut world = World::default();
+        let e1 = world.spawn().insert(A(0)).id();
+
+        fn get_added<Com: Component>(world: &World) -> Vec<Entity> {
+            world
+                .query::<Entity>()
+                .filter::<Added<Com>>()
+                .collect::<Vec<Entity>>()
+        }
+
+        assert_eq!(get_added::<A>(&world), vec![e1]);
+        world.entity_mut(e1).unwrap().insert(B(0));
+        assert_eq!(get_added::<A>(&world), vec![e1]);
+        assert_eq!(get_added::<B>(&world), vec![e1]);
+
+        world.clear_trackers();
+        assert!(get_added::<A>(&world).is_empty());
+        let e2 = world.spawn().insert_bundle((A(1), B(1))).id();
+        assert_eq!(get_added::<A>(&world), vec![e2]);
+        assert_eq!(get_added::<B>(&world), vec![e2]);
+
+        let added = world
+            .query::<Entity>()
+            .filter::<(Added<A>, Added<B>)>()
+            .collect::<Vec<Entity>>();
+        assert_eq!(added, vec![e2]);
+    }
+
+    #[test]
+    fn mutated_trackers() {
+        let mut world = World::default();
+        let e1 = world.spawn().insert_bundle((A(0), B(0))).id();
+        let e2 = world.spawn().insert_bundle((A(0), B(0))).id();
+        let e3 = world.spawn().insert_bundle((A(0), B(0))).id();
+        world.spawn().insert_bundle((A(0), B));
+
+        for (i, mut a) in world.query_mut::<&mut A>().enumerate() {
+            if i % 2 == 0 {
+                a.0 += 1;
+            }
+        }
+
+        fn get_filtered<F: QueryFilter>(world: &mut World) -> Vec<Entity> {
+            world
+                .query::<Entity>()
+                .filter::<F>()
+                .collect::<Vec<Entity>>()
+        }
+
+        assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e1, e3]);
+
+        // ensure changing an entity's archetypes also moves its mutated state
+        world.entity_mut(e1).unwrap().insert(C);
+
+        assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e3, e1], "changed entities list should not change (although the order will due to archetype moves)");
+
+        // spawning a new A entity should not change existing mutated state
+        world.entity_mut(e1).unwrap().insert_bundle((A(0), B));
+        assert_eq!(
+            get_filtered::<Mutated<A>>(&mut world),
+            vec![e3, e1],
+            "changed entities list should not change"
+        );
+
+        // removing an unchanged entity should not change mutated state
+        assert!(world.despawn(e2));
+        assert_eq!(
+            get_filtered::<Mutated<A>>(&mut world),
+            vec![e3, e1],
+            "changed entities list should not change"
+        );
+
+        // removing a changed entity should remove it from enumeration
+        assert!(world.despawn(e1));
+        assert_eq!(
+            get_filtered::<Mutated<A>>(&mut world),
+            vec![e3],
+            "e1 should no longer be returned"
+        );
+
+        world.clear_trackers();
+
+        assert!(get_filtered::<Mutated<A>>(&mut world).is_empty());
+
+        let e4 = world.spawn().id();
+
+        world.entity_mut(e4).unwrap().insert(A(0));
+        assert!(get_filtered::<Mutated<A>>(&mut world).is_empty());
+        assert_eq!(get_filtered::<Added<A>>(&mut world), vec![e4]);
+
+        world.entity_mut(e4).unwrap().insert(A(1));
+        assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e4]);
+
+        world.clear_trackers();
+
+        // ensure inserting multiple components set mutated state for
+        // already existing components and set added state for
+        // non existing components even when changing archetype.
+        world.entity_mut(e4).unwrap().insert_bundle((A(0), B(0)));
+
+        assert!(get_filtered::<Added<A>>(&mut world).is_empty());
+        assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e4]);
+        assert_eq!(get_filtered::<Added<B>>(&mut world), vec![e4]);
+        assert!(get_filtered::<Mutated<B>>(&mut world).is_empty());
+    }
+
+    #[test]
+    fn empty_spawn() {
+        let mut world = World::default();
+        let e = world.spawn().id();
+        let mut e_mut = world.entity_mut(e).unwrap();
+        e_mut.insert(A(0));
+        assert_eq!(e_mut.get::<A>().unwrap(), &A(0));
+    }
+
+    #[test]
+    fn multiple_mutated_query() {
+        let mut world = World::default();
+        world.spawn().insert_bundle((A(0), B(0))).id();
+        let e2 = world.spawn().insert_bundle((A(0), B(0))).id();
+        world.spawn().insert_bundle((A(0), B(0)));
+
+        for mut a in world.query_mut::<&mut A>() {
+            a.0 += 1;
+        }
+
+        for mut b in world.query_mut::<&mut B>().skip(1).take(1) {
+            b.0 += 1;
+        }
+
+        let a_b_mutated = world
+            .query::<Entity>()
+            .filter::<(Mutated<A>, Mutated<B>)>()
+            .collect::<Vec<Entity>>();
+        assert_eq!(a_b_mutated, vec![e2]);
+    }
+
+    // #[test]
+    // fn or_mutated_query() {
+    //     let mut world = World::default();
+    //     let e1 = world.spawn().insert_bundle((A(0), B(0))).id();
+    //     let e2 = world.spawn().insert_bundle((A(0), B(0))).id();
+    //     let e3 = world.spawn().insert_bundle((A(0), B(0))).id();
+    //     world.spawn().insert_bundle((A(0), B(0)));
+
+    //     // Mutate A in entities e1 and e2
+    //     for mut a in world.query_mut::<&mut A>().take(2) {
+    //         a.0 += 1;
+    //     }
+    //     // Mutate B in entities e2 and e3
+    //     for mut b in world.query_mut::<&mut B>().skip(1).take(2) {
+    //         b.0 += 1;
+    //     }
+
+    //     let a_b_mutated = world
+    //         .query::<Entity>()
+    //         .filter::<Or<(Mutated<A>, Mutated<B>)>>()
+    //         .collect::<Vec<Entity>>();
+    //     // e1 has mutated A, e3 has mutated B, e2 has mutated A and B, _e4 has no mutated component
+    //     assert_eq!(a_b_mutated, vec![e1, e2, e3]);
+    // }
+
+    #[test]
+    fn changed_query() {
+        let mut world = World::default();
+        let e1 = world.spawn().insert_bundle((A(0), B(0))).id();
+
+        fn get_changed(world: &World) -> Vec<Entity> {
+            world
+                .query::<Entity>()
+                .filter::<Changed<A>>()
+                .collect::<Vec<Entity>>()
+        }
+        assert_eq!(get_changed(&world), vec![e1]);
+        world.clear_trackers();
+        assert_eq!(get_changed(&world), vec![]);
+        *world.get_mut(e1).unwrap() = A(1);
+        assert_eq!(get_changed(&world), vec![e1]);
+    }
+
+    // #[test]
+    // fn flags_query() {
+    //     let mut world = World::default();
+    //     let e1 = world.spawn((A(0), B(0)));
+    //     world.spawn((B(0),));
+
+    //     fn get_flags(world: &World) -> Vec<Flags<A>> {
+    //         world.query::<Flags<A>>().collect::<Vec<Flags<A>>>()
+    //     }
+    //     let flags = get_flags(&world);
+    //     assert!(flags[0].with());
+    //     assert!(flags[0].added());
+    //     assert!(!flags[0].mutated());
+    //     assert!(flags[0].changed());
+    //     assert!(!flags[1].with());
+    //     assert!(!flags[1].added());
+    //     assert!(!flags[1].mutated());
+    //     assert!(!flags[1].changed());
+    //     world.clear_trackers();
+    //     let flags = get_flags(&world);
+    //     assert!(flags[0].with());
+    //     assert!(!flags[0].added());
+    //     assert!(!flags[0].mutated());
+    //     assert!(!flags[0].changed());
+    //     *world.get_mut(e1).unwrap() = A(1);
+    //     let flags = get_flags(&world);
+    //     assert!(flags[0].with());
+    //     assert!(!flags[0].added());
+    //     assert!(flags[0].mutated());
+    //     assert!(flags[0].changed());
+    // }
+
+    // #[test]
+    // fn exact_size_query() {
+    //     let mut world = World::default();
+    //     world.spawn((A(0), B(0)));
+    //     world.spawn((A(0), B(0)));
+    //     world.spawn((C,));
+
+    //     assert_eq!(world.query::<(&A, &B)>().len(), 2);
+    //     // the following example shouldn't compile because Changed<A> is not an UnfilteredFetch
+    //     // assert_eq!(world.query::<(Changed<A>, &B)>().len(), 2);
+    // }
 
     // #[test]
     // #[cfg_attr(

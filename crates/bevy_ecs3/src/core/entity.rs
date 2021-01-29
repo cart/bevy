@@ -336,12 +336,6 @@ impl Entities {
         if meta.generation != entity.generation {
             return None;
         }
-        if meta.location.archetype_id == ArchetypeId::empty_archetype() {
-            return Some(EntityLocation {
-                archetype_id: ArchetypeId::empty_archetype(),
-                index: usize::max_value(),
-            });
-        }
         Some(meta.location)
     }
 

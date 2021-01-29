@@ -47,13 +47,13 @@ impl Column {
     }
 
     #[inline]
-    pub unsafe fn swap_remove_unchecked(&mut self, row: usize) {
+    pub(crate) unsafe fn swap_remove_unchecked(&mut self, row: usize) {
         self.data.swap_remove_unchecked(row);
         (*self.flags.get()).swap_remove(row);
     }
 
     #[inline]
-    pub unsafe fn swap_remove_and_forget_unchecked(
+    pub(crate) unsafe fn swap_remove_and_forget_unchecked(
         &mut self,
         row: usize,
     ) -> (*mut u8, ComponentFlags) {
@@ -63,7 +63,7 @@ impl Column {
     }
 
     #[inline]
-    pub fn reserve(&mut self, additional: usize) {
+    pub(crate) fn reserve(&mut self, additional: usize) {
         self.data.grow(additional);
         // SAFE: unique access to self
         unsafe {
@@ -94,6 +94,14 @@ impl Column {
     #[inline]
     pub unsafe fn get_flags_unchecked(&self, row: usize) -> *mut ComponentFlags {
         self.get_flags_mut_ptr().add(row)
+    }
+
+    #[inline]
+    pub(crate) fn clear_flags(&mut self)  {
+        let flags = unsafe { (*self.flags.get()).iter_mut()};
+        for component_flags in flags {
+            *component_flags = ComponentFlags::empty();
+        }
     }
 }
 
@@ -170,6 +178,12 @@ impl Tables {
     pub fn iter(&self) -> impl Iterator<Item = &Table> {
         self.tables.iter()
     }
+
+    pub(crate) fn clear_flags(&mut self) {
+        for table in self.tables.iter_mut() {
+            table.clear_flags();
+        }
+    } 
 }
 
 pub struct Table {
@@ -342,6 +356,12 @@ impl Table {
     #[inline]
     pub fn len(&self) -> usize {
         self.entities.len()
+    }
+    
+    pub(crate) fn clear_flags(&mut self) {
+        for column in self.columns.values_mut() {
+            column.clear_flags();
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Column> {

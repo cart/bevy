@@ -94,6 +94,27 @@ impl<'w, Q: WorldQuery, F: QueryFilter> QueryIter<'w, Q, F> {
             query_state,
         )
     }
+
+    pub fn get(mut self, entity: Entity) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
+        // SAFE: Queries can only be created in ways that honor rust's mutability rules. This consumes the query, which prevents aliased access.
+        unsafe {
+            let location = self.world.entities.get(entity)?;
+            // SAFE: live entities always exist in an archetype
+            let archetype = self.archetypes.get_unchecked(location.archetype_id);
+            if !self.fetch.matches_archetype(archetype) || !self.filter.matches_archetype(archetype)
+            {
+                return None;
+            }
+            self.fetch.next_archetype(archetype);
+            self.filter.next_archetype(archetype);
+
+            if self.filter.matches_entity(location.index) {
+                Some(self.fetch.fetch(location.index))
+            } else {
+                None
+            }
+        }
+    }
 }
 
 impl<'w, Q: WorldQuery> QueryIter<'w, Q, ()> {

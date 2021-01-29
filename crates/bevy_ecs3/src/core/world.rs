@@ -165,6 +165,11 @@ impl World {
             });
         }
     }
+
+    pub  fn clear_trackers(&mut self) {
+        self.storages.tables.clear_flags();
+        self.storages.sparse_sets.clear_flags();
+    }
 }
 
 impl fmt::Debug for World {

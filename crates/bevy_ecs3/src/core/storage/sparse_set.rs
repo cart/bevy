@@ -231,6 +231,14 @@ impl ComponentSparseSet {
             }
         }
     }
+
+    pub(crate) fn clear_flags(&mut self) {
+        // SAFE: unique access to self
+        let flags = unsafe { (*self.flags.get()).iter_mut() };
+        for component_flags in flags {
+            *component_flags = ComponentFlags::empty();
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -422,6 +430,12 @@ impl SparseSets {
         component_id: ComponentId,
     ) -> &mut ComponentSparseSet {
         self.sets.get_unchecked_mut(component_id)
+    }
+
+    pub(crate) fn clear_flags(&mut self) {
+        for set in self.sets.values_mut() {
+            set.clear_flags();
+        }
     }
 }
 
