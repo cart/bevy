@@ -115,12 +115,12 @@ impl<T: Component> QueryFilter for Without<T> {
     }
 }
 
-pub struct WithType<T: Bundle> {
+pub struct WithBundle<T: Bundle> {
     bundle_info: *const BundleInfo,
     marker: PhantomData<T>,
 }
 
-impl<T: Bundle> QueryFilter for WithType<T> {
+impl<T: Bundle> QueryFilter for WithBundle<T> {
     const DANGLING: Self = Self {
         bundle_info: ptr::null::<BundleInfo>(),
         marker: PhantomData,
