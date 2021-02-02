@@ -104,7 +104,7 @@ pub enum ComponentsError {
 }
 
 impl Components {
-    pub fn add(&mut self, descriptor: ComponentDescriptor) -> Result<ComponentId, ComponentsError> {
+    pub(crate) fn add(&mut self, descriptor: &ComponentDescriptor) -> Result<ComponentId, ComponentsError> {
         let index_entry = self.indices.entry(descriptor.type_id);
         if let Entry::Occupied(_) = index_entry {
             return Err(ComponentsError::ComponentAlreadyExists(descriptor.type_id));

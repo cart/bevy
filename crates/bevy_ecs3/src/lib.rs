@@ -18,7 +18,12 @@ macro_rules! smaller_tuples_too {
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::{Added, Component, Entity, Mut, Mutated, Or, Changed, QueryFilter, QueryState, With, Without}, prelude::{ComponentDescriptor, StorageType, World}};
+    use crate::{
+        core::{
+            Added, Changed, Component, Entity, Mutated, QueryFilter, QueryState, With, Without,
+        },
+        prelude::{ComponentDescriptor, StorageType, World},
+    };
 
     #[derive(Debug, PartialEq, Eq)]
     struct A(usize);
@@ -29,8 +34,7 @@ mod tests {
     fn random_access() {
         let mut world = World::new();
         world
-            .components_mut()
-            .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
+            .register_component(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
             .unwrap();
         let e = world.spawn().insert_bundle(("abc", 123)).id();
         let f = world.spawn().insert_bundle(("def", 456, true)).id();
@@ -66,8 +70,7 @@ mod tests {
     fn despawn_mixed_storage() {
         let mut world = World::new();
         world
-            .components_mut()
-            .add(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
+            .register_component(ComponentDescriptor::of::<i32>(StorageType::SparseSet))
             .unwrap();
         let e = world.spawn().insert_bundle(("abc", 123)).id();
         let f = world.spawn().insert_bundle(("def", 456)).id();
@@ -194,19 +197,92 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn query_optional_component() {
-    //     let mut world = World::new();
-    //     let e = world.spawn(("abc", 123));
-    //     let f = world.spawn(("def", 456, true));
-    //     let ents = world
-    //         .query::<(Entity, Option<&bool>, &i32)>()
-    //         .map(|(e, b, &i)| (e, b.copied(), i))
-    //         .collect::<Vec<_>>();
-    //     assert_eq!(ents.len(), 2);
-    //     assert!(ents.contains(&(e, None, 123)));
-    //     assert!(ents.contains(&(f, Some(true), 456)));
-    // }
+    #[test]
+    fn query_optional_component_table() {
+        let mut world = World::new();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
+        // this should be skipped
+        world.spawn().insert("abc");
+        let ents = world
+            .query::<(Entity, Option<&bool>, &i32)>()
+            .map(|(e, b, &i)| (e, b.copied(), i))
+            .collect::<Vec<_>>();
+        assert_eq!(ents, &[(e, None, 123), (f, Some(true), 456)]);
+    }
+
+    #[test]
+    fn query_optional_component_sparse() {
+        let mut world = World::new();
+        world
+            .register_component(ComponentDescriptor::of::<bool>(StorageType::SparseSet))
+            .unwrap();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
+        // // this should be skipped
+        // world.spawn().insert("abc");
+        let ents = world
+            .query::<(Entity, Option<&bool>, &i32)>()
+            .map(|(e, b, &i)| (e, b.copied(), i))
+            .collect::<Vec<_>>();
+        assert_eq!(ents, &[(e, None, 123), (f, Some(true), 456)]);
+    }
+
+    #[test]
+    fn query_optional_component_sparse_no_match() {
+        let mut world = World::new();
+        world
+            .register_component(ComponentDescriptor::of::<bool>(StorageType::SparseSet))
+            .unwrap();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456)).id();
+        // // this should be skipped
+        world.spawn().insert("abc");
+        let ents = world
+            .query::<(Entity, Option<&bool>, &i32)>()
+            .map(|(e, b, &i)| (e, b.copied(), i))
+            .collect::<Vec<_>>();
+        assert_eq!(ents, &[(e, None, 123), (f, None, 456)]);
+    }
+
+    #[test]
+    fn query_optional_component_stateful_sparse() {
+        let mut world = World::new();
+        world
+            .register_component(ComponentDescriptor::of::<bool>(StorageType::SparseSet))
+            .unwrap();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
+        // this should be skipped
+        world.spawn().insert("abc");
+        let mut query_state = QueryState::default();
+        unsafe {
+            let ents = world
+                .query::<(Entity, Option<&bool>, &i32)>()
+                .with_state(&mut query_state)
+                .map(|(e, b, &i)| (e, b.copied(), i))
+                .collect::<Vec<_>>();
+            assert_eq!(ents, &[(e, None, 123), (f, Some(true), 456)]);
+        }
+    }
+
+    #[test]
+    fn query_optional_component_stateful_table() {
+        let mut world = World::new();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
+        // this should be skipped
+        world.spawn().insert("abc");
+        let mut query_state = QueryState::default();
+        unsafe {
+            let ents = world
+                .query::<(Entity, Option<&bool>, &i32)>()
+                .with_state(&mut query_state)
+                .map(|(e, b, &i)| (e, b.copied(), i))
+                .collect::<Vec<_>>();
+            assert_eq!(ents, &[(e, None, 123), (f, Some(true), 456)]);
+        }
+    }
 
     #[test]
     fn add_remove_components() {
@@ -275,8 +351,7 @@ mod tests {
     fn sparse_set_add_remove_many() {
         let mut world = World::default();
         world
-            .components_mut()
-            .add(ComponentDescriptor::of::<usize>(StorageType::SparseSet))
+            .register_component(ComponentDescriptor::of::<usize>(StorageType::SparseSet))
             .unwrap();
         let mut entities = Vec::with_capacity(1000);
         for _ in 0..4 {

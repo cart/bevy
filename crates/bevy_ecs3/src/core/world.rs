@@ -1,11 +1,11 @@
 use crate::core::{
     add_bundle_to_archetype, entity_ref::EntityMut, Archetype, ArchetypeId, Archetypes, Bundle,
-    Bundles, Component, Components, Entities, Entity, EntityRef, Mut, QueryIter, ReadOnlyFetch,
-    SparseSets, Storages, Table, WorldQuery,
+    Bundles, Component, ComponentId, Components, ComponentsError, Entities, Entity, EntityRef, Mut,
+    QueryIter, ReadOnlyFetch, SparseSets, Storages, Table, WorldQuery,
 };
 use std::fmt;
 
-use super::BundleInfo;
+use super::{BundleInfo, ComponentDescriptor, StorageType};
 
 #[derive(Default)]
 pub struct World {
@@ -38,11 +38,6 @@ impl World {
     }
 
     #[inline]
-    pub fn components_mut(&mut self) -> &mut Components {
-        &mut self.components
-    }
-
-    #[inline]
     pub fn storages(&self) -> &Storages {
         &self.storages
     }
@@ -50,6 +45,21 @@ impl World {
     #[inline]
     pub fn bundles(&self) -> &Bundles {
         &self.bundles
+    }
+
+    pub fn register_component(
+        &mut self,
+        descriptor: ComponentDescriptor,
+    ) -> Result<ComponentId, ComponentsError> {
+        let component_id = self.components.add(&descriptor)?;
+        // ensure sparse set is created for SparseSet components
+        if descriptor.storage_type == StorageType::SparseSet {
+            // SAFE: just created
+            let info = unsafe { self.components.get_info_unchecked(component_id) };
+            self.storages.sparse_sets.get_or_insert(info);
+        }
+
+        Ok(component_id)
     }
 
     #[inline]
@@ -166,7 +176,7 @@ impl World {
         }
     }
 
-    pub  fn clear_trackers(&mut self) {
+    pub fn clear_trackers(&mut self) {
         self.storages.tables.clear_flags();
         self.storages.sparse_sets.clear_flags();
     }

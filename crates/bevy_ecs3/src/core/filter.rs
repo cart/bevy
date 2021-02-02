@@ -9,8 +9,7 @@ pub trait QueryFilter: Sized {
     unsafe fn init(world: &World) -> Option<Self>;
     unsafe fn matches_archetype(&self, archetype: &Archetype) -> bool;
     unsafe fn next_table(&mut self, table: &Table);
-    unsafe fn next_archetype(&mut self, archetype: &Archetype);
-    unsafe fn matches_entity(&self, index: usize) -> bool;
+    unsafe fn matches_entity(&self, table_row: usize) -> bool;
 }
 
 impl QueryFilter for () {
@@ -30,10 +29,7 @@ impl QueryFilter for () {
     unsafe fn next_table(&mut self, _table: &Table) {}
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
-
-    #[inline]
-    unsafe fn matches_entity(&self, _index: usize) -> bool {
+    unsafe fn matches_entity(&self, _table_row: usize) -> bool {
         true
     }
 }
@@ -70,10 +66,7 @@ impl<T: Component> QueryFilter for With<T> {
     unsafe fn next_table(&mut self, _table: &Table) {}
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
-
-    #[inline]
-    unsafe fn matches_entity(&self, _index: usize) -> bool {
+    unsafe fn matches_entity(&self, _table_row: usize) -> bool {
         true
     }
 }
@@ -107,10 +100,7 @@ impl<T: Component> QueryFilter for Without<T> {
     unsafe fn next_table(&mut self, _table: &Table) {}
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
-
-    #[inline]
-    unsafe fn matches_entity(&self, _index: usize) -> bool {
+    unsafe fn matches_entity(&self, _table_row: usize) -> bool {
         true
     }
 }
@@ -151,10 +141,7 @@ impl<T: Bundle> QueryFilter for WithBundle<T> {
     unsafe fn next_table(&mut self, _table: &Table) {}
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype) {}
-
-    #[inline]
-    unsafe fn matches_entity(&self, _index: usize) -> bool {
+    unsafe fn matches_entity(&self, _table_row: usize) -> bool {
         true
     }
 }
@@ -179,12 +166,6 @@ macro_rules! impl_query_filter_tuple {
             unsafe fn next_table(&mut self, table: &Table) {
                 let ($($filter,)*) = self;
                 $($filter.next_table(table);)*
-            }
-
-            #[inline]
-            unsafe fn next_archetype(&mut self, archetype: &Archetype) {
-                let ($($filter,)*) = self;
-                $($filter.next_archetype(archetype);)*
             }
 
             #[inline]
@@ -264,34 +245,17 @@ macro_rules! impl_flag_filter {
                 }
             }
 
-            unsafe fn next_archetype(&mut self, archetype: &Archetype) {
-                match self {
-                    Self::Table {
-                        component_id,
-                        flags,
-                        tables,
-                        ..
-                    } => {
-                        let table = (&**tables).get_unchecked(archetype.table_id());
-                        *flags = table
-                            .get_column_unchecked(*component_id)
-                            .get_flags_mut_ptr();
-                    }
-                    Self::SparseSet { entities, .. } => *entities = archetype.entities().as_ptr(),
-                }
-            }
-
-            unsafe fn matches_entity(&self, index: usize) -> bool {
+            unsafe fn matches_entity(&self, table_row: usize) -> bool {
                 match self {
                     Self::Table { flags, .. } => {
-                        false $(|| (*flags.add(index)).contains($flags))+
+                        false $(|| (*flags.add(table_row)).contains($flags))+
                     }
                     Self::SparseSet {
                         entities,
                         sparse_set,
                         ..
                     } => {
-                        let entity = *entities.add(index);
+                        let entity = *entities.add(table_row);
                         let flags = (*(**sparse_set).get_flags_unchecked(entity));
                         false $(|| flags.contains($flags))+
                     }
