@@ -1,5 +1,5 @@
 use crate::core::{BlobVec, ComponentFlags, ComponentId, ComponentInfo, Entity};
-use std::{alloc::Layout, cell::UnsafeCell, marker::PhantomData};
+use std::{cell::UnsafeCell, marker::PhantomData};
 
 #[derive(Debug)]
 pub struct SparseArray<I, V = I> {
@@ -124,7 +124,9 @@ impl ComponentSparseSet {
         });
         // SAFE: dense_index exists thanks to the call above
         self.dense.set_unchecked(dense_index, value);
-        (*self.flags.get()).get_unchecked_mut(dense_index).insert(flags);
+        (*self.flags.get())
+            .get_unchecked_mut(dense_index)
+            .insert(flags);
     }
 
     #[inline]

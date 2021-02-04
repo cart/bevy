@@ -1,7 +1,11 @@
 pub mod core;
+pub mod system;
 
+// TODO: stop using wildcards here
 pub mod prelude {
     pub use crate::core::*;
+    // pub use crate::resource::*;
+    // pub use crate::system::*;
 }
 
 #[macro_export]

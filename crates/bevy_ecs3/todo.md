@@ -5,7 +5,7 @@
 * TypeId->ComponentId hash lookup
 * Cache where possible (ex: Queries)
 
-## Done
+## Summary of Done Things
 
 * Multiple component storages (tables and sparse sets)
 * Complete World rewrite (no shared hecs code, other than the entity id allocator)
@@ -13,6 +13,8 @@
 * Stateful Queries
 * Smaller Codebase (verify numbers at the end)
 * Reduced monomorphization (measure compile time difference)
+* More granular module organization
+* Direct stateless World queries are slower
 
 ## random thoughts
 
@@ -30,9 +32,6 @@
     * un-comment all tests
     * Or Filter
     * Removal Tracking
-    * Option Fetch
-        * current table iterator problematic? can't know if fetch is safe to call
-    * Flags
     * ExactSizeIter for Query
     * Flags
     * try removing pre-hash in favor of non-owned get (to allow collision resolution)
@@ -42,6 +41,7 @@
     * simplify SAFETY text
     * consistent unchecked_mut
     * batch_iter
+    * Update bundle derive macro
 * high level
     * Query access
     * port System to new api
@@ -51,6 +51,7 @@
 
 
 ## Maybe
+* try trimming down Fetch api
 * try removing QueryIter and see how it affects benches
 * experiment with inlines
     * pub (crate) where possible (no inline)
@@ -63,6 +64,7 @@
 * commands can/should use the graph / an entity builder
 * EntitySpawner
     * struct { Entity, Blobs }
+* batch archetype changes
 
 
 ## Scratch

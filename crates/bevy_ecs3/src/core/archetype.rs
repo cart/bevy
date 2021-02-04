@@ -8,6 +8,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use super::SparseSetIndex;
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ArchetypeId(u32);
 
@@ -99,10 +101,15 @@ pub(crate) struct ArchetypeSwapRemoveResult {
     pub table_row: usize,
 }
 
+struct ArchetypeComponentInfo {
+    storage_type: StorageType,
+    archetype_component_id: ArchetypeComponentId,
+}
+
 pub struct Archetype {
     id: ArchetypeId,
     table_info: TableInfo,
-    components: SparseArray<ComponentId, StorageType>,
+    components: SparseArray<ComponentId, ArchetypeComponentInfo>,
     table_components: Vec<ComponentId>,
     sparse_set_components: Vec<ComponentId>,
     entities: Vec<Entity>,
@@ -115,14 +122,33 @@ impl Archetype {
         table_id: TableId,
         table_components: Vec<ComponentId>,
         sparse_set_components: Vec<ComponentId>,
+        table_archetype_components: Vec<ArchetypeComponentId>,
+        sparse_set_archetype_components: Vec<ArchetypeComponentId>,
     ) -> Self {
         let mut components = SparseArray::default();
-        for component_id in table_components.iter().cloned() {
-            components.insert(component_id, StorageType::Table);
+        for (component_id, archetype_component_id) in
+            table_components.iter().zip(table_archetype_components)
+        {
+            components.insert(
+                *component_id,
+                ArchetypeComponentInfo {
+                    storage_type: StorageType::Table,
+                    archetype_component_id,
+                },
+            );
         }
 
-        for component_id in sparse_set_components.iter().cloned() {
-            components.insert(component_id, StorageType::SparseSet);
+        for (component_id, archetype_component_id) in sparse_set_components
+            .iter()
+            .zip(sparse_set_archetype_components)
+        {
+            components.insert(
+                *component_id,
+                ArchetypeComponentInfo {
+                    storage_type: StorageType::SparseSet,
+                    archetype_component_id,
+                },
+            );
         }
         Self {
             id,
@@ -228,7 +254,19 @@ impl Archetype {
 
     #[inline]
     pub fn get_storage_type(&self, component_id: ComponentId) -> Option<StorageType> {
-        self.components.get(component_id).cloned()
+        self.components
+            .get(component_id)
+            .map(|info| info.storage_type)
+    }
+
+    #[inline]
+    pub fn get_archetype_component_id(
+        &self,
+        component_id: ComponentId,
+    ) -> Option<ArchetypeComponentId> {
+        self.components
+            .get(component_id)
+            .map(|info| info.archetype_component_id)
     }
 }
 
@@ -254,15 +292,52 @@ pub struct ArchetypeHash<'a> {
     sparse_set_components: &'a [ComponentId],
 }
 
-#[derive(Hash)]
-pub struct ArchetypeComponents<'a> {
-    table_components: &'a [ComponentId],
-    sparse_set_components: &'a [ComponentId],
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ArchetypeComponent {
+    pub archetype_id: ArchetypeId,
+    pub component_id: ComponentId,
+}
+
+impl ArchetypeComponent {
+    #[inline]
+    pub fn new(archetype_id: ArchetypeId, component_id: ComponentId) -> Self {
+        ArchetypeComponent {
+            archetype_id,
+            component_id,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct ArchetypeComponentId(usize);
+
+impl ArchetypeComponentId {
+    #[inline]
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.0
+    }
+}
+
+impl SparseSetIndex for ArchetypeComponentId {
+    #[inline]
+    fn sparse_set_index(&self) -> usize {
+        self.0
+    }
+}
+
+struct ArchetypeComponents {
+
 }
 
 pub struct Archetypes {
     archetypes: Vec<Archetype>,
     archetype_ids: HashMap<u64, ArchetypeId>,
+    archetype_component_count: usize,
 }
 
 impl Default for Archetypes {
@@ -270,6 +345,7 @@ impl Default for Archetypes {
         let mut archetypes = Archetypes {
             archetypes: Vec::new(),
             archetype_ids: Default::default(),
+            archetype_component_count: 0,
         };
         archetypes.get_id_or_insert(TableId::empty_table(), Vec::new(), Vec::new());
         archetypes
@@ -325,15 +401,35 @@ impl Archetypes {
         archetype_hash.hash(&mut hasher);
         let hash = hasher.finish();
         let archetypes = &mut self.archetypes;
-        *self.archetype_ids.entry(hash).or_insert_with(|| {
+        let archetype_component_count = &mut self.archetype_component_count;
+        let mut next_archetype_component_id = move || {
+            let id = ArchetypeComponentId(*archetype_component_count);
+            *archetype_component_count += 1;
+            id
+        };
+        *self.archetype_ids.entry(hash).or_insert_with(move || {
             let id = ArchetypeId(archetypes.len() as u32);
+            let table_archetype_components = (0..table_components.len())
+                .map(|_| next_archetype_component_id())
+                .collect();
+            let sparse_set_archetype_components = (0..sparse_set_components.len())
+                .map(|_| next_archetype_component_id())
+                .collect();
             archetypes.push(Archetype::new(
                 id,
                 table_id,
                 table_components,
                 sparse_set_components,
+                table_archetype_components,
+                sparse_set_archetype_components,
             ));
             id
         })
+    }
+
+    fn get_next_archetype_component_id(&mut self) -> ArchetypeComponentId {
+        let id = ArchetypeComponentId(self.archetype_component_count);
+        self.archetype_component_count += 1;
+        id
     }
 }

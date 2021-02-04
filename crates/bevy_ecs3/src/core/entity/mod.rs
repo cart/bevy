@@ -1,10 +1,15 @@
+mod entity_ref;
+mod spawn_batch;
+
+pub use entity_ref::*;
+pub use spawn_batch::*;
+
+use crate::core::{ArchetypeId, SparseSetIndex};
 use std::{
     convert::TryFrom,
     fmt, mem,
     sync::atomic::{AtomicI64, Ordering},
 };
-
-use crate::core::{ArchetypeId, SparseSetIndex};
 
 /// Lightweight unique ID of an entity
 ///
