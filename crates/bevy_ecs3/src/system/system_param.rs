@@ -1,42 +1,67 @@
-use crate::{core::{Fetch, Or, QueryFilter, QueryState, World, WorldQuery}, system::{Commands, Query, SystemQueryState, SystemState}};
+use crate::{
+    core::{Or, QueryFilter, World, WorldQuery},
+    system::{Commands, Query, SystemQueryState, SystemState},
+};
 use parking_lot::Mutex;
-use std::{any::TypeId, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
+
 pub trait SystemParam: Sized {
-    type Fetch: for<'a> FetchSystemParam<'a>;
+    type State: SystemParamState;
+    type Fetch: for<'a> FetchSystemParam<'a, State = Self::State>;
+}
+
+pub trait SystemParamState: Send + Sync + 'static {
+    fn init(world: &mut World) -> Self;
+    #[inline]
+    fn update(&mut self, world: &World, system_state: &mut SystemState) {}
+    #[inline]
+    fn apply(&mut self, _world: &mut World) {}
 }
 
 pub trait FetchSystemParam<'a> {
     type Item;
-    fn init(system_state: &mut SystemState, world: &World);
+    type State: 'a;
     /// # Safety
     /// This call might access any of the input parameters in an unsafe way. Make sure the data access is safe in
     /// the context of the system scheduler
-    unsafe fn get_param(system_state: &'a SystemState, world: &'a World) -> Option<Self::Item>;
+    unsafe fn get_param(
+        state: &'a mut Self::State,
+        system_state: &'a SystemState,
+        world: &'a World,
+    ) -> Option<Self::Item>;
 }
 
 pub struct FetchQuery<Q, F>(PhantomData<(Q, F)>);
 
 impl<'a, Q: WorldQuery, F: QueryFilter> SystemParam for Query<'a, Q, F> {
     type Fetch = FetchQuery<Q, F>;
+    type State = SystemQueryState;
+}
+
+impl SystemParamState for SystemQueryState {
+    fn init(_world: &mut World) -> Self {
+        SystemQueryState::default()
+    }
+
+    fn update(&mut self, world: &World, system_state: &mut SystemState) {
+        // self.update_archetypes(archetypes, fetch, filter)
+        // TODO: check for collision with system state archetype component access
+    }
 }
 
 impl<'a, Q: WorldQuery, F: QueryFilter> FetchSystemParam<'a> for FetchQuery<Q, F> {
     type Item = Query<'a, Q, F>;
+    type State = SystemQueryState;
 
     #[inline]
-    unsafe fn get_param(system_state: &'a SystemState, world: &'a World) -> Option<Self::Item> {
-        let query_index = *system_state.current_query_index.get();
-        let system_query_state: &'a SystemQueryState = &system_state.param_query_states[query_index][0];
-        *system_state.current_query_index.get() += 1;
+    unsafe fn get_param(
+        state: &'a mut Self::State,
+        _system_state: &'a SystemState,
+        world: &'a World,
+    ) -> Option<Self::Item> {
         // TODO: try caching fetch state in SystemParam
         // TODO: remove these "expects"
-        Some(Query::new(world, system_query_state))
-    }
-
-    fn init(system_state: &mut SystemState, _world: &World) {
-        system_state
-            .param_query_states
-            .push(vec![SystemQueryState::default()]);
+        Some(Query::new(world, state))
     }
 }
 
@@ -78,36 +103,61 @@ pub struct FetchCommands;
 
 impl<'a> SystemParam for &'a mut Commands {
     type Fetch = FetchCommands;
+    type State = Commands;
 }
+
+impl SystemParamState for Commands {
+    fn init(_world: &mut World) -> Self {
+        Default::default()
+    }
+
+    fn apply(&mut self, world: &mut World) {
+        self.apply(world);
+    }
+}
+
 impl<'a> FetchSystemParam<'a> for FetchCommands {
     type Item = &'a mut Commands;
-
-    fn init(system_state: &mut SystemState, world: &World) {}
+    type State = Commands;
 
     #[inline]
-    unsafe fn get_param(system_state: &'a SystemState, _world: &'a World) -> Option<Self::Item> {
-        Some(&mut *system_state.commands.get())
+    unsafe fn get_param(
+        state: &'a mut Self::State,
+        _system_state: &'a SystemState,
+        _world: &'a World,
+    ) -> Option<Self::Item> {
+        Some(state)
     }
 }
 
 pub struct FetchArcCommands;
 impl SystemParam for Arc<Mutex<Commands>> {
     type Fetch = FetchArcCommands;
+    type State = Arc<Mutex<Commands>>;
+}
+
+impl SystemParamState for Arc<Mutex<Commands>> {
+    fn init(_world: &mut World) -> Self {
+        Default::default()
+    }
+
+    fn apply(&mut self, world: &mut World) {
+        let mut commands = self.lock();
+        commands.apply(world);
+    }
 }
 
 impl<'a> FetchSystemParam<'a> for FetchArcCommands {
     type Item = Arc<Mutex<Commands>>;
-
-    fn init(system_state: &mut SystemState, world: &World) {
-        system_state.arc_commands.get_or_insert_with(|| {
-            let mut commands = Commands::default();
-            Arc::new(Mutex::new(commands))
-        });
-    }
+    type State = Arc<Mutex<Commands>>;
 
     #[inline]
-    unsafe fn get_param(system_state: &SystemState, _world: &World) -> Option<Self::Item> {
-        Some(system_state.arc_commands.as_ref().unwrap().clone())
+    unsafe fn get_param(
+        state: &'a mut Self::State,
+        _system_state: &SystemState,
+        _world: &World,
+    ) -> Option<Self::Item> {
+        Some(state.clone())
     }
 }
 
@@ -118,25 +168,43 @@ macro_rules! impl_system_param_tuple {
     ($($param: ident),*) => {
         impl<$($param: SystemParam),*> SystemParam for ($($param,)*) {
             type Fetch = FetchParamTuple<($($param::Fetch,)*)>;
+            type State = ($($param::State,)*);
         }
         #[allow(unused_variables)]
         impl<'a, $($param: FetchSystemParam<'a>),*> FetchSystemParam<'a> for FetchParamTuple<($($param,)*)> {
             type Item = ($($param::Item,)*);
-            fn init(system_state: &mut SystemState, world: &World) {
-                $($param::init(system_state, world);)*
-            }
+            type State = ($($param::State,)*);
 
             #[inline]
+            #[allow(non_snake_case)]
             unsafe fn get_param(
+                state: &'a mut Self::State,
                 system_state: &'a SystemState,
                 world: &'a World,
             ) -> Option<Self::Item> {
-                Some(($($param::get_param(system_state, world)?,)*))
+
+                let ($($param,)*) = state;
+                Some(($($param::get_param($param, system_state, world)?,)*))
+            }
+        }
+
+        impl<$($param: SystemParamState),*> SystemParamState for ($($param,)*) {
+            #[inline]
+            fn init(_world: &mut World) -> Self {
+                (($($param::init(_world),)*))
+            }
+
+            #[allow(non_snake_case)]
+            #[inline]
+            fn apply(&mut self, _world: &mut World) {
+                let ($($param,)*) = self;
+                $($param.apply(_world);)*
             }
         }
 
         impl<$($param: SystemParam),*> SystemParam for Or<($(Option<$param>,)*)> {
             type Fetch = FetchOr<($($param::Fetch,)*)>;
+            type State = ($($param::State,)*);
         }
 
         #[allow(unused_variables)]
@@ -144,18 +212,18 @@ macro_rules! impl_system_param_tuple {
         #[allow(non_snake_case)]
         impl<'a, $($param: FetchSystemParam<'a>),*> FetchSystemParam<'a> for FetchOr<($($param,)*)> {
             type Item = Or<($(Option<$param::Item>,)*)>;
-            fn init(system_state: &mut SystemState, world: &World) {
-                $($param::init(system_state, world);)*
-            }
+            type State = ($($param::State,)*);
 
             #[inline]
             unsafe fn get_param(
+                state: &'a mut Self::State,
                 system_state: &'a SystemState,
                 world: &'a World,
             ) -> Option<Self::Item> {
                 let mut has_some = false;
+                let ($($param,)*) = state;
                 $(
-                    let $param = $param::get_param(system_state, world);
+                    let $param = $param::get_param($param, system_state, world);
                     if $param.is_some() {
                         has_some = true;
                     }

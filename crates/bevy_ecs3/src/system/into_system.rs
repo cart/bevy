@@ -1,74 +1,29 @@
-use crate::{core::{Access, ArchetypeComponentId, QueryState, World}, system::{Commands, System, SystemId, SystemParam, SystemQueryState, ThreadLocalExecution}};
-
-use super::system_param::FetchSystemParam;
-use parking_lot::Mutex;
-use std::{borrow::Cow, cell::UnsafeCell, sync::Arc};
+use crate::{
+    core::{Access, ArchetypeComponentId, World},
+    system::{
+        FetchSystemParam, System, SystemId, SystemParam, SystemParamState, ThreadLocalExecution,
+    },
+};
+use std::borrow::Cow;
 
 pub struct SystemState {
     pub(crate) id: SystemId,
     pub(crate) name: Cow<'static, str>,
     pub(crate) archetype_component_access: Access<ArchetypeComponentId>,
-    pub(crate) param_query_states: Vec<Vec<SystemQueryState>>,
-    pub(crate) commands: UnsafeCell<Commands>,
-    pub(crate) arc_commands: Option<Arc<Mutex<Commands>>>,
-    pub(crate) current_query_index: UnsafeCell<usize>,
 }
 
-// SAFE: UnsafeCell<Commands> and UnsafeCell<usize> only accessed from the thread they are scheduled on
-unsafe impl Sync for SystemState {}
-
-impl SystemState {
-    pub fn reset_indices(&mut self) {
-        // SAFE: done with unique mutable access to Self
-        unsafe {
-            *self.current_query_index.get() = 0;
-        }
-    }
-
-    pub fn update(&mut self, world: &World) {
-        self.archetype_component_access.clear();
-        for (param_index, param_query_states) in self.param_query_states.iter().enumerate() {
-            // individually check each query state in the current param for compatibility
-            for query_state in param_query_states.iter() {
-                if !query_state
-                    .archetype_component_access
-                    .is_compatible(&self.archetype_component_access)
-                {
-                    // if this param conflicts with a prior param, do the work to find the exact conflict
-                    for prior_index in 0..param_index {
-                        for prior_state in self.param_query_states[prior_index].iter() {
-                            if !query_state
-                                .archetype_component_access
-                                .is_compatible(&prior_state.archetype_component_access)
-                            {
-                                panic!("System {} has conflicting queries. {} conflicts with the component access [{}] in this prior query: {}.",
-                                self.name,
-                                query_state.type_name,
-                                todo!("get colliding bit, look up ArchetypeComponent in Archetypes, use ArchetypeComponent.component_id to look up component name"),
-                                prior_state.type_name);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // if all states in the param are compatible, merge this state into the current state
-            for query_state in param_query_states.iter() {
-                self.archetype_component_access
-                    .extend(&query_state.archetype_component_access);
-            }
-        }
-    }
-}
-
-pub struct FuncSystem<Out> {
-    func: Box<dyn FnMut(&mut SystemState, &World) -> Option<Out> + Send + Sync + 'static>,
-    thread_local_func: Box<dyn FnMut(&mut SystemState, &mut World) + Send + Sync + 'static>,
-    init_func: Box<dyn FnMut(&mut SystemState, &World) + Send + Sync + 'static>,
+pub struct FuncSystem<Out, ParamState> {
+    func: Box<
+        dyn FnMut(&mut ParamState, &mut SystemState, &World) -> Option<Out> + Send + Sync + 'static,
+    >,
+    thread_local_func:
+        Box<dyn FnMut(&mut ParamState, &mut SystemState, &mut World) + Send + Sync + 'static>,
+    init_func: Box<dyn FnMut(&mut SystemState, &mut World) -> ParamState + Send + Sync + 'static>,
     state: SystemState,
+    param_state: Option<ParamState>,
 }
 
-impl<Out: 'static> System for FuncSystem<Out> {
+impl<ParamState: SystemParamState, Out: 'static> System for FuncSystem<Out, ParamState> {
     type In = ();
     type Out = Out;
 
@@ -81,7 +36,9 @@ impl<Out: 'static> System for FuncSystem<Out> {
     }
 
     fn update(&mut self, world: &World) {
-        self.state.update(world);
+        self.state.archetype_component_access.clear();
+        let param_state = self.param_state.as_mut().unwrap();
+        param_state.update(world, &mut self.state);
     }
 
     fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
@@ -93,26 +50,35 @@ impl<Out: 'static> System for FuncSystem<Out> {
     }
 
     unsafe fn run_unsafe(&mut self, _input: Self::In, world: &World) -> Option<Out> {
-        (self.func)(&mut self.state, world)
+        (self.func)(self.param_state.as_mut().unwrap(), &mut self.state, world)
     }
 
     fn run_thread_local(&mut self, world: &mut World) {
-        (self.thread_local_func)(&mut self.state, world)
+        (self.thread_local_func)(self.param_state.as_mut().unwrap(), &mut self.state, world)
     }
 
     fn initialize(&mut self, world: &mut World) {
-        (self.init_func)(&mut self.state, world);
+        self.param_state = Some((self.init_func)(&mut self.state, world));
     }
 }
 
-pub struct InputFuncSystem<In, Out> {
-    func: Box<dyn FnMut(In, &mut SystemState, &World) -> Option<Out> + Send + Sync + 'static>,
-    thread_local_func: Box<dyn FnMut(&mut SystemState, &mut World) + Send + Sync + 'static>,
-    init_func: Box<dyn FnMut(&mut SystemState, &World) + Send + Sync + 'static>,
+pub struct InputFuncSystem<In, Out, ParamState> {
+    func: Box<
+        dyn FnMut(In, &mut ParamState, &mut SystemState, &World) -> Option<Out>
+            + Send
+            + Sync
+            + 'static,
+    >,
+    thread_local_func:
+        Box<dyn FnMut(&mut ParamState, &mut SystemState, &mut World) + Send + Sync + 'static>,
+    init_func: Box<dyn FnMut(&mut SystemState, &mut World) -> ParamState + Send + Sync + 'static>,
     state: SystemState,
+    param_state: Option<ParamState>,
 }
 
-impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
+impl<In: 'static, Out: 'static, ParamState: SystemParamState> System
+    for InputFuncSystem<In, Out, ParamState>
+{
     type In = In;
     type Out = Out;
 
@@ -125,7 +91,9 @@ impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
     }
 
     fn update(&mut self, world: &World) {
-        self.state.update(world);
+        self.state.archetype_component_access.clear();
+        let param_state = self.param_state.as_mut().unwrap();
+        param_state.update(world, &mut self.state);
     }
 
     fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
@@ -137,15 +105,24 @@ impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
     }
 
     unsafe fn run_unsafe(&mut self, input: In, world: &World) -> Option<Out> {
-        (self.func)(input, &mut self.state, world)
+        (self.func)(
+            input,
+            &mut self.param_state.as_mut().unwrap(),
+            &mut self.state,
+            world,
+        )
     }
 
     fn run_thread_local(&mut self, world: &mut World) {
-        (self.thread_local_func)(&mut self.state, world)
+        (self.thread_local_func)(
+            &mut self.param_state.as_mut().unwrap(),
+            &mut self.state,
+            world,
+        )
     }
 
     fn initialize(&mut self, world: &mut World) {
-        (self.init_func)(&mut self.state, world);
+        self.param_state = Some((self.init_func)(&mut self.state, world));
     }
 }
 
@@ -163,7 +140,7 @@ pub struct In<In>(pub In);
 
 macro_rules! impl_into_system {
     ($($param: ident),*) => {
-        impl<Func, Out, $($param: SystemParam),*> IntoSystem<($($param,)*), FuncSystem<Out>> for Func
+        impl<Func, Out, $($param: SystemParam),*> IntoSystem<($($param,)*), FuncSystem<Out, ($($param::State,)*)>> for Func
         where
             Func:
                 FnMut($($param),*) -> Out +
@@ -173,45 +150,34 @@ macro_rules! impl_into_system {
             #[allow(unused_variables)]
             #[allow(unused_unsafe)]
             #[allow(non_snake_case)]
-            fn system(mut self) -> FuncSystem<Out> {
+            fn system(mut self) -> FuncSystem<Out, ($($param::State,)*)> {
                 FuncSystem {
                     state: SystemState {
                         name: std::any::type_name::<Self>().into(),
                         archetype_component_access: Access::default(),
                         id: SystemId::new(),
-                        commands: Default::default(),
-                        arc_commands: Default::default(),
-                        current_query_index: Default::default(),
-                        param_query_states: Vec::new(),
                     },
-                    func: Box::new(move |state, world| {
-                        state.reset_indices();
-                        // let mut input = Some(input);
+                    func: Box::new(move |param_state, state, world| {
                         unsafe {
-                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::get_param(state, world) {
+                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::get_param(param_state, state, world) {
                                 Some(self($($param),*))
                             } else {
                                 None
                             }
                         }
                     }),
-                    thread_local_func: Box::new(|state, world| {
-                        // SAFE: this is called with unique access to SystemState
-                        unsafe {
-                            (&mut *state.commands.get()).apply(world);
-                        }
-                        if let Some(ref commands) = state.arc_commands {
-                            let mut commands = commands.lock();
-                            commands.apply(world);
-                        }
+                    thread_local_func: Box::new(|param_state, state, world| {
+                        param_state.apply(world);
                     }),
+                    param_state: None,
                     init_func: Box::new(|state, world| {
-                        <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::init(state, world)
+                        ($(<$param::State as SystemParamState>::init(world),)*)
                     }),
                 }
             }
         }
-        impl<Func, Input, Out, $($param: SystemParam),*> IntoSystem<(Input, $($param,)*), InputFuncSystem<Input, Out>> for Func
+
+        impl<Func, Input, Out, $($param: SystemParam),*> IntoSystem<(Input, $($param,)*), InputFuncSystem<Input, Out, ($($param::State,)*)>> for Func
         where
             Func:
                 FnMut(In<Input>, $($param),*) -> Out +
@@ -221,40 +187,28 @@ macro_rules! impl_into_system {
             #[allow(unused_variables)]
             #[allow(unused_unsafe)]
             #[allow(non_snake_case)]
-            fn system(mut self) -> InputFuncSystem<Input, Out> {
+            fn system(mut self) -> InputFuncSystem<Input, Out, ($($param::State,)*)> {
                 InputFuncSystem {
                     state: SystemState {
                         name: std::any::type_name::<Self>().into(),
                         archetype_component_access: Access::default(),
-                        param_query_states: Vec::new(),
                         id: SystemId::new(),
-                        commands: Default::default(),
-                        arc_commands: Default::default(),
-                        current_query_index: Default::default(),
                     },
-                    func: Box::new(move |input, state, world| {
-                        state.reset_indices();
-                        // let mut input = Some(input);
+                    func: Box::new(move |input, param_state, state, world| {
                         unsafe {
-                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::get_param(state, world) {
+                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::get_param(param_state, state, world) {
                                 Some(self(In(input), $($param),*))
                             } else {
                                 None
                             }
                         }
                     }),
-                    thread_local_func: Box::new(|state, world| {
-                        // SAFE: this is called with unique access to SystemState
-                        unsafe {
-                            (&mut *state.commands.get()).apply(world);
-                        }
-                        if let Some(ref commands) = state.arc_commands {
-                            let mut commands = commands.lock();
-                            commands.apply(world);
-                        }
+                    param_state: None,
+                    thread_local_func: Box::new(|param_state, state, world| {
+                        param_state.apply(world);
                     }),
                     init_func: Box::new(|state, world| {
-                        <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::init(state, world)
+                        ($(<$param::State as SystemParamState>::init(world),)*)
                     }),
                 }
             }
@@ -282,7 +236,10 @@ impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::World, system::{Query, System}};
+    use crate::{
+        core::World,
+        system::{Query, System},
+    };
 
     use super::IntoSystem;
     #[derive(Debug, Eq, PartialEq, Default)]
