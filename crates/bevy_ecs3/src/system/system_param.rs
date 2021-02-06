@@ -1,7 +1,4 @@
-use crate::{
-    core::{Fetch, Or, QueryFilter, QueryState, World, WorldQuery},
-    system::{Commands, Query, SystemState},
-};
+use crate::{core::{Fetch, Or, QueryFilter, QueryState, World, WorldQuery}, system::{Commands, Query, SystemQueryState, SystemState}};
 use parking_lot::Mutex;
 use std::{any::TypeId, marker::PhantomData, sync::Arc};
 pub trait SystemParam: Sized {
@@ -29,21 +26,17 @@ impl<'a, Q: WorldQuery, F: QueryFilter> FetchSystemParam<'a> for FetchQuery<Q, F
     #[inline]
     unsafe fn get_param(system_state: &'a SystemState, world: &'a World) -> Option<Self::Item> {
         let query_index = *system_state.current_query_index.get();
-        let query_state: &'a QueryState = &system_state.param_query_states[query_index][0];
+        let system_query_state: &'a SystemQueryState = &system_state.param_query_states[query_index][0];
         *system_state.current_query_index.get() += 1;
-        Some(Query::new(world, query_state))
+        // TODO: try caching fetch state in SystemParam
+        // TODO: remove these "expects"
+        Some(Query::new(world, system_query_state))
     }
 
     fn init(system_state: &mut SystemState, _world: &World) {
         system_state
             .param_query_states
-            .push(vec![QueryState::default()]);
-        todo!("update accesses");
-        // let access = QueryAccess::union(vec![Q::Fetch::access(), F::access()]);
-        // system_state.query_accesses.push(vec![access]);
-        // system_state
-        //     .query_type_names
-        //     .push(std::any::type_name::<Q>());
+            .push(vec![SystemQueryState::default()]);
     }
 }
 

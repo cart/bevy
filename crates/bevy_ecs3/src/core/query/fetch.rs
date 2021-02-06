@@ -1,7 +1,7 @@
 use crate::{
     core::{
-        Archetype, Component, ComponentFlags, ComponentId, ComponentSparseSet, Entity, Mut,
-        QueryFilter, StorageType, Table, Tables, World,
+        Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId,
+        ComponentSparseSet, Entity, Mut, StorageType, Table, Tables, World,
     },
     smaller_tuples_too,
 };
@@ -18,6 +18,12 @@ pub trait Fetch<'w>: Sized {
     const DANGLING: Self;
     type Item;
     unsafe fn init(world: &World) -> Option<Self>;
+    fn update_component_access(&self, access: &mut Access<ComponentId>);
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    );
     fn matches_archetype(&self, archetype: &Archetype) -> bool;
     fn matches_table(&self, table: &Table) -> bool;
     fn is_dense(&self) -> bool;
@@ -77,6 +83,17 @@ impl<'w> Fetch<'w> for FetchEntity {
     unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
         Some(self.fetch(index))
     }
+
+    #[inline]
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
+
+    #[inline]
+    fn update_archetype_component_access(
+        &self,
+        _archetype: &Archetype,
+        _access: &mut Access<ArchetypeComponentId>,
+    ) {
+    }
 }
 
 impl<T: Component> WorldQuery for &T {
@@ -106,6 +123,30 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
         components: NonNull::dangling(),
         tables: ptr::null::<Tables>(),
     };
+
+    #[inline]
+    fn update_component_access(&self, access: &mut Access<ComponentId>) {
+        match self {
+            Self::Table { component_id, .. } => access.add_read(*component_id),
+            Self::SparseSet { component_id, .. } => access.add_read(*component_id),
+        }
+    }
+
+    #[inline]
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+        let component_id = match self {
+            Self::Table { component_id, .. } => *component_id,
+            Self::SparseSet { component_id, .. } => *component_id,
+        };
+
+        if let Some(archetype_component_id) = archetype.get_archetype_component_id(component_id) {
+            access.add_read(archetype_component_id);
+        }
+    }
 
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
         match self {
@@ -225,6 +266,28 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
         flags: ptr::null_mut::<ComponentFlags>(),
         tables: ptr::null::<Tables>(),
     };
+
+    fn update_component_access(&self, access: &mut Access<ComponentId>) {
+        match self {
+            Self::Table { component_id, .. } => access.add_read(*component_id),
+            Self::SparseSet { component_id, .. } => access.add_read(*component_id),
+        }
+    }
+
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+        let component_id = match self {
+            Self::Table { component_id, .. } => *component_id,
+            Self::SparseSet { component_id, .. } => *component_id,
+        };
+
+        if let Some(archetype_component_id) = archetype.get_archetype_component_id(component_id) {
+            access.add_write(archetype_component_id);
+        }
+    }
 
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
         match self {
@@ -352,6 +415,19 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
         matches: false,
     };
 
+    fn update_component_access(&self, access: &mut Access<ComponentId>) {
+        self.fetch.update_component_access(access);
+    }
+
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+        self.fetch
+            .update_archetype_component_access(archetype, access)
+    }
+
     fn matches_archetype(&self, _archetype: &Archetype) -> bool {
         true
     }
@@ -410,6 +486,20 @@ macro_rules! tuple_impl {
             #[allow(unused_variables)]
             unsafe fn init(world: &World) -> Option<Self> {
                 Some(($($name::init(world)?,)*))
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            fn update_component_access(&self, access: &mut Access<ComponentId>) {
+                let ($($name,)*) = self;
+                $($name.update_component_access(access);)*
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            fn update_archetype_component_access(&self, archetype: &Archetype, access: &mut Access<ArchetypeComponentId>) {
+                let ($($name,)*) = self;
+                $($name.update_archetype_component_access(archetype, access);)*
             }
 
             #[allow(unused_variables)]

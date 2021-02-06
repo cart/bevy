@@ -1,17 +1,18 @@
 // mod query_set;
 // pub use query_set::*;
+mod state;
+pub use state::*;
 
 use std::marker::PhantomData;
 
 use crate::core::{
-    Component, Entity, Fetch, Mut, QueryFilter, QueryIter, QueryState, ReadOnlyFetch,
-    StatefulQueryIter, World, WorldQuery,
+    Component, Entity, Fetch, Mut, QueryFilter, ReadOnlyFetch, StatefulQueryIter, World, WorldQuery,
 };
 
 /// Provides scoped access to a World according to a given [HecsQuery]
 pub struct Query<'a, Q: WorldQuery, F: QueryFilter = ()> {
     pub(crate) world: &'a World,
-    pub(crate) query_state: &'a QueryState,
+    pub(crate) state: &'a SystemQueryState,
     _marker: PhantomData<(Q, F)>,
 }
 
@@ -29,10 +30,13 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
     /// This will create a Query that could violate memory safety rules. Make sure that this is only called in
     /// ways that ensure the Queries have unique mutable access.
     #[inline]
-    pub(crate) unsafe fn new(world: &'a World, query_state: &'a QueryState) -> Self {
+    pub(crate) unsafe fn new(
+        world: &'a World,
+        state: &'a SystemQueryState,
+    ) -> Self {
         Self {
             world,
-            query_state,
+            state,
             _marker: PhantomData::default(),
         }
     }
@@ -43,9 +47,14 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
     where
         Q::Fetch: ReadOnlyFetch,
     {
-        todo!()
+        
         // SAFE: system runs without conflicts with other systems. same-system queries have runtime borrow checks when they conflict
-        // unsafe { self.world.query_unchecked() }
+        unsafe {
+            StatefulQueryIter::new(
+                self.world,
+                &self.state.query_state,
+            )
+        }
     }
 
     /// Iterates over the query results

@@ -1,12 +1,15 @@
-use crate::core::{
-    Archetype, Bundle, BundleInfo, Component, ComponentFlags, ComponentId, ComponentSparseSet,
-    Entity, StorageType, Table, Tables, World,
-};
+use crate::core::{Access, Archetype, ArchetypeComponentId, Bundle, BundleInfo, Component, ComponentFlags, ComponentId, ComponentSparseSet, Entity, StorageType, Table, Tables, World};
 use std::{any::TypeId, marker::PhantomData, ptr};
 
 pub trait QueryFilter: Sized {
     const DANGLING: Self;
     unsafe fn init(world: &World) -> Option<Self>;
+    fn update_component_access(&self, access: &mut Access<ComponentId>);
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    );
     unsafe fn matches_archetype(&self, archetype: &Archetype) -> bool;
     unsafe fn next_table(&mut self, table: &Table);
     unsafe fn matches_entity(&self, table_row: usize) -> bool;
@@ -14,6 +17,15 @@ pub trait QueryFilter: Sized {
 
 impl QueryFilter for () {
     const DANGLING: Self = ();
+
+    #[inline]
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {
+    }
+
+    #[inline]
+    fn update_archetype_component_access(&self, _archetype: &Archetype, _access: &mut Access<ArchetypeComponentId>) {
+        
+    }
 
     #[inline]
     unsafe fn init(_world: &World) -> Option<Self> {
@@ -47,6 +59,15 @@ impl<T: Component> QueryFilter for With<T> {
         component_id: ComponentId::new(usize::MAX),
         marker: PhantomData,
     };
+
+    #[inline]
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {
+    }
+
+    #[inline]
+    fn update_archetype_component_access(&self, _archetype: &Archetype, _access: &mut Access<ArchetypeComponentId>) {
+        
+    }
 
     unsafe fn init(world: &World) -> Option<Self> {
         let components = world.components();
@@ -82,6 +103,15 @@ impl<T: Component> QueryFilter for Without<T> {
         marker: PhantomData,
     };
 
+    #[inline]
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {
+    }
+
+    #[inline]
+    fn update_archetype_component_access(&self, _archetype: &Archetype, _access: &mut Access<ArchetypeComponentId>) {
+        
+    }
+
     unsafe fn init(world: &World) -> Option<Self> {
         let components = world.components();
         let component_id = components.get_id(TypeId::of::<T>())?;
@@ -115,6 +145,15 @@ impl<T: Bundle> QueryFilter for WithBundle<T> {
         bundle_info: ptr::null::<BundleInfo>(),
         marker: PhantomData,
     };
+
+    #[inline]
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {
+    }
+
+    #[inline]
+    fn update_archetype_component_access(&self, _archetype: &Archetype, _access: &mut Access<ArchetypeComponentId>) {
+        
+    }
 
     unsafe fn init(world: &World) -> Option<Self> {
         let bundles = world.bundles();
@@ -154,6 +193,20 @@ macro_rules! impl_query_filter_tuple {
             const DANGLING: Self = ($($filter::DANGLING,)*);
             unsafe fn init(world: &World) -> Option<Self> {
                 Some(($($filter::init(world)?,)*))
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            fn update_component_access(&self, access: &mut Access<ComponentId>) {
+                let ($($filter,)*) = self;
+                $($filter.update_component_access(access);)*
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            fn update_archetype_component_access(&self, archetype: &Archetype, access: &mut Access<ArchetypeComponentId>) {
+                let ($($filter,)*) = self;
+                $($filter.update_archetype_component_access(archetype, access);)*
             }
 
             #[inline]
@@ -203,6 +256,31 @@ macro_rules! impl_flag_filter {
                 tables: ptr::null::<Tables>(),
                 marker: PhantomData,
             };
+
+            #[inline]
+            fn update_component_access(&self, access: &mut Access<ComponentId>) {
+                match self {
+                    Self::Table { component_id, .. } => access.add_read(*component_id),
+                    Self::SparseSet { component_id, .. } => access.add_read(*component_id),
+                }
+            }
+
+            #[inline]
+            fn update_archetype_component_access(
+                &self,
+                archetype: &Archetype,
+                access: &mut Access<ArchetypeComponentId>,
+            ) {
+                let component_id = match self {
+                    Self::Table { component_id, .. } => *component_id,
+                    Self::SparseSet { component_id, .. } => *component_id,
+                };
+
+                if let Some(archetype_component_id) = archetype.get_archetype_component_id(component_id) {
+                    access.add_read(archetype_component_id);
+                }
+            }
+
 
             unsafe fn init(world: &World) -> Option<Self> {
                 let components = world.components();

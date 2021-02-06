@@ -22,15 +22,9 @@ impl<'w, Q: WorldQuery, F: QueryFilter> QueryIter<'w, Q, F> {
     /// SAFETY: ensure that the given `query_state` is only used with this exact [QueryIter] type   
     pub unsafe fn with_state<'s>(
         self,
-        query_state: &'s mut QueryState,
+        _query_state: &'s mut QueryState,
     ) -> StatefulQueryIter<'w, 's, Q, F> {
-        StatefulQueryIter::new(
-            self.archetypes,
-            self.tables,
-            self.fetch,
-            self.filter,
-            query_state,
-        )
+        todo!("remove queryiter")
     }
 
     pub fn get(mut self, entity: Entity) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
@@ -160,15 +154,14 @@ pub struct StatefulQueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
 
 impl<'w, 's, Q: WorldQuery, F: QueryFilter> StatefulQueryIter<'w, 's, Q, F> {
     pub(crate) unsafe fn new(
-        archetypes: &'w Archetypes,
-        tables: &'w Tables,
-        fetch: Q::Fetch,
-        filter: F,
+        world: &'w World,
         query_state: &'s QueryState,
     ) -> Self {
+        let fetch = <Q::Fetch as Fetch>::init(world).expect("unmatched fetch");
+        let filter = F::init(world).expect("unmatched filter");
         StatefulQueryIter {
             fetch,
-            tables,
+            tables: &world.storages().tables,
             filter,
             table_id_iter: query_state.matched_table_ids.iter(),
             table_len: 0,
