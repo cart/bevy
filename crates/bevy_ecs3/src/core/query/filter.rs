@@ -140,6 +140,7 @@ pub struct WithBundle<T: Bundle> {
     marker: PhantomData<T>,
 }
 
+
 impl<T: Bundle> QueryFilter for WithBundle<T> {
     const DANGLING: Self = Self {
         bundle_info: ptr::null::<BundleInfo>(),

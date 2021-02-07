@@ -6,13 +6,13 @@ pub use state::*;
 use std::marker::PhantomData;
 
 use crate::core::{
-    Component, Entity, Fetch, Mut, QueryFilter, ReadOnlyFetch, StatefulQueryIter, World, WorldQuery,
+    Component, Entity, Fetch, Mut, QueryFilter, ReadOnlyFetch, QueryIter, World, WorldQuery,
 };
 
 /// Provides scoped access to a World according to a given [HecsQuery]
 pub struct Query<'a, Q: WorldQuery, F: QueryFilter = ()> {
     pub(crate) world: &'a World,
-    pub(crate) state: &'a SystemQueryState,
+    pub(crate) state: &'a SystemQueryState<Q, F>,
     _marker: PhantomData<(Q, F)>,
 }
 
@@ -32,7 +32,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
     #[inline]
     pub(crate) unsafe fn new(
         world: &'a World,
-        state: &'a SystemQueryState,
+        state: &'a SystemQueryState<Q, F>,
     ) -> Self {
         Self {
             world,
@@ -43,14 +43,14 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
 
     /// Iterates over the query results. This can only be called for read-only queries
     #[inline]
-    pub fn iter(&self) -> StatefulQueryIter<'_, '_, Q, F>
+    pub fn iter(&self) -> QueryIter<'_, '_, Q, F>
     where
         Q::Fetch: ReadOnlyFetch,
     {
         
         // SAFE: system runs without conflicts with other systems. same-system queries have runtime borrow checks when they conflict
         unsafe {
-            StatefulQueryIter::new(
+            QueryIter::new(
                 self.world,
                 &self.state.query_state,
             )
@@ -59,7 +59,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
 
     /// Iterates over the query results
     #[inline]
-    pub fn iter_mut(&mut self) -> StatefulQueryIter<'_, '_, Q, F> {
+    pub fn iter_mut(&mut self) -> QueryIter<'_, '_, Q, F> {
         todo!()
         // SAFE: system runs without conflicts with other systems. same-system queries have runtime borrow checks when they conflict
         // unsafe { self.world.query_unchecked() }
@@ -69,7 +69,7 @@ impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
     /// # Safety
     /// This allows aliased mutability. You must make sure this call does not result in multiple mutable references to the same component
     #[inline]
-    pub unsafe fn iter_unsafe(&self) -> StatefulQueryIter<'_, '_, Q, F> {
+    pub unsafe fn iter_unsafe(&self) -> QueryIter<'_, '_, Q, F> {
         todo!()
         // SAFE: system runs without conflicts with other systems. same-system queries have runtime borrow checks when they conflict
         // self.world.query_unchecked()

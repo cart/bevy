@@ -33,12 +33,12 @@ pub trait FetchSystemParam<'a> {
 
 pub struct FetchQuery<Q, F>(PhantomData<(Q, F)>);
 
-impl<'a, Q: WorldQuery, F: QueryFilter> SystemParam for Query<'a, Q, F> {
+impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Query<'a, Q, F> {
     type Fetch = FetchQuery<Q, F>;
-    type State = SystemQueryState;
+    type State = SystemQueryState<Q, F>;
 }
 
-impl SystemParamState for SystemQueryState {
+impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for SystemQueryState<Q, F> {
     fn init(_world: &mut World) -> Self {
         SystemQueryState::default()
     }
@@ -49,9 +49,9 @@ impl SystemParamState for SystemQueryState {
     }
 }
 
-impl<'a, Q: WorldQuery, F: QueryFilter> FetchSystemParam<'a> for FetchQuery<Q, F> {
+impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a> for FetchQuery<Q, F> {
     type Item = Query<'a, Q, F>;
-    type State = SystemQueryState;
+    type State = SystemQueryState<Q, F>;
 
     #[inline]
     unsafe fn get_param(

@@ -15,6 +15,7 @@
 * Reduced monomorphization (measure compile time difference)
 * More granular module organization
 * Direct stateless World queries are slower
+* SystemParam state (still needs "settable" params)
 
 ## random thoughts
 
@@ -28,6 +29,7 @@
 * use archetype generation to get the range of archetypes to update
 
 ## TODO
+* world id safety
 * core
     * un-comment all tests
     * Or Filter

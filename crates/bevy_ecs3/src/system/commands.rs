@@ -371,7 +371,10 @@ impl Commands {
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::World, system::Commands};
+    use crate::{
+        core::{IntoQueryState, World},
+        system::Commands,
+    };
 
     #[test]
     fn commands() {
@@ -381,8 +384,8 @@ mod tests {
         let entity = commands.current_entity().unwrap();
         // commands.insert_resource(3.14f32);
         commands.apply(&mut world);
-        let results = world
-            .query::<(&u32, &u64)>()
+        let results = <(&u32, &u64)>::query()
+            .iter(&world)
             .map(|(a, b)| (*a, *b))
             .collect::<Vec<_>>();
         assert_eq!(results, vec![(1u32, 2u64)]);
@@ -391,8 +394,8 @@ mod tests {
         commands.despawn(entity);
         commands.despawn(entity); // double despawn shouldn't panic
         commands.apply(&mut world);
-        let results2 = world
-            .query::<(&u32, &u64)>()
+        let results2 = <(&u32, &u64)>::query()
+            .iter(&world)
             .map(|(a, b)| (*a, *b))
             .collect::<Vec<_>>();
         assert_eq!(results2, vec![]);
@@ -405,8 +408,8 @@ mod tests {
         command_buffer.spawn((1u32, 2u64));
         let entity = command_buffer.current_entity().unwrap();
         command_buffer.apply(&mut world);
-        let results_before = world
-            .query::<(&u32, &u64)>()
+        let results_before = <(&u32, &u64)>::query()
+            .iter(&world)
             .map(|(a, b)| (*a, *b))
             .collect::<Vec<_>>();
         assert_eq!(results_before, vec![(1u32, 2u64)]);
@@ -415,12 +418,12 @@ mod tests {
         command_buffer.remove_one::<u32>(entity);
         command_buffer.remove::<(u32, u64)>(entity);
         command_buffer.apply(&mut world);
-        let results_after = world
-            .query::<(&u32, &u64)>()
+        let results_after = <(&u32, &u64)>::query()
+            .iter(&world)
             .map(|(a, b)| (*a, *b))
             .collect::<Vec<_>>();
         assert_eq!(results_after, vec![]);
-        let results_after_u64 = world.query::<&u64>().map(|a| *a).collect::<Vec<_>>();
+        let results_after_u64 = <&u64>::query().iter(&world).map(|a| *a).collect::<Vec<_>>();
         assert_eq!(results_after_u64, vec![]);
     }
 }

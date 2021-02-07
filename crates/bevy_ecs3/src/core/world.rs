@@ -1,8 +1,4 @@
-use crate::core::{
-    ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId,
-    Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryIter,
-    ReadOnlyFetch, SpawnBatchIter, StorageType, Storages, WorldQuery,
-};
+use crate::core::{ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId, Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryIter, ReadOnlyFetch, SpawnBatchIter, StorageType, Storages, WorldQuery};
 use std::fmt;
 
 #[derive(Default)]
@@ -118,29 +114,6 @@ impl World {
         I::Item: Bundle,
     {
         SpawnBatchIter::new(self, iter.into_iter())
-    }
-
-    #[inline]
-    pub fn query<Q: WorldQuery>(&self) -> QueryIter<'_, Q, ()>
-    where
-        Q::Fetch: ReadOnlyFetch,
-    {
-        // SAFE: read-only access to world and read only query prevents mutable access
-        unsafe { self.query_unchecked() }
-    }
-
-    #[inline]
-    pub fn query_mut<Q: WorldQuery>(&mut self) -> QueryIter<'_, Q, ()> {
-        // SAFE: unique mutable access
-        unsafe { self.query_unchecked() }
-    }
-
-    /// # Safety
-    /// This does not check for mutable query correctness. To be safe, make sure mutable queries
-    /// have unique access to the components they query.
-    #[inline]
-    pub unsafe fn query_unchecked<Q: WorldQuery>(&self) -> QueryIter<'_, Q, ()> {
-        QueryIter::new(&self)
     }
 
     // /// Like `query`, but instead of returning a single iterator it returns a "batched iterator",

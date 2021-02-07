@@ -12,7 +12,7 @@ pub use state::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{ComponentDescriptor, QueryState, StorageType, World};
+    use crate::core::{ComponentDescriptor, IntoQueryState, QueryState, StorageType, World};
 
     #[derive(Debug, Eq, PartialEq)]
     struct A(usize);
@@ -24,45 +24,14 @@ mod tests {
         let mut world = World::new();
         world.spawn().insert_bundle((A(1), B(1)));
         world.spawn().insert_bundle((A(2),));
-        let values = world.query::<&A>().collect::<Vec<&A>>();
+        let values = <&A>::query().iter(&world).collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (_a, mut b) in world.query_mut::<(&A, &mut B)>() {
+        for (_a, mut b) in <(&A, &mut B)>::query().iter_mut(&mut world) {
             b.0 = 3;
         }
-        let values = world.query::<&B>().collect::<Vec<&B>>();
+        let values = <&B>::query().iter(&world).collect::<Vec<&B>>();
         assert_eq!(values, vec![&B(3)]);
-    }
-
-    #[test]
-    fn stateful_query() {
-        let mut world = World::new();
-        let mut query_state = QueryState::default();
-        world.spawn().insert_bundle((A(1), B(1)));
-        world.spawn().insert_bundle((A(2),));
-        unsafe {
-            let values = world
-                .query::<&A>()
-                .with_state(&mut query_state)
-                .collect::<Vec<&A>>();
-            assert_eq!(values, vec![&A(1), &A(2)]);
-        }
-
-        unsafe {
-            let mut query_state = QueryState::default();
-            for (_a, mut b) in world.query::<(&A, &mut B)>().with_state(&mut query_state) {
-                b.0 = 3;
-            }
-        }
-
-        unsafe {
-            let mut query_state = QueryState::default();
-            let values = world
-                .query::<&B>()
-                .with_state(&mut query_state)
-                .collect::<Vec<&B>>();
-            assert_eq!(values, vec![&B(3)]);
-        }
     }
 
     #[test]
@@ -75,14 +44,14 @@ mod tests {
         world.spawn().insert_bundle((A(1), B(2)));
         world.spawn().insert_bundle((A(2),));
 
-        let values = world.query::<&A>().collect::<Vec<&A>>();
+        let values = <&A>::query().iter(&world).collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (_a, mut b) in world.query::<(&A, &mut B)>() {
+        for (_a, mut b) in <(&A, &mut B)>::query().iter(&world) {
             b.0 = 3;
         }
 
-        let values = world.query::<&B>().collect::<Vec<&B>>();
+        let values = <&B>::query().iter(&world).collect::<Vec<&B>>();
         assert_eq!(values, vec![&B(3)]);
     }
 }

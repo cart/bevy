@@ -10,9 +10,13 @@ use std::{
     ptr::{self, NonNull},
 };
 
-pub trait WorldQuery {
+pub trait WorldQuery: Send + Sync {
     type Fetch: for<'a> Fetch<'a>;
 }
+
+// pub trait FetchState {
+//     fn init(world: &World) -> Option<Self>;
+// }
 
 pub trait Fetch<'w>: Sized {
     const DANGLING: Self;

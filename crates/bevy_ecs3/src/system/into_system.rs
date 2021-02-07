@@ -23,7 +23,7 @@ pub struct FuncSystem<Out, ParamState> {
     param_state: Option<ParamState>,
 }
 
-impl<ParamState: SystemParamState, Out: 'static> System for FuncSystem<Out, ParamState> {
+impl<ParamState: SystemParamState + 'static, Out: 'static> System for FuncSystem<Out, ParamState> {
     type In = ();
     type Out = Out;
 
@@ -76,7 +76,7 @@ pub struct InputFuncSystem<In, Out, ParamState> {
     param_state: Option<ParamState>,
 }
 
-impl<In: 'static, Out: 'static, ParamState: SystemParamState> System
+impl<In: 'static, Out: 'static, ParamState: SystemParamState + Send + Sync + 'static> System
     for InputFuncSystem<In, Out, ParamState>
 {
     type In = In;
