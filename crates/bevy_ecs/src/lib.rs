@@ -8,7 +8,7 @@ pub use bevy_ecs_macros::*;
 pub use lazy_static;
 pub use resource::*;
 pub use schedule::*;
-pub use system::{Query, *};
+pub use system::*;
 
 pub mod prelude {
     pub use crate::{

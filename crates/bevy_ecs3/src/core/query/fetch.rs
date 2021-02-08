@@ -7,28 +7,20 @@ use crate::{
 };
 use std::{
     any::TypeId,
+    marker::PhantomData,
     ptr::{self, NonNull},
 };
 
 pub trait WorldQuery: Send + Sync {
-    type Fetch: for<'a> Fetch<'a>;
+    type Fetch: for<'a> Fetch<'a, State = Self::State>;
+    type State: FetchState;
 }
-
-// pub trait FetchState {
-//     fn init(world: &World) -> Option<Self>;
-// }
 
 pub trait Fetch<'w>: Sized {
     const DANGLING: Self;
     type Item;
-    unsafe fn init(world: &World) -> Option<Self>;
-    fn update_component_access(&self, access: &mut Access<ComponentId>);
-    fn update_archetype_component_access(
-        &self,
-        archetype: &Archetype,
-        access: &mut Access<ArchetypeComponentId>,
-    );
-    fn matches_archetype(&self, archetype: &Archetype) -> bool;
+    type State: FetchState;
+    unsafe fn init(world: &World, state: &Self::State) -> Self;
     fn matches_table(&self, table: &Table) -> bool;
     fn is_dense(&self) -> bool;
     unsafe fn next_table(&mut self, table: &Table);
@@ -36,11 +28,65 @@ pub trait Fetch<'w>: Sized {
     unsafe fn fetch(&mut self, index: usize) -> Self::Item;
 }
 
+/// State used to construct a Fetch. This will be cached inside QueryState, so it is best to move as much data /
+// computation here as possible to reduce the cost of constructing Fetch.
+pub trait FetchState: Sized {
+    fn init(world: &World) -> Option<Self>;
+    fn update_component_access(&self, access: &mut Access<ComponentId>);
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    );
+    fn matches_archetype(&self, archetype: &Archetype) -> bool;
+}
+
+pub struct ReadState<T> {
+    component_id: ComponentId,
+    storage_type: StorageType,
+    marker: PhantomData<T>,
+}
+
+impl<T: Component> FetchState for ReadState<T> {
+    fn init(world: &World) -> Option<Self> {
+        let components = world.components();
+        let component_id = components.get_id(TypeId::of::<T>())?;
+        // SAFE: component_id exists if there is a TypeId pointing to it
+        let component_info = unsafe { components.get_info_unchecked(component_id) };
+        Some(ReadState {
+            component_id: component_info.id(),
+            storage_type: component_info.storage_type(),
+            marker: PhantomData,
+        })
+    }
+
+    fn update_component_access(&self, access: &mut Access<ComponentId>) {
+        access.add_read(self.component_id)
+    }
+
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+        if let Some(archetype_component_id) =
+            archetype.get_archetype_component_id(self.component_id)
+        {
+            access.add_read(archetype_component_id);
+        }
+    }
+
+    fn matches_archetype(&self, archetype: &Archetype) -> bool {
+        archetype.contains(self.component_id)
+    }
+}
+
 /// A fetch that is read only. This should only be implemented for read-only fetches.
 pub unsafe trait ReadOnlyFetch {}
 
 impl WorldQuery for Entity {
     type Fetch = FetchEntity;
+    type State = EntityState;
 }
 
 pub struct FetchEntity {
@@ -49,16 +95,35 @@ pub struct FetchEntity {
 
 unsafe impl ReadOnlyFetch for FetchEntity {}
 
+pub struct EntityState;
+
+impl FetchState for EntityState {
+    fn init(world: &World) -> Option<Self> {
+        Some(Self)
+    }
+
+    fn update_component_access(&self, access: &mut Access<ComponentId>) {}
+
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+    }
+
+    #[inline]
+    fn matches_archetype(&self, archetype: &Archetype) -> bool {
+        true
+    }
+}
+
 impl<'w> Fetch<'w> for FetchEntity {
     type Item = Entity;
+    type State = EntityState;
 
     const DANGLING: Self = FetchEntity {
         entities: std::ptr::null::<Entity>(),
     };
-
-    fn matches_archetype(&self, _archetype: &Archetype) -> bool {
-        true
-    }
 
     fn matches_table(&self, _table: &Table) -> bool {
         true
@@ -69,8 +134,8 @@ impl<'w> Fetch<'w> for FetchEntity {
         true
     }
 
-    unsafe fn init(_world: &World) -> Option<Self> {
-        Some(Self::DANGLING)
+    unsafe fn init(_world: &World, state: &Self::State) -> Self {
+        Self::DANGLING
     }
 
     #[inline]
@@ -87,21 +152,11 @@ impl<'w> Fetch<'w> for FetchEntity {
     unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
         Some(self.fetch(index))
     }
-
-    #[inline]
-    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
-
-    #[inline]
-    fn update_archetype_component_access(
-        &self,
-        _archetype: &Archetype,
-        _access: &mut Access<ArchetypeComponentId>,
-    ) {
-    }
 }
 
 impl<T: Component> WorldQuery for &T {
     type Fetch = FetchRead<T>;
+    type State = ReadState<T>;
 }
 
 pub enum FetchRead<T> {
@@ -121,43 +176,13 @@ unsafe impl<T> ReadOnlyFetch for FetchRead<T> {}
 
 impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     type Item = &'w T;
+    type State = ReadState<T>;
 
     const DANGLING: Self = Self::Table {
         component_id: ComponentId::new(usize::MAX),
         components: NonNull::dangling(),
         tables: ptr::null::<Tables>(),
     };
-
-    #[inline]
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        match self {
-            Self::Table { component_id, .. } => access.add_read(*component_id),
-            Self::SparseSet { component_id, .. } => access.add_read(*component_id),
-        }
-    }
-
-    #[inline]
-    fn update_archetype_component_access(
-        &self,
-        archetype: &Archetype,
-        access: &mut Access<ArchetypeComponentId>,
-    ) {
-        let component_id = match self {
-            Self::Table { component_id, .. } => *component_id,
-            Self::SparseSet { component_id, .. } => *component_id,
-        };
-
-        if let Some(archetype_component_id) = archetype.get_archetype_component_id(component_id) {
-            access.add_read(archetype_component_id);
-        }
-    }
-
-    fn matches_archetype(&self, archetype: &Archetype) -> bool {
-        match self {
-            Self::Table { component_id, .. } => archetype.contains(*component_id),
-            Self::SparseSet { component_id, .. } => archetype.contains(*component_id),
-        }
-    }
 
     fn matches_table(&self, table: &Table) -> bool {
         match self {
@@ -175,22 +200,22 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
         }
     }
 
-    unsafe fn init(world: &World) -> Option<Self> {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>())?;
-        let component_info = components.get_info_unchecked(component_id);
-        Some(match component_info.storage_type() {
+    unsafe fn init(world: &World, state: &Self::State) -> Self {
+        match state.storage_type {
             StorageType::Table => Self::Table {
-                component_id,
+                component_id: state.component_id,
                 components: NonNull::dangling(),
                 tables: (&world.storages().tables) as *const Tables,
             },
             StorageType::SparseSet => Self::SparseSet {
-                component_id,
+                component_id: state.component_id,
                 entities: std::ptr::null::<Entity>(),
-                sparse_set: world.storages().sparse_sets.get_unchecked(component_id),
+                sparse_set: world
+                    .storages()
+                    .sparse_sets
+                    .get_unchecked(state.component_id),
             },
-        })
+        }
     }
 
     #[inline]
@@ -243,6 +268,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
 
 impl<T: Component> WorldQuery for &mut T {
     type Fetch = FetchWrite<T>;
+    type State = WriteState<T>;
 }
 
 pub enum FetchWrite<T> {
@@ -259,23 +285,27 @@ pub enum FetchWrite<T> {
     },
 }
 
-unsafe impl<T> ReadOnlyFetch for FetchWrite<T> {}
+pub struct WriteState<T> {
+    component_id: ComponentId,
+    storage_type: StorageType,
+    marker: PhantomData<T>,
+}
 
-impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
-    type Item = Mut<'w, T>;
-
-    const DANGLING: Self = Self::Table {
-        component_id: ComponentId::new(usize::MAX),
-        components: NonNull::dangling(),
-        flags: ptr::null_mut::<ComponentFlags>(),
-        tables: ptr::null::<Tables>(),
-    };
+impl<T: Component> FetchState for WriteState<T> {
+    fn init(world: &World) -> Option<Self> {
+        let components = world.components();
+        let component_id = components.get_id(TypeId::of::<T>())?;
+        // SAFE: component_id exists if there is a TypeId pointing to it
+        let component_info = unsafe { components.get_info_unchecked(component_id) };
+        Some(WriteState {
+            component_id: component_info.id(),
+            storage_type: component_info.storage_type(),
+            marker: PhantomData,
+        })
+    }
 
     fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        match self {
-            Self::Table { component_id, .. } => access.add_read(*component_id),
-            Self::SparseSet { component_id, .. } => access.add_read(*component_id),
-        }
+        access.add_write(self.component_id)
     }
 
     fn update_archetype_component_access(
@@ -283,22 +313,28 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
         archetype: &Archetype,
         access: &mut Access<ArchetypeComponentId>,
     ) {
-        let component_id = match self {
-            Self::Table { component_id, .. } => *component_id,
-            Self::SparseSet { component_id, .. } => *component_id,
-        };
-
-        if let Some(archetype_component_id) = archetype.get_archetype_component_id(component_id) {
+        if let Some(archetype_component_id) =
+            archetype.get_archetype_component_id(self.component_id)
+        {
             access.add_write(archetype_component_id);
         }
     }
 
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
-        match self {
-            Self::Table { component_id, .. } => archetype.contains(*component_id),
-            Self::SparseSet { component_id, .. } => archetype.contains(*component_id),
-        }
+        archetype.contains(self.component_id)
     }
+}
+
+impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
+    type Item = Mut<'w, T>;
+    type State = WriteState<T>;
+
+    const DANGLING: Self = Self::Table {
+        component_id: ComponentId::new(usize::MAX),
+        components: NonNull::dangling(),
+        flags: ptr::null_mut::<ComponentFlags>(),
+        tables: ptr::null::<Tables>(),
+    };
 
     fn matches_table(&self, table: &Table) -> bool {
         match self {
@@ -316,23 +352,23 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
         }
     }
 
-    unsafe fn init(world: &World) -> Option<Self> {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>())?;
-        let component_info = components.get_info_unchecked(component_id);
-        Some(match component_info.storage_type() {
+    unsafe fn init(world: &World, state: &Self::State) -> Self {
+        match state.storage_type {
             StorageType::Table => Self::Table {
-                component_id,
+                component_id: state.component_id,
                 components: NonNull::dangling(),
                 flags: ptr::null_mut(),
                 tables: (&world.storages().tables) as *const Tables,
             },
             StorageType::SparseSet => Self::SparseSet {
-                component_id,
+                component_id: state.component_id,
                 entities: std::ptr::null::<Entity>(),
-                sparse_set: world.storages().sparse_sets.get_unchecked(component_id),
+                sparse_set: world
+                    .storages()
+                    .sparse_sets
+                    .get_unchecked(state.component_id),
             },
-        })
+        }
     }
 
     #[inline]
@@ -402,6 +438,7 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
 
 impl<T: WorldQuery> WorldQuery for Option<T> {
     type Fetch = FetchOption<T::Fetch>;
+    type State = OptionState<T::State>;
 }
 
 pub struct FetchOption<T> {
@@ -411,16 +448,19 @@ pub struct FetchOption<T> {
 
 unsafe impl<T: ReadOnlyFetch> ReadOnlyFetch for FetchOption<T> {}
 
-impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
-    type Item = Option<T::Item>;
+pub struct OptionState<T: FetchState> {
+    state: T,
+}
 
-    const DANGLING: Self = Self {
-        fetch: T::DANGLING,
-        matches: false,
-    };
+impl<T: FetchState> FetchState for OptionState<T> {
+    fn init(world: &World) -> Option<Self> {
+        Some(Self {
+            state: T::init(world)?,
+        })
+    }
 
     fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        self.fetch.update_component_access(access);
+        self.state.update_component_access(access);
     }
 
     fn update_archetype_component_access(
@@ -428,13 +468,23 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
         archetype: &Archetype,
         access: &mut Access<ArchetypeComponentId>,
     ) {
-        self.fetch
+        self.state
             .update_archetype_component_access(archetype, access)
     }
 
-    fn matches_archetype(&self, _archetype: &Archetype) -> bool {
+    fn matches_archetype(&self, archetype: &Archetype) -> bool {
         true
     }
+}
+
+impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
+    type Item = Option<T::Item>;
+    type State = OptionState<T::State>;
+
+    const DANGLING: Self = Self {
+        fetch: T::DANGLING,
+        matches: false,
+    };
 
     fn matches_table(&self, _table: &Table) -> bool {
         true
@@ -446,11 +496,11 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
         false
     }
 
-    unsafe fn init(world: &World) -> Option<Self> {
-        Some(Self {
-            fetch: T::init(world)?,
+    unsafe fn init(world: &World, state: &Self::State) -> Self {
+        Self {
+            fetch: T::init(world, &state.state),
             matches: false,
-        })
+        }
     }
 
     #[inline]
@@ -484,27 +534,16 @@ macro_rules! tuple_impl {
     ($($name: ident),*) => {
         impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
             type Item = ($($name::Item,)*);
+            type State = ($($name::State,)*);
 
             const DANGLING: Self = ($($name::DANGLING,)*);
 
             #[allow(unused_variables)]
-            unsafe fn init(world: &World) -> Option<Self> {
-                Some(($($name::init(world)?,)*))
+            unsafe fn init(world: &World, state: &Self::State) -> Self {
+                let ($($name,)*) = state;
+                ($($name::init(world, $name),)*)
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            fn update_component_access(&self, access: &mut Access<ComponentId>) {
-                let ($($name,)*) = self;
-                $($name.update_component_access(access);)*
-            }
-
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            fn update_archetype_component_access(&self, archetype: &Archetype, access: &mut Access<ArchetypeComponentId>) {
-                let ($($name,)*) = self;
-                $($name.update_archetype_component_access(archetype, access);)*
-            }
 
             #[allow(unused_variables)]
             #[allow(non_snake_case)]
@@ -512,13 +551,6 @@ macro_rules! tuple_impl {
             fn is_dense(&self) -> bool {
                 let ($($name,)*) = self;
                 true $(&& $name.is_dense())*
-            }
-
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            fn matches_archetype(&self, archetype: &Archetype) -> bool {
-                let ($($name,)*) = self;
-                true $(&& $name.matches_archetype(archetype))*
             }
 
             #[allow(unused_variables)]
@@ -553,8 +585,37 @@ macro_rules! tuple_impl {
             }
         }
 
+        impl<$($name: FetchState),*> FetchState for ($($name,)*) {
+            fn init(world: &World) -> Option<Self> {
+                Some(($($name::init(world)?,)*))
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            fn update_component_access(&self, access: &mut Access<ComponentId>) {
+                let ($($name,)*) = self;
+                $($name.update_component_access(access);)*
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            fn update_archetype_component_access(&self, archetype: &Archetype, access: &mut Access<ArchetypeComponentId>) {
+                let ($($name,)*) = self;
+                $($name.update_archetype_component_access(archetype, access);)*
+            }
+
+            #[allow(unused_variables)]
+            #[allow(non_snake_case)]
+            fn matches_archetype(&self, archetype: &Archetype) -> bool {
+                let ($($name,)*) = self;
+                true $(&& $name.matches_archetype(archetype))*
+            }
+
+        }
+
         impl<$($name: WorldQuery),*> WorldQuery for ($($name,)*) {
             type Fetch = ($($name::Fetch,)*);
+            type State = ($($name::State,)*);
         }
 
         unsafe impl<$($name: ReadOnlyFetch),*> ReadOnlyFetch for ($($name,)*) {}

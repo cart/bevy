@@ -12,8 +12,16 @@ pub struct QueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
 
 impl<'w, 's, Q: WorldQuery, F: QueryFilter> QueryIter<'w, 's, Q, F> {
     pub(crate) unsafe fn new(world: &'w World, query_state: &'s QueryState<Q, F>) -> Self {
-        let fetch = <Q::Fetch as Fetch>::init(world).expect("unmatched fetch");
-        let filter = F::init(world).expect("unmatched filter");
+        let (fetch, filter) = query_state
+            .state
+            .as_ref()
+            .map(|(fetch_state, filter_state)| {
+                (
+                    <Q::Fetch as Fetch>::init(world, fetch_state),
+                    F::init(world, filter_state),
+                )
+            })
+            .unwrap_or_else(|| (<Q::Fetch as Fetch>::DANGLING, F::DANGLING));
         QueryIter {
             fetch,
             tables: &world.storages().tables,

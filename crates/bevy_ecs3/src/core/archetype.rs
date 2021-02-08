@@ -330,10 +330,6 @@ impl SparseSetIndex for ArchetypeComponentId {
     }
 }
 
-struct ArchetypeComponents {
-
-}
-
 pub struct Archetypes {
     archetypes: Vec<Archetype>,
     archetype_ids: HashMap<u64, ArchetypeId>,
@@ -431,5 +427,10 @@ impl Archetypes {
         let id = ArchetypeComponentId(self.archetype_component_count);
         self.archetype_component_count += 1;
         id
+    }
+
+    #[inline]
+    pub fn archetype_components_len(&self) -> usize {
+        self.archetype_component_count
     }
 }

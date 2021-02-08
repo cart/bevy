@@ -154,6 +154,11 @@ impl Components {
 
         ComponentId(*index)
     }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.components.len()
+    }
 }
 
 bitflags! {

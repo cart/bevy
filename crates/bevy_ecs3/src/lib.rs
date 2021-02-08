@@ -24,8 +24,7 @@ macro_rules! smaller_tuples_too {
 mod tests {
     use crate::{
         core::{
-            Added, Changed, Component, Entity, IntoQueryState, Mutated, QueryFilter, QueryState,
-            With, Without,
+            Added, Changed, Component, Entity, IntoQueryState, Mutated, QueryFilter, With, Without,
         },
         prelude::{ComponentDescriptor, StorageType, World},
     };
@@ -442,9 +441,15 @@ mod tests {
         assert_eq!(<&i32>::query().iter(&world).count(), 1);
         assert_eq!(<()>::query().filter::<Added<i32>>().iter(&world).count(), 1);
         assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query().filter::<Added<i32>>().get(&world, a).is_some());
+        assert!(<()>::query()
+            .filter::<Added<i32>>()
+            .get(&world, a)
+            .is_some());
         assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query().filter::<Added<i32>>().get(&world, a).is_some());
+        assert!(<()>::query()
+            .filter::<Added<i32>>()
+            .get(&world, a)
+            .is_some());
 
         world.clear_trackers();
 
@@ -453,9 +458,15 @@ mod tests {
         assert_eq!(<&i32>::query().iter(&world).count(), 1);
         assert_eq!(<()>::query().filter::<Added<i32>>().iter(&world).count(), 0);
         assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query().filter::<Added<i32>>().get(&world, a).is_none());
+        assert!(<()>::query()
+            .filter::<Added<i32>>()
+            .get(&world, a)
+            .is_none());
         assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query().filter::<Added<i32>>().get(&world, a).is_none());
+        assert!(<()>::query()
+            .filter::<Added<i32>>()
+            .get(&world, a)
+            .is_none());
     }
 
     #[test]
@@ -496,7 +507,7 @@ mod tests {
         let e3 = world.spawn().insert_bundle((A(0), B(0))).id();
         world.spawn().insert_bundle((A(0), B));
 
-        for (i, mut a) in <&mut A>::query().iter(&world).enumerate() {
+        for (i, mut a) in <&mut A>::query().iter_mut(&mut world).enumerate() {
             if i % 2 == 0 {
                 a.0 += 1;
             }
@@ -582,11 +593,11 @@ mod tests {
         let e2 = world.spawn().insert_bundle((A(0), B(0))).id();
         world.spawn().insert_bundle((A(0), B(0)));
 
-        for mut a in <&mut A>::query().iter(&world) {
+        for mut a in <&mut A>::query().iter_mut(&mut world) {
             a.0 += 1;
         }
 
-        for mut b in <&mut B>::query().iter(&world).skip(1).take(1) {
+        for mut b in <&mut B>::query().iter_mut(&mut world).skip(1).take(1) {
             b.0 += 1;
         }
 

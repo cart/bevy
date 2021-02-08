@@ -12,7 +12,7 @@ pub use state::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{ComponentDescriptor, IntoQueryState, QueryState, StorageType, World};
+    use crate::core::{ComponentDescriptor, QueryState, IntoQueryState, StorageType, World};
 
     #[derive(Debug, Eq, PartialEq)]
     struct A(usize);
@@ -47,7 +47,7 @@ mod tests {
         let values = <&A>::query().iter(&world).collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (_a, mut b) in <(&A, &mut B)>::query().iter(&world) {
+        for (_a, mut b) in <(&A, &mut B)>::query().iter_mut(&mut world) {
             b.0 = 3;
         }
 

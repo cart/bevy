@@ -1,7 +1,4 @@
-use crate::{
-    core::{Or, QueryFilter, World, WorldQuery},
-    system::{Commands, Query, SystemQueryState, SystemState},
-};
+use crate::{core::{Or, QueryFilter, QueryState, World, WorldQuery}, system::{Commands, Query, SystemState}};
 use parking_lot::Mutex;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -35,12 +32,12 @@ pub struct FetchQuery<Q, F>(PhantomData<(Q, F)>);
 
 impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Query<'a, Q, F> {
     type Fetch = FetchQuery<Q, F>;
-    type State = SystemQueryState<Q, F>;
+    type State = QueryState<Q, F>;
 }
 
-impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for SystemQueryState<Q, F> {
+impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for QueryState<Q, F> {
     fn init(_world: &mut World) -> Self {
-        SystemQueryState::default()
+        QueryState::default()
     }
 
     fn update(&mut self, world: &World, system_state: &mut SystemState) {
@@ -51,7 +48,7 @@ impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for Sys
 
 impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a> for FetchQuery<Q, F> {
     type Item = Query<'a, Q, F>;
-    type State = SystemQueryState<Q, F>;
+    type State = QueryState<Q, F>;
 
     #[inline]
     unsafe fn get_param(
