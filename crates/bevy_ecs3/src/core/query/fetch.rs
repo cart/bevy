@@ -41,46 +41,6 @@ pub trait FetchState: Sized {
     fn matches_archetype(&self, archetype: &Archetype) -> bool;
 }
 
-pub struct ReadState<T> {
-    component_id: ComponentId,
-    storage_type: StorageType,
-    marker: PhantomData<T>,
-}
-
-impl<T: Component> FetchState for ReadState<T> {
-    fn init(world: &World) -> Option<Self> {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>())?;
-        // SAFE: component_id exists if there is a TypeId pointing to it
-        let component_info = unsafe { components.get_info_unchecked(component_id) };
-        Some(ReadState {
-            component_id: component_info.id(),
-            storage_type: component_info.storage_type(),
-            marker: PhantomData,
-        })
-    }
-
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        access.add_read(self.component_id)
-    }
-
-    fn update_archetype_component_access(
-        &self,
-        archetype: &Archetype,
-        access: &mut Access<ArchetypeComponentId>,
-    ) {
-        if let Some(archetype_component_id) =
-            archetype.get_archetype_component_id(self.component_id)
-        {
-            access.add_read(archetype_component_id);
-        }
-    }
-
-    fn matches_archetype(&self, archetype: &Archetype) -> bool {
-        archetype.contains(self.component_id)
-    }
-}
-
 /// A fetch that is read only. This should only be implemented for read-only fetches.
 pub unsafe trait ReadOnlyFetch {}
 
@@ -157,6 +117,46 @@ impl<'w> Fetch<'w> for FetchEntity {
 impl<T: Component> WorldQuery for &T {
     type Fetch = FetchRead<T>;
     type State = ReadState<T>;
+}
+
+pub struct ReadState<T> {
+    component_id: ComponentId,
+    storage_type: StorageType,
+    marker: PhantomData<T>,
+}
+
+impl<T: Component> FetchState for ReadState<T> {
+    fn init(world: &World) -> Option<Self> {
+        let components = world.components();
+        let component_id = components.get_id(TypeId::of::<T>())?;
+        // SAFE: component_id exists if there is a TypeId pointing to it
+        let component_info = unsafe { components.get_info_unchecked(component_id) };
+        Some(ReadState {
+            component_id: component_info.id(),
+            storage_type: component_info.storage_type(),
+            marker: PhantomData,
+        })
+    }
+
+    fn update_component_access(&self, access: &mut Access<ComponentId>) {
+        access.add_read(self.component_id)
+    }
+
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+        if let Some(archetype_component_id) =
+            archetype.get_archetype_component_id(self.component_id)
+        {
+            access.add_read(archetype_component_id);
+        }
+    }
+
+    fn matches_archetype(&self, archetype: &Archetype) -> bool {
+        archetype.contains(self.component_id)
+    }
 }
 
 pub enum FetchRead<T> {
