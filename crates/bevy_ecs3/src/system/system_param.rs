@@ -10,7 +10,7 @@ pub trait SystemParam: Sized {
 pub trait SystemParamState: Send + Sync + 'static {
     fn init(world: &mut World) -> Self;
     #[inline]
-    fn update(&mut self, world: &World, system_state: &mut SystemState) {}
+    fn update(&mut self, _world: &World, _system_state: &mut SystemState) {}
     #[inline]
     fn apply(&mut self, _world: &mut World) {}
 }

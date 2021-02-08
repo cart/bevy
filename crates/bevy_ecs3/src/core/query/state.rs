@@ -40,6 +40,7 @@ unsafe impl<Q: WorldQuery, F: QueryFilter> Send for QueryState<Q, F> {}
 unsafe impl<Q: WorldQuery, F: QueryFilter> Sync for QueryState<Q, F> {}
 
 impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
+    #[inline]
     pub fn update(&mut self, world: &World) {
         if self.state.is_none() {
             if let (Some(fetch_state), Some(filter_state)) = (
@@ -101,6 +102,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         QueryState::default()
     }
 
+    #[inline]
     pub fn get<'w>(
         &mut self,
         world: &'w World,
@@ -113,6 +115,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         unsafe { self.get_unchecked(world, entity) }
     }
 
+    #[inline]
     pub fn get_mut<'w>(
         &mut self,
         world: &'w mut World,
@@ -124,12 +127,22 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     }
 
 
+    #[inline]
     pub unsafe fn get_unchecked<'w>(
         &mut self,
         world: &'w World,
         entity: Entity,
     ) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
         self.update(world);
+        self.get_unchecked_manual(world, entity)
+    }
+
+    #[inline]
+    pub unsafe fn get_unchecked_manual<'w>(
+        &mut self,
+        world: &'w World,
+        entity: Entity,
+    ) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
         let location = world.entities.get(entity)?;
         if !self
             .matched_archetypes
@@ -180,6 +193,14 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         world: &'w World,
     ) -> QueryIter<'w, 's, Q, F> {
         self.update(world);
+        QueryIter::new(world, self)
+    }
+
+    #[inline]
+    pub unsafe fn iter_unchecked_manual<'w, 's>(
+        &'s mut self,
+        world: &'w World,
+    ) -> QueryIter<'w, 's, Q, F> {
         QueryIter::new(world, self)
     }
 }
