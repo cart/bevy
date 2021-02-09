@@ -587,6 +587,16 @@ mod tests {
     }
 
     #[test]
+    fn reserve_and_spawn() {
+        let mut world = World::default();
+        let e = world.entities().reserve_entity();
+        world.flush();
+        let mut e_mut = world.entity_mut(e).unwrap();
+        e_mut.insert(A(0));
+        assert_eq!(e_mut.get::<A>().unwrap(), &A(0));
+    }
+
+    #[test]
     fn multiple_mutated_query() {
         let mut world = World::default();
         world.spawn().insert_bundle((A(0), B(0))).id();

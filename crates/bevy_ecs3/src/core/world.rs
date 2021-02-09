@@ -105,10 +105,7 @@ impl World {
     #[inline]
     pub fn despawn(&mut self, entity: Entity) -> bool {
         self.entity_mut(entity)
-            .map(|e| {
-                e.despawn();
-                true
-            })
+            .map(|e| {e.despawn(); true})
             .unwrap_or(false)
     }
 
@@ -119,20 +116,6 @@ impl World {
     {
         SpawnBatchIter::new(self, iter.into_iter())
     }
-
-    // /// Like `query`, but instead of returning a single iterator it returns a "batched iterator",
-    // /// where each batch is `batch_size`. This is generally used for parallel iteration.
-    // ///
-    // /// # Safety
-    // /// This does not check for mutable query correctness. To be safe, make sure mutable queries
-    // /// have unique access to the components they query.
-    // #[inline]
-    // pub unsafe fn query_batched_unchecked<Q: WorldQuery, F: QueryFilter>(
-    //     &self,
-    //     batch_size: usize,
-    // ) -> BatchedIter<'_, Q, F> {
-    //     BatchedIter::new(&self.archetypes, batch_size)
-    // }
 
     pub(crate) fn flush(&mut self) {
         // SAFE: empty archetype is initialized when the world is constructed

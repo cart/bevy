@@ -7,15 +7,24 @@
 
 ## Summary of Done Things
 
-* Multiple component storages (tables and sparse sets)
 * Complete World rewrite (no shared hecs code, other than the entity id allocator)
-* EntityRef / EntityMut api
+    * Multiple component storages (tables and sparse sets)
+    * EntityRef / EntityMut api
+    * Archetype Graph
 * Stateful Queries
+    * QueryState
+    * Fetch and Filter state (stored in QueryStt)
+* Perf improvements
+    * much faster fragmented iterator perf
+    * muuuuuch faster sparse fragmented perf
+    * faster table component adds/removes
+    * sparse component add/removes 
 * Smaller Codebase (verify numbers at the end)
 * Reduced monomorphization (measure compile time difference)
 * More granular module organization
 * Direct stateless World queries are slower
 * SystemParam state (still needs "settable" params)
+* Safe entity reservation api
 
 ## random thoughts
 
@@ -37,7 +46,7 @@
     * ExactSizeIter for Query
     * Flags
     * try removing pre-hash in favor of non-owned get (to allow collision resolution)
-    * remove one by one
+    * remove one by one (remove_intersection)
     * prevent allocating in empty archetype on init (maybe use a EntityMutUninit?)
         * last attempt dropped perf
     * simplify SAFETY text
@@ -45,7 +54,6 @@
     * batch_iter
     * Update bundle derive macro
 * high level
-    * Query access
     * port System to new api
     * port scheduler to new api
     * make reserver api safe

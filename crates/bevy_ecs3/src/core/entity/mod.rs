@@ -276,10 +276,13 @@ impl Entities {
     /// Destroy an entity, allowing it to be reused
     ///
     /// Must not be called while reserved entities are awaiting `flush()`.
-    pub fn free(&mut self, entity: Entity) -> EntityLocation {
+    pub fn free(&mut self, entity: Entity) -> Option<EntityLocation> {
         self.verify_flushed();
 
         let meta = &mut self.meta[entity.id as usize];
+        if meta.generation != entity.generation {
+            return None;
+        }
         meta.generation += 1;
 
         let loc = mem::replace(&mut meta.location, EntityMeta::EMPTY.location);
@@ -289,7 +292,7 @@ impl Entities {
         let new_free_cursor = self.pending.len() as i64;
         self.free_cursor.store(new_free_cursor, Ordering::Relaxed); // Not racey due to &mut self
         self.len -= 1;
-        loc
+        Some(loc)
     }
 
     /// Ensure at least `n` allocations can succeed without reallocating
@@ -331,17 +334,15 @@ impl Entities {
 
     /// Returns `Ok(Location { archetype: 0, index: undefined })` for pending entities
     pub fn get(&self, entity: Entity) -> Option<EntityLocation> {
-        if self.meta.len() <= entity.id as usize {
-            return Some(EntityLocation {
-                archetype_id: ArchetypeId::empty_archetype(),
-                index: usize::max_value(),
-            });
+        if (entity.id as usize) < self.meta.len() {
+            let meta = &self.meta[entity.id as usize];
+            if meta.generation != entity.generation {
+                return None;
+            }
+            Some(meta.location)
+        } else {
+            None
         }
-        let meta = &self.meta[entity.id as usize];
-        if meta.generation != entity.generation {
-            return None;
-        }
-        Some(meta.location)
     }
 
     /// Panics if the given id would represent an index outside of `meta`.
@@ -388,7 +389,7 @@ impl Entities {
             let old_meta_len = self.meta.len();
             let new_meta_len = old_meta_len + -free_cursor as usize;
             self.meta.resize(new_meta_len, EntityMeta::EMPTY);
-
+            self.len += -free_cursor as u32;
             for (id, meta) in self.meta.iter_mut().enumerate().skip(old_meta_len) {
                 init(Entity::new(id as u32), &mut meta.location);
             }
@@ -446,5 +447,13 @@ mod tests {
             id: 0xBAADF00D,
         };
         assert_eq!(Entity::from_bits(e.to_bits()), e);
+    }
+
+    #[test]
+    fn reserve_entity_len() {
+        let mut e = Entities::default();
+        e.reserve_entity();
+        e.flush(|_, _| {});
+        assert_eq!(e.len(), 1);
     }
 }

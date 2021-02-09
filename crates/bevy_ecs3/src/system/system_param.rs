@@ -1,9 +1,8 @@
 use crate::{
     core::{Or, QueryFilter, QueryState, World, WorldQuery},
-    system::{Commands, Query, SystemState},
+    system::{CommandQueue, Commands, Query, SystemState},
 };
-use parking_lot::Mutex;
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
 
 pub trait SystemParam: Sized {
     type State: SystemParamState;
@@ -101,12 +100,12 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a>
 
 pub struct FetchCommands;
 
-impl<'a> SystemParam for &'a mut Commands {
+impl<'a> SystemParam for Commands<'a> {
     type Fetch = FetchCommands;
-    type State = Commands;
+    type State = CommandQueue;
 }
 
-impl SystemParamState for Commands {
+impl SystemParamState for CommandQueue {
     fn init(_world: &mut World) -> Self {
         Default::default()
     }
@@ -117,47 +116,16 @@ impl SystemParamState for Commands {
 }
 
 impl<'a> FetchSystemParam<'a> for FetchCommands {
-    type Item = &'a mut Commands;
-    type State = Commands;
+    type Item = Commands<'a>;
+    type State = CommandQueue;
 
     #[inline]
     unsafe fn get_param(
         state: &'a mut Self::State,
         _system_state: &'a SystemState,
-        _world: &'a World,
+        world: &'a World,
     ) -> Option<Self::Item> {
-        Some(state)
-    }
-}
-
-pub struct FetchArcCommands;
-impl SystemParam for Arc<Mutex<Commands>> {
-    type Fetch = FetchArcCommands;
-    type State = Arc<Mutex<Commands>>;
-}
-
-impl SystemParamState for Arc<Mutex<Commands>> {
-    fn init(_world: &mut World) -> Self {
-        Default::default()
-    }
-
-    fn apply(&mut self, world: &mut World) {
-        let mut commands = self.lock();
-        commands.apply(world);
-    }
-}
-
-impl<'a> FetchSystemParam<'a> for FetchArcCommands {
-    type Item = Arc<Mutex<Commands>>;
-    type State = Arc<Mutex<Commands>>;
-
-    #[inline]
-    unsafe fn get_param(
-        state: &'a mut Self::State,
-        _system_state: &SystemState,
-        _world: &World,
-    ) -> Option<Self::Item> {
-        Some(state.clone())
+        Some(Commands::new(state, world))
     }
 }
 
