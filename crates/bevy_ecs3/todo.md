@@ -56,9 +56,7 @@
 * high level
     * port System to new api
     * port scheduler to new api
-    * make reserver api safe
-        * pass world into Commands
-
+    * par_iter
 
 ## Maybe
 * try trimming down Fetch api
