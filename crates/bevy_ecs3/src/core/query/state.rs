@@ -1,11 +1,8 @@
 use crate::core::{
-    Access, ArchetypeComponentId, ArchetypeGeneration, ArchetypeId, Archetypes, ComponentId,
-    Entity, Fetch, FetchState, QueryFilter, QueryIter, TableId, World, WorldQuery,
+    Access, ArchetypeComponentId, ArchetypeGeneration, ArchetypeId, ComponentId, Entity, Fetch,
+    FetchState, QueryFilter, QueryIter, ReadOnlyFetch, TableId, World, WorldQuery,
 };
 use fixedbitset::FixedBitSet;
-use std::ops::Range;
-
-use super::ReadOnlyFetch;
 
 // TODO: consider splitting out into QueryState and SystemQueryState
 pub struct QueryState<Q: WorldQuery, F: QueryFilter = ()> {
@@ -40,7 +37,6 @@ unsafe impl<Q: WorldQuery, F: QueryFilter> Send for QueryState<Q, F> {}
 unsafe impl<Q: WorldQuery, F: QueryFilter> Sync for QueryState<Q, F> {}
 
 impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
-    #[inline]
     pub fn update(&mut self, world: &World) {
         if self.state.is_none() {
             if let (Some(fetch_state), Some(filter_state)) = (
@@ -53,17 +49,15 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
                 self.state = Some((fetch_state, filter_state));
             }
         }
-        self.update_internal(world);
-    }
 
-    fn update_internal(&mut self, world: &World) {
         if let Some((fetch_state, filter_state)) = &self.state {
             let archetypes = world.archetypes();
             let old_generation = self.archetype_generation;
             self.archetype_generation = archetypes.generation();
             self.matched_tables.grow(world.storages().tables.len());
             self.matched_archetypes.grow(archetypes.len());
-            self.archetype_component_access.grow(archetypes.archetype_components_len());
+            self.archetype_component_access
+                .grow(archetypes.archetype_components_len());
             let archetype_index_range = if old_generation == self.archetype_generation {
                 0..0
             } else {
@@ -98,6 +92,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         }
     }
 
+    #[inline]
     pub fn filter<Filter: QueryFilter>(self) -> QueryState<Q, Filter> {
         QueryState::default()
     }
@@ -120,12 +115,10 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         &mut self,
         world: &'w mut World,
         entity: Entity,
-    ) -> Option<<Q::Fetch as Fetch<'w>>::Item>
-    {
+    ) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
         // SAFE: query has unique world access
         unsafe { self.get_unchecked(world, entity) }
     }
-
 
     #[inline]
     pub unsafe fn get_unchecked<'w>(
@@ -137,7 +130,6 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         self.get_unchecked_manual(world, entity)
     }
 
-    #[inline]
     pub unsafe fn get_unchecked_manual<'w>(
         &mut self,
         world: &'w World,
@@ -202,6 +194,90 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         world: &'w World,
     ) -> QueryIter<'w, 's, Q, F> {
         QueryIter::new(world, self)
+    }
+
+    #[inline]
+    pub fn for_each<'w, 's>(
+        &'s self,
+        world: &'w World,
+        func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item),
+    ) where
+        Q::Fetch: ReadOnlyFetch,
+    {
+        unsafe {
+            self.for_each_unchecked_manual(world, func);
+        }
+    }
+
+    #[inline]
+    pub fn for_each_mut<'w, 's>(
+        &'s mut self,
+        world: &'w mut World,
+        func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item),
+    ) {
+        unsafe {
+            self.for_each_unchecked_manual(world, func);
+        }
+    }
+
+    #[inline]
+    pub fn for_each_mut_manual<'w, 's>(
+        &'s self,
+        world: &'w World,
+        func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item),
+    ) {
+        unsafe {
+            self.for_each_unchecked_manual(world, func);
+        }
+    }
+
+    pub unsafe fn for_each_unchecked_manual<'w, 's>(
+        &'s self,
+        world: &'w World,
+        mut func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item),
+    ) {
+        let (mut fetch, mut filter) = self
+            .state
+            .as_ref()
+            .map(|(fetch_state, filter_state)| {
+                (
+                    <Q::Fetch as Fetch>::init(world, fetch_state),
+                    F::init(world, filter_state),
+                )
+            })
+            .unwrap_or_else(|| (<Q::Fetch as Fetch>::DANGLING, F::DANGLING));
+        if fetch.is_dense() {
+            let tables = &world.storages().tables;
+            for table_id in self.matched_table_ids.iter() {
+                let table = tables.get_unchecked(*table_id);
+                fetch.next_table_dense(table);
+                filter.next_table(table);
+
+                for table_index in 0..table.len() {
+                    if !filter.matches_entity(table_index) {
+                        continue;
+                    }
+                    let item = fetch.fetch(table_index);
+                    func(item);
+                }
+            }
+        } else {
+            let tables = &world.storages().tables;
+            for table_id in self.matched_table_ids.iter() {
+                let table = tables.get_unchecked(*table_id);
+                fetch.next_table(table);
+                filter.next_table(table);
+
+                for table_index in 0..table.len() {
+                    if !filter.matches_entity(table_index) {
+                        continue;
+                    }
+                    if let Some(item) = fetch.try_fetch(table_index) {
+                        func(item);
+                    }
+                }
+            }
+        }
     }
 }
 

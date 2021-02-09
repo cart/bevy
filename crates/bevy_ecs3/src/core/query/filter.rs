@@ -18,7 +18,7 @@ impl QueryFilter for () {
     const DANGLING: Self = ();
 
     #[inline]
-    unsafe fn init(_world: &World, state: &Self::State) -> Self {
+    unsafe fn init(_world: &World, _state: &Self::State) -> Self {
         ()
     }
 
@@ -54,13 +54,13 @@ impl<T: Component> FetchState for WithState<T> {
     }
 
     #[inline]
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
 
     #[inline]
     fn update_archetype_component_access(
         &self,
-        archetype: &Archetype,
-        access: &mut Access<ArchetypeComponentId>,
+        _archetype: &Archetype,
+        _access: &mut Access<ArchetypeComponentId>,
     ) {
     }
 
@@ -77,7 +77,7 @@ impl<T: Component> QueryFilter for With<T> {
         marker: PhantomData,
     };
 
-    unsafe fn init(world: &World, state: &Self::State) -> Self {
+    unsafe fn init(_world: &World, state: &Self::State) -> Self {
         Self {
             component_id: state.component_id,
             marker: PhantomData,
@@ -114,13 +114,13 @@ impl<T: Component> FetchState for WithoutState<T> {
     }
 
     #[inline]
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
 
     #[inline]
     fn update_archetype_component_access(
         &self,
-        archetype: &Archetype,
-        access: &mut Access<ArchetypeComponentId>,
+        _archetype: &Archetype,
+        _access: &mut Access<ArchetypeComponentId>,
     ) {
     }
 
@@ -137,7 +137,7 @@ impl<T: Component> QueryFilter for Without<T> {
         marker: PhantomData,
     };
 
-    unsafe fn init(world: &World, state: &Self::State) -> Self {
+    unsafe fn init(_world: &World, state: &Self::State) -> Self {
         Self {
             component_id: state.component_id,
             marker: Default::default(),
@@ -174,13 +174,13 @@ impl<T: Bundle> FetchState for WithBundleState<T> {
     }
 
     #[inline]
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
 
     #[inline]
     fn update_archetype_component_access(
         &self,
-        archetype: &Archetype,
-        access: &mut Access<ArchetypeComponentId>,
+        _archetype: &Archetype,
+        _access: &mut Access<ArchetypeComponentId>,
     ) {
     }
 
@@ -202,7 +202,7 @@ impl<T: Bundle> QueryFilter for WithBundle<T> {
         marker: PhantomData,
     };
 
-    unsafe fn init(world: &World, state: &Self::State) -> Self {
+    unsafe fn init(_world: &World, _state: &Self::State) -> Self {
         Self {
             marker: PhantomData,
         }

@@ -6,6 +6,7 @@ pub struct QueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
     table_id_iter: std::slice::Iter<'s, TableId>,
     fetch: Q::Fetch,
     filter: F,
+    pub(crate) is_dense: bool,
     table_len: usize,
     table_index: usize,
 }
@@ -23,6 +24,7 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> QueryIter<'w, 's, Q, F> {
             })
             .unwrap_or_else(|| (<Q::Fetch as Fetch>::DANGLING, F::DANGLING));
         QueryIter {
+            is_dense: fetch.is_dense(),
             fetch,
             tables: &world.storages().tables,
             filter,
@@ -39,12 +41,12 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, 's, Q, F>
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            if self.fetch.is_dense() {
+            if self.is_dense {
                 loop {
                     if self.table_index == self.table_len {
                         let table_id = self.table_id_iter.next()?;
                         let table = self.tables.get_unchecked(*table_id);
-                        self.fetch.next_table(table);
+                        self.fetch.next_table_dense(table);
                         self.filter.next_table(table);
                         self.table_len = table.len();
                         self.table_index = 0;

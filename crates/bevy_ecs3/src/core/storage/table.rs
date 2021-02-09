@@ -175,7 +175,7 @@ impl Tables {
         })
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Table> {
+    pub fn iter(&self) -> std::slice::Iter<'_, Table> {
         self.tables.iter()
     }
 

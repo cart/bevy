@@ -423,12 +423,6 @@ impl Archetypes {
         })
     }
 
-    fn get_next_archetype_component_id(&mut self) -> ArchetypeComponentId {
-        let id = ArchetypeComponentId(self.archetype_component_count);
-        self.archetype_component_count += 1;
-        id
-    }
-
     #[inline]
     pub fn archetype_components_len(&self) -> usize {
         self.archetype_component_count

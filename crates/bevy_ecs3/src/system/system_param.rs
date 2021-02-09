@@ -1,4 +1,7 @@
-use crate::{core::{Or, QueryFilter, QueryState, World, WorldQuery}, system::{Commands, Query, SystemState}};
+use crate::{
+    core::{Or, QueryFilter, QueryState, World, WorldQuery},
+    system::{Commands, Query, SystemState},
+};
 use parking_lot::Mutex;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -40,13 +43,15 @@ impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for Que
         QueryState::default()
     }
 
-    fn update(&mut self, world: &World, system_state: &mut SystemState) {
-        // self.update_archetypes(archetypes, fetch, filter)
+    fn update(&mut self, world: &World, _system_state: &mut SystemState) {
+        self.update(world);
         // TODO: check for collision with system state archetype component access
     }
 }
 
-impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a> for FetchQuery<Q, F> {
+impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a>
+    for FetchQuery<Q, F>
+{
     type Item = Query<'a, Q, F>;
     type State = QueryState<Q, F>;
 
@@ -56,8 +61,6 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a>
         _system_state: &'a SystemState,
         world: &'a World,
     ) -> Option<Self::Item> {
-        // TODO: try caching fetch state in SystemParam
-        // TODO: remove these "expects"
         Some(Query::new(world, state))
     }
 }
@@ -168,12 +171,12 @@ macro_rules! impl_system_param_tuple {
             type State = ($($param::State,)*);
         }
         #[allow(unused_variables)]
+        #[allow(non_snake_case)]
         impl<'a, $($param: FetchSystemParam<'a>),*> FetchSystemParam<'a> for FetchParamTuple<($($param,)*)> {
             type Item = ($($param::Item,)*);
             type State = ($($param::State,)*);
 
             #[inline]
-            #[allow(non_snake_case)]
             unsafe fn get_param(
                 state: &'a mut Self::State,
                 system_state: &'a SystemState,
@@ -185,13 +188,13 @@ macro_rules! impl_system_param_tuple {
             }
         }
 
+        #[allow(non_snake_case)]
         impl<$($param: SystemParamState),*> SystemParamState for ($($param,)*) {
             #[inline]
             fn init(_world: &mut World) -> Self {
                 (($($param::init(_world),)*))
             }
 
-            #[allow(non_snake_case)]
             #[inline]
             fn apply(&mut self, _world: &mut World) {
                 let ($($param,)*) = self;

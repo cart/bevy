@@ -12,7 +12,7 @@ pub use state::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{ComponentDescriptor, QueryState, IntoQueryState, StorageType, World};
+    use crate::core::{ComponentDescriptor, IntoQueryState, StorageType, World};
 
     #[derive(Debug, Eq, PartialEq)]
     struct A(usize);

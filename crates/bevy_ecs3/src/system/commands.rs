@@ -1,6 +1,5 @@
-use super::SystemId;
 use crate::core::{Bundle, Component, DynamicBundle, Entity, World};
-use bevy_utils::tracing::{debug, warn};
+use bevy_utils::tracing::debug;
 use std::marker::PhantomData;
 
 /// A [World] mutation
@@ -130,7 +129,7 @@ impl<T> Command for RemoveBundle<T>
 where
     T: Bundle + Send + Sync + 'static,
 {
-    fn write(self: Box<Self>, world: &mut World) {
+    fn write(self: Box<Self>, _world: &mut World) {
         todo!("use entity.remove_bundle_intersection once it is implemented");
         // if let Some(entity_mut) = world.entity_mut(self.entity) {
         //     match entity_mut.remove::<T>() {
@@ -205,7 +204,7 @@ impl Commands {
     ///     commands.spawn((Component1, Component2));
     /// }
     /// ```
-    pub fn spawn(&mut self, bundle: impl DynamicBundle + Send + Sync + 'static) -> &mut Self {
+    pub fn spawn(&mut self, _bundle: impl DynamicBundle + Send + Sync + 'static) -> &mut Self {
         todo!("use direct world ref to reserve entity");
         // let entity = self
         //     .entity_reserver

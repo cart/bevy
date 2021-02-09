@@ -1,4 +1,8 @@
-use crate::core::{ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId, Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryFilter, QueryIter, QueryState, ReadOnlyFetch, SpawnBatchIter, StorageType, Storages, WorldQuery};
+use crate::core::{
+    ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId,
+    Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, SpawnBatchIter,
+    StorageType, Storages,
+};
 use std::fmt;
 
 #[derive(Default)]
@@ -115,7 +119,7 @@ impl World {
     {
         SpawnBatchIter::new(self, iter.into_iter())
     }
-    
+
     // /// Like `query`, but instead of returning a single iterator it returns a "batched iterator",
     // /// where each batch is `batch_size`. This is generally used for parallel iteration.
     // ///

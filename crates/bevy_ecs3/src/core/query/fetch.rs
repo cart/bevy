@@ -1,7 +1,7 @@
 use crate::{
     core::{
         Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId,
-        ComponentSparseSet, Entity, Mut, StorageType, Table, Tables, World,
+        ComponentSparseSet, Entity, Mut, StorageType, Table, World,
     },
     smaller_tuples_too,
 };
@@ -24,6 +24,7 @@ pub trait Fetch<'w>: Sized {
     fn matches_table(&self, table: &Table) -> bool;
     fn is_dense(&self) -> bool;
     unsafe fn next_table(&mut self, table: &Table);
+    unsafe fn next_table_dense(&mut self, table: &Table);
     unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item>;
     unsafe fn fetch(&mut self, index: usize) -> Self::Item;
 }
@@ -58,21 +59,21 @@ unsafe impl ReadOnlyFetch for FetchEntity {}
 pub struct EntityState;
 
 impl FetchState for EntityState {
-    fn init(world: &World) -> Option<Self> {
+    fn init(_world: &World) -> Option<Self> {
         Some(Self)
     }
 
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
 
     fn update_archetype_component_access(
         &self,
-        archetype: &Archetype,
-        access: &mut Access<ArchetypeComponentId>,
+        _archetype: &Archetype,
+        _access: &mut Access<ArchetypeComponentId>,
     ) {
     }
 
     #[inline]
-    fn matches_archetype(&self, archetype: &Archetype) -> bool {
+    fn matches_archetype(&self, _archetype: &Archetype) -> bool {
         true
     }
 }
@@ -94,12 +95,17 @@ impl<'w> Fetch<'w> for FetchEntity {
         true
     }
 
-    unsafe fn init(_world: &World, state: &Self::State) -> Self {
+    unsafe fn init(_world: &World, _state: &Self::State) -> Self {
         Self::DANGLING
     }
 
     #[inline]
     unsafe fn next_table(&mut self, table: &Table) {
+        self.entities = table.entities().as_ptr();
+    }
+
+    #[inline]
+    unsafe fn next_table_dense(&mut self, table: &Table) {
         self.entities = table.entities().as_ptr();
     }
 
@@ -159,17 +165,12 @@ impl<T: Component> FetchState for ReadState<T> {
     }
 }
 
-pub enum FetchRead<T> {
-    Table {
-        component_id: ComponentId,
-        components: NonNull<T>,
-        tables: *const Tables,
-    },
-    SparseSet {
-        component_id: ComponentId,
-        entities: *const Entity,
-        sparse_set: *const ComponentSparseSet,
-    },
+pub struct FetchRead<T> {
+    component_id: ComponentId,
+    storage_type: StorageType,
+    components: NonNull<T>,
+    entities: *const Entity,
+    sparse_set: *const ComponentSparseSet,
 }
 
 unsafe impl<T> ReadOnlyFetch for FetchRead<T> {}
@@ -178,91 +179,80 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     type Item = &'w T;
     type State = ReadState<T>;
 
-    const DANGLING: Self = Self::Table {
+    const DANGLING: Self = Self {
         component_id: ComponentId::new(usize::MAX),
+        storage_type: StorageType::Table,
         components: NonNull::dangling(),
-        tables: ptr::null::<Tables>(),
+        entities: ptr::null::<Entity>(),
+        sparse_set: ptr::null::<ComponentSparseSet>(),
     };
 
     fn matches_table(&self, table: &Table) -> bool {
-        match self {
-            Self::Table { component_id, .. } => table.has_column(*component_id),
+        match self.storage_type {
+            StorageType::Table => table.has_column(self.component_id),
             // any table could have any sparse set component
-            Self::SparseSet { .. } => true,
+            StorageType::SparseSet => true,
         }
     }
 
     #[inline]
     fn is_dense(&self) -> bool {
-        match self {
-            Self::Table { .. } => true,
-            Self::SparseSet { .. } => false,
+        match self.storage_type {
+            StorageType::Table => true,
+            StorageType::SparseSet => false,
         }
     }
 
     unsafe fn init(world: &World, state: &Self::State) -> Self {
-        match state.storage_type {
-            StorageType::Table => Self::Table {
-                component_id: state.component_id,
-                components: NonNull::dangling(),
-                tables: (&world.storages().tables) as *const Tables,
-            },
-            StorageType::SparseSet => Self::SparseSet {
-                component_id: state.component_id,
-                entities: std::ptr::null::<Entity>(),
-                sparse_set: world
-                    .storages()
-                    .sparse_sets
-                    .get_unchecked(state.component_id),
-            },
+        let mut value = Self {
+            component_id: state.component_id,
+            storage_type: state.storage_type,
+            ..Self::DANGLING
+        };
+        if state.storage_type == StorageType::SparseSet {
+            value.sparse_set = world
+                .storages()
+                .sparse_sets
+                .get_unchecked(state.component_id);
         }
+        value
     }
 
     #[inline]
     unsafe fn next_table(&mut self, table: &Table) {
-        match self {
-            Self::Table {
-                component_id,
-                components,
-                ..
-            } => {
-                *components = table
-                    .get_column_unchecked(*component_id)
+        match self.storage_type {
+            StorageType::Table => {
+                self.components = table
+                    .get_column_unchecked(self.component_id)
                     .get_ptr()
                     .cast::<T>();
             }
-            Self::SparseSet { entities, .. } => *entities = table.entities().as_ptr(),
+            StorageType::SparseSet => self.entities = table.entities().as_ptr(),
         }
     }
 
     #[inline]
+    unsafe fn next_table_dense(&mut self, table: &Table) {
+        self.components = table
+            .get_column_unchecked(self.component_id)
+            .get_ptr()
+            .cast::<T>();
+    }
+
+    #[inline]
     unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
-        match self {
-            Self::Table { components, .. } => Some(&*components.as_ptr().add(index)),
-            Self::SparseSet {
-                entities,
-                sparse_set,
-                ..
-            } => {
-                let entity = *entities.add(index);
-                (**sparse_set).get(entity).map(|c| &*c.cast::<T>())
+        match self.storage_type {
+            StorageType::Table => Some(&*self.components.as_ptr().add(index)),
+            StorageType::SparseSet => {
+                let entity = *self.entities.add(index);
+                (*self.sparse_set).get(entity).map(|c| &*c.cast::<T>())
             }
         }
     }
 
     #[inline]
     unsafe fn fetch(&mut self, index: usize) -> Self::Item {
-        match self {
-            Self::Table { components, .. } => &*components.as_ptr().add(index),
-            Self::SparseSet {
-                entities,
-                sparse_set,
-                ..
-            } => {
-                let entity = *entities.add(index);
-                &*(**sparse_set).get_unchecked(entity).cast::<T>()
-            }
-        }
+        &*self.components.as_ptr().add(index)
     }
 }
 
@@ -271,18 +261,13 @@ impl<T: Component> WorldQuery for &mut T {
     type State = WriteState<T>;
 }
 
-pub enum FetchWrite<T> {
-    Table {
-        component_id: ComponentId,
-        components: NonNull<T>,
-        flags: *mut ComponentFlags,
-        tables: *const Tables,
-    },
-    SparseSet {
-        component_id: ComponentId,
-        entities: *const Entity,
-        sparse_set: *const ComponentSparseSet,
-    },
+pub struct FetchWrite<T> {
+    component_id: ComponentId,
+    storage_type: StorageType,
+    components: NonNull<T>,
+    entities: *const Entity,
+    sparse_set: *const ComponentSparseSet,
+    flags: *mut ComponentFlags,
 }
 
 pub struct WriteState<T> {
@@ -329,81 +314,75 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     type Item = Mut<'w, T>;
     type State = WriteState<T>;
 
-    const DANGLING: Self = Self::Table {
+    const DANGLING: Self = Self {
         component_id: ComponentId::new(usize::MAX),
+        storage_type: StorageType::Table,
         components: NonNull::dangling(),
+        entities: ptr::null::<Entity>(),
+        sparse_set: ptr::null::<ComponentSparseSet>(),
         flags: ptr::null_mut::<ComponentFlags>(),
-        tables: ptr::null::<Tables>(),
     };
 
     fn matches_table(&self, table: &Table) -> bool {
-        match self {
-            Self::Table { component_id, .. } => table.has_column(*component_id),
+        match self.storage_type {
+            StorageType::Table => table.has_column(self.component_id),
             // any table could have any sparse set component
-            Self::SparseSet { .. } => true,
+            StorageType::SparseSet => true,
         }
     }
 
     #[inline]
     fn is_dense(&self) -> bool {
-        match self {
-            Self::Table { .. } => true,
-            Self::SparseSet { .. } => false,
+        match self.storage_type {
+            StorageType::Table => true,
+            StorageType::SparseSet => false,
         }
     }
 
     unsafe fn init(world: &World, state: &Self::State) -> Self {
-        match state.storage_type {
-            StorageType::Table => Self::Table {
-                component_id: state.component_id,
-                components: NonNull::dangling(),
-                flags: ptr::null_mut(),
-                tables: (&world.storages().tables) as *const Tables,
-            },
-            StorageType::SparseSet => Self::SparseSet {
-                component_id: state.component_id,
-                entities: std::ptr::null::<Entity>(),
-                sparse_set: world
-                    .storages()
-                    .sparse_sets
-                    .get_unchecked(state.component_id),
-            },
+        let mut value = Self {
+            component_id: state.component_id,
+            storage_type: state.storage_type,
+            ..Self::DANGLING
+        };
+        if state.storage_type == StorageType::SparseSet {
+            value.sparse_set = world
+                .storages()
+                .sparse_sets
+                .get_unchecked(state.component_id);
         }
+        value
     }
 
     #[inline]
     unsafe fn next_table(&mut self, table: &Table) {
-        match self {
-            Self::Table {
-                component_id,
-                components,
-                flags,
-                ..
-            } => {
-                let column = table.get_column_unchecked(*component_id);
-                *components = column.get_ptr().cast::<T>();
-                *flags = column.get_flags_mut_ptr();
+        match self.storage_type {
+            StorageType::Table => {
+                let column = table.get_column_unchecked(self.component_id);
+                self.components = column.get_ptr().cast::<T>();
+                self.flags = column.get_flags_mut_ptr();
             }
-            Self::SparseSet { entities, .. } => *entities = table.entities().as_ptr(),
+            StorageType::SparseSet => self.entities = table.entities().as_ptr(),
         }
     }
 
     #[inline]
+    unsafe fn next_table_dense(&mut self, table: &Table) {
+        let column = table.get_column_unchecked(self.component_id);
+        self.components = column.get_ptr().cast::<T>();
+        self.flags = column.get_flags_mut_ptr();
+    }
+
+    #[inline]
     unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
-        match self {
-            Self::Table {
-                components, flags, ..
-            } => Some(Mut {
-                value: &mut *components.as_ptr().add(index),
-                flags: &mut *flags.add(index),
+        match self.storage_type {
+            StorageType::Table => Some(Mut {
+                value: &mut *self.components.as_ptr().add(index),
+                flags: &mut *self.flags.add(index),
             }),
-            Self::SparseSet {
-                entities,
-                sparse_set,
-                ..
-            } => {
-                let entity = *entities.add(index);
-                (**sparse_set).get_with_flags(entity).map(|(c, f)| Mut {
+            StorageType::SparseSet => {
+                let entity = *self.entities.add(index);
+                (*self.sparse_set).get_with_flags(entity).map(|(c, f)| Mut {
                     value: &mut *c.cast::<T>(),
                     flags: &mut *f,
                 })
@@ -413,25 +392,9 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
 
     #[inline]
     unsafe fn fetch(&mut self, index: usize) -> Self::Item {
-        match self {
-            Self::Table {
-                components, flags, ..
-            } => Mut {
-                value: &mut *components.as_ptr().add(index),
-                flags: &mut *flags.add(index),
-            },
-            Self::SparseSet {
-                entities,
-                sparse_set,
-                ..
-            } => {
-                let entity = *entities.add(index);
-                let (value, flags) = (**sparse_set).get_with_flags_unchecked(entity);
-                Mut {
-                    value: &mut *value.cast::<T>(),
-                    flags: &mut *flags,
-                }
-            }
+        Mut {
+            value: &mut *self.components.as_ptr().add(index),
+            flags: &mut *self.flags.add(index),
         }
     }
 }
@@ -472,7 +435,7 @@ impl<T: FetchState> FetchState for OptionState<T> {
             .update_archetype_component_access(archetype, access)
     }
 
-    fn matches_archetype(&self, archetype: &Archetype) -> bool {
+    fn matches_archetype(&self, _archetype: &Archetype) -> bool {
         true
     }
 }
@@ -512,6 +475,14 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
     }
 
     #[inline]
+    unsafe fn next_table_dense(&mut self, table: &Table) {
+        self.matches = self.fetch.matches_table(table);
+        if self.matches {
+            self.fetch.next_table_dense(table);
+        }
+    }
+
+    #[inline]
     unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
         if self.matches {
             Some(self.fetch.try_fetch(index))
@@ -532,83 +503,74 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
 
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
+        #[allow(non_snake_case)]
         impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
             type Item = ($($name::Item,)*);
             type State = ($($name::State,)*);
 
             const DANGLING: Self = ($($name::DANGLING,)*);
 
-            #[allow(unused_variables)]
-            unsafe fn init(world: &World, state: &Self::State) -> Self {
+            unsafe fn init(_world: &World, state: &Self::State) -> Self {
                 let ($($name,)*) = state;
-                ($($name::init(world, $name),)*)
+                ($($name::init(_world, $name),)*)
             }
 
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
             #[inline]
             fn is_dense(&self) -> bool {
                 let ($($name,)*) = self;
                 true $(&& $name.is_dense())*
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            fn matches_table(&self, table: &Table) -> bool {
+            fn matches_table(&self, _table: &Table) -> bool {
                 let ($($name,)*) = self;
-                true $(&& $name.matches_table(table))*
+                true $(&& $name.matches_table(_table))*
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
             #[inline]
-            unsafe fn next_table(&mut self, table: &Table) {
+            unsafe fn next_table(&mut self, _table: &Table) {
                 let ($($name,)*) = self;
-                $($name.next_table(table);)*
+                $($name.next_table(_table);)*
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
             #[inline]
-            unsafe fn fetch(&mut self, index: usize) -> Self::Item {
+            unsafe fn next_table_dense(&mut self, _table: &Table) {
                 let ($($name,)*) = self;
-                ($($name.fetch(index),)*)
+                $($name.next_table_dense(_table);)*
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
             #[inline]
-            unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
+            unsafe fn fetch(&mut self, _index: usize) -> Self::Item {
                 let ($($name,)*) = self;
-                Some(($($name.try_fetch(index)?,)*))
+                ($($name.fetch(_index),)*)
+            }
+
+            #[inline]
+            unsafe fn try_fetch(&mut self, _index: usize) -> Option<Self::Item> {
+                let ($($name,)*) = self;
+                Some(($($name.try_fetch(_index)?,)*))
             }
         }
 
+        #[allow(non_snake_case)]
         impl<$($name: FetchState),*> FetchState for ($($name,)*) {
-            fn init(world: &World) -> Option<Self> {
-                Some(($($name::init(world)?,)*))
+            fn init(_world: &World) -> Option<Self> {
+                Some(($($name::init(_world)?,)*))
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            fn update_component_access(&self, access: &mut Access<ComponentId>) {
+            fn update_component_access(&self, _access: &mut Access<ComponentId>) {
                 let ($($name,)*) = self;
-                $($name.update_component_access(access);)*
+                $($name.update_component_access(_access);)*
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            fn update_archetype_component_access(&self, archetype: &Archetype, access: &mut Access<ArchetypeComponentId>) {
+            fn update_archetype_component_access(&self, _archetype: &Archetype, _access: &mut Access<ArchetypeComponentId>) {
                 let ($($name,)*) = self;
-                $($name.update_archetype_component_access(archetype, access);)*
+                $($name.update_archetype_component_access(_archetype, _access);)*
             }
 
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-            fn matches_archetype(&self, archetype: &Archetype) -> bool {
+            fn matches_archetype(&self, _archetype: &Archetype) -> bool {
                 let ($($name,)*) = self;
-                true $(&& $name.matches_archetype(archetype))*
+                true $(&& $name.matches_archetype(_archetype))*
             }
 
         }
