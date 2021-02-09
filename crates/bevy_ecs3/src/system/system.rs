@@ -1,12 +1,5 @@
-use crate::core::{Access, ArchetypeComponentId, World};
+use crate::core::{Access, ArchetypeComponentId, ComponentId, World};
 use std::borrow::Cow;
-
-/// Determines the strategy used to run the `run_thread_local` function in a [System]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum ThreadLocalExecution {
-    Immediate,
-    NextFlush,
-}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct SystemId(pub usize);
@@ -25,8 +18,9 @@ pub trait System: Send + Sync + 'static {
     fn name(&self) -> Cow<'static, str>;
     fn id(&self) -> SystemId;
     fn update(&mut self, world: &World);
+    fn component_access(&self) -> &Access<ComponentId>;
     fn archetype_component_access(&self) -> &Access<ArchetypeComponentId>;
-    fn thread_local_execution(&self) -> ThreadLocalExecution;
+    fn is_non_send(&self) -> bool;
     /// # Safety
     /// This might access World and Resources in an unsafe manner. This should only be called in one of the following contexts:
     /// 1. This system is the only system running on the given World and Resources across all threads
@@ -36,7 +30,7 @@ pub trait System: Send + Sync + 'static {
         // SAFE: world and resources are exclusively borrowed
         unsafe { self.run_unsafe(input, world) }
     }
-    fn run_thread_local(&mut self, world: &mut World);
+    fn apply_buffers(&mut self, world: &mut World);
     fn initialize(&mut self, _world: &mut World);
 }
 

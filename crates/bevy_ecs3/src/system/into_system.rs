@@ -1,22 +1,22 @@
 use crate::{
-    core::{Access, ArchetypeComponentId, World},
-    system::{
-        FetchSystemParam, System, SystemId, SystemParam, SystemParamState, ThreadLocalExecution,
-    },
+    core::{Access, ArchetypeComponentId, ComponentId, World},
+    system::{FetchSystemParam, System, SystemId, SystemParam, SystemParamState},
 };
 use std::borrow::Cow;
 
 pub struct SystemState {
     pub(crate) id: SystemId,
     pub(crate) name: Cow<'static, str>,
+    pub(crate) component_access: Access<ComponentId>,
     pub(crate) archetype_component_access: Access<ArchetypeComponentId>,
+    pub(crate) is_non_send: bool,
 }
 
 pub struct FuncSystem<Out, ParamState> {
     func: Box<
         dyn FnMut(&mut ParamState, &mut SystemState, &World) -> Option<Out> + Send + Sync + 'static,
     >,
-    thread_local_func:
+    apply_buffers:
         Box<dyn FnMut(&mut ParamState, &mut SystemState, &mut World) + Send + Sync + 'static>,
     init_func: Box<dyn FnMut(&mut SystemState, &mut World) -> ParamState + Send + Sync + 'static>,
     state: SystemState,
@@ -41,20 +41,24 @@ impl<ParamState: SystemParamState + 'static, Out: 'static> System for FuncSystem
         param_state.update(world, &mut self.state);
     }
 
+    fn component_access(&self) -> &Access<ComponentId> {
+        &self.state.component_access
+    }
+
     fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
         &self.state.archetype_component_access
     }
 
-    fn thread_local_execution(&self) -> ThreadLocalExecution {
-        ThreadLocalExecution::NextFlush
+    fn is_non_send(&self) -> bool {
+        self.state.is_non_send
     }
 
     unsafe fn run_unsafe(&mut self, _input: Self::In, world: &World) -> Option<Out> {
         (self.func)(self.param_state.as_mut().unwrap(), &mut self.state, world)
     }
 
-    fn run_thread_local(&mut self, world: &mut World) {
-        (self.thread_local_func)(self.param_state.as_mut().unwrap(), &mut self.state, world)
+    fn apply_buffers(&mut self, world: &mut World) {
+        (self.apply_buffers)(self.param_state.as_mut().unwrap(), &mut self.state, world)
     }
 
     fn initialize(&mut self, world: &mut World) {
@@ -69,7 +73,7 @@ pub struct InputFuncSystem<In, Out, ParamState> {
             + Sync
             + 'static,
     >,
-    thread_local_func:
+    apply_buffers:
         Box<dyn FnMut(&mut ParamState, &mut SystemState, &mut World) + Send + Sync + 'static>,
     init_func: Box<dyn FnMut(&mut SystemState, &mut World) -> ParamState + Send + Sync + 'static>,
     state: SystemState,
@@ -96,12 +100,16 @@ impl<In: 'static, Out: 'static, ParamState: SystemParamState + Send + Sync + 'st
         param_state.update(world, &mut self.state);
     }
 
+    fn component_access(&self) -> &Access<ComponentId> {
+        &self.state.component_access
+    }
+
     fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
         &self.state.archetype_component_access
     }
 
-    fn thread_local_execution(&self) -> ThreadLocalExecution {
-        ThreadLocalExecution::NextFlush
+    fn is_non_send(&self) -> bool {
+        self.state.is_non_send
     }
 
     unsafe fn run_unsafe(&mut self, input: In, world: &World) -> Option<Out> {
@@ -113,8 +121,8 @@ impl<In: 'static, Out: 'static, ParamState: SystemParamState + Send + Sync + 'st
         )
     }
 
-    fn run_thread_local(&mut self, world: &mut World) {
-        (self.thread_local_func)(
+    fn apply_buffers(&mut self, world: &mut World) {
+        (self.apply_buffers)(
             &mut self.param_state.as_mut().unwrap(),
             &mut self.state,
             world,
@@ -155,6 +163,8 @@ macro_rules! impl_into_system {
                     state: SystemState {
                         name: std::any::type_name::<Self>().into(),
                         archetype_component_access: Access::default(),
+                        component_access: Access::default(),
+                        is_non_send: false,
                         id: SystemId::new(),
                     },
                     func: Box::new(move |param_state, state, world| {
@@ -166,7 +176,7 @@ macro_rules! impl_into_system {
                             }
                         }
                     }),
-                    thread_local_func: Box::new(|param_state, state, world| {
+                    apply_buffers: Box::new(|param_state, state, world| {
                         param_state.apply(world);
                     }),
                     param_state: None,
@@ -192,6 +202,8 @@ macro_rules! impl_into_system {
                     state: SystemState {
                         name: std::any::type_name::<Self>().into(),
                         archetype_component_access: Access::default(),
+                        component_access: Access::default(),
+                        is_non_send: false,
                         id: SystemId::new(),
                     },
                     func: Box::new(move |input, param_state, state, world| {
@@ -204,7 +216,7 @@ macro_rules! impl_into_system {
                         }
                     }),
                     param_state: None,
-                    thread_local_func: Box::new(|param_state, state, world| {
+                    apply_buffers: Box::new(|param_state, state, world| {
                         param_state.apply(world);
                     }),
                     init_func: Box::new(|state, world| {

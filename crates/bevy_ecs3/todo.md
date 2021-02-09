@@ -40,6 +40,7 @@
 ## TODO
 * world id safety
 * core
+    * rename core to world
     * un-comment all tests
     * Or Filter
     * Removal Tracking
@@ -57,6 +58,9 @@
     * port System to new api
     * port scheduler to new api
     * par_iter
+* resources
+    * try storing in World. Special archetype? Tags?
+    * NonSend (system param too)
 
 ## Maybe
 * try trimming down Fetch api

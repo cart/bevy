@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
 use crate::{
-    core::{Access, ArchetypeComponentId, World},
-    system::{System, SystemId, ThreadLocalExecution},
+    core::{Access, ArchetypeComponentId, ComponentId, World},
+    system::{System, SystemId},
 };
 
 pub struct ChainSystem<SystemA, SystemB> {
@@ -10,7 +10,8 @@ pub struct ChainSystem<SystemA, SystemB> {
     system_b: SystemB,
     name: Cow<'static, str>,
     id: SystemId,
-    pub(crate) archetype_component_access: Access<ArchetypeComponentId>,
+    component_access: Access<ComponentId>,
+    archetype_component_access: Access<ArchetypeComponentId>,
 }
 
 impl<SystemA: System, SystemB: System<In = SystemA::Out>> System for ChainSystem<SystemA, SystemB> {
@@ -27,19 +28,31 @@ impl<SystemA: System, SystemB: System<In = SystemA::Out>> System for ChainSystem
 
     fn update(&mut self, world: &World) {
         self.archetype_component_access.clear();
+        self.component_access.clear();
+
         self.system_a.update(world);
         self.system_b.update(world);
 
         self.archetype_component_access
             .extend(self.system_a.archetype_component_access());
+        self.archetype_component_access
+            .extend(self.system_b.archetype_component_access());
+        self.component_access
+            .extend(self.system_a.component_access());
+        self.component_access
+            .extend(self.system_b.component_access());
     }
 
     fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
         &self.archetype_component_access
     }
 
-    fn thread_local_execution(&self) -> ThreadLocalExecution {
-        ThreadLocalExecution::NextFlush
+    fn component_access(&self) -> &Access<ComponentId> {
+        &self.component_access
+    }
+
+    fn is_non_send(&self) -> bool {
+        self.system_a.is_non_send() || self.system_b.is_non_send()
     }
 
     unsafe fn run_unsafe(&mut self, input: Self::In, world: &World) -> Option<Self::Out> {
@@ -47,9 +60,9 @@ impl<SystemA: System, SystemB: System<In = SystemA::Out>> System for ChainSystem
         self.system_b.run_unsafe(out, world)
     }
 
-    fn run_thread_local(&mut self, world: &mut World) {
-        self.system_a.run_thread_local(world);
-        self.system_b.run_thread_local(world);
+    fn apply_buffers(&mut self, world: &mut World) {
+        self.system_a.apply_buffers(world);
+        self.system_b.apply_buffers(world);
     }
 
     fn initialize(&mut self, world: &mut World) {
@@ -76,6 +89,7 @@ where
             system_a: self,
             system_b: system,
             archetype_component_access: Default::default(),
+            component_access: Default::default(),
             id: SystemId::new(),
         }
     }
