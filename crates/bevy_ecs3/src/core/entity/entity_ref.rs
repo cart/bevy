@@ -25,12 +25,39 @@ impl<'w> EntityRef<'w> {
         self.entity
     }
 
+    #[inline]
+    pub fn location(&self) -> EntityLocation {
+        self.location
+    }
+
+    #[inline]
+    pub fn archetype(&self) -> &Archetype {
+        // SAFE: EntityRefs always point to valid entities. Valid entities always have valid archetypes
+        unsafe {
+            self.world.archetypes.get_unchecked(self.location.archetype_id)
+        }
+    }
+
     pub fn get<T: Component>(&self) -> Option<&'w T> {
         // SAFE: entity location is valid and returned component is of type T
         unsafe {
             get_component_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
                 .map(|value| &*value.cast::<T>())
         }
+    }
+
+    /// SAFETY: this cannot be used to produce aliased mutable access to an entity's component
+    pub unsafe fn get_mut_unchecked<T: Component>(&self) -> Option<Mut<'w, T>> {
+            get_component_and_flags_with_type(
+                self.world,
+                TypeId::of::<T>(),
+                self.entity,
+                self.location,
+            )
+            .map(|(value, flags)| Mut {
+                value: &mut *value.cast::<T>(),
+                flags: &mut *flags,
+            })
     }
 }
 
@@ -53,6 +80,11 @@ impl<'w> EntityMut<'w> {
     #[inline]
     pub fn id(&self) -> Entity {
         self.entity
+    }
+
+    #[inline]
+    pub fn location(&self) -> EntityLocation {
+        self.location
     }
 
     pub fn get<T: Component>(&self) -> Option<&'w T> {

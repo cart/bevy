@@ -131,7 +131,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     }
 
     pub unsafe fn get_unchecked_manual<'w>(
-        &mut self,
+        &self,
         world: &'w World,
         entity: Entity,
     ) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
@@ -190,7 +190,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
 
     #[inline]
     pub unsafe fn iter_unchecked_manual<'w, 's>(
-        &'s mut self,
+        &'s self,
         world: &'w World,
     ) -> QueryIter<'w, 's, Q, F> {
         QueryIter::new(world, self)

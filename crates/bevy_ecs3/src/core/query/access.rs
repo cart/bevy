@@ -35,6 +35,18 @@ impl<T: SparseSetIndex> Access<T> {
         self.writes.insert(index.sparse_set_index());
     }
 
+    pub fn has_read(&self, index: T) -> bool {
+        if self.reads_all {
+            true
+        } else {
+            self.reads_and_writes.contains(index.sparse_set_index())
+        }
+    }
+
+    pub fn has_write(&self, index: T) -> bool {
+        self.writes.contains(index.sparse_set_index())
+    }
+
     pub fn read_all(&mut self) {
         self.reads_all = true;
     }

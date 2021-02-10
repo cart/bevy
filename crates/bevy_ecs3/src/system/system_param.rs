@@ -149,11 +149,9 @@ impl<'a, T: Component> FetchSystemParam<'a> for FetchRes<T> {
     ) -> Option<Self::Item> {
         let component_id = state.component_id?;
         let column = world.archetypes.get_resource_column(component_id)?;
-        unsafe {
-            Some(Res {
-                value: &*column.get_ptr().as_ptr().cast::<T>(),
-            })
-        }
+        Some(Res {
+            value: &*column.get_ptr().as_ptr().cast::<T>(),
+        })
     }
 }
 
@@ -210,12 +208,10 @@ impl<'a, T: Component> FetchSystemParam<'a> for FetchResMut<T> {
     ) -> Option<Self::Item> {
         let component_id = state.component_id?;
         let column = world.archetypes.get_resource_column(component_id)?;
-        unsafe {
-            Some(ResMut {
-                value: &mut *column.get_ptr().as_ptr().cast::<T>(),
-                flags: &mut *column.get_flags_mut_ptr(),
-            })
-        }
+        Some(ResMut {
+            value: &mut *column.get_ptr().as_ptr().cast::<T>(),
+            flags: &mut *column.get_flags_mut_ptr(),
+        })
     }
 }
 
@@ -282,6 +278,12 @@ macro_rules! impl_system_param_tuple {
             #[inline]
             fn init(_world: &mut World) -> Self {
                 (($($param::init(_world),)*))
+            }
+
+            #[inline]
+            fn update(&mut self, _world: &World, _system_state: &mut SystemState) {
+                let ($($param,)*) = self;
+                $($param.update(_world, _system_state);)*
             }
 
             #[inline]

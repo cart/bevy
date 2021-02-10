@@ -64,6 +64,8 @@
     * NonSend (system param too)
 
 ## Maybe
+* World Error Handling (EntityRef)
+* remove "unchecked" where possible and see if it affect debug perf
 * consider adding Unique to StorageType
 * try removing SYstemParamState trait in favor of Fetch methods. cuts down on wrapper types needed
 * TrackedWorld

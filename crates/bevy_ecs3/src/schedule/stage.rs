@@ -7,7 +7,10 @@ use crate::{
     },
     system::System,
 };
-use bevy_utils::{HashMap, HashSet, tracing::{error, info}};
+use bevy_utils::{
+    tracing::{error, info},
+    HashMap, HashSet,
+};
 use downcast_rs::{impl_downcast, Downcast};
 use fixedbitset::FixedBitSet;
 use std::borrow::Cow;
@@ -606,734 +609,725 @@ impl Stage for SystemStage {
     }
 }
 
-// TODO: re-enable these
-// #[cfg(test)]
-// mod tests {
-//     use crate::{prelude::*, SingleThreadedExecutor};
+#[cfg(test)]
+mod tests {
+    use crate::{
+        prelude::*,
+        schedule::{
+            ExclusiveSystemDescriptorCoercion, ParallelSystemDescriptorCoercion, ShouldRun,
+            SingleThreadedExecutor, Stage, SystemSet, SystemStage,
+        },
+        system::{IntoExclusiveSystem, IntoSystem, Query, ResMut},
+    };
 
-//     fn make_exclusive(tag: usize) -> impl FnMut(&mut Resources) {
-//         move |resources| resources.get_mut::<Vec<usize>>().unwrap().push(tag)
-//     }
+    fn make_exclusive(tag: usize) -> impl FnMut(&mut World) {
+        move |world| world.get_resource_mut::<Vec<usize>>().unwrap().push(tag)
+    }
 
-//     // This is silly. https://github.com/bevyengine/bevy/issues/1029
-//     macro_rules! make_parallel {
-//         ($tag:expr) => {{
-//             fn parallel(mut resource: ResMut<Vec<usize>>) {
-//                 resource.push($tag)
-//             }
-//             parallel
-//         }};
-//     }
+    // This is silly. https://github.com/bevyengine/bevy/issues/1029
+    macro_rules! make_parallel {
+        ($tag:expr) => {{
+            fn parallel(mut resource: ResMut<Vec<usize>>) {
+                resource.push($tag)
+            }
+            parallel
+        }};
+    }
 
-//     fn empty() {}
+    fn empty() {}
 
-//     fn resettable_run_once(mut has_ran: ResMut<bool>) -> ShouldRun {
-//         if !*has_ran {
-//             *has_ran = true;
-//             return ShouldRun::Yes;
-//         }
-//         ShouldRun::No
-//     }
+    fn resettable_run_once(mut has_ran: ResMut<bool>) -> ShouldRun {
+        if !*has_ran {
+            *has_ran = true;
+            return ShouldRun::Yes;
+        }
+        ShouldRun::No
+    }
 
-//     #[test]
-//     fn insertion_points() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
+    #[test]
+    fn insertion_points() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(0).exclusive_system().at_start())
+            .with_system(make_parallel!(1).system())
+            .with_system(make_exclusive(2).exclusive_system().before_commands())
+            .with_system(make_exclusive(3).exclusive_system().at_end());
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource_mut::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3]
+        );
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 0, 1, 2, 3]
+        );
 
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(0).exclusive_system().at_start())
-//             .with_system(make_parallel!(1).system())
-//             .with_system(make_exclusive(2).exclusive_system().before_commands())
-//             .with_system(make_exclusive(3).exclusive_system().at_end());
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(*resources.get::<Vec<usize>>().unwrap(), vec![0, 1, 2, 3]);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 0, 1, 2, 3]
-//         );
+        world.get_resource_mut::<Vec<usize>>().unwrap().clear();
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(2).exclusive_system().before_commands())
+            .with_system(make_exclusive(3).exclusive_system().at_end())
+            .with_system(make_parallel!(1).system())
+            .with_system(make_exclusive(0).exclusive_system().at_start());
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3]
+        );
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 0, 1, 2, 3]
+        );
 
-//         resources.get_mut::<Vec<usize>>().unwrap().clear();
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(2).exclusive_system().before_commands())
-//             .with_system(make_exclusive(3).exclusive_system().at_end())
-//             .with_system(make_parallel!(1).system())
-//             .with_system(make_exclusive(0).exclusive_system().at_start());
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(*resources.get::<Vec<usize>>().unwrap(), vec![0, 1, 2, 3]);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 0, 1, 2, 3]
-//         );
+        world.get_resource_mut::<Vec<usize>>().unwrap().clear();
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(2).exclusive_system().before_commands())
+            .with_system(make_parallel!(3).exclusive_system().at_end())
+            .with_system(make_parallel!(1).system())
+            .with_system(make_parallel!(0).exclusive_system().at_start());
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3]
+        );
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 0, 1, 2, 3]
+        );
+    }
 
-//         resources.get_mut::<Vec<usize>>().unwrap().clear();
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(2).exclusive_system().before_commands())
-//             .with_system(make_parallel!(3).exclusive_system().at_end())
-//             .with_system(make_parallel!(1).system())
-//             .with_system(make_parallel!(0).exclusive_system().at_start());
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(*resources.get::<Vec<usize>>().unwrap(), vec![0, 1, 2, 3]);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 0, 1, 2, 3]
-//         );
-//     }
+    #[test]
+    #[should_panic(expected = "No exclusive system with label \"empty\" at start of stage.")]
+    fn exclusive_unknown_label() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.exclusive_system().at_end().label("empty"))
+            .with_system(empty.exclusive_system().after("empty"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic(expected = "No exclusive system with label \"empty\" at start of stage.")]
-//     fn exclusive_unknown_label() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.exclusive_system().at_end().label("empty"))
-//             .with_system(empty.exclusive_system().after("empty"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    #[should_panic(
+        expected = "Label \"empty\" already used by an exclusive system at start of stage."
+    )]
+    fn exclusive_duplicate_label() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.exclusive_system().at_end().label("empty"))
+            .with_system(empty.exclusive_system().before_commands().label("empty"));
+        stage.run(&mut world);
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.exclusive_system().label("empty"))
+            .with_system(empty.exclusive_system().label("empty"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic(
-//         expected = "Label \"empty\" already used by an exclusive system at start of stage."
-//     )]
-//     fn exclusive_duplicate_label() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.exclusive_system().at_end().label("empty"))
-//             .with_system(empty.exclusive_system().before_commands().label("empty"));
-//         stage.run(&mut world, &mut resources);
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.exclusive_system().label("empty"))
-//             .with_system(empty.exclusive_system().label("empty"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    fn exclusive_after() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(1).exclusive_system().label("1").after("0"))
+            .with_system(make_exclusive(2).exclusive_system().after("1"))
+            .with_system(make_exclusive(0).exclusive_system().label("0"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 0, 1, 2]
+        );
+    }
 
-//     #[test]
-//     fn exclusive_after() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(1).exclusive_system().label("1").after("0"))
-//             .with_system(make_exclusive(2).exclusive_system().after("1"))
-//             .with_system(make_exclusive(0).exclusive_system().label("0"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 0, 1, 2]
-//         );
-//     }
+    #[test]
+    fn exclusive_before() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(1).exclusive_system().label("1").before("2"))
+            .with_system(make_exclusive(2).exclusive_system().label("2"))
+            .with_system(make_exclusive(0).exclusive_system().before("1"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 0, 1, 2]
+        );
+    }
 
-//     #[test]
-//     fn exclusive_before() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(1).exclusive_system().label("1").before("2"))
-//             .with_system(make_exclusive(2).exclusive_system().label("2"))
-//             .with_system(make_exclusive(0).exclusive_system().before("1"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 0, 1, 2]
-//         );
-//     }
+    #[test]
+    fn exclusive_mixed() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(2).exclusive_system().label("2"))
+            .with_system(make_exclusive(1).exclusive_system().after("0").before("2"))
+            .with_system(make_exclusive(0).exclusive_system().label("0"))
+            .with_system(make_exclusive(4).exclusive_system().label("4"))
+            .with_system(make_exclusive(3).exclusive_system().after("2").before("4"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
 
-//     #[test]
-//     fn exclusive_mixed() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(2).exclusive_system().label("2"))
-//             .with_system(make_exclusive(1).exclusive_system().after("0").before("2"))
-//             .with_system(make_exclusive(0).exclusive_system().label("0"))
-//             .with_system(make_exclusive(4).exclusive_system().label("4"))
-//             .with_system(make_exclusive(3).exclusive_system().after("2").before("4"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
-//         );
-//     }
+    #[test]
+    fn exclusive_redundant_constraints() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(
+                make_exclusive(2)
+                    .exclusive_system()
+                    .label("2")
+                    .after("1")
+                    .before("3")
+                    .before("3"),
+            )
+            .with_system(
+                make_exclusive(1)
+                    .exclusive_system()
+                    .label("1")
+                    .after("0")
+                    .after("0")
+                    .before("2"),
+            )
+            .with_system(make_exclusive(0).exclusive_system().label("0").before("1"))
+            .with_system(make_exclusive(4).exclusive_system().label("4").after("3"))
+            .with_system(
+                make_exclusive(3)
+                    .exclusive_system()
+                    .label("3")
+                    .after("2")
+                    .before("4"),
+            );
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
 
-//     #[test]
-//     fn exclusive_redundant_constraints() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(
-//                 make_exclusive(2)
-//                     .exclusive_system()
-//                     .label("2")
-//                     .after("1")
-//                     .before("3")
-//                     .before("3"),
-//             )
-//             .with_system(
-//                 make_exclusive(1)
-//                     .exclusive_system()
-//                     .label("1")
-//                     .after("0")
-//                     .after("0")
-//                     .before("2"),
-//             )
-//             .with_system(make_exclusive(0).exclusive_system().label("0").before("1"))
-//             .with_system(make_exclusive(4).exclusive_system().label("4").after("3"))
-//             .with_system(
-//                 make_exclusive(3)
-//                     .exclusive_system()
-//                     .label("3")
-//                     .after("2")
-//                     .before("4"),
-//             );
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
-//         );
-//     }
+    #[test]
+    fn exclusive_mixed_across_sets() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(2).exclusive_system().label("2"))
+            .with_system_set(
+                SystemSet::new()
+                    .with_system(make_exclusive(0).exclusive_system().label("0"))
+                    .with_system(make_exclusive(4).exclusive_system().label("4"))
+                    .with_system(make_exclusive(3).exclusive_system().after("2").before("4")),
+            )
+            .with_system(make_exclusive(1).exclusive_system().after("0").before("2"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
 
-//     #[test]
-//     fn exclusive_mixed_across_sets() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(2).exclusive_system().label("2"))
-//             .with_system_set(
-//                 SystemSet::new()
-//                     .with_system(make_exclusive(0).exclusive_system().label("0"))
-//                     .with_system(make_exclusive(4).exclusive_system().label("4"))
-//                     .with_system(make_exclusive(3).exclusive_system().after("2").before("4")),
-//             )
-//             .with_system(make_exclusive(1).exclusive_system().after("0").before("2"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
-//         );
-//     }
+    #[test]
+    fn exclusive_run_criteria() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        world.insert_resource(false);
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(0).exclusive_system().before("1"))
+            .with_system_set(
+                SystemSet::new()
+                    .with_run_criteria(resettable_run_once.system())
+                    .with_system(make_exclusive(1).exclusive_system().label("1")),
+            )
+            .with_system(make_exclusive(2).exclusive_system().after("1"));
+        stage.run(&mut world);
+        stage.run(&mut world);
+        *world.get_resource_mut::<bool>().unwrap() = false;
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 0, 2, 0, 1, 2, 0, 2]
+        );
+    }
 
-//     #[test]
-//     fn exclusive_run_criteria() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         resources.insert(false);
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(0).exclusive_system().before("1"))
-//             .with_system_set(
-//                 SystemSet::new()
-//                     .with_run_criteria(resettable_run_once.system())
-//                     .with_system(make_exclusive(1).exclusive_system().label("1")),
-//             )
-//             .with_system(make_exclusive(2).exclusive_system().after("1"));
-//         stage.run(&mut world, &mut resources);
-//         stage.run(&mut world, &mut resources);
-//         *resources.get_mut::<bool>().unwrap() = false;
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 0, 2, 0, 1, 2, 0, 2]
-//         );
-//     }
+    #[test]
+    #[should_panic]
+    fn exclusive_cycle_1() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(0).exclusive_system().label("0").after("0"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic]
-//     fn exclusive_cycle_1() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(0).exclusive_system().label("0").after("0"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    #[should_panic]
+    fn exclusive_cycle_2() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(0).exclusive_system().label("0").after("1"))
+            .with_system(make_exclusive(1).exclusive_system().label("1").after("0"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic]
-//     fn exclusive_cycle_2() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(0).exclusive_system().label("0").after("1"))
-//             .with_system(make_exclusive(1).exclusive_system().label("1").after("0"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    #[should_panic]
+    fn exclusive_cycle_3() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_exclusive(0).exclusive_system().label("0"))
+            .with_system(make_exclusive(1).exclusive_system().after("0").before("2"))
+            .with_system(make_exclusive(2).exclusive_system().label("2").before("0"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic]
-//     fn exclusive_cycle_3() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_exclusive(0).exclusive_system().label("0"))
-//             .with_system(make_exclusive(1).exclusive_system().after("0").before("2"))
-//             .with_system(make_exclusive(2).exclusive_system().label("2").before("0"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    #[should_panic(expected = "No parallel system with label \"empty\" in stage.")]
+    fn parallel_unknown_label() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.system())
+            .with_system(empty.system().after("empty"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic(expected = "No parallel system with label \"empty\" in stage.")]
-//     fn parallel_unknown_label() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.system())
-//             .with_system(empty.system().after("empty"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    #[should_panic(expected = "Label \"empty\" already used by a parallel system.")]
+    fn parallel_duplicate_label() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.system().label("empty"))
+            .with_system(empty.system().label("empty"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic(expected = "Label \"empty\" already used by a parallel system.")]
-//     fn parallel_duplicate_label() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.system().label("empty"))
-//             .with_system(empty.system().label("empty"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    fn parallel_after() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(1).system().after("0").label("1"))
+            .with_system(make_parallel!(2).system().after("1"))
+            .with_system(make_parallel!(0).system().label("0"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 0, 1, 2]
+        );
+    }
 
-//     #[test]
-//     fn parallel_after() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(1).system().after("0").label("1"))
-//             .with_system(make_parallel!(2).system().after("1"))
-//             .with_system(make_parallel!(0).system().label("0"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 0, 1, 2]
-//         );
-//     }
+    #[test]
+    fn parallel_before() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(1).system().label("1").before("2"))
+            .with_system(make_parallel!(2).system().label("2"))
+            .with_system(make_parallel!(0).system().before("1"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 0, 1, 2]
+        );
+    }
 
-//     #[test]
-//     fn parallel_before() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(1).system().label("1").before("2"))
-//             .with_system(make_parallel!(2).system().label("2"))
-//             .with_system(make_parallel!(0).system().before("1"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 0, 1, 2]
-//         );
-//     }
+    #[test]
+    fn parallel_mixed() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(2).system().label("2"))
+            .with_system(make_parallel!(1).system().after("0").before("2"))
+            .with_system(make_parallel!(0).system().label("0"))
+            .with_system(make_parallel!(4).system().label("4"))
+            .with_system(make_parallel!(3).system().after("2").before("4"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
 
-//     #[test]
-//     fn parallel_mixed() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(2).system().label("2"))
-//             .with_system(make_parallel!(1).system().after("0").before("2"))
-//             .with_system(make_parallel!(0).system().label("0"))
-//             .with_system(make_parallel!(4).system().label("4"))
-//             .with_system(make_parallel!(3).system().after("2").before("4"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
-//         );
-//     }
+    #[test]
+    fn parallel_redundant_constraints() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(
+                make_parallel!(2)
+                    .system()
+                    .label("2")
+                    .after("1")
+                    .before("3")
+                    .before("3"),
+            )
+            .with_system(
+                make_parallel!(1)
+                    .system()
+                    .label("1")
+                    .after("0")
+                    .after("0")
+                    .before("2"),
+            )
+            .with_system(make_parallel!(0).system().label("0").before("1"))
+            .with_system(make_parallel!(4).system().label("4").after("3"))
+            .with_system(make_parallel!(3).system().label("3").after("2").before("4"));
+        stage.run(&mut world);
+        for container in stage.parallel.iter() {
+            assert!(container.dependencies().len() <= 1);
+        }
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
 
-//     #[test]
-//     fn parallel_redundant_constraints() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(
-//                 make_parallel!(2)
-//                     .system()
-//                     .label("2")
-//                     .after("1")
-//                     .before("3")
-//                     .before("3"),
-//             )
-//             .with_system(
-//                 make_parallel!(1)
-//                     .system()
-//                     .label("1")
-//                     .after("0")
-//                     .after("0")
-//                     .before("2"),
-//             )
-//             .with_system(make_parallel!(0).system().label("0").before("1"))
-//             .with_system(make_parallel!(4).system().label("4").after("3"))
-//             .with_system(make_parallel!(3).system().label("3").after("2").before("4"));
-//         stage.run(&mut world, &mut resources);
-//         for container in stage.parallel.iter() {
-//             assert!(container.dependencies().len() <= 1);
-//         }
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
-//         );
-//     }
+    #[test]
+    fn parallel_mixed_across_sets() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(2).system().label("2"))
+            .with_system_set(
+                SystemSet::new()
+                    .with_system(make_parallel!(0).system().label("0"))
+                    .with_system(make_parallel!(4).system().label("4"))
+                    .with_system(make_parallel!(3).system().after("2").before("4")),
+            )
+            .with_system(make_parallel!(1).system().after("0").before("2"));
+        stage.run(&mut world);
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+        );
+    }
 
-//     #[test]
-//     fn parallel_mixed_across_sets() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(2).system().label("2"))
-//             .with_system_set(
-//                 SystemSet::new()
-//                     .with_system(make_parallel!(0).system().label("0"))
-//                     .with_system(make_parallel!(4).system().label("4"))
-//                     .with_system(make_parallel!(3).system().after("2").before("4")),
-//             )
-//             .with_system(make_parallel!(1).system().after("0").before("2"));
-//         stage.run(&mut world, &mut resources);
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
-//         );
-//     }
+    #[test]
+    fn parallel_run_criteria() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        world.insert_resource(false);
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(0).system().before("1"))
+            .with_system_set(
+                SystemSet::new()
+                    .with_run_criteria(resettable_run_once.system())
+                    .with_system(make_parallel!(1).system().label("1")),
+            )
+            .with_system(make_parallel!(2).system().after("1"));
+        stage.run(&mut world);
+        stage.run(&mut world);
+        *world.get_resource_mut::<bool>().unwrap() = false;
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+        stage.run(&mut world);
+        assert_eq!(
+            *world.get_resource::<Vec<usize>>().unwrap(),
+            vec![0, 1, 2, 0, 2, 0, 1, 2, 0, 2]
+        );
+    }
 
-//     #[test]
-//     fn parallel_run_criteria() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         resources.insert(false);
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(0).system().before("1"))
-//             .with_system_set(
-//                 SystemSet::new()
-//                     .with_run_criteria(resettable_run_once.system())
-//                     .with_system(make_parallel!(1).system().label("1")),
-//             )
-//             .with_system(make_parallel!(2).system().after("1"));
-//         stage.run(&mut world, &mut resources);
-//         stage.run(&mut world, &mut resources);
-//         *resources.get_mut::<bool>().unwrap() = false;
-//         stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-//         stage.run(&mut world, &mut resources);
-//         stage.run(&mut world, &mut resources);
-//         assert_eq!(
-//             *resources.get::<Vec<usize>>().unwrap(),
-//             vec![0, 1, 2, 0, 2, 0, 1, 2, 0, 2]
-//         );
-//     }
+    #[test]
+    #[should_panic]
+    fn parallel_cycle_1() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage =
+            SystemStage::parallel().with_system(make_parallel!(0).system().label("0").after("0"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic]
-//     fn parallel_cycle_1() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage =
-//             SystemStage::parallel().with_system(make_parallel!(0).system().label("0").after("0"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    #[should_panic]
+    fn parallel_cycle_2() {
+        let mut world = World::new();
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(0).system().label("0").after("1"))
+            .with_system(make_parallel!(1).system().label("1").after("0"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     #[should_panic]
-//     fn parallel_cycle_2() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(0).system().label("0").after("1"))
-//             .with_system(make_parallel!(1).system().label("1").after("0"));
-//         stage.run(&mut world, &mut resources);
-//     }
+    #[test]
+    #[should_panic]
+    fn parallel_cycle_3() {
+        let mut world = World::new();
 
-//     #[test]
-//     #[should_panic]
-//     fn parallel_cycle_3() {
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
-//         resources.insert(Vec::<usize>::new());
-//         let mut stage = SystemStage::parallel()
-//             .with_system(make_parallel!(0).system().label("0"))
-//             .with_system(make_parallel!(1).system().after("0").before("2"))
-//             .with_system(make_parallel!(2).system().label("2").before("0"));
-//         stage.run(&mut world, &mut resources);
-//     }
+        world.insert_resource(Vec::<usize>::new());
+        let mut stage = SystemStage::parallel()
+            .with_system(make_parallel!(0).system().label("0"))
+            .with_system(make_parallel!(1).system().after("0").before("2"))
+            .with_system(make_parallel!(2).system().label("2").before("0"));
+        stage.run(&mut world);
+    }
 
-//     #[test]
-//     fn ambiguity_detection() {
-//         use super::{find_ambiguities, SystemContainer};
-//         use std::borrow::Cow;
+    #[test]
+    fn ambiguity_detection() {
+        use super::{find_ambiguities, SystemContainer};
+        use std::borrow::Cow;
 
-//         fn find_ambiguities_labels(
-//             systems: &[impl SystemContainer],
-//         ) -> Vec<(Cow<'static, str>, Cow<'static, str>)> {
-//             find_ambiguities(systems)
-//                 .drain(..)
-//                 .map(|(index_a, index_b)| {
-//                     (
-//                         systems[index_a].display_name(),
-//                         systems[index_b].display_name(),
-//                     )
-//                 })
-//                 .collect()
-//         }
+        fn find_ambiguities_labels(
+            systems: &[impl SystemContainer],
+        ) -> Vec<(Cow<'static, str>, Cow<'static, str>)> {
+            find_ambiguities(systems)
+                .drain(..)
+                .map(|(index_a, index_b)| {
+                    (
+                        systems[index_a].display_name(),
+                        systems[index_b].display_name(),
+                    )
+                })
+                .collect()
+        }
 
-//         fn empty() {}
-//         fn resource(_: ResMut<usize>) {}
-//         fn component(_: Query<&mut f32>) {}
+        fn empty() {}
+        fn resource(_: ResMut<usize>) {}
+        fn component(_: Query<&mut f32>) {}
 
-//         let mut world = World::new();
-//         let mut resources = Resources::default();
+        let mut world = World::new();
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.system().label("0"))
-//             .with_system(empty.system().label("1").after("0"))
-//             .with_system(empty.system().label("2"))
-//             .with_system(empty.system().label("3").after("2").before("4"))
-//             .with_system(empty.system().label("4"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         assert_eq!(find_ambiguities(&stage.parallel).len(), 0);
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.system().label("0"))
+            .with_system(empty.system().label("1").after("0"))
+            .with_system(empty.system().label("2"))
+            .with_system(empty.system().label("3").after("2").before("4"))
+            .with_system(empty.system().label("4"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        assert_eq!(find_ambiguities(&stage.parallel).len(), 0);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.system().label("0"))
-//             .with_system(component.system().label("1").after("0"))
-//             .with_system(empty.system().label("2"))
-//             .with_system(empty.system().label("3").after("2").before("4"))
-//             .with_system(component.system().label("4"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.parallel);
-//         assert!(
-//             ambiguities.contains(&("1".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "1".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 1);
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.system().label("0"))
+            .with_system(component.system().label("1").after("0"))
+            .with_system(empty.system().label("2"))
+            .with_system(empty.system().label("3").after("2").before("4"))
+            .with_system(component.system().label("4"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.parallel);
+        assert!(
+            ambiguities.contains(&("1".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "1".into()))
+        );
+        assert_eq!(ambiguities.len(), 1);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.system().label("0"))
-//             .with_system(resource.system().label("1").after("0"))
-//             .with_system(empty.system().label("2"))
-//             .with_system(empty.system().label("3").after("2").before("4"))
-//             .with_system(resource.system().label("4"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.parallel);
-//         assert!(
-//             ambiguities.contains(&("1".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "1".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 1);
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.system().label("0"))
+            .with_system(resource.system().label("1").after("0"))
+            .with_system(empty.system().label("2"))
+            .with_system(empty.system().label("3").after("2").before("4"))
+            .with_system(resource.system().label("4"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.parallel);
+        assert!(
+            ambiguities.contains(&("1".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "1".into()))
+        );
+        assert_eq!(ambiguities.len(), 1);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.system().label("0"))
-//             .with_system(resource.system().label("1").after("0"))
-//             .with_system(empty.system().label("2"))
-//             .with_system(empty.system().label("3").after("2").before("4"))
-//             .with_system(component.system().label("4"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         assert_eq!(find_ambiguities(&stage.parallel).len(), 0);
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.system().label("0"))
+            .with_system(resource.system().label("1").after("0"))
+            .with_system(empty.system().label("2"))
+            .with_system(empty.system().label("3").after("2").before("4"))
+            .with_system(component.system().label("4"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        assert_eq!(find_ambiguities(&stage.parallel).len(), 0);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(component.system().label("0"))
-//             .with_system(resource.system().label("1").after("0"))
-//             .with_system(empty.system().label("2"))
-//             .with_system(component.system().label("3").after("2").before("4"))
-//             .with_system(resource.system().label("4"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.parallel);
-//         assert!(
-//             ambiguities.contains(&("0".into(), "3".into()))
-//                 || ambiguities.contains(&("3".into(), "0".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("1".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "1".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 2);
+        let mut stage = SystemStage::parallel()
+            .with_system(component.system().label("0"))
+            .with_system(resource.system().label("1").after("0"))
+            .with_system(empty.system().label("2"))
+            .with_system(component.system().label("3").after("2").before("4"))
+            .with_system(resource.system().label("4"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.parallel);
+        assert!(
+            ambiguities.contains(&("0".into(), "3".into()))
+                || ambiguities.contains(&("3".into(), "0".into()))
+        );
+        assert!(
+            ambiguities.contains(&("1".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "1".into()))
+        );
+        assert_eq!(ambiguities.len(), 2);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(component.system().label("0").before("2"))
-//             .with_system(component.system().label("1").before("2"))
-//             .with_system(component.system().label("2"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.parallel);
-//         assert!(
-//             ambiguities.contains(&("0".into(), "1".into()))
-//                 || ambiguities.contains(&("1".into(), "0".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 1);
+        let mut stage = SystemStage::parallel()
+            .with_system(component.system().label("0").before("2"))
+            .with_system(component.system().label("1").before("2"))
+            .with_system(component.system().label("2"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.parallel);
+        assert!(
+            ambiguities.contains(&("0".into(), "1".into()))
+                || ambiguities.contains(&("1".into(), "0".into()))
+        );
+        assert_eq!(ambiguities.len(), 1);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(component.system().label("0"))
-//             .with_system(component.system().label("1").after("0"))
-//             .with_system(component.system().label("2").after("0"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.parallel);
-//         assert!(
-//             ambiguities.contains(&("1".into(), "2".into()))
-//                 || ambiguities.contains(&("2".into(), "1".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 1);
+        let mut stage = SystemStage::parallel()
+            .with_system(component.system().label("0"))
+            .with_system(component.system().label("1").after("0"))
+            .with_system(component.system().label("2").after("0"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.parallel);
+        assert!(
+            ambiguities.contains(&("1".into(), "2".into()))
+                || ambiguities.contains(&("2".into(), "1".into()))
+        );
+        assert_eq!(ambiguities.len(), 1);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(component.system().label("0").before("1").before("2"))
-//             .with_system(component.system().label("1"))
-//             .with_system(component.system().label("2"))
-//             .with_system(component.system().label("3").after("1").after("2"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.parallel);
-//         assert!(
-//             ambiguities.contains(&("1".into(), "2".into()))
-//                 || ambiguities.contains(&("2".into(), "1".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 1);
+        let mut stage = SystemStage::parallel()
+            .with_system(component.system().label("0").before("1").before("2"))
+            .with_system(component.system().label("1"))
+            .with_system(component.system().label("2"))
+            .with_system(component.system().label("3").after("1").after("2"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.parallel);
+        assert!(
+            ambiguities.contains(&("1".into(), "2".into()))
+                || ambiguities.contains(&("2".into(), "1".into()))
+        );
+        assert_eq!(ambiguities.len(), 1);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(
-//                 component
-//                     .system()
-//                     .label("0")
-//                     .before("1")
-//                     .before("2")
-//                     .before("3")
-//                     .before("4"),
-//             )
-//             .with_system(component.system().label("1"))
-//             .with_system(component.system().label("2"))
-//             .with_system(component.system().label("3"))
-//             .with_system(component.system().label("4"))
-//             .with_system(
-//                 component
-//                     .system()
-//                     .label("5")
-//                     .after("1")
-//                     .after("2")
-//                     .after("3")
-//                     .after("4"),
-//             );
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.parallel);
-//         assert!(
-//             ambiguities.contains(&("1".into(), "2".into()))
-//                 || ambiguities.contains(&("2".into(), "1".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("1".into(), "3".into()))
-//                 || ambiguities.contains(&("3".into(), "1".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("1".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "1".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("2".into(), "3".into()))
-//                 || ambiguities.contains(&("3".into(), "2".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("2".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "2".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("3".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "3".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 6);
+        let mut stage = SystemStage::parallel()
+            .with_system(
+                component
+                    .system()
+                    .label("0")
+                    .before("1")
+                    .before("2")
+                    .before("3")
+                    .before("4"),
+            )
+            .with_system(component.system().label("1"))
+            .with_system(component.system().label("2"))
+            .with_system(component.system().label("3"))
+            .with_system(component.system().label("4"))
+            .with_system(
+                component
+                    .system()
+                    .label("5")
+                    .after("1")
+                    .after("2")
+                    .after("3")
+                    .after("4"),
+            );
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.parallel);
+        assert!(
+            ambiguities.contains(&("1".into(), "2".into()))
+                || ambiguities.contains(&("2".into(), "1".into()))
+        );
+        assert!(
+            ambiguities.contains(&("1".into(), "3".into()))
+                || ambiguities.contains(&("3".into(), "1".into()))
+        );
+        assert!(
+            ambiguities.contains(&("1".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "1".into()))
+        );
+        assert!(
+            ambiguities.contains(&("2".into(), "3".into()))
+                || ambiguities.contains(&("3".into(), "2".into()))
+        );
+        assert!(
+            ambiguities.contains(&("2".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "2".into()))
+        );
+        assert!(
+            ambiguities.contains(&("3".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "3".into()))
+        );
+        assert_eq!(ambiguities.len(), 6);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.exclusive_system().label("0"))
-//             .with_system(empty.exclusive_system().label("1").after("0"))
-//             .with_system(empty.exclusive_system().label("2").after("1"))
-//             .with_system(empty.exclusive_system().label("3").after("2"))
-//             .with_system(empty.exclusive_system().label("4").after("3"))
-//             .with_system(empty.exclusive_system().label("5").after("4"))
-//             .with_system(empty.exclusive_system().label("6").after("5"))
-//             .with_system(empty.exclusive_system().label("7").after("6"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         assert_eq!(find_ambiguities(&stage.exclusive_at_start).len(), 0);
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.exclusive_system().label("0"))
+            .with_system(empty.exclusive_system().label("1").after("0"))
+            .with_system(empty.exclusive_system().label("2").after("1"))
+            .with_system(empty.exclusive_system().label("3").after("2"))
+            .with_system(empty.exclusive_system().label("4").after("3"))
+            .with_system(empty.exclusive_system().label("5").after("4"))
+            .with_system(empty.exclusive_system().label("6").after("5"))
+            .with_system(empty.exclusive_system().label("7").after("6"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        assert_eq!(find_ambiguities(&stage.exclusive_at_start).len(), 0);
 
-//         let mut stage = SystemStage::parallel()
-//             .with_system(empty.exclusive_system().label("0").before("1").before("3"))
-//             .with_system(empty.exclusive_system().label("1"))
-//             .with_system(empty.exclusive_system().label("2").after("1"))
-//             .with_system(empty.exclusive_system().label("3"))
-//             .with_system(empty.exclusive_system().label("4").after("3").before("5"))
-//             .with_system(empty.exclusive_system().label("5"))
-//             .with_system(empty.exclusive_system().label("6").after("2").after("5"));
-//         stage.initialize_systems(&mut world, &mut resources);
-//         stage.rebuild_orders_and_dependencies();
-//         let ambiguities = find_ambiguities_labels(&stage.exclusive_at_start);
-//         assert!(
-//             ambiguities.contains(&("1".into(), "3".into()))
-//                 || ambiguities.contains(&("3".into(), "1".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("2".into(), "3".into()))
-//                 || ambiguities.contains(&("3".into(), "2".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("1".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "1".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("2".into(), "4".into()))
-//                 || ambiguities.contains(&("4".into(), "2".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("1".into(), "5".into()))
-//                 || ambiguities.contains(&("5".into(), "1".into()))
-//         );
-//         assert!(
-//             ambiguities.contains(&("2".into(), "5".into()))
-//                 || ambiguities.contains(&("5".into(), "2".into()))
-//         );
-//         assert_eq!(ambiguities.len(), 6);
-//     }
-// }
+        let mut stage = SystemStage::parallel()
+            .with_system(empty.exclusive_system().label("0").before("1").before("3"))
+            .with_system(empty.exclusive_system().label("1"))
+            .with_system(empty.exclusive_system().label("2").after("1"))
+            .with_system(empty.exclusive_system().label("3"))
+            .with_system(empty.exclusive_system().label("4").after("3").before("5"))
+            .with_system(empty.exclusive_system().label("5"))
+            .with_system(empty.exclusive_system().label("6").after("2").after("5"));
+        stage.initialize_systems(&mut world);
+        stage.rebuild_orders_and_dependencies();
+        let ambiguities = find_ambiguities_labels(&stage.exclusive_at_start);
+        assert!(
+            ambiguities.contains(&("1".into(), "3".into()))
+                || ambiguities.contains(&("3".into(), "1".into()))
+        );
+        assert!(
+            ambiguities.contains(&("2".into(), "3".into()))
+                || ambiguities.contains(&("3".into(), "2".into()))
+        );
+        assert!(
+            ambiguities.contains(&("1".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "1".into()))
+        );
+        assert!(
+            ambiguities.contains(&("2".into(), "4".into()))
+                || ambiguities.contains(&("4".into(), "2".into()))
+        );
+        assert!(
+            ambiguities.contains(&("1".into(), "5".into()))
+                || ambiguities.contains(&("5".into(), "1".into()))
+        );
+        assert!(
+            ambiguities.contains(&("2".into(), "5".into()))
+                || ambiguities.contains(&("5".into(), "2".into()))
+        );
+        assert_eq!(ambiguities.len(), 6);
+    }
+}
