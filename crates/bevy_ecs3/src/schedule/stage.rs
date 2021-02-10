@@ -7,7 +7,7 @@ use crate::{
     },
     system::System,
 };
-use bevy_utils::{tracing::info, HashMap, HashSet};
+use bevy_utils::{HashMap, HashSet, tracing::{error, info}};
 use downcast_rs::{impl_downcast, Downcast};
 use fixedbitset::FixedBitSet;
 use std::borrow::Cow;
@@ -532,7 +532,7 @@ impl Stage for SystemStage {
             self.systems_modified = false;
             self.executor.rebuild_cached_data(&mut self.parallel, world);
             self.executor_modified = false;
-            todo!("re-enable this check")
+            error!("re enable check");
             // if resources.contains::<ReportExecutionOrderAmbiguities>() {
             //     self.report_ambiguities();
             // }

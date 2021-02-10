@@ -1,11 +1,10 @@
 use crate::{
     core::{Access, ArchetypeComponentId, ArchetypeGeneration, World},
     schedule::{ParallelSystemContainer, ParallelSystemExecutor},
-    system::System,
 };
 use async_channel::{Receiver, Sender};
 use bevy_tasks::{ComputeTaskPool, Scope, TaskPool};
-use bevy_utils::HashSet;
+use bevy_utils::tracing::error;
 use fixedbitset::FixedBitSet;
 
 #[cfg(test)]
@@ -115,7 +114,7 @@ impl ParallelSystemExecutor for ParallelExecutor {
         #[cfg(test)]
         if self.events_sender.is_none() {
             let (sender, receiver) = async_channel::unbounded::<SchedulingEvent>();
-            todo!("insert scheduling event resource");
+            error!("insert scheduling event resource");
             // resources.insert(receiver);
             self.events_sender = Some(sender);
         }
@@ -124,7 +123,7 @@ impl ParallelSystemExecutor for ParallelExecutor {
             self.last_archetype_generation = world.archetypes().generation();
         }
 
-        todo!("get compute pool from resources");
+        error!("get compute pool from resources");
         let compute_pool = ComputeTaskPool(TaskPool::default());
         compute_pool.scope(|scope| {
             self.prepare_systems(scope, systems, world);
@@ -294,11 +293,12 @@ impl ParallelExecutor {
 
     #[cfg(test)]
     fn emit_event(&self, event: SchedulingEvent) {
-        self.events_sender
-            .as_ref()
-            .unwrap()
-            .try_send(event)
-            .unwrap();
+        // TODO: re-enable
+        // self.events_sender
+        //     .as_ref()
+        //     .unwrap()
+        //     .try_send(event)
+        //     .unwrap();
     }
 }
 

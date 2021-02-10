@@ -248,10 +248,7 @@ impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        core::World,
-        system::{Query, System},
-    };
+    use crate::{core::{Entity, With, World}, schedule::{Schedule, Stage, SystemStage}, system::{Query, Res, ResMut, System}};
 
     use super::IntoSystem;
     #[derive(Debug, Eq, PartialEq, Default)]
@@ -277,75 +274,71 @@ mod tests {
         system.run((), &mut world);
     }
 
-    // fn run_system<S: System<In = (), Out = ()>>(
-    //     world: &mut World,
-    //     system: S,
-    // ) {
-    //     let mut schedule = Schedule::default();
-    //     let mut update = SystemStage::parallel();
-    //     update.add_system(system);
-    //     schedule.add_stage("update", update);
-    //     schedule.initialize_and_run(world);
-    // }
+    fn run_system<S: System<In = (), Out = ()>>(world: &mut World, system: S) {
+        let mut schedule = Schedule::default();
+        let mut update = SystemStage::parallel();
+        update.add_system(system);
+        schedule.add_stage("update", update);
+        schedule.run(world);
+    }
 
-    // #[test]
-    // fn query_system_gets() {
-    //     fn query_system(
-    //         mut ran: ResMut<bool>,
-    //         entity_query: Query<Entity, With<A>>,
-    //         b_query: Query<&B>,
-    //         a_c_query: Query<(&A, &C)>,
-    //         d_query: Query<&D>,
-    //     ) {
-    //         let entities = entity_query.iter().collect::<Vec<Entity>>();
-    //         assert!(
-    //             b_query.get_component::<B>(entities[0]).is_err(),
-    //             "entity 0 should not have B"
-    //         );
-    //         assert!(
-    //             b_query.get_component::<B>(entities[1]).is_ok(),
-    //             "entity 1 should have B"
-    //         );
-    //         assert!(
-    //             b_query.get_component::<A>(entities[1]).is_err(),
-    //             "entity 1 should have A, but b_query shouldn't have access to it"
-    //         );
-    //         assert!(
-    //             b_query.get_component::<D>(entities[3]).is_err(),
-    //             "entity 3 should have D, but it shouldn't be accessible from b_query"
-    //         );
-    //         assert!(
-    //             b_query.get_component::<C>(entities[2]).is_err(),
-    //             "entity 2 has C, but it shouldn't be accessible from b_query"
-    //         );
-    //         assert!(
-    //             a_c_query.get_component::<C>(entities[2]).is_ok(),
-    //             "entity 2 has C, and it should be accessible from a_c_query"
-    //         );
-    //         assert!(
-    //             a_c_query.get_component::<D>(entities[3]).is_err(),
-    //             "entity 3 should have D, but it shouldn't be accessible from b_query"
-    //         );
-    //         assert!(
-    //             d_query.get_component::<D>(entities[3]).is_ok(),
-    //             "entity 3 should have D"
-    //         );
+    #[test]
+    fn query_system_gets() {
+        fn query_system(
+            mut ran: ResMut<bool>,
+            entity_query: Query<Entity, With<A>>,
+            b_query: Query<&B>,
+            a_c_query: Query<(&A, &C)>,
+            d_query: Query<&D>,
+        ) {
+            let entities = entity_query.iter().collect::<Vec<Entity>>();
+            assert!(
+                b_query.get_component::<B>(entities[0]).is_err(),
+                "entity 0 should not have B"
+            );
+            assert!(
+                b_query.get_component::<B>(entities[1]).is_ok(),
+                "entity 1 should have B"
+            );
+            assert!(
+                b_query.get_component::<A>(entities[1]).is_err(),
+                "entity 1 should have A, but b_query shouldn't have access to it"
+            );
+            assert!(
+                b_query.get_component::<D>(entities[3]).is_err(),
+                "entity 3 should have D, but it shouldn't be accessible from b_query"
+            );
+            assert!(
+                b_query.get_component::<C>(entities[2]).is_err(),
+                "entity 2 has C, but it shouldn't be accessible from b_query"
+            );
+            assert!(
+                a_c_query.get_component::<C>(entities[2]).is_ok(),
+                "entity 2 has C, and it should be accessible from a_c_query"
+            );
+            assert!(
+                a_c_query.get_component::<D>(entities[3]).is_err(),
+                "entity 3 should have D, but it shouldn't be accessible from b_query"
+            );
+            assert!(
+                d_query.get_component::<D>(entities[3]).is_ok(),
+                "entity 3 should have D"
+            );
 
-    //         *ran = true;
-    //     }
+            *ran = true;
+        }
 
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     resources.insert(false);
-    //     world.spawn((A,));
-    //     world.spawn((A, B));
-    //     world.spawn((A, C));
-    //     world.spawn((A, D));
+        let mut world = World::default();
+        world.insert_resource(false);
+        world.spawn().insert_bundle((A,));
+        world.spawn().insert_bundle((A, B));
+        world.spawn().insert_bundle((A, C));
+        world.spawn().insert_bundle((A, D));
 
-    //     run_system(&mut world, &mut resources, query_system.system());
+        run_system(&mut world, query_system.system());
 
-    //     assert!(*resources.get::<bool>().unwrap(), "system ran");
-    // }
+        assert!(*world.get_resource::<bool>().unwrap(), "system ran");
+    }
 
     // #[test]
     // fn or_query_set_system() {
@@ -457,29 +450,27 @@ mod tests {
     //     assert_eq!(*(world.get::<i32>(ent).unwrap()), 3);
     // }
 
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_query_mut_system() {
-    //     fn sys(_q1: Query<&mut A>, _q2: Query<&mut A>) {}
+    #[test]
+    #[should_panic]
+    fn conflicting_query_mut_system() {
+        fn sys(_q1: Query<&mut A>, _q2: Query<&mut A>) {}
 
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     world.spawn((A,));
+        let mut world = World::default();
+        world.spawn().insert(A);
 
-    //     run_system(&mut world, &mut resources, sys.system());
-    // }
+        run_system(&mut world, sys.system());
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_query_immut_system() {
-    //     fn sys(_q1: Query<&A>, _q2: Query<&mut A>) {}
+    #[test]
+    #[should_panic]
+    fn conflicting_query_immut_system() {
+        fn sys(_q1: Query<&A>, _q2: Query<&mut A>) {}
 
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     world.spawn((A,));
+        let mut world = World::default();
+        world.spawn().insert(A);
 
-    //     run_system(&mut world, &mut resources, sys.system());
-    // }
+        run_system(&mut world, sys.system());
+    }
 
     // #[test]
     // fn query_set_system() {
@@ -515,40 +506,39 @@ mod tests {
     //     run_system(&mut world, &mut resources, sys.system());
     // }
 
-    // #[derive(Default)]
-    // struct BufferRes {
-    //     _buffer: Vec<u8>,
-    // }
+    #[derive(Default)]
+    struct BufferRes {
+        _buffer: Vec<u8>,
+    }
 
-    // fn test_for_conflicting_resources<S: System<In = (), Out = ()>>(sys: S) {
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     resources.insert(BufferRes::default());
-    //     resources.insert(A);
-    //     resources.insert(B);
-    //     run_system(&mut world, &mut resources, sys.system());
-    // }
+    fn test_for_conflicting_resources<S: System<In = (), Out = ()>>(sys: S) {
+        let mut world = World::default();
+        world.insert_resource(BufferRes::default());
+        world.insert_resource(A);
+        world.insert_resource(B);
+        run_system(&mut world, sys.system());
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_system_resources() {
-    //     fn sys(_: ResMut<BufferRes>, _: Res<BufferRes>) {}
-    //     test_for_conflicting_resources(sys.system())
-    // }
+    #[test]
+    #[should_panic]
+    fn conflicting_system_resources() {
+        fn sys(_: ResMut<BufferRes>, _: Res<BufferRes>) {}
+        test_for_conflicting_resources(sys.system())
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_system_resources_reverse_order() {
-    //     fn sys(_: Res<BufferRes>, _: ResMut<BufferRes>) {}
-    //     test_for_conflicting_resources(sys.system())
-    // }
+    #[test]
+    #[should_panic]
+    fn conflicting_system_resources_reverse_order() {
+        fn sys(_: Res<BufferRes>, _: ResMut<BufferRes>) {}
+        test_for_conflicting_resources(sys.system())
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_system_resources_multiple_mutable() {
-    //     fn sys(_: ResMut<BufferRes>, _: ResMut<BufferRes>) {}
-    //     test_for_conflicting_resources(sys.system())
-    // }
+    #[test]
+    #[should_panic]
+    fn conflicting_system_resources_multiple_mutable() {
+        fn sys(_: ResMut<BufferRes>, _: ResMut<BufferRes>) {}
+        test_for_conflicting_resources(sys.system())
+    }
 
     // #[test]
     // #[should_panic]

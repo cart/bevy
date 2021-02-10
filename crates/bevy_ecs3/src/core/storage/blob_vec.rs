@@ -86,7 +86,7 @@ impl BlobVec {
     #[inline]
     pub unsafe fn push_uninit(&mut self) {
         if self.len == self.capacity {
-            self.grow(self.capacity.max(1));
+            self.grow(1);
         }
         self.len += 1;
     }
@@ -233,7 +233,6 @@ impl Drop for BlobVec {
     }
 }
 
-
 pub struct BlobVecIter<'a, T> {
     value: &'a BlobVec,
     index: usize,
@@ -346,18 +345,18 @@ mod tests {
 
                 blob_vec.push_type(foo3.clone());
                 assert_eq!(blob_vec.len(), 3);
-                assert_eq!(blob_vec.capacity(), 4);
+                assert_eq!(blob_vec.capacity(), 3);
 
                 let value = blob_vec.pop_type_unchecked::<Foo>();
                 assert_eq!(foo3, value);
 
                 assert_eq!(blob_vec.len(), 2);
-                assert_eq!(blob_vec.capacity(), 4);
+                assert_eq!(blob_vec.capacity(), 3);
 
                 let value = blob_vec.swap_remove_type_unchecked::<Foo>(0);
                 assert_eq!(foo1, value);
                 assert_eq!(blob_vec.len(), 1);
-                assert_eq!(blob_vec.capacity(), 4);
+                assert_eq!(blob_vec.capacity(), 3);
 
                 foo2.a = 8;
                 assert_eq!(blob_vec.get_type_unchecked::<Foo>(0), &foo2);

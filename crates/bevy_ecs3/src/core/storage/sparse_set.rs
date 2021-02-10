@@ -7,16 +7,30 @@ pub struct SparseArray<I, V = I> {
     marker: PhantomData<I>,
 }
 
-impl<I, V> Default for SparseArray<I, V> {
+impl<I: SparseSetIndex, V> Default for SparseArray<I, V> {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<I, V> SparseArray<I, V> {
+    #[inline]
+    pub const fn new() -> Self {
         Self {
             values: Vec::new(),
-            marker: Default::default(),
+            marker: PhantomData,
         }
     }
 }
 
 impl<I: SparseSetIndex, V> SparseArray<I, V> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            values: Vec::with_capacity(capacity),
+            marker: PhantomData,
+        }
+    }
+
     #[inline]
     pub fn insert(&mut self, index: I, value: V) {
         let index = index.sparse_set_index();
@@ -244,7 +258,7 @@ impl ComponentSparseSet {
 }
 
 #[derive(Debug)]
-pub struct SparseSet<I: SparseSetIndex, V: 'static> {
+pub struct SparseSet<I, V: 'static> {
     dense: Vec<V>,
     indices: Vec<I>,
     sparse: SparseArray<I, usize>,
@@ -252,12 +266,21 @@ pub struct SparseSet<I: SparseSetIndex, V: 'static> {
 
 impl<I: SparseSetIndex, V> Default for SparseSet<I, V> {
     fn default() -> Self {
-        Self::new(64)
+        Self::with_capacity(64)
+    }
+}
+impl<I, V> SparseSet<I, V> {
+    pub const fn new() -> Self {
+        Self {
+            dense: Vec::new(),
+            indices: Vec::new(),
+            sparse: SparseArray::new(),
+        }
     }
 }
 
 impl<I: SparseSetIndex, V> SparseSet<I, V> {
-    pub fn new(capacity: usize) -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
             dense: Vec::with_capacity(capacity),
             indices: Vec::with_capacity(capacity),

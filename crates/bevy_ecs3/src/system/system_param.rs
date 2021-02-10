@@ -1,8 +1,14 @@
 use crate::{
-    core::{Or, QueryFilter, QueryState, World, WorldQuery},
+    core::{
+        Component, ComponentFlags, ComponentId, Or, QueryFilter, QueryState, World, WorldQuery,
+    },
     system::{CommandQueue, Commands, Query, SystemState},
 };
-use std::marker::PhantomData;
+use std::{
+    any::TypeId,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 
 pub trait SystemParam: Sized {
     type State: SystemParamState;
@@ -97,6 +103,121 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a>
 //             .push(std::any::type_name::<T>());
 //     }
 // }
+
+pub struct Res<'w, T> {
+    value: &'w T,
+}
+
+impl<'w, T: Component> Deref for Res<'w, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.value
+    }
+}
+
+pub struct FetchRes<T>(PhantomData<T>);
+pub struct FetchResState<T> {
+    component_id: Option<ComponentId>,
+    marker: PhantomData<T>,
+}
+
+impl<'a, T: Component> SystemParam for Res<'a, T> {
+    type Fetch = FetchRes<T>;
+    type State = FetchResState<T>;
+}
+
+impl<T: Component> SystemParamState for FetchResState<T> {
+    fn init(world: &mut World) -> Self {
+        // TODO: update archetype component access here
+        Self {
+            component_id: world.components.get_resource_id(TypeId::of::<T>()),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Component> FetchSystemParam<'a> for FetchRes<T> {
+    type Item = Res<'a, T>;
+    type State = FetchResState<T>;
+
+    #[inline]
+    unsafe fn get_param(
+        state: &'a mut Self::State,
+        _system_state: &'a SystemState,
+        world: &'a World,
+    ) -> Option<Self::Item> {
+        let component_id = state.component_id?;
+        let column = world.archetypes.get_resource_column(component_id)?;
+        unsafe {
+            Some(Res {
+                value: &*column.get_ptr().as_ptr().cast::<T>(),
+            })
+        }
+    }
+}
+
+pub struct ResMut<'w, T> {
+    value: &'w mut T,
+    flags: &'w mut ComponentFlags,
+}
+
+impl<'w, T: Component> Deref for ResMut<'w, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.value
+    }
+}
+
+impl<'w, T: Component> DerefMut for ResMut<'w, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.flags.insert(ComponentFlags::MUTATED);
+        self.value
+    }
+}
+
+pub struct FetchResMut<T>(PhantomData<T>);
+pub struct FetchResMutState<T> {
+    component_id: Option<ComponentId>,
+    marker: PhantomData<T>,
+}
+
+impl<'a, T: Component> SystemParam for ResMut<'a, T> {
+    type Fetch = FetchResMut<T>;
+    type State = FetchResMutState<T>;
+}
+
+impl<T: Component> SystemParamState for FetchResMutState<T> {
+    fn init(world: &mut World) -> Self {
+        // TODO: update archetype component access here
+        Self {
+            component_id: world.components.get_resource_id(TypeId::of::<T>()),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Component> FetchSystemParam<'a> for FetchResMut<T> {
+    type Item = ResMut<'a, T>;
+    type State = FetchResMutState<T>;
+
+    #[inline]
+    unsafe fn get_param(
+        state: &'a mut Self::State,
+        _system_state: &'a SystemState,
+        world: &'a World,
+    ) -> Option<Self::Item> {
+        let component_id = state.component_id?;
+        let column = world.archetypes.get_resource_column(component_id)?;
+        unsafe {
+            Some(ResMut {
+                value: &mut *column.get_ptr().as_ptr().cast::<T>(),
+                flags: &mut *column.get_flags_mut_ptr(),
+            })
+        }
+    }
+}
 
 pub struct FetchCommands;
 

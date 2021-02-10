@@ -35,6 +35,15 @@ pub struct Column {
 }
 
 impl Column {
+    #[inline]
+    pub fn with_capacity(component_info: &ComponentInfo, capacity: usize) -> Self {
+        Column {
+            component_id: component_info.id(),
+            data: BlobVec::new(component_info.layout(), component_info.drop(), capacity),
+            flags: UnsafeCell::new(Vec::with_capacity(capacity)),
+        }
+    }
+
     /// SAFETY: assumes data has already been allocated for the given row/column.
     #[inline]
     pub unsafe fn set_unchecked(&self, row: usize, data: *mut u8) {
@@ -60,6 +69,12 @@ impl Column {
         let data = self.data.swap_remove_and_forget_unchecked(row);
         let flags = (*self.flags.get()).swap_remove(row);
         (data, flags)
+    }
+
+    /// SAFETY: allocated value must be immediately set 
+    pub (crate) unsafe fn push_uninit(&mut self) {
+        self.data.push_uninit();
+        (*self.flags.get()).push(ComponentFlags::empty());
     }
 
     #[inline]
@@ -97,8 +112,8 @@ impl Column {
     }
 
     #[inline]
-    pub(crate) fn clear_flags(&mut self)  {
-        let flags = unsafe { (*self.flags.get()).iter_mut()};
+    pub(crate) fn clear_flags(&mut self) {
+        let flags = unsafe { (*self.flags.get()).iter_mut() };
         for component_flags in flags {
             *component_flags = ComponentFlags::empty();
         }
@@ -112,7 +127,7 @@ pub struct Tables {
 
 impl Default for Tables {
     fn default() -> Self {
-        let empty_table = Table::new(64, 0, 64);
+        let empty_table = Table::with_capacity(0, 0, 64);
         Tables {
             tables: vec![empty_table],
             table_ids: HashMap::default(),
@@ -166,7 +181,7 @@ impl Tables {
         let hash = hasher.finish();
         let tables = &mut self.tables;
         *self.table_ids.entry(hash).or_insert_with(move || {
-            let mut table = Table::new(64, component_ids.len(), 64);
+            let mut table = Table::with_capacity(0, component_ids.len(), 64);
             for component_id in component_ids.iter() {
                 table.add_column(components.get_info_unchecked(*component_id));
             }
@@ -183,7 +198,7 @@ impl Tables {
         for table in self.tables.iter_mut() {
             table.clear_flags();
         }
-    } 
+    }
 }
 
 pub struct Table {
@@ -195,9 +210,19 @@ pub struct Table {
 }
 
 impl Table {
-    pub fn new(capacity: usize, column_capacity: usize, grow_amount: usize) -> Table {
+    pub const fn new(grow_amount: usize) -> Table {
         Self {
-            columns: SparseSet::new(column_capacity),
+            columns: SparseSet::new(),
+            entities: Vec::new(),
+            archetypes: Vec::new(),
+            grow_amount,
+            capacity: 0,
+        }
+    }
+
+    pub fn with_capacity(capacity: usize, column_capacity: usize, grow_amount: usize) -> Table {
+        Self {
+            columns: SparseSet::with_capacity(column_capacity),
             entities: Vec::with_capacity(capacity),
             archetypes: Vec::new(),
             grow_amount,
@@ -217,15 +242,7 @@ impl Table {
     pub fn add_column(&mut self, component_info: &ComponentInfo) {
         self.columns.insert(
             component_info.id(),
-            Column {
-                component_id: component_info.id(),
-                data: BlobVec::new(
-                    component_info.layout(),
-                    component_info.drop(),
-                    self.capacity(),
-                ),
-                flags: UnsafeCell::new(Vec::with_capacity(self.capacity())),
-            },
+            Column::with_capacity(component_info, self.capacity()),
         )
     }
 
@@ -357,7 +374,7 @@ impl Table {
     pub fn len(&self) -> usize {
         self.entities.len()
     }
-    
+
     pub(crate) fn clear_flags(&mut self) {
         for column in self.columns.values_mut() {
             column.clear_flags();
@@ -378,7 +395,7 @@ mod tests {
         let mut components = Components::default();
         let component_id = components.get_with_type_info(&TypeInfo::of::<usize>());
         let columns = &[component_id];
-        let mut table = Table::new(64, columns.len(), 64);
+        let mut table = Table::with_capacity(0, columns.len(), 64);
         table.add_column(components.get_info(component_id).unwrap());
         let entities = (0..200).map(|i| Entity::new(i)).collect::<Vec<_>>();
         for (row, entity) in entities.iter().cloned().enumerate() {

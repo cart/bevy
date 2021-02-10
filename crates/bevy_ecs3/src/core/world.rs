@@ -1,9 +1,9 @@
 use crate::core::{
-    ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId,
+    ArchetypeId, Archetypes, Bundle, Bundles, Column, Component, ComponentDescriptor, ComponentId,
     Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, SpawnBatchIter,
     StorageType, Storages,
 };
-use std::fmt;
+use std::{any::TypeId, fmt};
 
 #[derive(Default)]
 pub struct World {
@@ -105,7 +105,10 @@ impl World {
     #[inline]
     pub fn despawn(&mut self, entity: Entity) -> bool {
         self.entity_mut(entity)
-            .map(|e| {e.despawn(); true})
+            .map(|e| {
+                e.despawn();
+                true
+            })
             .unwrap_or(false)
     }
 
@@ -137,6 +140,21 @@ impl World {
     pub fn clear_trackers(&mut self) {
         self.storages.tables.clear_flags();
         self.storages.sparse_sets.clear_flags();
+    }
+
+    #[inline]
+    pub fn insert_resource<T: Component>(&mut self, value: T) {
+        self.archetypes.insert_resource(&mut self.components, value);
+    }
+
+    #[inline]
+    pub fn get_resource<T: Component>(&self) -> Option<&T> {
+        self.archetypes.get_resource(&self.components)
+    }
+
+    #[inline]
+    pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
+        self.archetypes.get_resource_mut(&self.components)
     }
 }
 

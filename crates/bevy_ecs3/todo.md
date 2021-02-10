@@ -64,6 +64,10 @@
     * NonSend (system param too)
 
 ## Maybe
+* consider adding Unique to StorageType
+* try removing SYstemParamState trait in favor of Fetch methods. cuts down on wrapper types needed
+* TrackedWorld
+    * runtime borrow checked wrapper around world
 * try trimming down Fetch api
 * try removing QueryIter and see how it affects benches
 * experiment with inlines

@@ -1,7 +1,7 @@
 use crate::{
     core::{
-        Component, ComponentId, Components, Entity, SparseSetIndex, SparseSets, StorageType, Table, ComponentFlags,
-        TypeInfo,
+        Component, ComponentFlags, ComponentId, Components, Entity, SparseSetIndex, SparseSets,
+        StorageType, Table, TypeInfo,
     },
     smaller_tuples_too,
 };
@@ -44,6 +44,7 @@ macro_rules! tuple_impl {
                 let ($(mut $name,)*) = self;
                 $(
                     func((&mut $name as *mut $name).cast::<u8>());
+                    std::mem::forget($name);
                 )*
             }
         }

@@ -95,6 +95,7 @@ impl ComponentDescriptor {
 pub struct Components {
     components: Vec<ComponentInfo>,
     indices: std::collections::HashMap<TypeId, usize, fxhash::FxBuildHasher>,
+    resource_indices: std::collections::HashMap<TypeId, usize, fxhash::FxBuildHasher>,
 }
 
 #[derive(Debug, Error)]
@@ -135,6 +136,31 @@ impl Components {
     #[inline]
     pub fn get_id(&self, type_id: TypeId) -> Option<ComponentId> {
         self.indices.get(&type_id).map(|index| ComponentId(*index))
+    }
+
+    #[inline]
+    pub fn get_resource_id(&self, type_id: TypeId) -> Option<ComponentId> {
+        self.resource_indices.get(&type_id).map(|index| ComponentId(*index))
+    }
+
+    #[inline]
+    pub fn get_or_insert_resource_id<T: Component>(&mut self) -> ComponentId {
+        let components = &mut self.components;
+        let index = self.resource_indices.entry(TypeId::of::<T>()).or_insert_with(|| {
+            let type_info = TypeInfo::of::<T>();
+            let index = components.len();
+            components.push(ComponentInfo {
+                storage_type: StorageType::Table,
+                type_id: type_info.id(),
+                id: ComponentId(index),
+                drop: type_info.drop(),
+                layout: type_info.layout(),
+            });
+
+            index
+        });
+
+        ComponentId(*index)
     }
 
     pub fn get_with_type_info(&mut self, type_info: &TypeInfo) -> ComponentId {

@@ -662,6 +662,70 @@ mod tests {
         assert_eq!(get_changed(&world), vec![e1]);
     }
 
+    #[test]
+    fn resource() {
+        let mut world = World::default();
+        assert!(world.get_resource::<i32>().is_none());
+
+        world.insert_resource(123);
+        assert_eq!(*world.get_resource::<i32>().expect("resource exists"), 123);
+
+        world.insert_resource(456.0);
+        assert_eq!(*world.get_resource::<f64>().expect("resource exists"), 456.0);
+
+        world.insert_resource(789.0);
+        assert_eq!(*world.get_resource::<f64>().expect("resource exists"), 789.0);
+
+        {
+            let mut value = world.get_resource_mut::<f64>().expect("resource exists");
+            assert_eq!(*value, 789.0);
+            *value = -1.0;
+        }
+
+        assert_eq!(*world.get_resource::<f64>().expect("resource exists"), -1.0);
+    }
+
+    // #[test]
+    // fn non_send_resource() {
+    //     let mut resources = Resources::default();
+    //     resources.insert_non_send(123i32);
+    //     resources.insert_non_send(456i64);
+    //     assert_eq!(*resources.get_non_send::<i32>().unwrap(), 123);
+    //     assert_eq!(*resources.get_non_send_mut::<i64>().unwrap(), 456);
+    // }
+
+    // #[test]
+    // fn non_send_resource_ref_aliasing() {
+    //     let mut resources = Resources::default();
+    //     resources.insert_non_send(123i32);
+    //     let a = resources.get_non_send::<i32>().unwrap();
+    //     let b = resources.get_non_send::<i32>().unwrap();
+    //     assert_eq!(*a, 123);
+    //     assert_eq!(*b, 123);
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn non_send_resource_mut_ref_aliasing() {
+    //     let mut resources = Resources::default();
+    //     resources.insert_non_send(123i32);
+    //     let _a = resources.get_non_send::<i32>().unwrap();
+    //     let _b = resources.get_non_send_mut::<i32>().unwrap();
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn non_send_resource_panic() {
+    //     let mut resources = Resources::default();
+    //     resources.insert_non_send(0i32);
+    //     std::thread::spawn(move || {
+    //         let _ = resources.get_non_send_mut::<i32>();
+    //     })
+    //     .join()
+    //     .unwrap();
+    // }
+
+
     // #[test]
     // fn flags_query() {
     //     let mut world = World::default();
