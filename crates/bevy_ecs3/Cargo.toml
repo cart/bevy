@@ -14,9 +14,11 @@ keywords = ["ecs", "game", "bevy"]
 categories = ["game-engines", "data-structures"]
 
 [dependencies]
+bevy_tasks = { path = "../bevy_tasks", version = "0.4.0" }
 bevy_utils = { path = "../bevy_utils", version = "0.4.0" }
 bevy_ecs3_macros = { path = "macros", version = "0.4.0" }
 
+async-channel = "1.4"
 bitflags = "1.2"
 fixedbitset = "0.3"
 fxhash = "0.2"

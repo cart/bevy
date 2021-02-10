@@ -1,5 +1,6 @@
 pub mod core;
 pub mod system;
+pub mod schedule;
 
 // TODO: stop using wildcards here
 pub mod prelude {

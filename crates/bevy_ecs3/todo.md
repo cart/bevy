@@ -54,6 +54,7 @@
     * consistent unchecked_mut
     * batch_iter
     * Update bundle derive macro
+    * Consider making archetype id a usize (but still u32 in entity id)
 * high level
     * port System to new api
     * port scheduler to new api
