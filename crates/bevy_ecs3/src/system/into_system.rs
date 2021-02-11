@@ -36,7 +36,6 @@ impl<ParamState: SystemParamState + 'static, Out: 'static> System for FuncSystem
     }
 
     fn update(&mut self, world: &World) {
-        self.state.archetype_component_access.clear();
         let param_state = self.param_state.as_mut().unwrap();
         param_state.update(world, &mut self.state);
     }
@@ -95,7 +94,6 @@ impl<In: 'static, Out: 'static, ParamState: SystemParamState + Send + Sync + 'st
     }
 
     fn update(&mut self, world: &World) {
-        self.state.archetype_component_access.clear();
         let param_state = self.param_state.as_mut().unwrap();
         param_state.update(world, &mut self.state);
     }
@@ -181,7 +179,7 @@ macro_rules! impl_into_system {
                     }),
                     param_state: None,
                     init_func: Box::new(|state, world| {
-                        ($(<$param::State as SystemParamState>::init(world),)*)
+                        ($(<$param::State as SystemParamState>::init(world, state),)*)
                     }),
                 }
             }
@@ -220,7 +218,7 @@ macro_rules! impl_into_system {
                         param_state.apply(world);
                     }),
                     init_func: Box::new(|state, world| {
-                        ($(<$param::State as SystemParamState>::init(world),)*)
+                        ($(<$param::State as SystemParamState>::init(world, state),)*)
                     }),
                 }
             }

@@ -27,10 +27,13 @@ impl<T: SparseSetIndex> Access<T> {
     }
 
     pub fn add_read(&mut self, index: T) {
+        self.reads_and_writes.grow(index.sparse_set_index() + 1);
         self.reads_and_writes.insert(index.sparse_set_index());
     }
 
     pub fn add_write(&mut self, index: T) {
+        self.reads_and_writes.grow(index.sparse_set_index() + 1);
+        self.writes.grow(index.sparse_set_index() + 1);
         self.reads_and_writes.insert(index.sparse_set_index());
         self.writes.insert(index.sparse_set_index());
     }

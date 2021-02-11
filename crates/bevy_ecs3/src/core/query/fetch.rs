@@ -5,11 +5,7 @@ use crate::{
     },
     smaller_tuples_too,
 };
-use std::{
-    any::TypeId,
-    marker::PhantomData,
-    ptr::{self, NonNull},
-};
+use std::{any::{TypeId, type_name}, marker::PhantomData, ptr::{self, NonNull}};
 
 pub trait WorldQuery: Send + Sync {
     type Fetch: for<'a> Fetch<'a, State = Self::State>;
@@ -290,7 +286,7 @@ impl<T: Component> FetchState for WriteState<T> {
     }
 
     fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        access.add_write(self.component_id)
+        access.add_write(self.component_id);
     }
 
     fn update_archetype_component_access(

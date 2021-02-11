@@ -87,6 +87,14 @@ impl<'w> EntityMut<'w> {
         self.location
     }
 
+    #[inline]
+    pub fn archetype(&self) -> &Archetype {
+        // SAFE: EntityRefs always point to valid entities. Valid entities always have valid archetypes
+        unsafe {
+            self.world.archetypes.get_unchecked(self.location.archetype_id)
+        }
+    }
+
     pub fn get<T: Component>(&self) -> Option<&'w T> {
         // SAFE: entity location is valid and returned component is of type T
         unsafe {

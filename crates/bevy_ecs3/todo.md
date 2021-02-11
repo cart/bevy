@@ -55,15 +55,18 @@
     * batch_iter
     * Update bundle derive macro
     * Consider making archetype id a usize (but still u32 in entity id)
+    * Make SystemParam an unsafe trait
+    * Local
 * high level
-    * port System to new api
-    * port scheduler to new api
     * par_iter
+    * Rename System::Update() to System::UpdateAccess() (only pass in required data)
 * resources
-    * try storing in World. Special archetype? Tags?
     * NonSend (system param too)
 
 ## Maybe
+* Foreach tests
+* Test stateful query adapting to archetype changes
+* Give Option fetch access updating some scrutiny
 * World Error Handling (EntityRef)
 * remove "unchecked" where possible and see if it affect debug perf
 * consider adding Unique to StorageType
@@ -84,6 +87,10 @@
 * EntitySpawner
     * struct { Entity, Blobs }
 * batch archetype changes
+
+## New Limitations
+
+* Resources added at runtime will be ignored
 
 
 ## Scratch

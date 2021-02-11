@@ -518,6 +518,23 @@ impl Archetypes {
         }
     }
 
+    #[inline]
+    pub(crate) fn contains_resource<T: Component>(&mut self, components: &Components) -> bool {
+        let component_id = if let Some(component_id) = components.get_resource_id(TypeId::of::<T>())
+        {
+            component_id
+        } else {
+            return false;
+        };
+        // SAFE: resource archetype is guaranteed to exist
+        let resource_archetype = unsafe {
+            self.archetypes
+                .get_unchecked(ArchetypeId::resource_archetype().index() as usize)
+        };
+        let unique_components = resource_archetype.unique_components();
+        unique_components.contains(component_id)
+    }
+
     fn get_resource_column_with_type(
         &self,
         components: &Components,

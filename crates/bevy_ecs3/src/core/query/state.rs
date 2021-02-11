@@ -43,7 +43,6 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
                 <Q::State as FetchState>::init(world),
                 <F::State as FetchState>::init(world),
             ) {
-                self.component_access.grow(world.components.len());
                 fetch_state.update_component_access(&mut self.component_access);
                 filter_state.update_component_access(&mut self.component_access);
                 self.state = Some((fetch_state, filter_state));
@@ -56,8 +55,6 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
             self.archetype_generation = archetypes.generation();
             self.matched_tables.grow(world.storages().tables.len());
             self.matched_archetypes.grow(archetypes.len());
-            self.archetype_component_access
-                .grow(archetypes.archetype_components_len());
             let archetype_index_range = if old_generation == self.archetype_generation {
                 0..0
             } else {
@@ -197,11 +194,8 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     }
 
     #[inline]
-    pub fn for_each<'w, 's>(
-        &'s self,
-        world: &'w World,
-        func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item),
-    ) where
+    pub fn for_each<'w>(&self, world: &'w World, func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item))
+    where
         Q::Fetch: ReadOnlyFetch,
     {
         unsafe {
@@ -210,8 +204,8 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     }
 
     #[inline]
-    pub fn for_each_mut<'w, 's>(
-        &'s mut self,
+    pub fn for_each_mut<'w>(
+        &mut self,
         world: &'w mut World,
         func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item),
     ) {
@@ -221,8 +215,8 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     }
 
     #[inline]
-    pub fn for_each_mut_manual<'w, 's>(
-        &'s self,
+    pub fn for_each_mut_manual<'w>(
+        &self,
         world: &'w World,
         func: impl FnMut(<Q::Fetch as Fetch<'w>>::Item),
     ) {

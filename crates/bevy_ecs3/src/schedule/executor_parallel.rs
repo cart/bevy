@@ -80,13 +80,7 @@ impl ParallelSystemExecutor for ParallelExecutor {
         self.queued.grow(systems.len());
         self.running.grow(systems.len());
         self.should_run.grow(systems.len());
-        if self.last_archetype_generation != world.archetypes().generation() {
-            for container in systems.iter_mut() {
-                let system = container.system_mut();
-                system.update(world);
-            }
-            self.last_archetype_generation = world.archetypes().generation();
-        }
+
         // Construct scheduling data for systems.
         for container in systems.iter() {
             let dependencies_total = container.dependencies().len();
@@ -108,6 +102,8 @@ impl ParallelSystemExecutor for ParallelExecutor {
                 self.system_metadata[*dependency].dependants.push(dependant);
             }
         }
+
+        self.update_systems(systems, world);
     }
 
     fn run_systems(&mut self, systems: &mut [ParallelSystemContainer], world: &mut World) {
@@ -117,11 +113,10 @@ impl ParallelSystemExecutor for ParallelExecutor {
             world.insert_resource(receiver);
             self.events_sender = Some(sender);
         }
-        if self.last_archetype_generation != world.archetypes().generation() {
-            self.update_systems(systems, world);
-            self.last_archetype_generation = world.archetypes().generation();
-        }
 
+        self.update_systems(systems, world);
+
+        // TODO: get resource using world.get_or_insert_with
         error!("get compute pool from resources");
         let compute_pool = ComputeTaskPool(TaskPool::default());
         compute_pool.scope(|scope| {
@@ -155,13 +150,19 @@ impl ParallelSystemExecutor for ParallelExecutor {
 
 impl ParallelExecutor {
     /// Updates access and recondenses the archetype component bitsets of systems.
-    fn update_systems(&mut self, systems: &mut [ParallelSystemContainer], world: &mut World) {
+    fn update_systems(&mut self, systems: &mut [ParallelSystemContainer], world: &World) {
+        if self.last_archetype_generation == world.archetypes().generation() {
+            return;
+        }
+
         for (index, container) in systems.iter_mut().enumerate() {
             let system = container.system_mut();
             system.update(world);
             self.system_metadata[index].archetype_component_access =
                 system.archetype_component_access().clone();
         }
+
+        self.last_archetype_generation = world.archetypes().generation();
     }
 
     /// Populates `should_run` bitset, spawns tasks for systems that should run this iteration,
@@ -309,7 +310,11 @@ enum SchedulingEvent {
 #[cfg(test)]
 mod tests {
     use super::SchedulingEvent::{self, *};
-    use crate::{prelude::*, schedule::{Stage, SystemStage}, system::{IntoSystem, Query, Res, ResMut}};
+    use crate::{
+        prelude::*,
+        schedule::{Stage, SystemStage},
+        system::{IntoSystem, Query, Res, ResMut},
+    };
     use async_channel::Receiver;
 
     fn receive_events(world: &World) -> Vec<SchedulingEvent> {

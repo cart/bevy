@@ -1,6 +1,7 @@
 use crate::{
     core::{
-        Component, ComponentFlags, ComponentId, Or, QueryFilter, QueryState, World, WorldQuery,
+        ArchetypeId, Component, ComponentFlags, ComponentId, Or, QueryFilter, QueryState, World,
+        WorldQuery,
     },
     system::{CommandQueue, Commands, Query, SystemState},
 };
@@ -16,7 +17,7 @@ pub trait SystemParam: Sized {
 }
 
 pub trait SystemParamState: Send + Sync + 'static {
-    fn init(world: &mut World) -> Self;
+    fn init(world: &mut World, system_state: &mut SystemState) -> Self;
     #[inline]
     fn update(&mut self, _world: &World, _system_state: &mut SystemState) {}
     #[inline]
@@ -44,12 +45,23 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Quer
 }
 
 impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for QueryState<Q, F> {
-    fn init(_world: &mut World) -> Self {
-        QueryState::default()
+    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+        let mut state = QueryState::default();
+        state.update(world);
+        system_state
+            .component_access
+            .extend(&state.component_access);
+        system_state
+            .archetype_component_access
+            .extend(&state.archetype_component_access);
+        state
     }
 
-    fn update(&mut self, world: &World, _system_state: &mut SystemState) {
+    fn update(&mut self, world: &World, system_state: &mut SystemState) {
         self.update(world);
+        system_state
+            .archetype_component_access
+            .extend(&self.archetype_component_access);
         // TODO: check for collision with system state archetype component access
     }
 }
@@ -128,10 +140,28 @@ impl<'a, T: Component> SystemParam for Res<'a, T> {
 }
 
 impl<T: Component> SystemParamState for FetchResState<T> {
-    fn init(world: &mut World) -> Self {
-        // TODO: update archetype component access here
+    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+        let component_id =
+            if let Some(component_id) = world.components.get_resource_id(TypeId::of::<T>()) {
+                // SAFE: resource archetype always exists
+                let archetype = unsafe {
+                    world
+                        .archetypes()
+                        .get_unchecked(ArchetypeId::resource_archetype())
+                };
+                system_state.component_access.add_read(component_id);
+                let archetype_component = archetype
+                    .get_archetype_component_id(component_id)
+                    .expect("resource already checked for existence");
+                system_state
+                    .archetype_component_access
+                    .add_read(archetype_component);
+                Some(component_id)
+            } else {
+                None
+            };
         Self {
-            component_id: world.components.get_resource_id(TypeId::of::<T>()),
+            component_id,
             marker: PhantomData,
         }
     }
@@ -187,13 +217,33 @@ impl<'a, T: Component> SystemParam for ResMut<'a, T> {
 }
 
 impl<T: Component> SystemParamState for FetchResMutState<T> {
-    fn init(world: &mut World) -> Self {
-        // TODO: update archetype component access here
+    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+        let component_id =
+            if let Some(component_id) = world.components.get_resource_id(TypeId::of::<T>()) {
+                // SAFE: resource archetype always exists
+                let archetype = unsafe {
+                    world
+                        .archetypes()
+                        .get_unchecked(ArchetypeId::resource_archetype())
+                };
+                system_state.component_access.add_write(component_id);
+                let archetype_component = archetype
+                    .get_archetype_component_id(component_id)
+                    .expect("resource already checked for existence");
+                system_state
+                    .archetype_component_access
+                    .add_write(archetype_component);
+                Some(component_id)
+            } else {
+                None
+            };
         Self {
-            component_id: world.components.get_resource_id(TypeId::of::<T>()),
+            component_id,
             marker: PhantomData,
         }
     }
+
+    fn update(&mut self, _world: &World, _system_state: &mut SystemState) {}
 }
 
 impl<'a, T: Component> FetchSystemParam<'a> for FetchResMut<T> {
@@ -223,7 +273,7 @@ impl<'a> SystemParam for Commands<'a> {
 }
 
 impl SystemParamState for CommandQueue {
-    fn init(_world: &mut World) -> Self {
+    fn init(_world: &mut World, _system_state: &mut SystemState) -> Self {
         Default::default()
     }
 
@@ -276,8 +326,8 @@ macro_rules! impl_system_param_tuple {
         #[allow(non_snake_case)]
         impl<$($param: SystemParamState),*> SystemParamState for ($($param,)*) {
             #[inline]
-            fn init(_world: &mut World) -> Self {
-                (($($param::init(_world),)*))
+            fn init(_world: &mut World, _system_state: &mut SystemState) -> Self {
+                (($($param::init(_world, _system_state),)*))
             }
 
             #[inline]

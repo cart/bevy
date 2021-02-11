@@ -476,6 +476,7 @@ fn find_ambiguities(systems: &[impl SystemContainer]) -> Vec<(usize, usize)> {
             dependencies.insert(dependency);
             all_dependants[dependency].insert(index);
         }
+
         all_dependants.push(FixedBitSet::with_capacity(systems.len()));
         all_dependencies.push(dependencies);
     }
@@ -535,10 +536,9 @@ impl Stage for SystemStage {
             self.systems_modified = false;
             self.executor.rebuild_cached_data(&mut self.parallel, world);
             self.executor_modified = false;
-            error!("re enable check");
-            // if resources.contains::<ReportExecutionOrderAmbiguities>() {
-            //     self.report_ambiguities();
-            // }
+            if world.contains_resource::<ReportExecutionOrderAmbiguities>() {
+                self.report_ambiguities();
+            }
         } else if self.executor_modified {
             self.executor.rebuild_cached_data(&mut self.parallel, world);
             self.executor_modified = false;

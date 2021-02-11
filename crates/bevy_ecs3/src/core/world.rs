@@ -156,6 +156,11 @@ impl World {
     pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
         self.archetypes.get_resource_mut(&self.components)
     }
+
+    #[inline]
+    pub fn contains_resource<T: Component>(&mut self) -> bool {
+        self.archetypes.contains_resource::<T>(&self.components)
+    }
 }
 
 impl fmt::Debug for World {
