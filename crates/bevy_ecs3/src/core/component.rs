@@ -163,6 +163,27 @@ impl Components {
         ComponentId(*index)
     }
 
+    // TODO: try compressing these similar impls
+    #[inline]
+    pub fn get_or_insert_id<T: Component>(&mut self) -> ComponentId {
+        let components = &mut self.components;
+        let index = self.indices.entry(TypeId::of::<T>()).or_insert_with(|| {
+            let type_info = TypeInfo::of::<T>();
+            let index = components.len();
+            components.push(ComponentInfo {
+                storage_type: StorageType::Table,
+                type_id: type_info.id(),
+                id: ComponentId(index),
+                drop: type_info.drop(),
+                layout: type_info.layout(),
+            });
+
+            index
+        });
+
+        ComponentId(*index)
+    }
+
     pub fn get_with_type_info(&mut self, type_info: &TypeInfo) -> ComponentId {
         let components = &mut self.components;
         let index = self.indices.entry(type_info.id()).or_insert_with(|| {

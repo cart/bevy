@@ -60,6 +60,7 @@
 * high level
     * par_iter
     * Rename System::Update() to System::UpdateAccess() (only pass in required data)
+    * investigate slower becs3 schedule perf (54 vs 69 us) ... afaik ive only subtracted ops so wtf
 * resources
     * NonSend (system param too)
 

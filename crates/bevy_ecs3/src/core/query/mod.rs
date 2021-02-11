@@ -12,7 +12,7 @@ pub use state::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{ComponentDescriptor, IntoQueryState, StorageType, World};
+    use crate::core::{ComponentDescriptor, StorageType, World};
 
     #[derive(Debug, Eq, PartialEq)]
     struct A(usize);
@@ -24,13 +24,13 @@ mod tests {
         let mut world = World::new();
         world.spawn().insert_bundle((A(1), B(1)));
         world.spawn().insert_bundle((A(2),));
-        let values = <&A>::query().iter(&world).collect::<Vec<&A>>();
+        let values = world.query::<&A>().iter(&world).collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (_a, mut b) in <(&A, &mut B)>::query().iter_mut(&mut world) {
+        for (_a, mut b) in world.query::<(&A, &mut B)>().iter_mut(&mut world) {
             b.0 = 3;
         }
-        let values = <&B>::query().iter(&world).collect::<Vec<&B>>();
+        let values = world.query::<&B>().iter(&world).collect::<Vec<&B>>();
         assert_eq!(values, vec![&B(3)]);
     }
 
@@ -44,14 +44,14 @@ mod tests {
         world.spawn().insert_bundle((A(1), B(2)));
         world.spawn().insert_bundle((A(2),));
 
-        let values = <&A>::query().iter(&world).collect::<Vec<&A>>();
+        let values = world.query::<&A>().iter(&world).collect::<Vec<&A>>();
         assert_eq!(values, vec![&A(1), &A(2)]);
 
-        for (_a, mut b) in <(&A, &mut B)>::query().iter_mut(&mut world) {
+        for (_a, mut b) in world.query::<(&A, &mut B)>().iter_mut(&mut world) {
             b.0 = 3;
         }
 
-        let values = <&B>::query().iter(&world).collect::<Vec<&B>>();
+        let values = world.query::<&B>().iter(&world).collect::<Vec<&B>>();
         assert_eq!(values, vec![&B(3)]);
     }
 }

@@ -518,6 +518,21 @@ impl Archetypes {
         }
     }
 
+    // PERF: optimize this to avoid redundant lookups
+    #[inline]
+    pub(crate) fn get_resource_or_insert_with<T: Component>(
+        &mut self,
+        components: &mut Components,
+        func: impl FnOnce() -> T,
+    ) -> Mut<'_, T> {
+        if self.contains_resource::<T>(components) {
+            self.get_resource_mut(components).unwrap()
+        } else {
+            self.insert_resource(components, func());
+            self.get_resource_mut(components).unwrap()
+        }
+    }
+
     #[inline]
     pub(crate) fn contains_resource<T: Component>(&mut self, components: &Components) -> bool {
         let component_id = if let Some(component_id) = components.get_resource_id(TypeId::of::<T>())

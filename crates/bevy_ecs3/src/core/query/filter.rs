@@ -35,7 +35,6 @@ pub struct Or<T>(pub T);
 
 /// Filter that retrieves components of type `T` that have either been mutated or added since the start of the frame.
 pub struct With<T> {
-    component_id: ComponentId,
     marker: PhantomData<T>,
 }
 pub struct WithState<T> {
@@ -44,13 +43,12 @@ pub struct WithState<T> {
 }
 
 impl<T: Component> FetchState for WithState<T> {
-    fn init(world: &World) -> Option<Self> {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>())?;
-        Some(Self {
+    fn init(world: &mut World) -> Self {
+        let component_id = world.components.get_or_insert_id::<T>();
+        Self {
             component_id,
             marker: PhantomData,
-        })
+        }
     }
 
     #[inline]
@@ -73,13 +71,11 @@ impl<T: Component> QueryFilter for With<T> {
     type State = WithState<T>;
 
     const DANGLING: Self = Self {
-        component_id: ComponentId::new(usize::MAX),
         marker: PhantomData,
     };
 
-    unsafe fn init(_world: &World, state: &Self::State) -> Self {
+    unsafe fn init(_world: &World, _state: &Self::State) -> Self {
         Self {
-            component_id: state.component_id,
             marker: PhantomData,
         }
     }
@@ -94,7 +90,6 @@ impl<T: Component> QueryFilter for With<T> {
 }
 
 pub struct Without<T> {
-    component_id: ComponentId,
     marker: PhantomData<T>,
 }
 
@@ -104,13 +99,12 @@ pub struct WithoutState<T> {
 }
 
 impl<T: Component> FetchState for WithoutState<T> {
-    fn init(world: &World) -> Option<Self> {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>())?;
-        Some(Self {
+    fn init(world: &mut World) -> Self {
+        let component_id = world.components.get_or_insert_id::<T>();
+        Self {
             component_id,
             marker: PhantomData,
-        })
+        }
     }
 
     #[inline]
@@ -133,14 +127,12 @@ impl<T: Component> QueryFilter for Without<T> {
     type State = WithoutState<T>;
 
     const DANGLING: Self = Self {
-        component_id: ComponentId::new(usize::MAX),
         marker: PhantomData,
     };
 
-    unsafe fn init(_world: &World, state: &Self::State) -> Self {
+    unsafe fn init(_world: &World, _state: &Self::State) -> Self {
         Self {
-            component_id: state.component_id,
-            marker: Default::default(),
+            marker: PhantomData,
         }
     }
 
@@ -163,14 +155,12 @@ pub struct WithBundleState<T: Bundle> {
 }
 
 impl<T: Bundle> FetchState for WithBundleState<T> {
-    fn init(world: &World) -> Option<Self> {
-        let bundles = world.bundles();
-        let bundle_id = bundles.get_id(TypeId::of::<T>())?;
-        let bundle_info = bundles.get(bundle_id)?;
-        Some(Self {
+    fn init(world: &mut World) -> Self {
+        let bundle_info = world.bundles.init_info::<T>(&mut world.components);
+        Self {
             component_ids: bundle_info.component_ids.clone(),
             marker: PhantomData,
-        })
+        }
     }
 
     #[inline]
@@ -271,16 +261,15 @@ macro_rules! impl_flag_filter {
         }
 
         impl<T: Component> FetchState for $state_name<T> {
-            fn init(world: &World) -> Option<Self> {
-                let components = world.components();
-                let component_id = components.get_id(TypeId::of::<T>())?;
+            fn init(world: &mut World) -> Self {
+                let component_id = world.components.get_or_insert_id::<T>();
                 // SAFE: component_id exists if there is a TypeId pointing to it
-                let component_info = unsafe { components.get_info_unchecked(component_id) };
-                Some(Self {
+                let component_info = unsafe { world.components.get_info_unchecked(component_id) };
+                Self {
                     component_id,
                     storage_type: component_info.storage_type(),
                     marker: PhantomData,
-                })
+                }
             }
 
             #[inline]

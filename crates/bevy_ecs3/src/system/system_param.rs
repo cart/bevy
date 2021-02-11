@@ -6,7 +6,6 @@ use crate::{
     system::{CommandQueue, Commands, Query, SystemState},
 };
 use std::{
-    any::TypeId,
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -46,8 +45,7 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Quer
 
 impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for QueryState<Q, F> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
-        let mut state = QueryState::default();
-        state.update(world);
+        let state = QueryState::new(world);
         system_state
             .component_access
             .extend(&state.component_access);
@@ -58,7 +56,7 @@ impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for Que
     }
 
     fn update(&mut self, world: &World, system_state: &mut SystemState) {
-        self.update(world);
+        self.update_archetypes(world);
         system_state
             .archetype_component_access
             .extend(&self.archetype_component_access);
@@ -130,7 +128,7 @@ impl<'w, T: Component> Deref for Res<'w, T> {
 
 pub struct FetchRes<T>(PhantomData<T>);
 pub struct FetchResState<T> {
-    component_id: Option<ComponentId>,
+    component_id: ComponentId,
     marker: PhantomData<T>,
 }
 
@@ -141,28 +139,27 @@ impl<'a, T: Component> SystemParam for Res<'a, T> {
 
 impl<T: Component> SystemParamState for FetchResState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
-        let component_id =
-            if let Some(component_id) = world.components.get_resource_id(TypeId::of::<T>()) {
-                // SAFE: resource archetype always exists
-                let archetype = unsafe {
-                    world
-                        .archetypes()
-                        .get_unchecked(ArchetypeId::resource_archetype())
-                };
-                system_state.component_access.add_read(component_id);
-                let archetype_component = archetype
-                    .get_archetype_component_id(component_id)
-                    .expect("resource already checked for existence");
-                system_state
-                    .archetype_component_access
-                    .add_read(archetype_component);
-                Some(component_id)
-            } else {
-                None
-            };
+        let component_id = world.components.get_or_insert_resource_id::<T>();
+        system_state.component_access.add_read(component_id);
         Self {
             component_id,
             marker: PhantomData,
+        }
+    }
+
+    // PERF: move this into init by somehow creating the archetype component id, even if there is no resource yet
+    fn update(&mut self, world: &World, system_state: &mut SystemState) {
+        // SAFE: resource archetype always exists
+        let archetype = unsafe {
+            world
+                .archetypes()
+                .get_unchecked(ArchetypeId::resource_archetype())
+        };
+
+        if let Some(archetype_component) = archetype.get_archetype_component_id(self.component_id) {
+            system_state
+                .archetype_component_access
+                .add_read(archetype_component);
         }
     }
 }
@@ -177,8 +174,7 @@ impl<'a, T: Component> FetchSystemParam<'a> for FetchRes<T> {
         _system_state: &'a SystemState,
         world: &'a World,
     ) -> Option<Self::Item> {
-        let component_id = state.component_id?;
-        let column = world.archetypes.get_resource_column(component_id)?;
+        let column = world.archetypes.get_resource_column(state.component_id)?;
         Some(Res {
             value: &*column.get_ptr().as_ptr().cast::<T>(),
         })
@@ -207,7 +203,7 @@ impl<'w, T: Component> DerefMut for ResMut<'w, T> {
 
 pub struct FetchResMut<T>(PhantomData<T>);
 pub struct FetchResMutState<T> {
-    component_id: Option<ComponentId>,
+    component_id: ComponentId,
     marker: PhantomData<T>,
 }
 
@@ -218,32 +214,29 @@ impl<'a, T: Component> SystemParam for ResMut<'a, T> {
 
 impl<T: Component> SystemParamState for FetchResMutState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
-        let component_id =
-            if let Some(component_id) = world.components.get_resource_id(TypeId::of::<T>()) {
-                // SAFE: resource archetype always exists
-                let archetype = unsafe {
-                    world
-                        .archetypes()
-                        .get_unchecked(ArchetypeId::resource_archetype())
-                };
-                system_state.component_access.add_write(component_id);
-                let archetype_component = archetype
-                    .get_archetype_component_id(component_id)
-                    .expect("resource already checked for existence");
-                system_state
-                    .archetype_component_access
-                    .add_write(archetype_component);
-                Some(component_id)
-            } else {
-                None
-            };
+        let component_id = world.components.get_or_insert_resource_id::<T>();
+        system_state.component_access.add_write(component_id);
         Self {
             component_id,
             marker: PhantomData,
         }
     }
 
-    fn update(&mut self, _world: &World, _system_state: &mut SystemState) {}
+    // PERF: move this into init by somehow creating the archetype component id, even if there is no resource yet
+    fn update(&mut self, world: &World, system_state: &mut SystemState) {
+        // SAFE: resource archetype always exists
+        let archetype = unsafe {
+            world
+                .archetypes()
+                .get_unchecked(ArchetypeId::resource_archetype())
+        };
+
+        if let Some(archetype_component) = archetype.get_archetype_component_id(self.component_id) {
+            system_state
+                .archetype_component_access
+                .add_write(archetype_component);
+        }
+    }
 }
 
 impl<'a, T: Component> FetchSystemParam<'a> for FetchResMut<T> {
@@ -256,8 +249,7 @@ impl<'a, T: Component> FetchSystemParam<'a> for FetchResMut<T> {
         _system_state: &'a SystemState,
         world: &'a World,
     ) -> Option<Self::Item> {
-        let component_id = state.component_id?;
-        let column = world.archetypes.get_resource_column(component_id)?;
+        let column = world.archetypes.get_resource_column(state.component_id)?;
         Some(ResMut {
             value: &mut *column.get_ptr().as_ptr().cast::<T>(),
             flags: &mut *column.get_flags_mut_ptr(),

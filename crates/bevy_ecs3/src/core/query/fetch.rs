@@ -5,7 +5,10 @@ use crate::{
     },
     smaller_tuples_too,
 };
-use std::{any::{TypeId, type_name}, marker::PhantomData, ptr::{self, NonNull}};
+use std::{
+    marker::PhantomData,
+    ptr::{self, NonNull},
+};
 
 pub trait WorldQuery: Send + Sync {
     type Fetch: for<'a> Fetch<'a, State = Self::State>;
@@ -28,7 +31,7 @@ pub trait Fetch<'w>: Sized {
 /// State used to construct a Fetch. This will be cached inside QueryState, so it is best to move as much data /
 // computation here as possible to reduce the cost of constructing Fetch.
 pub trait FetchState: Sized {
-    fn init(world: &World) -> Option<Self>;
+    fn init(world: &mut World) -> Self;
     fn update_component_access(&self, access: &mut Access<ComponentId>);
     fn update_archetype_component_access(
         &self,
@@ -55,8 +58,8 @@ unsafe impl ReadOnlyFetch for FetchEntity {}
 pub struct EntityState;
 
 impl FetchState for EntityState {
-    fn init(_world: &World) -> Option<Self> {
-        Some(Self)
+    fn init(_world: &mut World) -> Self {
+        Self
     }
 
     fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
@@ -128,16 +131,15 @@ pub struct ReadState<T> {
 }
 
 impl<T: Component> FetchState for ReadState<T> {
-    fn init(world: &World) -> Option<Self> {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>())?;
+    fn init(world: &mut World) -> Self {
+        let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
-        let component_info = unsafe { components.get_info_unchecked(component_id) };
-        Some(ReadState {
+        let component_info = unsafe { world.components.get_info_unchecked(component_id) };
+        ReadState {
             component_id: component_info.id(),
             storage_type: component_info.storage_type(),
             marker: PhantomData,
-        })
+        }
     }
 
     fn update_component_access(&self, access: &mut Access<ComponentId>) {
@@ -273,16 +275,15 @@ pub struct WriteState<T> {
 }
 
 impl<T: Component> FetchState for WriteState<T> {
-    fn init(world: &World) -> Option<Self> {
-        let components = world.components();
-        let component_id = components.get_id(TypeId::of::<T>())?;
+    fn init(world: &mut World) -> Self {
+        let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
-        let component_info = unsafe { components.get_info_unchecked(component_id) };
-        Some(WriteState {
+        let component_info = unsafe { world.components.get_info_unchecked(component_id) };
+        WriteState {
             component_id: component_info.id(),
             storage_type: component_info.storage_type(),
             marker: PhantomData,
-        })
+        }
     }
 
     fn update_component_access(&self, access: &mut Access<ComponentId>) {
@@ -412,10 +413,10 @@ pub struct OptionState<T: FetchState> {
 }
 
 impl<T: FetchState> FetchState for OptionState<T> {
-    fn init(world: &World) -> Option<Self> {
-        Some(Self {
-            state: T::init(world)?,
-        })
+    fn init(world: &mut World) -> Self {
+        Self {
+            state: T::init(world),
+        }
     }
 
     fn update_component_access(&self, access: &mut Access<ComponentId>) {
@@ -550,8 +551,8 @@ macro_rules! tuple_impl {
 
         #[allow(non_snake_case)]
         impl<$($name: FetchState),*> FetchState for ($($name,)*) {
-            fn init(_world: &World) -> Option<Self> {
-                Some(($($name::init(_world)?,)*))
+            fn init(_world: &mut World) -> Self {
+                ($($name::init(_world),)*)
             }
 
             fn update_component_access(&self, _access: &mut Access<ComponentId>) {

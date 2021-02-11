@@ -1,12 +1,16 @@
 pub mod core;
-pub mod system;
 pub mod schedule;
+pub mod system;
 
-// TODO: stop using wildcards here
 pub mod prelude {
-    pub use crate::core::*;
-    // pub use crate::resource::*;
-    // pub use crate::system::*;
+    pub use crate::{
+        core::{Mut, QueryState, With, Without, World, Entity},
+        schedule::{
+            ExclusiveSystemDescriptorCoercion, ParallelSystemDescriptorCoercion, Schedule, Stage,
+            SystemStage,
+        },
+        system::{IntoExclusiveSystem, IntoSystem, Query, System},
+    };
 }
 
 #[macro_export]
@@ -23,11 +27,9 @@ macro_rules! smaller_tuples_too {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        core::{
-            Added, Changed, Component, Entity, IntoQueryState, Mutated, QueryFilter, With, Without,
-        },
-        prelude::{ComponentDescriptor, StorageType, World},
+    use crate::core::{
+        Added, Changed, Component, ComponentDescriptor, Entity, Mutated, QueryFilter, StorageType,
+        With, Without, World,
     };
 
     #[derive(Debug, PartialEq, Eq)]
@@ -94,7 +96,8 @@ mod tests {
         let e = world.spawn().insert_bundle(("abc", 123)).id();
         let f = world.spawn().insert_bundle(("def", 456)).id();
 
-        let ents = <(Entity, &i32, &&str)>::query()
+        let ents = world
+            .query::<(Entity, &i32, &&str)>()
             .iter(&world)
             .map(|(e, &i, &s)| (e, i, s))
             .collect::<Vec<_>>();
@@ -102,7 +105,7 @@ mod tests {
         assert!(ents.contains(&(e, 123, "abc")));
         assert!(ents.contains(&(f, 456, "def")));
 
-        let ents = <Entity>::query().iter(&world).collect::<Vec<_>>();
+        let ents = world.query::<Entity>().iter(&world).collect::<Vec<_>>();
         assert_eq!(ents.len(), 2);
         assert!(ents.contains(&e));
         assert!(ents.contains(&f));
@@ -113,7 +116,8 @@ mod tests {
         let mut world = World::new();
         let e = world.spawn().insert_bundle(("abc", 123)).id();
         let f = world.spawn().insert_bundle(("def", 456, true)).id();
-        let ents = <(Entity, &i32)>::query()
+        let ents = world
+            .query::<(Entity, &i32)>()
             .iter(&world)
             .map(|(e, &i)| (e, i))
             .collect::<Vec<_>>();
@@ -127,7 +131,7 @@ mod tests {
         let mut world = World::new();
         world.spawn().insert_bundle(("abc", 123));
         world.spawn().insert_bundle(("def", 456));
-        assert!(<(&bool, &i32)>::query().iter(&world).next().is_none());
+        assert!(world.query::<(&bool, &i32)>().iter(&world).next().is_none());
     }
 
     #[test]
@@ -135,7 +139,8 @@ mod tests {
         let mut world = World::new();
         world.spawn().insert_bundle(("abc", 123));
         let f = world.spawn().insert_bundle(("def", 456, true)).id();
-        let ents = <(Entity, &bool)>::query()
+        let ents = world
+            .query::<(Entity, &bool)>()
             .iter(&world)
             .map(|(e, &b)| (e, b))
             .collect::<Vec<_>>();
@@ -147,8 +152,8 @@ mod tests {
         let mut world = World::new();
         world.spawn().insert_bundle((123u32, 1.0f32));
         world.spawn().insert(456u32);
-        let result = <&u32>::query()
-            .filter::<With<f32>>()
+        let result = world
+            .query_filtered::<&u32, With<f32>>()
             .iter(&world)
             .cloned()
             .collect::<Vec<_>>();
@@ -160,8 +165,8 @@ mod tests {
         let mut world = World::new();
         world.spawn().insert_bundle((123u32, 1.0f32));
         world.spawn().insert(456u32);
-        let result = <&u32>::query()
-            .filter::<Without<f32>>()
+        let result = world
+            .query_filtered::<&u32, Without<f32>>()
             .iter(&world)
             .cloned()
             .collect::<Vec<_>>();
@@ -175,7 +180,8 @@ mod tests {
         let f = world.spawn().insert_bundle(("def", 456, true)).id();
         // this should be skipped
         world.spawn().insert("abc");
-        let ents = <(Entity, Option<&bool>, &i32)>::query()
+        let ents = world
+            .query::<(Entity, Option<&bool>, &i32)>()
             .iter(&world)
             .map(|(e, b, &i)| (e, b.copied(), i))
             .collect::<Vec<_>>();
@@ -192,7 +198,8 @@ mod tests {
         let f = world.spawn().insert_bundle(("def", 456, true)).id();
         // // this should be skipped
         // world.spawn().insert("abc");
-        let ents = <(Entity, Option<&bool>, &i32)>::query()
+        let ents = world
+            .query::<(Entity, Option<&bool>, &i32)>()
             .iter(&world)
             .map(|(e, b, &i)| (e, b.copied(), i))
             .collect::<Vec<_>>();
@@ -209,7 +216,8 @@ mod tests {
         let f = world.spawn().insert_bundle(("def", 456)).id();
         // // this should be skipped
         world.spawn().insert("abc");
-        let ents = <(Entity, Option<&bool>, &i32)>::query()
+        let ents = world
+            .query::<(Entity, Option<&bool>, &i32)>()
             .iter(&world)
             .map(|(e, b, &i)| (e, b.copied(), i))
             .collect::<Vec<_>>();
@@ -223,7 +231,8 @@ mod tests {
         let e2 = world.spawn().insert(0).insert_bundle((false, "xyz")).id();
 
         assert_eq!(
-            <(Entity, &i32, &bool)>::query()
+            world
+                .query::<(Entity, &i32, &bool)>()
                 .iter(&world)
                 .map(|(e, &i, &b)| (e, i, b))
                 .collect::<Vec<_>>(),
@@ -232,14 +241,16 @@ mod tests {
 
         assert_eq!(world.entity_mut(e1).unwrap().remove::<i32>(), Some(42));
         assert_eq!(
-            <(Entity, &i32, &bool)>::query()
+            world
+                .query::<(Entity, &i32, &bool)>()
                 .iter(&world)
                 .map(|(e, &i, &b)| (e, i, b))
                 .collect::<Vec<_>>(),
             &[(e2, 0, false)]
         );
         assert_eq!(
-            <(Entity, &bool, &&str)>::query()
+            world
+                .query::<(Entity, &bool, &&str)>()
                 .iter(&world)
                 .map(|(e, &b, &s)| (e, b, s))
                 .collect::<Vec<_>>(),
@@ -247,7 +258,8 @@ mod tests {
         );
         world.entity_mut(e1).unwrap().insert(43);
         assert_eq!(
-            <(Entity, &i32, &bool)>::query()
+            world
+                .query::<(Entity, &i32, &bool)>()
                 .iter(&world)
                 .map(|(e, &i, &b)| (e, i, b))
                 .collect::<Vec<_>>(),
@@ -255,7 +267,8 @@ mod tests {
         );
         world.entity_mut(e1).unwrap().insert(1.0f32);
         assert_eq!(
-            <(Entity, &f32)>::query()
+            world
+                .query::<(Entity, &f32)>()
                 .iter(&world)
                 .map(|(e, &f)| (e, f))
                 .collect::<Vec<_>>(),
@@ -344,7 +357,11 @@ mod tests {
     fn spawn_batch() {
         let mut world = World::new();
         world.spawn_batch((0..100).map(|x| (x, "abc")));
-        let values = <&i32>::query().iter(&world).map(|&x| x).collect::<Vec<_>>();
+        let values = world
+            .query::<&i32>()
+            .iter(&world)
+            .map(|&x| x)
+            .collect::<Vec<_>>();
         let expected = (0..100).collect::<Vec<_>>();
         assert_eq!(values, expected);
     }
@@ -437,35 +454,59 @@ mod tests {
         let mut world = World::new();
         let a = world.spawn().insert(123i32).id();
 
-        assert_eq!(<&i32>::query().iter(&world).count(), 1);
-        assert_eq!(<()>::query().filter::<Added<i32>>().iter(&world).count(), 1);
-        assert_eq!(<&i32>::query().iter(&world).count(), 1);
-        assert_eq!(<()>::query().filter::<Added<i32>>().iter(&world).count(), 1);
-        assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query()
-            .filter::<Added<i32>>()
+        assert_eq!(world.query::<&i32>().iter(&world).count(), 1);
+        assert_eq!(
+            world
+                .query_filtered::<(), Added<i32>>()
+                .iter(&world)
+                .count(),
+            1
+        );
+        assert_eq!(world.query::<&i32>().iter(&world).count(), 1);
+        assert_eq!(
+            world
+                .query_filtered::<(), Added<i32>>()
+                .iter(&world)
+                .count(),
+            1
+        );
+        assert!(world.query::<&i32>().get(&world, a).is_some());
+        assert!(world
+            .query_filtered::<(), Added<i32>>()
             .get(&world, a)
             .is_some());
-        assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query()
-            .filter::<Added<i32>>()
+        assert!(world.query::<&i32>().get(&world, a).is_some());
+        assert!(world
+            .query_filtered::<(), Added<i32>>()
             .get(&world, a)
             .is_some());
 
         world.clear_trackers();
 
-        assert_eq!(<&i32>::query().iter(&world).count(), 1);
-        assert_eq!(<()>::query().filter::<Added<i32>>().iter(&world).count(), 0);
-        assert_eq!(<&i32>::query().iter(&world).count(), 1);
-        assert_eq!(<()>::query().filter::<Added<i32>>().iter(&world).count(), 0);
-        assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query()
-            .filter::<Added<i32>>()
+        assert_eq!(world.query::<&i32>().iter(&world).count(), 1);
+        assert_eq!(
+            world
+                .query_filtered::<(), Added<i32>>()
+                .iter(&world)
+                .count(),
+            0
+        );
+        assert_eq!(world.query::<&i32>().iter(&world).count(), 1);
+        assert_eq!(
+            world
+                .query_filtered::<(), Added<i32>>()
+                .iter(&world)
+                .count(),
+            0
+        );
+        assert!(world.query::<&i32>().get(&world, a).is_some());
+        assert!(world
+            .query_filtered::<(), Added<i32>>()
             .get(&world, a)
             .is_none());
-        assert!(<&i32>::query().get(&world, a).is_some());
-        assert!(<()>::query()
-            .filter::<Added<i32>>()
+        assert!(world.query::<&i32>().get(&world, a).is_some());
+        assert!(world
+            .query_filtered::<(), Added<i32>>()
             .get(&world, a)
             .is_none());
     }
@@ -475,26 +516,26 @@ mod tests {
         let mut world = World::default();
         let e1 = world.spawn().insert(A(0)).id();
 
-        fn get_added<Com: Component>(world: &World) -> Vec<Entity> {
-            <Entity>::query()
-                .filter::<Added<Com>>()
+        fn get_added<Com: Component>(world: &mut World) -> Vec<Entity> {
+            world
+                .query_filtered::<Entity, Added<Com>>()
                 .iter(&world)
                 .collect::<Vec<Entity>>()
         }
 
-        assert_eq!(get_added::<A>(&world), vec![e1]);
+        assert_eq!(get_added::<A>(&mut world), vec![e1]);
         world.entity_mut(e1).unwrap().insert(B(0));
-        assert_eq!(get_added::<A>(&world), vec![e1]);
-        assert_eq!(get_added::<B>(&world), vec![e1]);
+        assert_eq!(get_added::<A>(&mut world), vec![e1]);
+        assert_eq!(get_added::<B>(&mut world), vec![e1]);
 
         world.clear_trackers();
-        assert!(get_added::<A>(&world).is_empty());
+        assert!(get_added::<A>(&mut world).is_empty());
         let e2 = world.spawn().insert_bundle((A(1), B(1))).id();
-        assert_eq!(get_added::<A>(&world), vec![e2]);
-        assert_eq!(get_added::<B>(&world), vec![e2]);
+        assert_eq!(get_added::<A>(&mut world), vec![e2]);
+        assert_eq!(get_added::<B>(&mut world), vec![e2]);
 
-        let added = <Entity>::query()
-            .filter::<(Added<A>, Added<B>)>()
+        let added = world
+            .query_filtered::<Entity, (Added<A>, Added<B>)>()
             .iter(&world)
             .collect::<Vec<Entity>>();
         assert_eq!(added, vec![e2]);
@@ -508,15 +549,15 @@ mod tests {
         let e3 = world.spawn().insert_bundle((A(0), B(0))).id();
         world.spawn().insert_bundle((A(0), B));
 
-        for (i, mut a) in <&mut A>::query().iter_mut(&mut world).enumerate() {
+        for (i, mut a) in world.query::<&mut A>().iter_mut(&mut world).enumerate() {
             if i % 2 == 0 {
                 a.0 += 1;
             }
         }
 
-        fn get_filtered<F: QueryFilter>(world: &World) -> Vec<Entity> {
-            <Entity>::query()
-                .filter::<F>()
+        fn get_filtered<F: QueryFilter>(world: &mut World) -> Vec<Entity> {
+            world
+                .query_filtered::<Entity, F>()
                 .iter(&world)
                 .collect::<Vec<Entity>>()
         }
@@ -604,16 +645,16 @@ mod tests {
         let e2 = world.spawn().insert_bundle((A(0), B(0))).id();
         world.spawn().insert_bundle((A(0), B(0)));
 
-        for mut a in <&mut A>::query().iter_mut(&mut world) {
+        for mut a in world.query::<&mut A>().iter_mut(&mut world) {
             a.0 += 1;
         }
 
-        for mut b in <&mut B>::query().iter_mut(&mut world).skip(1).take(1) {
+        for mut b in world.query::<&mut B>().iter_mut(&mut world).skip(1).take(1) {
             b.0 += 1;
         }
 
-        let a_b_mutated = <Entity>::query()
-            .filter::<(Mutated<A>, Mutated<B>)>()
+        let a_b_mutated = world
+            .query_filtered::<Entity, (Mutated<A>, Mutated<B>)>()
             .iter(&world)
             .collect::<Vec<Entity>>();
         assert_eq!(a_b_mutated, vec![e2]);
@@ -649,17 +690,17 @@ mod tests {
         let mut world = World::default();
         let e1 = world.spawn().insert_bundle((A(0), B(0))).id();
 
-        fn get_changed(world: &World) -> Vec<Entity> {
-            <Entity>::query()
-                .filter::<Changed<A>>()
+        fn get_changed(world: &mut World) -> Vec<Entity> {
+            world
+                .query_filtered::<Entity, Changed<A>>()
                 .iter(&world)
                 .collect::<Vec<Entity>>()
         }
-        assert_eq!(get_changed(&world), vec![e1]);
+        assert_eq!(get_changed(&mut world), vec![e1]);
         world.clear_trackers();
-        assert_eq!(get_changed(&world), vec![]);
+        assert_eq!(get_changed(&mut world), vec![]);
         *world.get_mut(e1).unwrap() = A(1);
-        assert_eq!(get_changed(&world), vec![e1]);
+        assert_eq!(get_changed(&mut world), vec![e1]);
     }
 
     #[test]
@@ -673,10 +714,16 @@ mod tests {
         assert!(world.contains_resource::<i32>());
 
         world.insert_resource(456.0);
-        assert_eq!(*world.get_resource::<f64>().expect("resource exists"), 456.0);
+        assert_eq!(
+            *world.get_resource::<f64>().expect("resource exists"),
+            456.0
+        );
 
         world.insert_resource(789.0);
-        assert_eq!(*world.get_resource::<f64>().expect("resource exists"), 789.0);
+        assert_eq!(
+            *world.get_resource::<f64>().expect("resource exists"),
+            789.0
+        );
 
         {
             let mut value = world.get_resource_mut::<f64>().expect("resource exists");
@@ -726,7 +773,6 @@ mod tests {
     //     .join()
     //     .unwrap();
     // }
-
 
     // #[test]
     // fn flags_query() {

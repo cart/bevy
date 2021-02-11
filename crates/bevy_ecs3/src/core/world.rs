@@ -1,9 +1,9 @@
 use crate::core::{
-    ArchetypeId, Archetypes, Bundle, Bundles, Column, Component, ComponentDescriptor, ComponentId,
-    Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, SpawnBatchIter,
-    StorageType, Storages,
+    ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId,
+    Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryFilter,
+    QueryState, SpawnBatchIter, StorageType, Storages, WorldQuery,
 };
-use std::{any::TypeId, fmt};
+use std::fmt;
 
 #[derive(Default)]
 pub struct World {
@@ -158,8 +158,24 @@ impl World {
     }
 
     #[inline]
+    pub fn get_resource_or_insert_with<T: Component>(&mut self, func: impl FnOnce() -> T) -> Mut<'_, T> {
+        self.archetypes.get_resource_or_insert_with(&mut self.components, func)
+    }
+
+
+    #[inline]
     pub fn contains_resource<T: Component>(&mut self) -> bool {
         self.archetypes.contains_resource::<T>(&self.components)
+    }
+
+    #[inline]
+    pub fn query<Q: WorldQuery>(&mut self) -> QueryState<Q, ()> {
+        QueryState::new(self)
+    }
+
+    #[inline]
+    pub fn query_filtered<Q: WorldQuery, F: QueryFilter>(&mut self) -> QueryState<Q, F> {
+        QueryState::new(self)
     }
 }
 

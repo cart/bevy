@@ -13,21 +13,12 @@ pub struct QueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {
 
 impl<'w, 's, Q: WorldQuery, F: QueryFilter> QueryIter<'w, 's, Q, F> {
     pub(crate) unsafe fn new(world: &'w World, query_state: &'s QueryState<Q, F>) -> Self {
-        let (fetch, filter) = query_state
-            .state
-            .as_ref()
-            .map(|(fetch_state, filter_state)| {
-                (
-                    <Q::Fetch as Fetch>::init(world, fetch_state),
-                    F::init(world, filter_state),
-                )
-            })
-            .unwrap_or_else(|| (<Q::Fetch as Fetch>::DANGLING, F::DANGLING));
+        let fetch = <Q::Fetch as Fetch>::init(world, &query_state.fetch_state);
         QueryIter {
             is_dense: fetch.is_dense(),
             fetch,
+            filter: F::init(world, &query_state.filter_state),
             tables: &world.storages().tables,
-            filter,
             table_id_iter: query_state.matched_table_ids.iter(),
             table_len: 0,
             table_index: 0,

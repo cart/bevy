@@ -4,7 +4,6 @@ use crate::{
 };
 use async_channel::{Receiver, Sender};
 use bevy_tasks::{ComputeTaskPool, Scope, TaskPool};
-use bevy_utils::tracing::error;
 use fixedbitset::FixedBitSet;
 
 #[cfg(test)]
@@ -116,9 +115,9 @@ impl ParallelSystemExecutor for ParallelExecutor {
 
         self.update_systems(systems, world);
 
-        // TODO: get resource using world.get_or_insert_with
-        error!("get compute pool from resources");
-        let compute_pool = ComputeTaskPool(TaskPool::default());
+        let compute_pool = world
+            .get_resource_or_insert_with(|| ComputeTaskPool(TaskPool::default()))
+            .clone();
         compute_pool.scope(|scope| {
             self.prepare_systems(scope, systems, world);
             scope.spawn(async {
@@ -156,10 +155,12 @@ impl ParallelExecutor {
         }
 
         for (index, container) in systems.iter_mut().enumerate() {
+            let meta = &mut self.system_metadata[index];
+            meta.archetype_component_access.clear();
             let system = container.system_mut();
             system.update(world);
-            self.system_metadata[index].archetype_component_access =
-                system.archetype_component_access().clone();
+            meta.archetype_component_access
+                .extend(system.archetype_component_access());
         }
 
         self.last_archetype_generation = world.archetypes().generation();
@@ -372,6 +373,18 @@ mod tests {
             .with_system(wants_ref.system());
         stage.run(&mut world);
         assert_eq!(receive_events(&world), vec![StartedSystems(2),]);
+    }
+
+    #[test]
+    fn try_things() {
+        let mut world = World::new();
+        world.spawn().insert(0usize);
+        fn wants_mut(_: Query<&mut usize>) {}
+        let mut stage = SystemStage::parallel()
+            .with_system(wants_mut.system())
+            .with_system(wants_mut.system());
+        stage.run(&mut world);
+        stage.run(&mut world);
     }
 
     #[test]
