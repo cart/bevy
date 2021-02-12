@@ -210,10 +210,9 @@ mod tests {
     use crate::{
         core::{Entity, FromWorld, With, World},
         schedule::{Schedule, Stage, SystemStage},
-        system::{Local, Query, QuerySet, Res, ResMut, System},
+        system::{IntoSystem, Local, Query, QuerySet, Res, ResMut, System},
     };
 
-    use super::IntoSystem;
     #[derive(Debug, Eq, PartialEq, Default)]
     struct A;
     struct B;
