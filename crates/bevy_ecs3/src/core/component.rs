@@ -1,10 +1,6 @@
 use crate::core::{SparseSetIndex, TypeInfo};
 use bitflags::bitflags;
-use std::{
-    alloc::Layout,
-    any::{type_name, TypeId},
-    collections::hash_map::Entry,
-};
+use std::{alloc::Layout, any::TypeId, collections::hash_map::Entry};
 use thiserror::Error;
 
 pub trait Component: Send + Sync + 'static {}

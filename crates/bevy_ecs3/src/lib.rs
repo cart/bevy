@@ -806,33 +806,22 @@ mod tests {
     //     assert!(flags[0].changed());
     // }
 
-    // #[test]
-    // fn exact_size_query() {
-    //     let mut world = World::default();
-    //     world.spawn((A(0), B(0)));
-    //     world.spawn((A(0), B(0)));
-    //     world.spawn((C,));
+    #[test]
+    fn exact_size_query() {
+        let mut world = World::default();
+        world.spawn().insert_bundle((A(0), B(0)));
+        world.spawn().insert_bundle((A(0), B(0)));
+        world.spawn().insert_bundle((A(0), B(0), C));
+        world.spawn().insert(C);
 
-    //     assert_eq!(<(&A, &B)>().len(), 2);
-    //     // the following example shouldn't compile because Changed<A> is not an UnfilteredFetch
-    //     // assert_eq!(<(Changed<A>, &B)>().len(), 2);
-    // }
+        let mut query = world.query::<(&A, &B)>();
+        assert_eq!(query.iter(&world).len(), 3);
+    }
 
     // #[test]
-    // #[cfg_attr(
-    //     debug_assertions,
-    //     should_panic(
-    //         expected = "attempted to allocate entity with duplicate f32 components; each type must occur at most once!"
-    //     )
-    // )]
-    // #[cfg_attr(
-    //     not(debug_assertions),
-    //     should_panic(
-    //         expected = "attempted to allocate entity with duplicate components; each type must occur at most once!"
-    //     )
-    // )]
+    // #[should_panic]
     // fn duplicate_components_panic() {
     //     let mut world = World::new();
-    //     world.reserve::<(f32, i64, f32)>(1);
+    //     world.spawn().insert_bundle((1, 2));
     // }
 }

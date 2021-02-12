@@ -33,8 +33,8 @@
     * un-comment all tests
     * Or Filter
     * Removal Tracking
-    * ExactSizeIter for Query
     * Flags
+    * fail on duplicate components in bundle
     * try removing pre-hash in favor of non-owned get (to allow collision resolution)
     * remove one by one (remove_intersection)
     * prevent allocating in empty archetype on init (maybe use a EntityMutUninit?)
@@ -45,36 +45,32 @@
     * Update bundle derive macro
     * Consider making archetype id a usize (but still u32 in entity id)
     * Make SystemParam an unsafe trait
+    * try removing "unchecked" methods to cut down on unsafe and see if it cuts perf 
+    * Optimize SparseSet::insert (code is written but it has memory issues)
     * Local
+    * Foreach tests
+    * Test stateful query adapting to archetype changes
+    * Give Option fetch access updating some scrutiny
 * high level
-    * Query conflict detection
-    * QuerySet
     * par_iter
     * Rename System::Update() to System::UpdateAccess() (only pass in required data)
     * investigate slower becs3 schedule perf (54 vs 69 us) ... afaik ive only subtracted ops so wtf
 * resources
     * NonSend (system param too)
 
+## LATER
+
+* world.reserve
+
 ## Maybe
-* Foreach tests
-* Test stateful query adapting to archetype changes
-* Give Option fetch access updating some scrutiny
 * World Error Handling (EntityRef)
-* remove "unchecked" where possible and see if it affect debug perf
 * consider adding Unique to StorageType
-* try removing SYstemParamState trait in favor of Fetch methods. cuts down on wrapper types needed
 * TrackedWorld
     * runtime borrow checked wrapper around world
 * try trimming down Fetch api
-* try removing QueryIter and see how it affects benches
 * experiment with inlines
     * pub (crate) where possible (no inline)
-* Optimize SparseSet::insert (code is written but it has memory issues)
 * inline bundle put?
-* consider removing Vec{Entity} from Archetype. tables store that data redundantly?
-* query state is an unsafe api
-    * maybe this is ok
-    * consider abstracting out QueryState in world (hash query to state)
 * commands can/should use the graph / an entity builder
 * EntitySpawner
     * struct { Entity, Blobs }
