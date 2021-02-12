@@ -348,6 +348,10 @@ impl SparseSetIndex for ArchetypeComponentId {
     fn sparse_set_index(&self) -> usize {
         self.0
     }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        Self(value)
+    }
 }
 
 pub struct Archetypes {

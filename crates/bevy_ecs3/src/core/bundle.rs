@@ -83,6 +83,10 @@ impl SparseSetIndex for BundleId {
     fn sparse_set_index(&self) -> usize {
         self.index()
     }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        Self(value)
+    }
 }
 
 pub struct BundleInfo {

@@ -66,6 +66,10 @@ impl SparseSetIndex for Entity {
     fn sparse_set_index(&self) -> usize {
         self.id() as usize
     }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        Entity::new(value as u32)
+    }
 }
 
 /// An iterator returning a sequence of Entity values from `Entities::reserve_entities`.

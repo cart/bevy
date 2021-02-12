@@ -246,7 +246,7 @@ impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::{Entity, With, World}, schedule::{Schedule, Stage, SystemStage}, system::{Query, Res, ResMut, System}};
+    use crate::{core::{Entity, With, World}, schedule::{Schedule, Stage, SystemStage}, system::{Query, QuerySet, Res, ResMut, System}};
 
     use super::IntoSystem;
     #[derive(Debug, Eq, PartialEq, Default)]
@@ -470,39 +470,36 @@ mod tests {
         run_system(&mut world, sys.system());
     }
 
-    // #[test]
-    // fn query_set_system() {
-    //     fn sys(_set: QuerySet<(Query<&mut A>, Query<&B>)>) {}
+    #[test]
+    fn query_set_system() {
+        fn sys(_set: QuerySet<(Query<&mut A>, Query<&B>)>) {}
 
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     world.spawn((A,));
+        let mut world = World::default();
+        world.spawn().insert(A);
 
-    //     run_system(&mut world, &mut resources, sys.system());
-    // }
+        run_system(&mut world, sys.system());
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_query_with_query_set_system() {
-    //     fn sys(_query: Query<&mut A>, _set: QuerySet<(Query<&mut A>, Query<&B>)>) {}
+    #[test]
+    #[should_panic]
+    fn conflicting_query_with_query_set_system() {
+        fn sys(_query: Query<&mut A>, _set: QuerySet<(Query<&mut A>, Query<&B>)>) {}
 
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     world.spawn((A,));
+        let mut world = World::default();
+        world.spawn().insert(A);
 
-    //     run_system(&mut world, &mut resources, sys.system());
-    // }
+        run_system(&mut world, sys.system());
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_query_sets_system() {
-    //     fn sys(_set_1: QuerySet<(Query<&mut A>,)>, _set_2: QuerySet<(Query<&mut A>, Query<&B>)>) {}
+    #[test]
+    #[should_panic]
+    fn conflicting_query_sets_system() {
+        fn sys(_set_1: QuerySet<(Query<&mut A>,)>, _set_2: QuerySet<(Query<&mut A>, Query<&B>)>) {}
 
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     world.spawn((A,));
-    //     run_system(&mut world, &mut resources, sys.system());
-    // }
+        let mut world = World::default();
+        world.spawn().insert(A);
+        run_system(&mut world, sys.system());
+    }
 
     #[derive(Default)]
     struct BufferRes {
@@ -543,13 +540,6 @@ mod tests {
     // fn conflicting_changed_and_mutable_resource() {
     //     // A tempting pattern, but unsound if allowed.
     //     fn sys(_: ResMut<BufferRes>, _: ChangedRes<BufferRes>) {}
-    //     test_for_conflicting_resources(sys.system())
-    // }
-
-    // #[test]
-    // #[should_panic]
-    // fn conflicting_system_local_resources() {
-    //     fn sys(_: Local<BufferRes>, _: Local<BufferRes>) {}
     //     test_for_conflicting_resources(sys.system())
     // }
 

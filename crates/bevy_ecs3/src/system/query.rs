@@ -1,14 +1,13 @@
-use std::any::TypeId;
-
 use crate::core::{
     Component, Entity, Fetch, Mut, QueryFilter, QueryIter, QueryState, ReadOnlyFetch, World,
     WorldQuery,
 };
+use std::any::TypeId;
 
 /// Provides scoped access to a World according to a given [HecsQuery]
-pub struct Query<'a, Q: WorldQuery, F: QueryFilter = ()> {
-    pub(crate) world: &'a World,
-    pub(crate) state: &'a QueryState<Q, F>,
+pub struct Query<'w, Q: WorldQuery, F: QueryFilter = ()> {
+    pub(crate) world: &'w World,
+    pub(crate) state: &'w QueryState<Q, F>,
 }
 
 /// An error that occurs when using a [Query]
@@ -20,12 +19,12 @@ pub enum QueryError {
     NoSuchEntity,
 }
 
-impl<'a, Q: WorldQuery, F: QueryFilter> Query<'a, Q, F> {
+impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
     /// # Safety
     /// This will create a Query that could violate memory safety rules. Make sure that this is only called in
     /// ways that ensure the Queries have unique mutable access.
     #[inline]
-    pub(crate) unsafe fn new(world: &'a World, state: &'a QueryState<Q, F>) -> Self {
+    pub(crate) unsafe fn new(world: &'w World, state: &'w QueryState<Q, F>) -> Self {
         Self { world, state }
     }
 

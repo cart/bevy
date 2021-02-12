@@ -1,7 +1,9 @@
+use bevy_ecs3_macros::impl_query_set;
+
 use crate::{
     core::{
-        ArchetypeId, Component, ComponentFlags, ComponentId, Or, QueryFilter, QueryState, World,
-        WorldQuery,
+        Access, ArchetypeId, Component, ComponentFlags, ComponentId, Or, QueryFilter, QueryState,
+        World, WorldQuery,
     },
     system::{CommandQueue, Commands, Query, SystemState},
 };
@@ -46,6 +48,14 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Quer
 impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for QueryState<Q, F> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let state = QueryState::new(world);
+        assert_component_access_compatibility(
+            &system_state.name,
+            std::any::type_name::<Q>(),
+            std::any::type_name::<F>(),
+            &state.component_access,
+            &system_state.component_access,
+            world,
+        );
         system_state
             .component_access
             .extend(&state.component_access);
@@ -60,7 +70,6 @@ impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for Que
         system_state
             .archetype_component_access
             .extend(&self.archetype_component_access);
-        // TODO: check for collision with system state archetype component access
     }
 }
 
@@ -80,39 +89,31 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a>
     }
 }
 
-// pub struct FetchQuerySet<T>(PhantomData<T>);
+fn assert_component_access_compatibility(
+    system_name: &str,
+    query_type: &'static str,
+    filter_type: &'static str,
+    current: &Access<ComponentId>,
+    previous: &Access<ComponentId>,
+    world: &World,
+) {
+    if !current.is_compatible(&previous) {
+        let conflicting_components = current
+            .get_conflicts(previous)
+            .drain(..)
+            .map(|component_id| world.components.get_info(component_id).unwrap().name())
+            .collect::<Vec<&str>>();
+        let accesses = conflicting_components.join(", ");
+        panic!("Query<{}, {}> in system {} accesses component(s) {} in a way that conflicts with a previous system parameter. Allowing this would break Rust's mutability rules. Consider merging conflicting Queries into a QuerySet.",
+            query_type, filter_type, system_name, accesses);
+    }
+}
 
-// impl<T: QueryTuple> SystemParam for QuerySet<T> {
-//     type Fetch = FetchQuerySet<T>;
-// }
+pub struct QuerySet<T>(T);
+pub struct FetchQuerySet<T>(PhantomData<T>);
+pub struct QuerySetState<T>(T);
 
-// impl<'a, T: QueryTuple> FetchSystemParam<'a> for FetchQuerySet<T> {
-//     type Item = QuerySet<T>;
-
-//     #[inline]
-//     unsafe fn get_param(
-//         system_state: &'a SystemState,
-//         world: &'a World,
-//         _resources: &'a Resources,
-//     ) -> Option<Self::Item> {
-//         let query_index = *system_state.current_query_index.get();
-//         *system_state.current_query_index.get() += 1;
-//         Some(QuerySet::new(
-//             world,
-//             &system_state.query_archetype_component_accesses[query_index],
-//         ))
-//     }
-
-//     fn init(system_state: &mut SystemState, _world: &World) {
-//         system_state
-//             .query_archetype_component_accesses
-//             .push(TypeAccess::default());
-//         system_state.query_accesses.push(T::get_accesses());
-//         system_state
-//             .query_type_names
-//             .push(std::any::type_name::<T>());
-//     }
-// }
+impl_query_set!();
 
 pub struct Res<'w, T> {
     value: &'w T,
@@ -140,6 +141,11 @@ impl<'a, T: Component> SystemParam for Res<'a, T> {
 impl<T: Component> SystemParamState for FetchResState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
+        if system_state.component_access.has_write(component_id) {
+            panic!(
+                "Res<{}> in system {} conflicts with a previous ResMut<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
+                std::any::type_name::<T>(), system_state.name);
+        }
         system_state.component_access.add_read(component_id);
         Self {
             component_id,
@@ -215,6 +221,15 @@ impl<'a, T: Component> SystemParam for ResMut<'a, T> {
 impl<T: Component> SystemParamState for FetchResMutState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
+        if system_state.component_access.has_write(component_id) {
+            panic!(
+                "ResMut<{}> in system {} conflicts with a previous ResMut<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
+                std::any::type_name::<T>(), system_state.name);
+        } else if system_state.component_access.has_read(component_id) {
+            panic!(
+                "ResMut<{}> in system {} conflicts with a previous Res<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
+                std::any::type_name::<T>(), system_state.name);
+        }
         system_state.component_access.add_write(component_id);
         Self {
             component_id,

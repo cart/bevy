@@ -388,11 +388,16 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
 
 pub trait SparseSetIndex: Clone {
     fn sparse_set_index(&self) -> usize;
+    fn get_sparse_set_index(value: usize) -> Self;
 }
 
 impl SparseSetIndex for u8 {
     fn sparse_set_index(&self) -> usize {
         *self as usize
+    }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        value as u8
     }
 }
 
@@ -400,11 +405,19 @@ impl SparseSetIndex for u16 {
     fn sparse_set_index(&self) -> usize {
         *self as usize
     }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        value as u16
+    }
 }
 
 impl SparseSetIndex for u32 {
     fn sparse_set_index(&self) -> usize {
         *self as usize
+    }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        value as u32
     }
 }
 
@@ -412,11 +425,19 @@ impl SparseSetIndex for u64 {
     fn sparse_set_index(&self) -> usize {
         *self as usize
     }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        value as u64
+    }
 }
 
 impl SparseSetIndex for usize {
     fn sparse_set_index(&self) -> usize {
         *self
+    }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        value
     }
 }
 

@@ -80,4 +80,21 @@ impl<T: SparseSetIndex> Access<T> {
                 && self.reads_and_writes.is_disjoint(&other.writes)
         }
     }
+
+    pub fn get_conflicts(&self, other: &Access<T>) -> Vec<T> {
+        let mut conflicts = FixedBitSet::default();
+        if self.reads_all {
+            conflicts.extend(other.writes.ones());
+        }
+
+        if other.reads_all {
+            conflicts.extend(self.writes.ones());
+        }
+        conflicts.extend(self.writes.intersection(&other.reads_and_writes));
+        conflicts.extend(self.reads_and_writes.intersection(&other.writes));
+        conflicts
+            .ones()
+            .map(|index| SparseSetIndex::get_sparse_set_index(index))
+            .collect()
+    }
 }

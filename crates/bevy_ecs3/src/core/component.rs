@@ -1,6 +1,10 @@
 use crate::core::{SparseSetIndex, TypeInfo};
 use bitflags::bitflags;
-use std::{alloc::Layout, any::TypeId, collections::hash_map::Entry};
+use std::{
+    alloc::Layout,
+    any::{type_name, TypeId},
+    collections::hash_map::Entry,
+};
 use thiserror::Error;
 
 pub trait Component: Send + Sync + 'static {}
@@ -14,6 +18,7 @@ pub enum StorageType {
 
 #[derive(Debug)]
 pub struct ComponentInfo {
+    name: String,
     id: ComponentId,
     type_id: TypeId,
     layout: Layout,
@@ -25,6 +30,11 @@ impl ComponentInfo {
     #[inline]
     pub fn id(&self) -> ComponentId {
         self.id
+    }
+
+    #[inline]
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     #[inline]
@@ -68,9 +78,14 @@ impl SparseSetIndex for ComponentId {
     fn sparse_set_index(&self) -> usize {
         self.index()
     }
+
+    fn get_sparse_set_index(value: usize) -> Self {
+        Self(value)
+    }
 }
 
 pub struct ComponentDescriptor {
+    pub name: String,
     pub storage_type: StorageType,
     pub type_id: TypeId,
     pub layout: Layout,
@@ -83,6 +98,7 @@ impl ComponentDescriptor {
             x.cast::<T>().drop_in_place()
         }
         Self {
+            name: std::any::type_name::<T>().to_string(),
             storage_type,
             type_id: TypeId::of::<T>(),
             layout: Layout::new::<T>(),
@@ -105,13 +121,17 @@ pub enum ComponentsError {
 }
 
 impl Components {
-    pub(crate) fn add(&mut self, descriptor: &ComponentDescriptor) -> Result<ComponentId, ComponentsError> {
+    pub(crate) fn add(
+        &mut self,
+        descriptor: &ComponentDescriptor,
+    ) -> Result<ComponentId, ComponentsError> {
         let index_entry = self.indices.entry(descriptor.type_id);
         if let Entry::Occupied(_) = index_entry {
             return Err(ComponentsError::ComponentAlreadyExists(descriptor.type_id));
         }
         let index = self.components.len();
         self.components.push(ComponentInfo {
+            name: descriptor.name.clone(),
             storage_type: descriptor.storage_type,
             type_id: descriptor.type_id,
             id: ComponentId(index),
@@ -140,25 +160,31 @@ impl Components {
 
     #[inline]
     pub fn get_resource_id(&self, type_id: TypeId) -> Option<ComponentId> {
-        self.resource_indices.get(&type_id).map(|index| ComponentId(*index))
+        self.resource_indices
+            .get(&type_id)
+            .map(|index| ComponentId(*index))
     }
 
     #[inline]
     pub fn get_or_insert_resource_id<T: Component>(&mut self) -> ComponentId {
         let components = &mut self.components;
-        let index = self.resource_indices.entry(TypeId::of::<T>()).or_insert_with(|| {
-            let type_info = TypeInfo::of::<T>();
-            let index = components.len();
-            components.push(ComponentInfo {
-                storage_type: StorageType::Table,
-                type_id: type_info.id(),
-                id: ComponentId(index),
-                drop: type_info.drop(),
-                layout: type_info.layout(),
-            });
+        let index = self
+            .resource_indices
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| {
+                let type_info = TypeInfo::of::<T>();
+                let index = components.len();
+                components.push(ComponentInfo {
+                    name: std::any::type_name::<T>().to_string(),
+                    storage_type: StorageType::Table,
+                    type_id: type_info.id(),
+                    id: ComponentId(index),
+                    drop: type_info.drop(),
+                    layout: type_info.layout(),
+                });
 
-            index
-        });
+                index
+            });
 
         ComponentId(*index)
     }
@@ -171,6 +197,7 @@ impl Components {
             let type_info = TypeInfo::of::<T>();
             let index = components.len();
             components.push(ComponentInfo {
+                name: std::any::type_name::<T>().to_string(),
                 storage_type: StorageType::Table,
                 type_id: type_info.id(),
                 id: ComponentId(index),
@@ -189,6 +216,7 @@ impl Components {
         let index = self.indices.entry(type_info.id()).or_insert_with(|| {
             let index = components.len();
             components.push(ComponentInfo {
+                name: type_info.type_name().to_string(),
                 storage_type: StorageType::Table,
                 type_id: type_info.id(),
                 id: ComponentId(index),

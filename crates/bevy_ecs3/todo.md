@@ -1,46 +1,35 @@
-# Component Storage
-
-* Component storage / other info stored in a Vec<ComponentInfo>
-* ComponentId(usize) is the index into that list
-* TypeId->ComponentId hash lookup
-* Cache where possible (ex: Queries)
-
-## Summary of Done Things
+## DONE
 
 * Complete World rewrite (no shared hecs code, other than the entity id allocator)
     * Multiple component storages (tables and sparse sets)
     * EntityRef / EntityMut api
     * Archetype Graph
+    * ComponentId + ComponentInfo
+        * Densely packed
+            * access comparisons are now bitsets everywhere (reduces hashing)
+            * Cheaper to look up component info: sparse set instead of hashmap
 * Stateful Queries
     * QueryState
-    * Fetch and Filter state (stored in QueryStt)
+    * Fetch and Filter state (stored in QueryState)
 * Perf improvements
     * much faster fragmented iterator perf
     * muuuuuch faster sparse fragmented perf
     * faster table component adds/removes
     * sparse component add/removes 
-* Smaller Codebase (verify numbers at the end)
-* Reduced monomorphization (measure compile time difference)
+* Query conflicts are determined by Component access instead of Archetype Component access
+    * stricter, but more predictable. lets see how it plays out
+* Smaller Codebase (verify numbers at the end, at the very least core is smaller?)
+* Reduced monomorphization (ty measuring compile time difference)
 * More granular module organization
 * Direct stateless World queries are slower
 * SystemParam state (still needs "settable" params)
-* Safe entity reservation api
-
-## random thoughts
-
-* Archetype/Component Graph?
-* quickly hack it in to see if it regresses perf?
-* how to reconcile iteration order:
-    * iterating archetypes will be a different order than iterating sparse sets
-* Bundle type -> ComponentId cache
-* Consider using BlobVec in Archetpe
-* Use ComponentIds + SparseSets in Archetype for type lookup
-* use archetype generation to get the range of archetypes to update
+* Safer
+    * Entity reservation uses a normal world reference instead of unsafe transmute
+    * QuerySets no longer transmute lifetimes
 
 ## TODO
 * world id safety
 * core
-    * rename core to world
     * un-comment all tests
     * Or Filter
     * Removal Tracking
@@ -58,6 +47,8 @@
     * Make SystemParam an unsafe trait
     * Local
 * high level
+    * Query conflict detection
+    * QuerySet
     * par_iter
     * Rename System::Update() to System::UpdateAccess() (only pass in required data)
     * investigate slower becs3 schedule perf (54 vs 69 us) ... afaik ive only subtracted ops so wtf
@@ -92,29 +83,3 @@
 ## New Limitations
 
 * Resources added at runtime will be ignored
-
-
-## Scratch
-
-A: Archetype
-B: Archetype
-C: SparseSet
-
-Insert (A, B, C)
-
-
-
-impl Bundle for (A, B, C)
-
-* 
-
-## SparseSet
-
-```rust
-struct SparseSet<T> {
-    components: Vec<T>
-    entities: Vec<Entity>,
-    set: Vec<MaybeUninit<Entity>>,
-    flags: Vec<ComponentFlags>
-}
-```
