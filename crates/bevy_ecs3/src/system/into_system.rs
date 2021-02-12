@@ -38,21 +38,21 @@ impl<Sys: System> IntoSystem<(), Sys> for Sys {
 pub struct In<In>(pub In);
 struct InputMarker;
 
-pub struct FunctionSystem<
-    In,
-    Out,
+pub struct FunctionSystem<In, Out, Param, Marker, F>
+where
     Param: SystemParam,
-    Marker,
     F: SystemFunction<In, Out, Param, Marker>,
-> {
+{
     func: F,
     param_state: Option<Param::State>,
     system_state: SystemState,
     marker: PhantomData<(In, Out, Marker)>,
 }
 
-impl<In, Out, Param: SystemParam, Marker, F: SystemFunction<In, Out, Param, Marker>> From<F>
-    for FunctionSystem<In, Out, Param, Marker, F>
+impl<In, Out, Param, Marker, F> From<F> for FunctionSystem<In, Out, Param, Marker, F>
+where
+    Param: SystemParam,
+    F: SystemFunction<In, Out, Param, Marker>,
 {
     fn from(func: F) -> Self {
         Self {
@@ -64,13 +64,13 @@ impl<In, Out, Param: SystemParam, Marker, F: SystemFunction<In, Out, Param, Mark
     }
 }
 
-impl<
-        In: Send + Sync + 'static,
-        Out: Send + Sync + 'static,
-        Param: SystemParam + Send + Sync + 'static,
-        Marker: Send + Sync + 'static,
-        F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
-    > IntoSystem<Param, FunctionSystem<In, Out, Param, Marker, F>> for F
+impl<In, Out, Param, Marker, F> IntoSystem<Param, FunctionSystem<In, Out, Param, Marker, F>> for F
+where
+    In: Send + Sync + 'static,
+    Out: Send + Sync + 'static,
+    Param: SystemParam + Send + Sync + 'static,
+    Marker: Send + Sync + 'static,
+    F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
 {
     fn system(self) -> FunctionSystem<In, Out, Param, Marker, F> {
         FunctionSystem {
@@ -82,13 +82,13 @@ impl<
     }
 }
 
-impl<
-        In: Send + Sync + 'static,
-        Out: Send + Sync + 'static,
-        Param: SystemParam + Send + Sync + 'static,
-        Marker: Send + Sync + 'static,
-        F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
-    > System for FunctionSystem<In, Out, Param, Marker, F>
+impl<In, Out, Param, Marker, F> System for FunctionSystem<In, Out, Param, Marker, F>
+where
+    In: Send + Sync + 'static,
+    Out: Send + Sync + 'static,
+    Param: SystemParam + Send + Sync + 'static,
+    Marker: Send + Sync + 'static,
+    F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
 {
     type In = In;
     type Out = Out;
@@ -454,7 +454,6 @@ mod tests {
     #[test]
     fn query_set_system() {
         fn sys(_set: QuerySet<(Query<&mut A>, Query<&B>)>) {}
-
         let mut world = World::default();
         world.spawn().insert(A);
 
