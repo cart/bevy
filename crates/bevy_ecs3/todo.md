@@ -27,33 +27,34 @@
     * Entity reservation uses a normal world reference instead of unsafe transmute
     * QuerySets no longer transmute lifetimes
     * SystemParamState is an unsafe trait
+* Slightly nicer IntoSystem / FuncSystem impl (inspired by DJMcnab's work)
 
 ## TODO
 * world id safety
 * documentation / symbol review
 * todo review
 * core
-    * un-comment all tests
     * Or Filter
     * Removal Tracking
     * Flags
-    * fail on duplicate components in bundle
-    * try removing pre-hash in favor of non-owned get (to allow collision resolution)
     * remove one by one (remove_intersection)
+    * batch_iter
+    * Update bundle derive macro
+    * Optimize SparseSet::insert (code is written but it has memory issues)
+    * fail on duplicate components in bundle
+    * un-comment all tests
+    * try removing pre-hash in favor of non-owned get (to allow collision resolution)
     * prevent allocating in empty archetype on init (maybe use a EntityMutUninit?)
         * last attempt dropped perf
     * simplify SAFETY text
     * consistent unchecked_mut
-    * batch_iter
-    * Update bundle derive macro
-    * Consider making archetype id a usize (but still u32 in entity id)
     * try removing "unchecked" methods to cut down on unsafe and see if it cuts perf 
-    * Optimize SparseSet::insert (code is written but it has memory issues)
     * Foreach tests
     * Test stateful query adapting to archetype changes
     * Give Option fetch access updating some scrutiny
 * high level
     * par_iter
+    * Set-able system params
     * Rename System::Update() to System::UpdateAccess() (only pass in required data)
     * investigate slower becs3 schedule perf (54 vs 69 us) ... afaik ive only subtracted ops so wtf
 * resources

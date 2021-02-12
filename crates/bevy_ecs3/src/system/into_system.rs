@@ -1,8 +1,8 @@
 use crate::{
     core::{Access, ArchetypeComponentId, ComponentId, World},
-    system::{SystemParamFetch, System, SystemId, SystemParam, SystemParamState},
+    system::{System, SystemId, SystemParam, SystemParamFetch, SystemParamState},
 };
-use std::borrow::Cow;
+use std::{borrow::Cow, marker::PhantomData};
 
 pub struct SystemState {
     pub(crate) id: SystemId,
@@ -12,123 +12,15 @@ pub struct SystemState {
     pub(crate) is_non_send: bool,
 }
 
-pub struct FuncSystem<Out, ParamState> {
-    func: Box<
-        dyn FnMut(&mut ParamState, &mut SystemState, &World) -> Option<Out> + Send + Sync + 'static,
-    >,
-    apply_buffers:
-        Box<dyn FnMut(&mut ParamState, &mut SystemState, &mut World) + Send + Sync + 'static>,
-    init_func: Box<dyn FnMut(&mut SystemState, &mut World) -> ParamState + Send + Sync + 'static>,
-    state: SystemState,
-    param_state: Option<ParamState>,
-}
-
-impl<ParamState: SystemParamState + 'static, Out: 'static> System for FuncSystem<Out, ParamState> {
-    type In = ();
-    type Out = Out;
-
-    fn name(&self) -> std::borrow::Cow<'static, str> {
-        self.state.name.clone()
-    }
-
-    fn id(&self) -> SystemId {
-        self.state.id
-    }
-
-    fn update(&mut self, world: &World) {
-        let param_state = self.param_state.as_mut().unwrap();
-        param_state.update(world, &mut self.state);
-    }
-
-    fn component_access(&self) -> &Access<ComponentId> {
-        &self.state.component_access
-    }
-
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
-        &self.state.archetype_component_access
-    }
-
-    fn is_non_send(&self) -> bool {
-        self.state.is_non_send
-    }
-
-    unsafe fn run_unsafe(&mut self, _input: Self::In, world: &World) -> Option<Out> {
-        (self.func)(self.param_state.as_mut().unwrap(), &mut self.state, world)
-    }
-
-    fn apply_buffers(&mut self, world: &mut World) {
-        (self.apply_buffers)(self.param_state.as_mut().unwrap(), &mut self.state, world)
-    }
-
-    fn initialize(&mut self, world: &mut World) {
-        self.param_state = Some((self.init_func)(&mut self.state, world));
-    }
-}
-
-pub struct InputFuncSystem<In, Out, ParamState> {
-    func: Box<
-        dyn FnMut(In, &mut ParamState, &mut SystemState, &World) -> Option<Out>
-            + Send
-            + Sync
-            + 'static,
-    >,
-    apply_buffers:
-        Box<dyn FnMut(&mut ParamState, &mut SystemState, &mut World) + Send + Sync + 'static>,
-    init_func: Box<dyn FnMut(&mut SystemState, &mut World) -> ParamState + Send + Sync + 'static>,
-    state: SystemState,
-    param_state: Option<ParamState>,
-}
-
-impl<In: 'static, Out: 'static, ParamState: SystemParamState + Send + Sync + 'static> System
-    for InputFuncSystem<In, Out, ParamState>
-{
-    type In = In;
-    type Out = Out;
-
-    fn name(&self) -> std::borrow::Cow<'static, str> {
-        self.state.name.clone()
-    }
-
-    fn id(&self) -> SystemId {
-        self.state.id
-    }
-
-    fn update(&mut self, world: &World) {
-        let param_state = self.param_state.as_mut().unwrap();
-        param_state.update(world, &mut self.state);
-    }
-
-    fn component_access(&self) -> &Access<ComponentId> {
-        &self.state.component_access
-    }
-
-    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
-        &self.state.archetype_component_access
-    }
-
-    fn is_non_send(&self) -> bool {
-        self.state.is_non_send
-    }
-
-    unsafe fn run_unsafe(&mut self, input: In, world: &World) -> Option<Out> {
-        (self.func)(
-            input,
-            &mut self.param_state.as_mut().unwrap(),
-            &mut self.state,
-            world,
-        )
-    }
-
-    fn apply_buffers(&mut self, world: &mut World) {
-        (self.apply_buffers)(
-            &mut self.param_state.as_mut().unwrap(),
-            &mut self.state,
-            world,
-        )
-    }
-
-    fn initialize(&mut self, world: &mut World) {
-        self.param_state = Some((self.init_func)(&mut self.state, world));
+impl SystemState {
+    fn new<T>() -> Self {
+        Self {
+            name: std::any::type_name::<T>().into(),
+            archetype_component_access: Access::default(),
+            component_access: Access::default(),
+            is_non_send: false,
+            id: SystemId::new(),
+        }
     }
 }
 
@@ -142,84 +34,169 @@ impl<Sys: System> IntoSystem<(), Sys> for Sys {
         self
     }
 }
+
 pub struct In<In>(pub In);
+struct InputMarker;
+
+pub struct FunctionSystem<
+    In,
+    Out,
+    Param: SystemParam,
+    Marker,
+    F: SystemFunction<In, Out, Param, Marker>,
+> {
+    func: F,
+    param_state: Option<Param::State>,
+    system_state: SystemState,
+    marker: PhantomData<(In, Out, Marker)>,
+}
+
+impl<In, Out, Param: SystemParam, Marker, F: SystemFunction<In, Out, Param, Marker>> From<F>
+    for FunctionSystem<In, Out, Param, Marker, F>
+{
+    fn from(func: F) -> Self {
+        Self {
+            func,
+            param_state: None,
+            system_state: SystemState::new::<F>(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<
+        In: Send + Sync + 'static,
+        Out: Send + Sync + 'static,
+        Param: SystemParam + Send + Sync + 'static,
+        Marker: Send + Sync + 'static,
+        F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
+    > IntoSystem<Param, FunctionSystem<In, Out, Param, Marker, F>> for F
+{
+    fn system(self) -> FunctionSystem<In, Out, Param, Marker, F> {
+        FunctionSystem {
+            func: self,
+            param_state: None,
+            system_state: SystemState::new::<F>(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<
+        In: Send + Sync + 'static,
+        Out: Send + Sync + 'static,
+        Param: SystemParam + Send + Sync + 'static,
+        Marker: Send + Sync + 'static,
+        F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
+    > System for FunctionSystem<In, Out, Param, Marker, F>
+{
+    type In = In;
+    type Out = Out;
+
+    #[inline]
+    fn name(&self) -> Cow<'static, str> {
+        self.system_state.name.clone()
+    }
+
+    #[inline]
+    fn id(&self) -> SystemId {
+        self.system_state.id
+    }
+
+    #[inline]
+    fn update(&mut self, world: &World) {
+        let param_state = self.param_state.as_mut().unwrap();
+        param_state.update(world, &mut self.system_state);
+    }
+
+    #[inline]
+    fn component_access(&self) -> &Access<ComponentId> {
+        &self.system_state.component_access
+    }
+
+    #[inline]
+    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
+        &self.system_state.archetype_component_access
+    }
+
+    #[inline]
+    fn is_non_send(&self) -> bool {
+        self.system_state.is_non_send
+    }
+
+    #[inline]
+    unsafe fn run_unsafe(&mut self, input: Self::In, world: &World) -> Option<Self::Out> {
+        self.func.run(
+            input,
+            self.param_state.as_mut().unwrap(),
+            &self.system_state,
+            world,
+        )
+    }
+
+    #[inline]
+    fn apply_buffers(&mut self, world: &mut World) {
+        let param_state = self.param_state.as_mut().unwrap();
+        param_state.apply(world);
+    }
+
+    #[inline]
+    fn initialize(&mut self, world: &mut World) {
+        self.param_state = Some(<Param::State as SystemParamState>::init(
+            world,
+            &mut self.system_state,
+        ));
+    }
+}
+
+pub trait SystemFunction<In, Out, Param: SystemParam, Marker> {
+    fn run(
+        &mut self,
+        input: In,
+        state: &mut Param::State,
+        system_state: &SystemState,
+        world: &World,
+    ) -> Option<Out>;
+}
 
 macro_rules! impl_into_system {
     ($($param: ident),*) => {
-        impl<Func, Out, $($param: SystemParam),*> IntoSystem<($($param,)*), FuncSystem<Out, ($($param::State,)*)>> for Func
+        #[allow(non_snake_case)]
+        impl<Out, Func, $($param: SystemParam),*> SystemFunction<(), Out, ($($param,)*), ()> for Func
         where
             Func:
                 FnMut($($param),*) -> Out +
                 FnMut($(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out +
                 Send + Sync + 'static, Out: 'static
         {
-            #[allow(unused_variables)]
-            #[allow(unused_unsafe)]
-            #[allow(non_snake_case)]
-            fn system(mut self) -> FuncSystem<Out, ($($param::State,)*)> {
-                FuncSystem {
-                    state: SystemState {
-                        name: std::any::type_name::<Self>().into(),
-                        archetype_component_access: Access::default(),
-                        component_access: Access::default(),
-                        is_non_send: false,
-                        id: SystemId::new(),
-                    },
-                    func: Box::new(move |param_state, state, world| {
-                        unsafe {
-                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::State as SystemParamFetch>::get_param(param_state, state, world) {
-                                Some(self($($param),*))
-                            } else {
-                                None
-                            }
-                        }
-                    }),
-                    apply_buffers: Box::new(|param_state, state, world| {
-                        param_state.apply(world);
-                    }),
-                    param_state: None,
-                    init_func: Box::new(|state, world| {
-                        ($(<$param::State as SystemParamState>::init(world, state),)*)
-                    }),
+            #[inline]
+            fn run(&mut self, _input: (), state: &mut <($($param,)*) as SystemParam>::State, system_state: &SystemState, world: &World) -> Option<Out> {
+                unsafe {
+                    if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::State as SystemParamFetch>::get_param(state, system_state, world) {
+                        Some(self($($param),*))
+                    } else {
+                        None
+                    }
                 }
             }
         }
 
-        impl<Func, Input, Out, $($param: SystemParam),*> IntoSystem<(Input, $($param,)*), InputFuncSystem<Input, Out, ($($param::State,)*)>> for Func
+        #[allow(non_snake_case)]
+        impl<Input, Out, Func, $($param: SystemParam),*> SystemFunction<Input, Out, ($($param,)*), InputMarker> for Func
         where
             Func:
                 FnMut(In<Input>, $($param),*) -> Out +
                 FnMut(In<Input>, $(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out +
-                Send + Sync + 'static, Input: 'static, Out: 'static
+                Send + Sync + 'static, Out: 'static
         {
-            #[allow(unused_variables)]
-            #[allow(unused_unsafe)]
-            #[allow(non_snake_case)]
-            fn system(mut self) -> InputFuncSystem<Input, Out, ($($param::State,)*)> {
-                InputFuncSystem {
-                    state: SystemState {
-                        name: std::any::type_name::<Self>().into(),
-                        archetype_component_access: Access::default(),
-                        component_access: Access::default(),
-                        is_non_send: false,
-                        id: SystemId::new(),
-                    },
-                    func: Box::new(move |input, param_state, state, world| {
-                        unsafe {
-                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::State as SystemParamFetch>::get_param(param_state, state, world) {
-                                Some(self(In(input), $($param),*))
-                            } else {
-                                None
-                            }
-                        }
-                    }),
-                    param_state: None,
-                    apply_buffers: Box::new(|param_state, state, world| {
-                        param_state.apply(world);
-                    }),
-                    init_func: Box::new(|state, world| {
-                        ($(<$param::State as SystemParamState>::init(world, state),)*)
-                    }),
+            #[inline]
+            fn run(&mut self, input: Input, state: &mut <($($param,)*) as SystemParam>::State, system_state: &SystemState, world: &World) -> Option<Out> {
+                unsafe {
+                    if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::State as SystemParamFetch>::get_param(state, system_state, world) {
+                        Some(self(In(input), $($param),*))
+                    } else {
+                        None
+                    }
                 }
             }
         }
@@ -246,7 +223,11 @@ impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::{Entity, With, World, FromWorld}, schedule::{Schedule, Stage, SystemStage}, system::{Local, Query, QuerySet, Res, ResMut, System}};
+    use crate::{
+        core::{Entity, FromWorld, With, World},
+        schedule::{Schedule, Stage, SystemStage},
+        system::{Local, Query, QuerySet, Res, ResMut, System},
+    };
 
     use super::IntoSystem;
     #[derive(Debug, Eq, PartialEq, Default)]
@@ -559,7 +540,7 @@ mod tests {
         }
 
         impl FromWorld for Foo {
-            fn from_world(world: &World) -> Self{
+            fn from_world(world: &World) -> Self {
                 Foo {
                     value: *world.get_resource::<u32>().unwrap() + 1,
                 }
