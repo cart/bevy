@@ -17,7 +17,11 @@ pub trait SystemParam: Sized {
     type Fetch: for<'a> FetchSystemParam<'a, State = Self::State>;
 }
 
-pub trait SystemParamState: Send + Sync + 'static {
+/// # Safety
+/// it is the implementors responsibility to ensure `system_state` is populated with the _exact_
+/// [World] access used by the SystemParamState (and associated FetchSystemParam). Additionally, it is the
+/// implementor's responsibility to ensure there is no conflicting access across all params. 
+pub unsafe trait SystemParamState: Send + Sync + 'static {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self;
     #[inline]
     fn update(&mut self, _world: &World, _system_state: &mut SystemState) {}
@@ -45,7 +49,9 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Quer
     type State = QueryState<Q, F>;
 }
 
-impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for QueryState<Q, F> {
+// SAFE: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemState. If this QueryState conflicts
+// with any prior access, a panic will occur.
+unsafe impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for QueryState<Q, F> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let state = QueryState::new(world);
         assert_component_access_compatibility(
@@ -128,17 +134,19 @@ impl<'w, T: Component> Deref for Res<'w, T> {
 }
 
 pub struct FetchRes<T>(PhantomData<T>);
-pub struct FetchResState<T> {
+pub struct ResState<T> {
     component_id: ComponentId,
     marker: PhantomData<T>,
 }
 
 impl<'a, T: Component> SystemParam for Res<'a, T> {
     type Fetch = FetchRes<T>;
-    type State = FetchResState<T>;
+    type State = ResState<T>;
 }
 
-impl<T: Component> SystemParamState for FetchResState<T> {
+// SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
+// with any prior access, a panic will occur.
+unsafe impl<T: Component> SystemParamState for ResState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
@@ -172,7 +180,7 @@ impl<T: Component> SystemParamState for FetchResState<T> {
 
 impl<'a, T: Component> FetchSystemParam<'a> for FetchRes<T> {
     type Item = Res<'a, T>;
-    type State = FetchResState<T>;
+    type State = ResState<T>;
 
     #[inline]
     unsafe fn get_param(
@@ -218,7 +226,9 @@ impl<'a, T: Component> SystemParam for ResMut<'a, T> {
     type State = FetchResMutState<T>;
 }
 
-impl<T: Component> SystemParamState for FetchResMutState<T> {
+// SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
+// with any prior access, a panic will occur.
+unsafe impl<T: Component> SystemParamState for FetchResMutState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
@@ -279,7 +289,8 @@ impl<'a> SystemParam for Commands<'a> {
     type State = CommandQueue;
 }
 
-impl SystemParamState for CommandQueue {
+// SAFE: only local state is accessed
+unsafe impl SystemParamState for CommandQueue {
     fn init(_world: &mut World, _system_state: &mut SystemState) -> Self {
         Default::default()
     }
@@ -330,8 +341,9 @@ macro_rules! impl_system_param_tuple {
             }
         }
 
+        /// SAFE: implementors of each SystemParamState in the tuple have validated their impls
         #[allow(non_snake_case)]
-        impl<$($param: SystemParamState),*> SystemParamState for ($($param,)*) {
+        unsafe impl<$($param: SystemParamState),*> SystemParamState for ($($param,)*) {
             #[inline]
             fn init(_world: &mut World, _system_state: &mut SystemState) -> Self {
                 (($($param::init(_world, _system_state),)*))

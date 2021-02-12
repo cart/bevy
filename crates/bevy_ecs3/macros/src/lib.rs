@@ -294,7 +294,9 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
                 type State = QuerySetState<(#(QueryState<#query, #filter>,)*)>;
             }
 
-            impl<#(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParamState for QuerySetState<(#(QueryState<#query, #filter>,)*)> {
+            // SAFE: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemState. If any QueryState conflicts
+            // with any prior access, a panic will occur.
+            unsafe impl<#(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParamState for QuerySetState<(#(QueryState<#query, #filter>,)*)> {
                 fn init(world: &mut World, system_state: &mut SystemState) -> Self {
                     #(
                         let #query = QueryState::<#query, #filter>::init(world, system_state);

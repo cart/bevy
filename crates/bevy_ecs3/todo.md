@@ -26,6 +26,7 @@
 * Safer
     * Entity reservation uses a normal world reference instead of unsafe transmute
     * QuerySets no longer transmute lifetimes
+    * SystemParamState is an unsafe trait
 
 ## TODO
 * world id safety
@@ -44,7 +45,6 @@
     * batch_iter
     * Update bundle derive macro
     * Consider making archetype id a usize (but still u32 in entity id)
-    * Make SystemParam an unsafe trait
     * try removing "unchecked" methods to cut down on unsafe and see if it cuts perf 
     * Optimize SparseSet::insert (code is written but it has memory issues)
     * Local
