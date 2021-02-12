@@ -27,10 +27,7 @@ macro_rules! smaller_tuples_too {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{
-        Added, Changed, Component, ComponentDescriptor, Entity, Mutated, QueryFilter, StorageType,
-        With, Without, World,
-    };
+    use crate::core::{Added, Changed, Component, ComponentDescriptor, Entity, Mutated, Or, QueryFilter, StorageType, With, Without, World};
 
     #[derive(Debug, PartialEq, Eq)]
     struct A(usize);
@@ -150,6 +147,20 @@ mod tests {
     #[test]
     fn query_filter_with() {
         let mut world = World::new();
+        world.spawn().insert_bundle((123u32, 1.0f32));
+        world.spawn().insert(456u32);
+        let result = world
+            .query_filtered::<&u32, With<f32>>()
+            .iter(&world)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(result, vec![123]);
+    }
+
+    #[test]
+    fn query_filter_with_sparse() {
+        let mut world = World::new();
+        world.register_component(ComponentDescriptor::of::<f32>(StorageType::SparseSet)).unwrap();
         world.spawn().insert_bundle((123u32, 1.0f32));
         world.spawn().insert(456u32);
         let result = world
@@ -660,30 +671,30 @@ mod tests {
         assert_eq!(a_b_mutated, vec![e2]);
     }
 
-    // #[test]
-    // fn or_mutated_query() {
-    //     let mut world = World::default();
-    //     let e1 = world.spawn().insert_bundle((A(0), B(0))).id();
-    //     let e2 = world.spawn().insert_bundle((A(0), B(0))).id();
-    //     let e3 = world.spawn().insert_bundle((A(0), B(0))).id();
-    //     world.spawn().insert_bundle((A(0), B(0)));
+    #[test]
+    fn or_mutated_query() {
+        let mut world = World::default();
+        let e1 = world.spawn().insert_bundle((A(0), B(0))).id();
+        let e2 = world.spawn().insert_bundle((A(0), B(0))).id();
+        let e3 = world.spawn().insert_bundle((A(0), B(0))).id();
+        world.spawn().insert_bundle((A(0), B(0)));
 
-    //     // Mutate A in entities e1 and e2
-    //     for mut a in <&mut A>().take(2) {
-    //         a.0 += 1;
-    //     }
-    //     // Mutate B in entities e2 and e3
-    //     for mut b in <&mut B>().skip(1).take(2) {
-    //         b.0 += 1;
-    //     }
+        // Mutate A in entities e1 and e2
+        for mut a in world.query::<&mut A>().iter_mut(&mut world).take(2) {
+            a.0 += 1;
+        }
+        // Mutate B in entities e2 and e3
+        for mut b in world.query::<&mut B>().iter_mut(&mut world).skip(1).take(2) {
+            b.0 += 1;
+        }
 
-    //     let a_b_mutated = world
-    //         .query::<Entity>()
-    //         .filter::<Or<(Mutated<A>, Mutated<B>)>>()
-    //         .collect::<Vec<Entity>>();
-    //     // e1 has mutated A, e3 has mutated B, e2 has mutated A and B, _e4 has no mutated component
-    //     assert_eq!(a_b_mutated, vec![e1, e2, e3]);
-    // }
+        let a_b_mutated = world
+            .query_filtered::<Entity, Or<(Mutated<A>, Mutated<B>)>>()
+            .iter(&world)
+            .collect::<Vec<Entity>>();
+        // e1 has mutated A, e3 has mutated B, e2 has mutated A and B, _e4 has no mutated component
+        assert_eq!(a_b_mutated, vec![e1, e2, e3]);
+    }
 
     #[test]
     fn changed_query() {

@@ -207,11 +207,7 @@ impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        core::{Entity, FromWorld, With, World},
-        schedule::{Schedule, Stage, SystemStage},
-        system::{IntoSystem, Local, Query, QuerySet, Res, ResMut, System},
-    };
+    use crate::{core::{Entity, FromWorld, Or, With, World, Changed, Added, Mutated}, schedule::{Schedule, Stage, SystemStage}, system::{IntoSystem, Local, Query, QuerySet, Res, ResMut, System}};
 
     #[derive(Debug, Eq, PartialEq, Default)]
     struct A;
@@ -302,38 +298,36 @@ mod tests {
         assert!(*world.get_resource::<bool>().unwrap(), "system ran");
     }
 
-    // #[test]
-    // fn or_query_set_system() {
-    //     // Regression test for issue #762
-    //     use crate::{Added, Changed, Mutated, Or};
-    //     fn query_system(
-    //         mut ran: ResMut<bool>,
-    //         set: QuerySet<(
-    //             Query<(), Or<(Changed<A>, Changed<B>)>>,
-    //             Query<(), Or<(Added<A>, Added<B>)>>,
-    //             Query<(), Or<(Mutated<A>, Mutated<B>)>>,
-    //         )>,
-    //     ) {
-    //         let changed = set.q0().iter().count();
-    //         let added = set.q1().iter().count();
-    //         let mutated = set.q2().iter().count();
+    #[test]
+    fn or_query_set_system() {
+        // Regression test for issue #762
+        fn query_system(
+            mut ran: ResMut<bool>,
+            set: QuerySet<(
+                Query<(), Or<(Changed<A>, Changed<B>)>>,
+                Query<(), Or<(Added<A>, Added<B>)>>,
+                Query<(), Or<(Mutated<A>, Mutated<B>)>>,
+            )>,
+        ) {
+            let changed = set.q0().iter().count();
+            let added = set.q1().iter().count();
+            let mutated = set.q2().iter().count();
 
-    //         assert_eq!(changed, 1);
-    //         assert_eq!(added, 1);
-    //         assert_eq!(mutated, 0);
+            assert_eq!(changed, 1);
+            assert_eq!(added, 1);
+            assert_eq!(mutated, 0);
 
-    //         *ran = true;
-    //     }
+            *ran = true;
+        }
 
-    //     let mut world = World::default();
-    //     let mut resources = Resources::default();
-    //     resources.insert(false);
-    //     world.spawn((A, B));
+        let mut world = World::default();
+        world.insert_resource(false);
+        world.spawn().insert_bundle((A, B));
 
-    //     run_system(&mut world, &mut resources, query_system.system());
+        run_system(&mut world, query_system.system());
 
-    //     assert!(*resources.get::<bool>().unwrap(), "system ran");
-    // }
+        assert!(*world.get_resource::<bool>().unwrap(), "system ran");
+    }
 
     // #[test]
     // fn changed_resource_system() {

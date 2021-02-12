@@ -30,11 +30,13 @@
 * Slightly nicer IntoSystem / FuncSystem impl (inspired by DJMcnab's work)
 
 ## TODO
+* OHSHIT query_filter_with test breaks with SparseSet
+    * `Table[A1, A2] Sparse[B1] | Query<A, With<B1>>` matches the table, thus including A2 in the query, despite it not matching
+    * probably need to revert back to archetype iterator for sparse queries
 * world id safety
 * documentation / symbol review
 * todo review
 * core
-    * Or Filter
     * Removal Tracking
     * Flags
     * remove one by one (remove_intersection)

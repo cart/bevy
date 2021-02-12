@@ -232,6 +232,53 @@ macro_rules! impl_query_filter_tuple {
                 true $(&& $filter.matches_entity(offset))*
             }
         }
+
+        #[allow(unused_variables)]
+        #[allow(non_snake_case)]
+        impl<$($filter: QueryFilter),*> QueryFilter for Or<($($filter,)*)> {
+            type State = Or<($($filter::State,)*)>;
+            const DANGLING: Self = Or(($($filter::DANGLING,)*));
+
+            unsafe fn init(world: &World, state: &Self::State) -> Self {
+                let ($($filter,)*) = &state.0;
+                Or(($($filter::init(world, $filter),)*))
+            }
+
+            #[inline]
+            unsafe fn next_table(&mut self, table: &Table) {
+                let ($($filter,)*) = &mut self.0;
+                $($filter.next_table(table);)*
+            }
+
+            #[inline]
+            unsafe fn matches_entity(&self, offset: usize) -> bool {
+                let ($($filter,)*) = &self.0;
+                false $(|| $filter.matches_entity(offset))*
+            }
+        }
+
+        #[allow(unused_variables)]
+        #[allow(non_snake_case)]
+        impl<$($filter: FetchState),*> FetchState for Or<($($filter,)*)> {
+            fn init(_world: &mut World) -> Self {
+                Or(($($filter::init(_world),)*))
+            }
+
+            fn update_component_access(&self, _access: &mut Access<ComponentId>) {
+                let ($($filter,)*) = &self.0;
+                $($filter.update_component_access(_access);)*
+            }
+
+            fn update_archetype_component_access(&self, _archetype: &Archetype, _access: &mut Access<ArchetypeComponentId>) {
+                let ($($filter,)*) = &self.0;
+                $($filter.update_archetype_component_access(_archetype, _access);)*
+            }
+
+            fn matches_archetype(&self, _archetype: &Archetype) -> bool {
+                let ($($filter,)*) = &self.0;
+                false $(|| $filter.matches_archetype(_archetype))*
+            }
+        }
     };
 }
 

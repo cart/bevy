@@ -428,8 +428,10 @@ impl<T: FetchState> FetchState for OptionState<T> {
         archetype: &Archetype,
         access: &mut Access<ArchetypeComponentId>,
     ) {
-        self.state
-            .update_archetype_component_access(archetype, access)
+        if self.state.matches_archetype(archetype) {
+            self.state
+                .update_archetype_component_access(archetype, access)
+        }
     }
 
     fn matches_archetype(&self, _archetype: &Archetype) -> bool {
