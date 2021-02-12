@@ -10,11 +10,11 @@ use std::{
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct ArchetypeId(u32);
+pub struct ArchetypeId(usize);
 
 impl ArchetypeId {
     #[inline]
-    pub const fn new(index: u32) -> Self {
+    pub const fn new(index: usize) -> Self {
         ArchetypeId(index)
     }
 
@@ -29,7 +29,7 @@ impl ArchetypeId {
     }
 
     #[inline]
-    pub fn index(&self) -> u32 {
+    pub fn index(&self) -> usize {
         self.0
     }
 
@@ -393,17 +393,17 @@ impl Archetypes {
 
     #[inline]
     pub fn get(&self, id: ArchetypeId) -> Option<&Archetype> {
-        self.archetypes.get(id.0 as usize)
+        self.archetypes.get(id.0)
     }
 
     #[inline]
     pub unsafe fn get_unchecked(&self, id: ArchetypeId) -> &Archetype {
-        self.archetypes.get_unchecked(id.0 as usize)
+        self.archetypes.get_unchecked(id.0)
     }
 
     #[inline]
     pub unsafe fn get_unchecked_mut(&mut self, id: ArchetypeId) -> &mut Archetype {
-        self.archetypes.get_unchecked_mut(id.0 as usize)
+        self.archetypes.get_unchecked_mut(id.0)
     }
 
     #[inline]
@@ -436,7 +436,7 @@ impl Archetypes {
             id
         };
         *self.archetype_ids.entry(hash).or_insert_with(move || {
-            let id = ArchetypeId(archetypes.len() as u32);
+            let id = ArchetypeId(archetypes.len());
             let table_archetype_components = (0..table_components.len())
                 .map(|_| next_archetype_component_id())
                 .collect();
@@ -464,7 +464,7 @@ impl Archetypes {
         // SAFE: resource archetype is guaranteed to exist
         let resource_archetype = unsafe {
             self.archetypes
-                .get_unchecked_mut(ArchetypeId::resource_archetype().index() as usize)
+                .get_unchecked_mut(ArchetypeId::resource_archetype().index())
         };
         let unique_components = &mut resource_archetype.unique_components;
         let component_id = components.get_or_insert_resource_id::<T>();
@@ -544,7 +544,7 @@ impl Archetypes {
         // SAFE: resource archetype is guaranteed to exist
         let resource_archetype = unsafe {
             self.archetypes
-                .get_unchecked(ArchetypeId::resource_archetype().index() as usize)
+                .get_unchecked(ArchetypeId::resource_archetype().index())
         };
         let unique_components = resource_archetype.unique_components();
         unique_components.contains(component_id)
@@ -563,7 +563,7 @@ impl Archetypes {
         // SAFE: resource archetype is guaranteed to exist
         let resource_archetype = unsafe {
             self.archetypes
-                .get_unchecked(ArchetypeId::resource_archetype().index() as usize)
+                .get_unchecked(ArchetypeId::resource_archetype().index())
         };
         let unique_components = resource_archetype.unique_components();
         unique_components.get(component_id)

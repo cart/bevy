@@ -165,8 +165,8 @@ impl Tables {
     ) -> (&mut Table, &mut Table) {
         let ptr = self.tables.as_mut_ptr();
         (
-            &mut *ptr.add(a.index() as usize),
-            &mut *ptr.add(b.index() as usize),
+            &mut *ptr.add(a.index()),
+            &mut *ptr.add(b.index()),
         )
     }
 

@@ -62,7 +62,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         for archetype_index in archetype_index_range.clone() {
             // SAFE: archetype indices less than the archetype generation are guaranteed to exist
             let archetype =
-                unsafe { archetypes.get_unchecked(ArchetypeId::new(archetype_index as u32)) };
+                unsafe { archetypes.get_unchecked(ArchetypeId::new(archetype_index)) };
             let table_index = archetype.table_id().index();
             if !self.matched_tables.contains(table_index)
                 && self.fetch_state.matches_archetype(archetype)
@@ -124,7 +124,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         let location = world.entities.get(entity)?;
         if !self
             .matched_archetypes
-            .contains(location.archetype_id.index() as usize)
+            .contains(location.archetype_id.index())
         {
             return None;
         }

@@ -104,7 +104,7 @@ impl<'w, 's, Q: WorldQuery> ExactSizeIterator for QueryIter<'w, 's, Q, ()> {
                 let archetype = unsafe {
                     self.world
                         .archetypes
-                        .get_unchecked(ArchetypeId::new(index as u32))
+                        .get_unchecked(ArchetypeId::new(index))
                 };
                 archetype.len()
             })
