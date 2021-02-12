@@ -290,7 +290,7 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
         let query_fn_mut = &query_fn_muts[0..query_count];
         tokens.extend(TokenStream::from(quote! {
             impl<'w, #(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParam for QuerySet<(#(Query<'w, #query, #filter>,)*)> {
-                type Fetch = FetchQuerySet<(#(QueryState<#query, #filter>,)*)>;
+                type Fetch = QuerySetFetch<(#(QueryState<#query, #filter>,)*)>;
                 type State = QuerySetState<(#(QueryState<#query, #filter>,)*)>;
             }
 
@@ -310,7 +310,7 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<'a, #(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> FetchSystemParam<'a> for FetchQuerySet<(#(QueryState<#query, #filter>,)*)> {
+            impl<'a, #(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParamFetch<'a> for QuerySetFetch<(#(QueryState<#query, #filter>,)*)> {
                 type Item = QuerySet<(#(Query<'a, #query, #filter>,)*)>;
                 type State = QuerySetState<(#(QueryState<#query, #filter>,)*)>;
 

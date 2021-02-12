@@ -1,6 +1,6 @@
 use crate::{
     core::{Access, ArchetypeComponentId, ComponentId, World},
-    system::{FetchSystemParam, System, SystemId, SystemParam, SystemParamState},
+    system::{SystemParamFetch, System, SystemId, SystemParam, SystemParamState},
 };
 use std::borrow::Cow;
 
@@ -150,7 +150,7 @@ macro_rules! impl_into_system {
         where
             Func:
                 FnMut($($param),*) -> Out +
-                FnMut($(<<$param as SystemParam>::Fetch as FetchSystemParam>::Item),*) -> Out +
+                FnMut($(<<$param as SystemParam>::Fetch as SystemParamFetch>::Item),*) -> Out +
                 Send + Sync + 'static, Out: 'static
         {
             #[allow(unused_variables)]
@@ -167,7 +167,7 @@ macro_rules! impl_into_system {
                     },
                     func: Box::new(move |param_state, state, world| {
                         unsafe {
-                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::get_param(param_state, state, world) {
+                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as SystemParamFetch>::get_param(param_state, state, world) {
                                 Some(self($($param),*))
                             } else {
                                 None
@@ -189,7 +189,7 @@ macro_rules! impl_into_system {
         where
             Func:
                 FnMut(In<Input>, $($param),*) -> Out +
-                FnMut(In<Input>, $(<<$param as SystemParam>::Fetch as FetchSystemParam>::Item),*) -> Out +
+                FnMut(In<Input>, $(<<$param as SystemParam>::Fetch as SystemParamFetch>::Item),*) -> Out +
                 Send + Sync + 'static, Input: 'static, Out: 'static
         {
             #[allow(unused_variables)]
@@ -206,7 +206,7 @@ macro_rules! impl_into_system {
                     },
                     func: Box::new(move |input, param_state, state, world| {
                         unsafe {
-                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as FetchSystemParam>::get_param(param_state, state, world) {
+                            if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as SystemParamFetch>::get_param(param_state, state, world) {
                                 Some(self(In(input), $($param),*))
                             } else {
                                 None

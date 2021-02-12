@@ -14,7 +14,7 @@ use std::{
 
 pub trait SystemParam: Sized {
     type State: SystemParamState;
-    type Fetch: for<'a> FetchSystemParam<'a, State = Self::State>;
+    type Fetch: for<'a> SystemParamFetch<'a, State = Self::State>;
 }
 
 /// # Safety
@@ -29,7 +29,7 @@ pub unsafe trait SystemParamState: Send + Sync + 'static {
     fn apply(&mut self, _world: &mut World) {}
 }
 
-pub trait FetchSystemParam<'a> {
+pub trait SystemParamFetch<'a> {
     type Item;
     type State: 'a;
     /// # Safety
@@ -42,10 +42,10 @@ pub trait FetchSystemParam<'a> {
     ) -> Option<Self::Item>;
 }
 
-pub struct FetchQuery<Q, F>(PhantomData<(Q, F)>);
+pub struct QueryFetch<Q, F>(PhantomData<(Q, F)>);
 
 impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Query<'a, Q, F> {
-    type Fetch = FetchQuery<Q, F>;
+    type Fetch = QueryFetch<Q, F>;
     type State = QueryState<Q, F>;
 }
 
@@ -79,8 +79,8 @@ unsafe impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState 
     }
 }
 
-impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> FetchSystemParam<'a>
-    for FetchQuery<Q, F>
+impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamFetch<'a>
+    for QueryFetch<Q, F>
 {
     type Item = Query<'a, Q, F>;
     type State = QueryState<Q, F>;
@@ -116,7 +116,7 @@ fn assert_component_access_compatibility(
 }
 
 pub struct QuerySet<T>(T);
-pub struct FetchQuerySet<T>(PhantomData<T>);
+pub struct QuerySetFetch<T>(PhantomData<T>);
 pub struct QuerySetState<T>(T);
 
 impl_query_set!();
@@ -133,14 +133,14 @@ impl<'w, T: Component> Deref for Res<'w, T> {
     }
 }
 
-pub struct FetchRes<T>(PhantomData<T>);
+pub struct ResFetch<T>(PhantomData<T>);
 pub struct ResState<T> {
     component_id: ComponentId,
     marker: PhantomData<T>,
 }
 
 impl<'a, T: Component> SystemParam for Res<'a, T> {
-    type Fetch = FetchRes<T>;
+    type Fetch = ResFetch<T>;
     type State = ResState<T>;
 }
 
@@ -178,7 +178,7 @@ unsafe impl<T: Component> SystemParamState for ResState<T> {
     }
 }
 
-impl<'a, T: Component> FetchSystemParam<'a> for FetchRes<T> {
+impl<'a, T: Component> SystemParamFetch<'a> for ResFetch<T> {
     type Item = Res<'a, T>;
     type State = ResState<T>;
 
@@ -215,20 +215,20 @@ impl<'w, T: Component> DerefMut for ResMut<'w, T> {
     }
 }
 
-pub struct FetchResMut<T>(PhantomData<T>);
-pub struct FetchResMutState<T> {
+pub struct ResMutFetch<T>(PhantomData<T>);
+pub struct ResMutState<T> {
     component_id: ComponentId,
     marker: PhantomData<T>,
 }
 
 impl<'a, T: Component> SystemParam for ResMut<'a, T> {
-    type Fetch = FetchResMut<T>;
-    type State = FetchResMutState<T>;
+    type Fetch = ResMutFetch<T>;
+    type State = ResMutState<T>;
 }
 
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
 // with any prior access, a panic will occur.
-unsafe impl<T: Component> SystemParamState for FetchResMutState<T> {
+unsafe impl<T: Component> SystemParamState for ResMutState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
@@ -264,9 +264,9 @@ unsafe impl<T: Component> SystemParamState for FetchResMutState<T> {
     }
 }
 
-impl<'a, T: Component> FetchSystemParam<'a> for FetchResMut<T> {
+impl<'a, T: Component> SystemParamFetch<'a> for ResMutFetch<T> {
     type Item = ResMut<'a, T>;
-    type State = FetchResMutState<T>;
+    type State = ResMutState<T>;
 
     #[inline]
     unsafe fn get_param(
@@ -300,7 +300,7 @@ unsafe impl SystemParamState for CommandQueue {
     }
 }
 
-impl<'a> FetchSystemParam<'a> for FetchCommands {
+impl<'a> SystemParamFetch<'a> for FetchCommands {
     type Item = Commands<'a>;
     type State = CommandQueue;
 
@@ -325,7 +325,7 @@ macro_rules! impl_system_param_tuple {
         }
         #[allow(unused_variables)]
         #[allow(non_snake_case)]
-        impl<'a, $($param: FetchSystemParam<'a>),*> FetchSystemParam<'a> for FetchParamTuple<($($param,)*)> {
+        impl<'a, $($param: SystemParamFetch<'a>),*> SystemParamFetch<'a> for FetchParamTuple<($($param,)*)> {
             type Item = ($($param::Item,)*);
             type State = ($($param::State,)*);
 
@@ -370,7 +370,7 @@ macro_rules! impl_system_param_tuple {
         #[allow(unused_variables)]
         #[allow(unused_mut)]
         #[allow(non_snake_case)]
-        impl<'a, $($param: FetchSystemParam<'a>),*> FetchSystemParam<'a> for FetchOr<($($param,)*)> {
+        impl<'a, $($param: SystemParamFetch<'a>),*> SystemParamFetch<'a> for FetchOr<($($param,)*)> {
             type Item = Or<($(Option<$param::Item>,)*)>;
             type State = ($($param::State,)*);
 
