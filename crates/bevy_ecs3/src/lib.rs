@@ -9,7 +9,7 @@ pub mod prelude {
             ExclusiveSystemDescriptorCoercion, ParallelSystemDescriptorCoercion, Schedule, Stage,
             SystemStage,
         },
-        system::{IntoExclusiveSystem, IntoSystem, Query, QuerySet, System},
+        system::{IntoExclusiveSystem, IntoSystem, Query, QuerySet, System, Local},
     };
 }
 

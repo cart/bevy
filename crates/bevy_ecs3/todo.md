@@ -30,6 +30,8 @@
 
 ## TODO
 * world id safety
+* documentation / symbol review
+* todo review
 * core
     * un-comment all tests
     * Or Filter
@@ -47,7 +49,6 @@
     * Consider making archetype id a usize (but still u32 in entity id)
     * try removing "unchecked" methods to cut down on unsafe and see if it cuts perf 
     * Optimize SparseSet::insert (code is written but it has memory issues)
-    * Local
     * Foreach tests
     * Test stateful query adapting to archetype changes
     * Give Option fetch access updating some scrutiny

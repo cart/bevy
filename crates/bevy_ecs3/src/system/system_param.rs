@@ -2,8 +2,8 @@ use bevy_ecs3_macros::impl_query_set;
 
 use crate::{
     core::{
-        Access, ArchetypeId, Component, ComponentFlags, ComponentId, Or, QueryFilter, QueryState,
-        World, WorldQuery,
+        Access, ArchetypeId, Component, ComponentFlags, ComponentId, FromWorld, Or, QueryFilter,
+        QueryState, World, WorldQuery,
     },
     system::{CommandQueue, Commands, Query, SystemState},
 };
@@ -19,7 +19,7 @@ pub trait SystemParam: Sized {
 /// # Safety
 /// it is the implementors responsibility to ensure `system_state` is populated with the _exact_
 /// [World] access used by the SystemParamState (and associated FetchSystemParam). Additionally, it is the
-/// implementor's responsibility to ensure there is no conflicting access across all params. 
+/// implementor's responsibility to ensure there is no conflicting access across all SystemParams.
 pub unsafe trait SystemParamState: Send + Sync + 'static {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self;
     #[inline]
@@ -48,7 +48,9 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Quer
 
 // SAFE: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemState. If this QueryState conflicts
 // with any prior access, a panic will occur.
-unsafe impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState for QueryState<Q, F> {
+unsafe impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState
+    for QueryState<Q, F>
+{
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let state = QueryState::new(world);
         assert_component_access_compatibility(
@@ -299,6 +301,50 @@ impl<'a> SystemParamFetch<'a> for CommandQueue {
         world: &'a World,
     ) -> Option<Self::Item> {
         Some(Commands::new(state, world))
+    }
+}
+
+pub struct Local<'a, T: Component>(&'a mut T);
+
+impl<'a, T: Component> Deref for Local<'a, T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl<'a, T: Component> DerefMut for Local<'a, T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+pub struct LocalState<T>(T);
+
+impl<'a, T: Component + FromWorld> SystemParam for Local<'a, T> {
+    type State = LocalState<T>;
+}
+
+// SAFE: only local state is accessed
+unsafe impl<T: Component + FromWorld> SystemParamState for LocalState<T> {
+    fn init(world: &mut World, _system_state: &mut SystemState) -> Self {
+        Self(T::from_world(world))
+    }
+}
+
+impl<'a, T: Component + FromWorld> SystemParamFetch<'a> for LocalState<T> {
+    type Item = Local<'a, T>;
+
+    #[inline]
+    unsafe fn get_param(
+        state: &'a mut Self,
+        _system_state: &'a SystemState,
+        _world: &'a World,
+    ) -> Option<Self::Item> {
+        Some(Local(&mut state.0))
     }
 }
 

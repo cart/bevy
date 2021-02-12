@@ -7,10 +7,7 @@ use crate::{
     },
     system::System,
 };
-use bevy_utils::{
-    tracing::{error, info},
-    HashMap, HashSet,
-};
+use bevy_utils::{tracing::info, HashMap, HashSet};
 use downcast_rs::{impl_downcast, Downcast};
 use fixedbitset::FixedBitSet;
 use std::borrow::Cow;

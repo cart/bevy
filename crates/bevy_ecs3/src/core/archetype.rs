@@ -107,7 +107,6 @@ pub(crate) struct ArchetypeSwapRemoveResult {
 
 struct ArchetypeComponentInfo {
     storage_type: StorageType,
-    is_resource: bool,
     archetype_component_id: ArchetypeComponentId,
 }
 
@@ -140,7 +139,6 @@ impl Archetype {
                 *component_id,
                 ArchetypeComponentInfo {
                     storage_type: StorageType::Table,
-                    is_resource: false,
                     archetype_component_id,
                 },
             );
@@ -154,7 +152,6 @@ impl Archetype {
                 *component_id,
                 ArchetypeComponentInfo {
                     storage_type: StorageType::SparseSet,
-                    is_resource: false,
                     archetype_component_id,
                 },
             );
@@ -480,7 +477,6 @@ impl Archetypes {
                 component_id,
                 ArchetypeComponentInfo {
                     archetype_component_id: ArchetypeComponentId(self.archetype_component_count),
-                    is_resource: true,
                     storage_type: StorageType::Table,
                 },
             );

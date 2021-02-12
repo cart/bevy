@@ -11,7 +11,7 @@ impl SystemId {
     }
 }
 
-/// An ECS system that can be added to a [Schedule](crate::Schedule)
+/// An ECS system that can be added to a [Schedule](crate::schedule::Schedule)
 pub trait System: Send + Sync + 'static {
     type In;
     type Out;

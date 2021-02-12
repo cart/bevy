@@ -1,5 +1,5 @@
 use crate::core::{
-    world, ArchetypeId, Fetch, QueryFilter, QueryState, TableId, Tables, World, WorldQuery,
+    ArchetypeId, Fetch, QueryFilter, QueryState, TableId, Tables, World, WorldQuery,
 };
 
 pub struct QueryIter<'w, 's, Q: WorldQuery, F: QueryFilter> {

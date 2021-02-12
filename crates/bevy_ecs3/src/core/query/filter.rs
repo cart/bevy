@@ -2,7 +2,7 @@ use crate::core::{
     Access, Archetype, ArchetypeComponentId, Bundle, Component, ComponentFlags, ComponentId,
     ComponentSparseSet, Entity, FetchState, StorageType, Table, Tables, World,
 };
-use std::{any::TypeId, marker::PhantomData, ptr};
+use std::{marker::PhantomData, ptr};
 
 pub trait QueryFilter: Sized {
     type State: FetchState;

@@ -158,10 +158,13 @@ impl World {
     }
 
     #[inline]
-    pub fn get_resource_or_insert_with<T: Component>(&mut self, func: impl FnOnce() -> T) -> Mut<'_, T> {
-        self.archetypes.get_resource_or_insert_with(&mut self.components, func)
+    pub fn get_resource_or_insert_with<T: Component>(
+        &mut self,
+        func: impl FnOnce() -> T,
+    ) -> Mut<'_, T> {
+        self.archetypes
+            .get_resource_or_insert_with(&mut self.components, func)
     }
-
 
     #[inline]
     pub fn contains_resource<T: Component>(&mut self) -> bool {
@@ -187,3 +190,15 @@ impl fmt::Debug for World {
 
 unsafe impl Send for World {}
 unsafe impl Sync for World {}
+
+/// Creates `Self` using data from the given [World]
+pub trait FromWorld {
+    /// Creates `Self` using data from the given [World]
+    fn from_world(world: &World) -> Self;
+}
+
+impl<T: Default> FromWorld for T {
+    fn from_world(_world: &World) -> Self {
+        T::default()
+    }
+}

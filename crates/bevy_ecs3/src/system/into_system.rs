@@ -246,7 +246,7 @@ impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::{Entity, With, World}, schedule::{Schedule, Stage, SystemStage}, system::{Query, QuerySet, Res, ResMut, System}};
+    use crate::{core::{Entity, With, World, FromWorld}, schedule::{Schedule, Stage, SystemStage}, system::{Local, Query, QuerySet, Res, ResMut, System}};
 
     use super::IntoSystem;
     #[derive(Debug, Eq, PartialEq, Default)]
@@ -543,9 +543,37 @@ mod tests {
     //     test_for_conflicting_resources(sys.system())
     // }
 
-    // #[test]
-    // fn nonconflicting_system_resources() {
-    //     fn sys(_: Local<BufferRes>, _: ResMut<BufferRes>, _: Local<A>, _: ResMut<A>) {}
-    //     test_for_conflicting_resources(sys.system())
-    // }
+    #[test]
+    fn nonconflicting_system_resources() {
+        fn sys(_: Local<BufferRes>, _: ResMut<BufferRes>, _: Local<A>, _: ResMut<A>) {}
+        test_for_conflicting_resources(sys.system())
+    }
+
+    #[test]
+    fn local_system() {
+        let mut world = World::default();
+        world.insert_resource(1u32);
+        world.insert_resource(false);
+        struct Foo {
+            value: u32,
+        }
+
+        impl FromWorld for Foo {
+            fn from_world(world: &World) -> Self{
+                Foo {
+                    value: *world.get_resource::<u32>().unwrap() + 1,
+                }
+            }
+        }
+
+        fn sys(local: Local<Foo>, mut modified: ResMut<bool>) {
+            assert_eq!(local.value, 2);
+            *modified = true;
+        }
+
+        run_system(&mut world, sys.system());
+
+        // ensure the system actually ran
+        assert_eq!(*world.get_resource::<bool>().unwrap(), true);
+    }
 }

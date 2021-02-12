@@ -1,7 +1,10 @@
+use crate::{
+    core::{Component, World},
+    schedule::{Stage, SystemDescriptor, SystemStage},
+};
 use bevy_utils::HashMap;
 use std::{mem::Discriminant, ops::Deref};
 use thiserror::Error;
-use crate::{core::{Component, World}, schedule::{Stage, SystemDescriptor, SystemStage}};
 
 pub(crate) struct StateStages {
     update: Box<dyn Stage>,
@@ -141,18 +144,17 @@ impl<T: Component + Clone> Stage for StateStage<T> {
     fn run(&mut self, world: &mut World) {
         let current_stage = loop {
             let (next_stage, current_stage) = {
-                todo!("re-enable this")
-                // let mut state = resources
-                //     .get_mut::<State<T>>()
-                //     .expect("Missing state resource");
-                // let result = (
-                //     state.next.as_ref().map(|next| std::mem::discriminant(next)),
-                //     std::mem::discriminant(&state.current),
-                // );
+                let mut state = world
+                    .get_resource_mut::<State<T>>()
+                    .expect("Missing state resource");
+                let result = (
+                    state.next.as_ref().map(|next| std::mem::discriminant(next)),
+                    std::mem::discriminant(&state.current),
+                );
 
-                // state.apply_next();
+                state.apply_next();
 
-                // result
+                result
             };
 
             // if next_stage is Some, we just applied a new state

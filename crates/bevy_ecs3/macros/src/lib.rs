@@ -8,7 +8,7 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{
     parse::ParseStream, parse_macro_input, Data, DataStruct, DeriveInput, Error, Field, Fields,
-    Ident, Index, Lifetime, Path, Result,
+    Ident, Index, Path, Result,
 };
 
 /// Implement `Bundle` for a monomorphic struct
