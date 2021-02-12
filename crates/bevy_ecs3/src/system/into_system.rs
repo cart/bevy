@@ -41,27 +41,11 @@ struct InputMarker;
 pub struct FunctionSystem<In, Out, Param, Marker, F>
 where
     Param: SystemParam,
-    F: SystemFunction<In, Out, Param, Marker>,
 {
     func: F,
     param_state: Option<Param::State>,
     system_state: SystemState,
     marker: PhantomData<(In, Out, Marker)>,
-}
-
-impl<In, Out, Param, Marker, F> From<F> for FunctionSystem<In, Out, Param, Marker, F>
-where
-    Param: SystemParam,
-    F: SystemFunction<In, Out, Param, Marker>,
-{
-    fn from(func: F) -> Self {
-        Self {
-            func,
-            param_state: None,
-            system_state: SystemState::new::<F>(),
-            marker: PhantomData,
-        }
-    }
 }
 
 impl<In, Out, Param, Marker, F> IntoSystem<Param, FunctionSystem<In, Out, Param, Marker, F>> for F
