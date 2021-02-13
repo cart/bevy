@@ -392,6 +392,11 @@ mod tests {
     #[test]
     fn remove_tracking() {
         let mut world = World::new();
+        world
+            .register_component(ComponentDescriptor::of::<&'static str>(
+                StorageType::SparseSet,
+            ))
+            .unwrap();
         let a = world.spawn().insert_bundle(("abc", 123)).id();
         let b = world.spawn().insert_bundle(("abc", 123)).id();
 
@@ -399,12 +404,12 @@ mod tests {
         assert_eq!(
             world.removed::<i32>().collect::<Vec<_>>(),
             &[a],
-            "despawning results in 'removed component' state"
+            "despawning results in 'removed component' state for table components"
         );
         assert_eq!(
             world.removed::<&'static str>().collect::<Vec<_>>(),
             &[a],
-            "despawning results in 'removed component' state"
+            "despawning results in 'removed component' state for sparse set components"
         );
 
         world.entity_mut(b).unwrap().insert(10.0);
@@ -437,7 +442,6 @@ mod tests {
             &[],
             "clearning trackers clears removals"
         );
-
 
         // TODO: uncomment when world.clear() is implemented
         // let c = world.spawn().insert_bundle(("abc", 123)).id();

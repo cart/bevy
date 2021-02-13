@@ -37,6 +37,7 @@
 * world id safety
 * documentation / symbol review
 * todo review
+* readme
 * core
     * Flags
     * remove one by one (remove_intersection)
