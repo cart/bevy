@@ -1,11 +1,11 @@
-use bevy_ecs3_macros::{impl_query_set, all_tuples};
 use crate::{
     core::{
-        Access, ArchetypeId, Component, ComponentFlags, ComponentId, FromWorld, Or, QueryFilter,
-        QueryState, World, WorldQuery,
+        Access, ArchetypeId, Component, ComponentFlags, ComponentId, Entity, FromWorld, Or,
+        QueryFilter, QueryState, World, WorldQuery,
     },
     system::{CommandQueue, Commands, Query, SystemState},
 };
+use bevy_ecs3_macros::{all_tuples, impl_query_set};
 use std::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -344,6 +344,55 @@ impl<'a, T: Component + FromWorld> SystemParamFetch<'a> for LocalState<T> {
         _world: &'a World,
     ) -> Option<Self::Item> {
         Some(Local(&mut state.0))
+    }
+}
+
+pub struct RemovedComponents<'a, T> {
+    world: &'a World,
+    component_id: ComponentId,
+    marker: PhantomData<T>,
+}
+
+impl<'a, T> RemovedComponents<'a, T> {
+    pub fn iter(&self) -> std::iter::Cloned<std::slice::Iter<'_, Entity>> {
+        self.world.removed_with_id(self.component_id)
+    }
+}
+
+pub struct RemovedComponentsState<T> {
+    component_id: ComponentId,
+    marker: PhantomData<T>,
+}
+
+impl<'a, T: Component> SystemParam for RemovedComponents<'a, T> {
+    type State = RemovedComponentsState<T>;
+}
+
+// SAFE: no component access. removed component entity collections can be read in parallel and are never mutably borrowed
+// during system execution
+unsafe impl<T: Component> SystemParamState for RemovedComponentsState<T> {
+    fn init(world: &mut World, _system_state: &mut SystemState) -> Self {
+        Self {
+            component_id: world.components.get_or_insert_id::<T>(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Component> SystemParamFetch<'a> for RemovedComponentsState<T> {
+    type Item = RemovedComponents<'a, T>;
+
+    #[inline]
+    unsafe fn get_param(
+        state: &'a mut Self,
+        _system_state: &'a SystemState,
+        world: &'a World,
+    ) -> Option<Self::Item> {
+        Some(RemovedComponents {
+            world,
+            component_id: state.component_id,
+            marker: PhantomData,
+        })
     }
 }
 

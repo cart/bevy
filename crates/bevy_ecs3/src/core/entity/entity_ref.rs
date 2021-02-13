@@ -1,6 +1,7 @@
 use crate::core::{
     Archetype, ArchetypeId, Archetypes, Bundle, BundleInfo, Component, ComponentFlags, ComponentId,
-    Components, DynamicBundle, Entity, EntityLocation, Mut, StorageType, Storages, World,
+    Components, DynamicBundle, Entity, EntityLocation, Mut, SparseSet, StorageType, Storages,
+    World,
 };
 use std::any::TypeId;
 
@@ -34,7 +35,9 @@ impl<'w> EntityRef<'w> {
     pub fn archetype(&self) -> &Archetype {
         // SAFE: EntityRefs always point to valid entities. Valid entities always have valid archetypes
         unsafe {
-            self.world.archetypes.get_unchecked(self.location.archetype_id)
+            self.world
+                .archetypes
+                .get_unchecked(self.location.archetype_id)
         }
     }
 
@@ -48,12 +51,7 @@ impl<'w> EntityRef<'w> {
 
     /// SAFETY: this cannot be used to produce aliased mutable access to an entity's component
     pub unsafe fn get_mut_unchecked<T: Component>(&self) -> Option<Mut<'w, T>> {
-            get_component_and_flags_with_type(
-                self.world,
-                TypeId::of::<T>(),
-                self.entity,
-                self.location,
-            )
+        get_component_and_flags_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
             .map(|(value, flags)| Mut {
                 value: &mut *value.cast::<T>(),
                 flags: &mut *flags,
@@ -91,7 +89,9 @@ impl<'w> EntityMut<'w> {
     pub fn archetype(&self) -> &Archetype {
         // SAFE: EntityRefs always point to valid entities. Valid entities always have valid archetypes
         unsafe {
-            self.world.archetypes.get_unchecked(self.location.archetype_id)
+            self.world
+                .archetypes
+                .get_unchecked(self.location.archetype_id)
         }
     }
 
@@ -213,6 +213,7 @@ impl<'w> EntityMut<'w> {
         let storages = &mut self.world.storages;
         let components = &mut self.world.components;
         let entities = &mut self.world.entities;
+        let removed_components = &mut self.world.removed_components;
 
         let bundle_info = self.world.bundles.init_info::<T>(components);
         let old_location = self.location;
@@ -244,6 +245,7 @@ impl<'w> EntityMut<'w> {
                     components,
                     storages,
                     old_archetype,
+                    removed_components,
                     component_id,
                     entity,
                     old_location,
@@ -314,12 +316,21 @@ impl<'w> EntityMut<'w> {
     pub fn despawn(self) {
         let world = self.world;
         world.flush();
-        let location = world.entities.free(self.entity).expect("entity should exist at this point.");
+        let location = world
+            .entities
+            .free(self.entity)
+            .expect("entity should exist at this point.");
         let table_row;
         let moved_entity;
         {
             // SAFE: entity is live and is contained in an archetype that exists
             let archetype = unsafe { world.archetypes.get_unchecked_mut(location.archetype_id) };
+            for component_id in archetype.components() {
+                let removed_components = world
+                    .removed_components
+                    .get_or_insert_with(component_id, || Vec::new());
+                removed_components.push(self.entity);
+            }
             let remove_result = archetype.swap_remove(location.index);
             if let Some(swapped_entity) = remove_result.swapped_entity {
                 // SAFE: entity is live and is contained in an archetype that exists
@@ -424,12 +435,15 @@ unsafe fn remove_component(
     components: &Components,
     storages: &mut Storages,
     archetype: &Archetype,
+    removed_components: &mut SparseSet<ComponentId, Vec<Entity>>,
     component_id: ComponentId,
     entity: Entity,
     location: EntityLocation,
 ) -> *mut u8 {
     // SAFE: component_id exists and is therefore valid
     let component_info = components.get_info_unchecked(component_id);
+    let removed_components = removed_components.get_or_insert_with(component_id, || Vec::new());
+    removed_components.push(entity);
     match component_info.storage_type() {
         StorageType::Table => {
             let table = storages.tables.get_unchecked(archetype.table_id());

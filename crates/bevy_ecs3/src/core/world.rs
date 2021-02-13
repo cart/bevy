@@ -1,9 +1,9 @@
 use crate::core::{
     ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId,
     Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryFilter,
-    QueryState, SpawnBatchIter, StorageType, Storages, WorldQuery,
+    QueryState, SparseSet, SpawnBatchIter, StorageType, Storages, WorldQuery,
 };
-use std::fmt;
+use std::{any::TypeId, fmt};
 
 #[derive(Default)]
 pub struct World {
@@ -12,6 +12,7 @@ pub struct World {
     pub(crate) archetypes: Archetypes,
     pub(crate) storages: Storages,
     pub(crate) bundles: Bundles,
+    pub(crate) removed_components: SparseSet<ComponentId, Vec<Entity>>,
 }
 
 impl World {
@@ -140,6 +141,9 @@ impl World {
     pub fn clear_trackers(&mut self) {
         self.storages.tables.clear_flags();
         self.storages.sparse_sets.clear_flags();
+        for entities in self.removed_components.values_mut() {
+            entities.clear();
+        }
     }
 
     #[inline]
@@ -179,6 +183,25 @@ impl World {
     #[inline]
     pub fn query_filtered<Q: WorldQuery, F: QueryFilter>(&mut self) -> QueryState<Q, F> {
         QueryState::new(self)
+    }
+
+    pub fn removed<T: Component>(&self) -> std::iter::Cloned<std::slice::Iter<'_, Entity>> {
+        if let Some(component_id) = self.components.get_id(TypeId::of::<T>()) {
+            self.removed_with_id(component_id)
+        } else {
+            [].iter().cloned()
+        }
+    }
+
+    pub fn removed_with_id(
+        &self,
+        component_id: ComponentId,
+    ) -> std::iter::Cloned<std::slice::Iter<'_, Entity>> {
+        if let Some(removed) = self.removed_components.get(component_id) {
+            removed.iter().cloned()
+        } else {
+            [].iter().cloned()
+        }
     }
 }
 

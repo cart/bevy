@@ -113,7 +113,7 @@ struct ArchetypeComponentInfo {
 pub struct Archetype {
     id: ArchetypeId,
     table_info: TableInfo,
-    components: SparseArray<ComponentId, ArchetypeComponentInfo>,
+    components: SparseSet<ComponentId, ArchetypeComponentInfo>,
     table_components: Vec<ComponentId>,
     sparse_set_components: Vec<ComponentId>,
     unique_components: SparseSet<ComponentId, Column>,
@@ -131,7 +131,7 @@ impl Archetype {
         sparse_set_archetype_components: Vec<ArchetypeComponentId>,
     ) -> Self {
         let mut components =
-            SparseArray::with_capacity(table_components.len() + sparse_set_components.len());
+            SparseSet::with_capacity(table_components.len() + sparse_set_components.len());
         for (component_id, archetype_component_id) in
             table_components.iter().zip(table_archetype_components)
         {
@@ -209,6 +209,11 @@ impl Archetype {
     #[inline]
     pub fn unique_components_mut(&mut self) -> &mut SparseSet<ComponentId, Column> {
         &mut self.unique_components
+    }
+
+    #[inline]
+    pub fn components(&self) -> impl Iterator<Item = ComponentId> + '_ {
+        self.components.indices()
     }
 
     #[inline]

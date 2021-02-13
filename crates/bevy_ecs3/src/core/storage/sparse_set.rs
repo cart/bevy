@@ -290,6 +290,7 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
 
     pub fn insert(&mut self, index: I, value: V) {
         if let Some(dense_index) = self.sparse.get(index.clone()).cloned() {
+            // SAFE: dense indices stored in self.sparse always exist
             unsafe {
                 *self.dense.get_unchecked_mut(dense_index) = value;
             }
@@ -299,7 +300,7 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
             self.dense.push(value);
         }
 
-        // TODO: switch to this. it's faster but it has an invalid memory access on table_add_remove_many
+        // PERF: switch to this. it's faster but it has an invalid memory access on table_add_remove_many
         // let dense = &mut self.dense;
         // let indices = &mut self.indices;
         // let dense_index = *self.sparse.get_or_insert_with(index.clone(), move || {
@@ -320,6 +321,20 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
         //     *self.dense.get_unchecked_mut(dense_index) = value;
         //     *self.indices.get_unchecked_mut(dense_index) = index;
         // }
+    }
+
+    pub fn get_or_insert_with(&mut self, index: I, func: impl FnOnce() -> V) -> &mut V {
+        if let Some(dense_index) = self.sparse.get(index.clone()).cloned() {
+            // SAFE: dense indices stored in self.sparse always exist
+            unsafe { self.dense.get_unchecked_mut(dense_index) }
+        } else {
+            let dense_index = self.dense.len();
+            self.sparse.insert(index.clone(), dense_index);
+            self.indices.push(index);
+            self.dense.push(func());
+            // SAFE: dense index was just populated above
+            unsafe { self.dense.get_unchecked_mut(dense_index) }
+        }
     }
 
     #[inline]
@@ -375,6 +390,10 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
             }
             value
         })
+    }
+
+    pub fn indices(&self) -> impl Iterator<Item = I> + '_ {
+        self.indices.iter().cloned()
     }
 
     pub fn values(&self) -> impl Iterator<Item = &V> {

@@ -23,18 +23,21 @@
 * More granular module organization
 * Direct stateless World queries are slower
 * SystemParam state (still needs "settable" params)
-* Safer
+* Safety Improvements
     * Entity reservation uses a normal world reference instead of unsafe transmute
     * QuerySets no longer transmute lifetimes
     * SystemParamState is an unsafe trait
+    * More thorough safety docs
 * Slightly nicer IntoSystem / FuncSystem impl (inspired by DJMcnab's work)
+* New removal system param API
+    * old version existed on queries: had no relation to the query
+    * caches component id
 
 ## TODO
 * world id safety
 * documentation / symbol review
 * todo review
 * core
-    * Removal Tracking
     * Flags
     * remove one by one (remove_intersection)
     * batch_iter
@@ -61,7 +64,9 @@
 
 ## LATER
 
+* world.clear
 * world.reserve
+* ChangedRes -> Res::is_changed
 
 ## Maybe
 * World Error Handling (EntityRef)
