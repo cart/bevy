@@ -1,10 +1,8 @@
-use crate::{
-    core::{
-        Access, Archetype, ArchetypeComponentId, Bundle, Component, ComponentFlags, ComponentId,
-        ComponentSparseSet, Entity, FetchState, StorageType, Table, Tables, World,
-    },
-    smaller_tuples_too,
+use crate::core::{
+    Access, Archetype, ArchetypeComponentId, Bundle, Component, ComponentFlags, ComponentId,
+    ComponentSparseSet, Entity, FetchState, StorageType, Table, Tables, World,
 };
+use bevy_ecs3_macros::all_tuples;
 use std::{marker::PhantomData, ptr};
 
 pub trait QueryFilter: Sized {
@@ -533,5 +531,4 @@ impl_flag_filter!(
     ComponentFlags::MUTATED
 );
 
-#[rustfmt::skip]
-smaller_tuples_too!(impl_query_filter_tuple, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+all_tuples!(impl_query_filter_tuple, 0, 15, F);

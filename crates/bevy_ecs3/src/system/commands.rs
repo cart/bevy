@@ -267,7 +267,7 @@ impl<'a> Commands<'a> {
         })
     }
 
-    /// See [`World::remove`].
+    /// See [`crate::core::EntityMut::remove_bundle`].
     pub fn remove_bundle<T>(&mut self, entity: Entity) -> &mut Self
     where
         T: Bundle + Send + Sync + 'static,

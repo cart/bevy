@@ -4,31 +4,21 @@ pub mod system;
 
 pub mod prelude {
     pub use crate::{
-        core::{Mut, QueryState, With, Without, World, Entity},
+        core::{Added, Changed, Entity, Mut, Mutated, QueryState, With, Without, World},
         schedule::{
             ExclusiveSystemDescriptorCoercion, ParallelSystemDescriptorCoercion, Schedule, Stage,
             SystemStage,
         },
-        system::{IntoExclusiveSystem, IntoSystem, Query, QuerySet, System, Local},
+        system::{IntoExclusiveSystem, IntoSystem, Local, Query, QuerySet, System},
     };
 }
-
-#[macro_export]
-macro_rules! smaller_tuples_too {
-    ($m: tt, $ty: tt) => {
-        $m!{$ty}
-        $m!{}
-    };
-    ($m: tt, $ty: tt, $($tt: tt),*) => {
-        $m!{$ty, $($tt),*}
-        smaller_tuples_too!{$m, $($tt),*}
-    };
-}
-
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{Added, Changed, Component, ComponentDescriptor, Entity, Mutated, Or, QueryFilter, StorageType, With, Without, World};
+    use crate::core::{
+        Added, Changed, Component, ComponentDescriptor, Entity, Mutated, Or, QueryFilter,
+        StorageType, With, Without, World,
+    };
 
     #[derive(Debug, PartialEq, Eq)]
     struct A(usize);
@@ -161,7 +151,9 @@ mod tests {
     #[test]
     fn query_filter_with_sparse() {
         let mut world = World::new();
-        world.register_component(ComponentDescriptor::of::<f32>(StorageType::SparseSet)).unwrap();
+        world
+            .register_component(ComponentDescriptor::of::<f32>(StorageType::SparseSet))
+            .unwrap();
         world.spawn().insert_bundle((123u32, 1.0f32));
         world.spawn().insert(456u32);
         let result = world

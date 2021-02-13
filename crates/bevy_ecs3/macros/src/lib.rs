@@ -5,11 +5,79 @@ use std::borrow::Cow;
 use find_crate::Manifest;
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{
-    parse::ParseStream, parse_macro_input, Data, DataStruct, DeriveInput, Error, Field, Fields,
-    Ident, Index, Path, Result,
+    parse::{Parse, ParseStream},
+    parse_macro_input,
+    token::Comma,
+    Data, DataStruct, DeriveInput, Error, Field, Fields, Ident, Index, LitInt, Path, Result,
 };
+
+struct AllTuples {
+    macro_ident: Ident,
+    start: usize,
+    end: usize,
+    idents: Vec<Ident>,
+}
+
+impl Parse for AllTuples {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let macro_ident = input.parse::<Ident>()?;
+        input.parse::<Comma>()?;
+        let start = input.parse::<LitInt>()?.base10_parse()?;
+        input.parse::<Comma>()?;
+        let end = input.parse::<LitInt>()?.base10_parse()?;
+        input.parse::<Comma>()?;
+        let mut idents = Vec::new();
+        while let Ok(ident) = input.parse::<Ident>() {
+            idents.push(ident);
+            let _ = input.parse::<Comma>();
+        }
+
+        Ok(AllTuples {
+            macro_ident,
+            start,
+            end,
+            idents,
+        })
+    }
+}
+
+#[proc_macro]
+pub fn all_tuples(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as AllTuples);
+    let len = input.end - input.start;
+    let mut ident_tuples = Vec::with_capacity(len);
+    for i in input.start..input.end {
+        let idents = input
+            .idents
+            .iter()
+            .map(|ident| format_ident!("{}{}", ident, i));
+        if input.idents.len() < 2 {
+            ident_tuples.push(quote! {
+                #(#idents)*
+            });
+        } else {
+            ident_tuples.push(quote! {
+                (#(#idents),*)
+            });
+        }
+    }
+
+    let mut invocations = Vec::with_capacity(len);
+    let macro_ident = &input.macro_ident;
+    for i in input.start..input.end {
+        let ident_tuples = &ident_tuples[0..i];
+        invocations.push(quote! {
+            #macro_ident!(#(#ident_tuples),*);
+        });
+    }
+    TokenStream::from(quote! {
+        #(
+            #invocations
+        )*
+    })
+}
 
 /// Implement `Bundle` for a monomorphic struct
 ///

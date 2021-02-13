@@ -1,11 +1,9 @@
-use bevy_ecs3_macros::impl_query_set;
-
+use bevy_ecs3_macros::{impl_query_set, all_tuples};
 use crate::{
     core::{
         Access, ArchetypeId, Component, ComponentFlags, ComponentId, FromWorld, Or, QueryFilter,
         QueryState, World, WorldQuery,
     },
-    smaller_tuples_too,
     system::{CommandQueue, Commands, Query, SystemState},
 };
 use std::{
@@ -449,5 +447,4 @@ macro_rules! impl_system_param_tuple {
     };
 }
 
-#[rustfmt::skip]
-smaller_tuples_too!(impl_system_param_tuple, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+all_tuples!(impl_system_param_tuple, 0, 16, P);

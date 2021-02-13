@@ -1,8 +1,8 @@
 use crate::{
     core::{Access, ArchetypeComponentId, ComponentId, World},
-    smaller_tuples_too,
     system::{System, SystemId, SystemParam, SystemParamFetch, SystemParamState},
 };
+use bevy_ecs3_macros::all_tuples;
 use std::{borrow::Cow, marker::PhantomData};
 
 pub struct SystemState {
@@ -144,7 +144,7 @@ pub trait SystemFunction<In, Out, Param: SystemParam, Marker> {
     ) -> Option<Out>;
 }
 
-macro_rules! impl_into_system {
+macro_rules! impl_system_function {
     ($($param: ident),*) => {
         #[allow(non_snake_case)]
         impl<Out, Func, $($param: SystemParam),*> SystemFunction<(), Out, ($($param,)*), ()> for Func
@@ -188,8 +188,7 @@ macro_rules! impl_into_system {
     };
 }
 
-#[rustfmt::skip]
-smaller_tuples_too!(impl_into_system, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+all_tuples!(impl_system_function, 0, 16, F);
 
 #[cfg(test)]
 mod tests {

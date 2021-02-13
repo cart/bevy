@@ -1,10 +1,8 @@
-use crate::{
-    core::{
-        Component, ComponentFlags, ComponentId, Components, Entity, SparseSetIndex, SparseSets,
-        StorageType, Table, TypeInfo,
-    },
-    smaller_tuples_too,
+use crate::core::{
+    Component, ComponentFlags, ComponentId, Components, Entity, SparseSetIndex, SparseSets,
+    StorageType, Table, TypeInfo,
 };
+use bevy_ecs3_macros::all_tuples;
 use std::{any::TypeId, collections::HashMap};
 
 /// A dynamically typed ordered collection of components
@@ -66,8 +64,7 @@ macro_rules! tuple_impl {
     }
 }
 
-#[rustfmt::skip]
-smaller_tuples_too!(tuple_impl, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+all_tuples!(tuple_impl, 0, 15, C);
 
 #[derive(Debug, Clone, Copy)]
 pub struct BundleId(usize);

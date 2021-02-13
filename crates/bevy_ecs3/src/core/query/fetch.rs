@@ -1,10 +1,8 @@
-use crate::{
-    core::{
-        Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId,
-        ComponentSparseSet, Entity, Mut, StorageType, Table, Tables, World,
-    },
-    smaller_tuples_too,
+use crate::core::{
+    Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId,
+    ComponentSparseSet, Entity, Mut, StorageType, Table, Tables, World,
 };
+use bevy_ecs3_macros::all_tuples;
 use std::{
     marker::PhantomData,
     ptr::{self, NonNull},
@@ -22,8 +20,8 @@ pub trait Fetch<'w>: Sized {
     unsafe fn init(world: &World, state: &Self::State) -> Self;
     /// Returns true if (and only if) every table of every archetype matched by this Fetch contains all of the matched components.
     /// This is used to select a more efficient "table iterator" for "dense" queries.
-    /// If this returns true, [next_table] and [table_fetch] will be called for iterators
-    /// If this returns false, [next_archetype] and [archetype_fetch] will be called for iterators
+    /// If this returns true, [Fetch::next_table] and [Fetch::table_fetch] will be called for iterators
+    /// If this returns false, [Fetch::next_archetype] and [Fetch::archetype_fetch] will be called for iterators
     fn is_dense(&self) -> bool;
     /// Adjusts internal state to account for the next [Archetype]. This will always be called on archetypes that match this [Fetch]
     unsafe fn next_archetype(
@@ -548,7 +546,7 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
     }
 }
 
-macro_rules! tuple_impl {
+macro_rules! impl_tuple_fetch {
     ($(($name: ident, $state: ident)),*) => {
         #[allow(non_snake_case)]
         impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
@@ -633,5 +631,4 @@ macro_rules! tuple_impl {
     };
 }
 
-#[rustfmt::skip]
-smaller_tuples_too!(tuple_impl, (A, AS), (B, BS), (C, CS), (D, DS), (E, ES), (F, FS), (G, GS), (H, HS), (I, IS), (J, JS), (K, KS), (L, LS), (M, MS), (N, NS), (O, OS));
+all_tuples!(impl_tuple_fetch, 0, 15, F, S);

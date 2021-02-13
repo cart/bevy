@@ -4,7 +4,7 @@ use crate::core::{
 };
 use std::any::TypeId;
 
-/// Provides scoped access to a World according to a given [HecsQuery]
+/// Provides scoped access to a World according to a given [WorldQuery] and [QueryFilter]
 pub struct Query<'w, Q: WorldQuery, F: QueryFilter = ()> {
     pub(crate) world: &'w World,
     pub(crate) state: &'w QueryState<Q, F>,
