@@ -187,6 +187,11 @@ impl Archetype {
     }
 
     #[inline]
+    pub fn entity_table_rows(&self) -> &[usize] {
+        &self.table_info.entity_rows
+    }
+
+    #[inline]
     pub fn table_components(&self) -> &Vec<ComponentId> {
         &self.table_components
     }

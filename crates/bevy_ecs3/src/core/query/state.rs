@@ -13,6 +13,8 @@ pub struct QueryState<Q: WorldQuery, F: QueryFilter = ()> {
     pub(crate) component_access: Access<ComponentId>,
     // NOTE: we maintain both a TableId bitset and a vec because iterating the vec is faster
     pub(crate) matched_table_ids: Vec<TableId>,
+    // NOTE: we maintain both a ArchetypeId bitset and a vec because iterating the vec is faster
+    pub(crate) matched_archetype_ids: Vec<ArchetypeId>,
     pub(crate) fetch_state: Q::State,
     pub(crate) filter_state: F::State,
 }
@@ -33,6 +35,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         let mut state = Self {
             archetype_generation: ArchetypeGeneration::new(usize::MAX),
             matched_table_ids: Vec::new(),
+            matched_archetype_ids: Vec::new(),
             fetch_state,
             filter_state,
             component_access,
@@ -47,7 +50,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     pub fn update_archetypes(&mut self, world: &World) {
         let archetypes = world.archetypes();
         let old_generation = self.archetype_generation;
-        let archetype_index_range = if old_generation == archetypes.generation(){
+        let archetype_index_range = if old_generation == archetypes.generation() {
             0..0
         } else {
             self.archetype_generation = archetypes.generation();
@@ -61,11 +64,9 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         };
         for archetype_index in archetype_index_range.clone() {
             // SAFE: archetype indices less than the archetype generation are guaranteed to exist
-            let archetype =
-                unsafe { archetypes.get_unchecked(ArchetypeId::new(archetype_index)) };
+            let archetype = unsafe { archetypes.get_unchecked(ArchetypeId::new(archetype_index)) };
             let table_index = archetype.table_id().index();
-            if !self.matched_tables.contains(table_index)
-                && self.fetch_state.matches_archetype(archetype)
+            if self.fetch_state.matches_archetype(archetype)
                 && self.filter_state.matches_archetype(archetype)
             {
                 self.fetch_state.update_archetype_component_access(
@@ -76,9 +77,12 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
                     archetype,
                     &mut self.archetype_component_access,
                 );
-                self.matched_tables.set(table_index, true);
                 self.matched_archetypes.set(archetype_index, true);
-                self.matched_table_ids.push(archetype.table_id());
+                self.matched_archetype_ids.push(archetype.id());
+                if !self.matched_tables.contains(table_index) {
+                    self.matched_tables.set(table_index, true);
+                    self.matched_table_ids.push(archetype.table_id());
+                }
             }
         }
     }
@@ -133,12 +137,10 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         let mut fetch = <Q::Fetch as Fetch>::init(world, &self.fetch_state);
         let mut filter = F::init(world, &self.filter_state);
 
-        let table = world.storages.tables.get_unchecked(archetype.table_id());
-        fetch.next_table(table);
-        filter.next_table(table);
-        let table_row = archetype.entity_table_row_unchecked(location.index);
-        if filter.matches_entity(table_row) {
-            Some(fetch.fetch(table_row))
+        fetch.next_archetype(&self.fetch_state, archetype, &world.storages().tables);
+        filter.next_archetype(archetype, &world.storages().tables);
+        if filter.matches_archetype_entity(location.index) {
+            Some(fetch.archetype_fetch(location.index))
         } else {
             None
         }
@@ -220,35 +222,34 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     ) {
         let mut fetch = <Q::Fetch as Fetch>::init(world, &self.fetch_state);
         let mut filter = F::init(world, &self.filter_state);
-        if fetch.is_dense() {
+        if fetch.is_dense() && filter.is_dense() {
             let tables = &world.storages().tables;
             for table_id in self.matched_table_ids.iter() {
                 let table = tables.get_unchecked(*table_id);
-                fetch.next_table_dense(table);
+                fetch.next_table(&self.fetch_state, table);
                 filter.next_table(table);
 
                 for table_index in 0..table.len() {
-                    if !filter.matches_entity(table_index) {
+                    if !filter.matches_table_entity(table_index) {
                         continue;
                     }
-                    let item = fetch.fetch(table_index);
+                    let item = fetch.table_fetch(table_index);
                     func(item);
                 }
             }
         } else {
+            let archetypes = &world.archetypes;
             let tables = &world.storages().tables;
-            for table_id in self.matched_table_ids.iter() {
-                let table = tables.get_unchecked(*table_id);
-                fetch.next_table(table);
-                filter.next_table(table);
+            for archetype_id in self.matched_archetype_ids.iter() {
+                let archetype = archetypes.get_unchecked(*archetype_id);
+                fetch.next_archetype(&self.fetch_state, archetype, tables);
+                filter.next_archetype(archetype, tables);
 
-                for table_index in 0..table.len() {
-                    if !filter.matches_entity(table_index) {
+                for archetype_index in 0..archetype.len() {
+                    if !filter.matches_archetype_entity(archetype_index) {
                         continue;
                     }
-                    if let Some(item) = fetch.try_fetch(table_index) {
-                        func(item);
-                    }
+                    func(fetch.archetype_fetch(archetype_index));
                 }
             }
         }

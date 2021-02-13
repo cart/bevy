@@ -1,7 +1,7 @@
 use crate::{
     core::{
         Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId,
-        ComponentSparseSet, Entity, Mut, StorageType, Table, World,
+        ComponentSparseSet, Entity, Mut, StorageType, Table, Tables, World,
     },
     smaller_tuples_too,
 };
@@ -20,12 +20,21 @@ pub trait Fetch<'w>: Sized {
     type Item;
     type State: FetchState;
     unsafe fn init(world: &World, state: &Self::State) -> Self;
-    fn matches_table(&self, table: &Table) -> bool;
+    /// Returns true if (and only if) every table of every archetype matched by this Fetch contains all of the matched components.
+    /// This is used to select a more efficient "table iterator" for "dense" queries.
+    /// If this returns true, [next_table] and [table_fetch] will be called for iterators
+    /// If this returns false, [next_archetype] and [archetype_fetch] will be called for iterators
     fn is_dense(&self) -> bool;
-    unsafe fn next_table(&mut self, table: &Table);
-    unsafe fn next_table_dense(&mut self, table: &Table);
-    unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item>;
-    unsafe fn fetch(&mut self, index: usize) -> Self::Item;
+    /// Adjusts internal state to account for the next [Archetype]. This will always be called on archetypes that match this [Fetch]
+    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables);
+    /// Adjusts internal state to account for the next [Table]. This will always be called on tables that match this [Fetch]
+    unsafe fn next_table(&mut self, state: &Self::State, table: &Table);
+    /// Fetch [Self::Item] for the given `archetype_index` in the current [Archetype]. This must always be called after [next_archetype] with an `archetype_index`
+    /// in the range of the current [Archetype]
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item;
+    /// Fetch [Self::Item] for the given `table_row` in the current [Table]. This must always be called after [next_table] with a `table_row`
+    /// in the range of the current [Table]
+    unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item;
 }
 
 /// State used to construct a Fetch. This will be cached inside QueryState, so it is best to move as much data /
@@ -39,6 +48,7 @@ pub trait FetchState: Sized {
         access: &mut Access<ArchetypeComponentId>,
     );
     fn matches_archetype(&self, archetype: &Archetype) -> bool;
+    fn matches_table(&self, table: &Table) -> bool;
 }
 
 /// A fetch that is read only. This should only be implemented for read-only fetches.
@@ -75,6 +85,11 @@ impl FetchState for EntityState {
     fn matches_archetype(&self, _archetype: &Archetype) -> bool {
         true
     }
+
+    #[inline]
+    fn matches_table(&self, _table: &Table) -> bool {
+        true
+    }
 }
 
 impl<'w> Fetch<'w> for FetchEntity {
@@ -84,10 +99,6 @@ impl<'w> Fetch<'w> for FetchEntity {
     const DANGLING: Self = FetchEntity {
         entities: std::ptr::null::<Entity>(),
     };
-
-    fn matches_table(&self, _table: &Table) -> bool {
-        true
-    }
 
     #[inline]
     fn is_dense(&self) -> bool {
@@ -99,23 +110,23 @@ impl<'w> Fetch<'w> for FetchEntity {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, table: &Table) {
+    unsafe fn next_archetype(&mut self, _state: &Self::State, archetype: &Archetype, _tables: &Tables) {
+        self.entities = archetype.entities().as_ptr();
+    }
+
+    #[inline]
+    unsafe fn next_table(&mut self, _state: &Self::State, table: &Table) {
         self.entities = table.entities().as_ptr();
     }
 
     #[inline]
-    unsafe fn next_table_dense(&mut self, table: &Table) {
-        self.entities = table.entities().as_ptr();
+    unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item {
+        *self.entities.add(table_row)
     }
 
     #[inline]
-    unsafe fn fetch(&mut self, index: usize) -> Self::Item {
-        *self.entities.add(index)
-    }
-
-    #[inline]
-    unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
-        Some(self.fetch(index))
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
+        *self.entities.add(archetype_index)
     }
 }
 
@@ -161,12 +172,21 @@ impl<T: Component> FetchState for ReadState<T> {
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
         archetype.contains(self.component_id)
     }
+
+    fn matches_table(&self, table: &Table) -> bool {
+        match self.storage_type {
+            StorageType::Table => table.has_column(self.component_id),
+            // any table could have any sparse set component
+            StorageType::SparseSet => true,
+        }
+    }
+
 }
 
 pub struct FetchRead<T> {
-    component_id: ComponentId,
     storage_type: StorageType,
-    components: NonNull<T>,
+    table_components: NonNull<T>,
+    entity_table_rows: *const usize,
     entities: *const Entity,
     sparse_set: *const ComponentSparseSet,
 }
@@ -178,20 +198,12 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     type State = ReadState<T>;
 
     const DANGLING: Self = Self {
-        component_id: ComponentId::new(usize::MAX),
         storage_type: StorageType::Table,
-        components: NonNull::dangling(),
+        table_components: NonNull::dangling(),
         entities: ptr::null::<Entity>(),
+        entity_table_rows: ptr::null::<usize>(),
         sparse_set: ptr::null::<ComponentSparseSet>(),
     };
-
-    fn matches_table(&self, table: &Table) -> bool {
-        match self.storage_type {
-            StorageType::Table => table.has_column(self.component_id),
-            // any table could have any sparse set component
-            StorageType::SparseSet => true,
-        }
-    }
 
     #[inline]
     fn is_dense(&self) -> bool {
@@ -203,7 +215,6 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
 
     unsafe fn init(world: &World, state: &Self::State) -> Self {
         let mut value = Self {
-            component_id: state.component_id,
             storage_type: state.storage_type,
             ..Self::DANGLING
         };
@@ -217,40 +228,47 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, table: &Table) {
-        match self.storage_type {
+    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables) {
+        // SAFE: archetype tables always exist
+        let table = tables.get_unchecked(archetype.table_id());
+        match state.storage_type {
             StorageType::Table => {
-                self.components = table
-                    .get_column_unchecked(self.component_id)
+                self.entity_table_rows = archetype.entity_table_rows().as_ptr();
+                self.table_components = table
+                    .get_column_unchecked(state.component_id)
                     .get_ptr()
                     .cast::<T>();
             }
-            StorageType::SparseSet => self.entities = table.entities().as_ptr(),
+            StorageType::SparseSet => self.entities = archetype.entities().as_ptr(),
         }
     }
 
     #[inline]
-    unsafe fn next_table_dense(&mut self, table: &Table) {
-        self.components = table
-            .get_column_unchecked(self.component_id)
+    unsafe fn next_table(&mut self, state: &Self::State, table: &Table) {
+        self.table_components = table
+            .get_column_unchecked(state.component_id)
             .get_ptr()
             .cast::<T>();
     }
 
     #[inline]
-    unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
+        // TODO: ensure table row index is looked up
         match self.storage_type {
-            StorageType::Table => Some(&*self.components.as_ptr().add(index)),
+            StorageType::Table => {
+                let table_row = *self.entity_table_rows.add(archetype_index);
+                &*self.table_components.as_ptr().add(table_row)
+            }
             StorageType::SparseSet => {
-                let entity = *self.entities.add(index);
-                (*self.sparse_set).get(entity).map(|c| &*c.cast::<T>())
+                let entity = *self.entities.add(archetype_index);
+                &*(*self.sparse_set).get_unchecked(entity).cast::<T>()
             }
         }
     }
 
     #[inline]
-    unsafe fn fetch(&mut self, index: usize) -> Self::Item {
-        &*self.components.as_ptr().add(index)
+    unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item {
+        &*self.table_components.as_ptr().add(table_row)
     }
 }
 
@@ -260,12 +278,12 @@ impl<T: Component> WorldQuery for &mut T {
 }
 
 pub struct FetchWrite<T> {
-    component_id: ComponentId,
     storage_type: StorageType,
-    components: NonNull<T>,
+    table_components: NonNull<T>,
+    table_flags: *mut ComponentFlags,
     entities: *const Entity,
+    entity_table_rows: *const usize,
     sparse_set: *const ComponentSparseSet,
-    flags: *mut ComponentFlags,
 }
 
 pub struct WriteState<T> {
@@ -305,20 +323,6 @@ impl<T: Component> FetchState for WriteState<T> {
     fn matches_archetype(&self, archetype: &Archetype) -> bool {
         archetype.contains(self.component_id)
     }
-}
-
-impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
-    type Item = Mut<'w, T>;
-    type State = WriteState<T>;
-
-    const DANGLING: Self = Self {
-        component_id: ComponentId::new(usize::MAX),
-        storage_type: StorageType::Table,
-        components: NonNull::dangling(),
-        entities: ptr::null::<Entity>(),
-        sparse_set: ptr::null::<ComponentSparseSet>(),
-        flags: ptr::null_mut::<ComponentFlags>(),
-    };
 
     fn matches_table(&self, table: &Table) -> bool {
         match self.storage_type {
@@ -327,6 +331,20 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
             StorageType::SparseSet => true,
         }
     }
+}
+
+impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
+    type Item = Mut<'w, T>;
+    type State = WriteState<T>;
+
+    const DANGLING: Self = Self {
+        storage_type: StorageType::Table,
+        table_components: NonNull::dangling(),
+        entities: ptr::null::<Entity>(),
+        entity_table_rows: ptr::null::<usize>(),
+        sparse_set: ptr::null::<ComponentSparseSet>(),
+        table_flags: ptr::null_mut::<ComponentFlags>(),
+    };
 
     #[inline]
     fn is_dense(&self) -> bool {
@@ -338,7 +356,6 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
 
     unsafe fn init(world: &World, state: &Self::State) -> Self {
         let mut value = Self {
-            component_id: state.component_id,
             storage_type: state.storage_type,
             ..Self::DANGLING
         };
@@ -352,46 +369,54 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, table: &Table) {
+    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables) {
+        // SAFE: archetype tables always exist
+        let table = tables.get_unchecked(archetype.table_id());
+        match state.storage_type {
+            StorageType::Table => {
+                self.entity_table_rows = archetype.entity_table_rows().as_ptr();
+                let column = table.get_column_unchecked(state.component_id);
+                self.table_components = column.get_ptr().cast::<T>();
+                self.table_flags = column.get_flags_mut_ptr();
+            }
+            StorageType::SparseSet => self.entities = archetype.entities().as_ptr(),
+        }
+    }
+
+    #[inline]
+    unsafe fn next_table(&mut self, state: &Self::State, table: &Table) {
+        let column = table.get_column_unchecked(state.component_id);
+        self.table_components = column.get_ptr().cast::<T>();
+        self.table_flags = column.get_flags_mut_ptr();
+    }
+
+    #[inline]
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
+        // TODO: ensure table row index is looked up
         match self.storage_type {
             StorageType::Table => {
-                let column = table.get_column_unchecked(self.component_id);
-                self.components = column.get_ptr().cast::<T>();
-                self.flags = column.get_flags_mut_ptr();
+                let table_row = *self.entity_table_rows.add(archetype_index);
+                Mut {
+                    value: &mut *self.table_components.as_ptr().add(table_row),
+                    flags: &mut *self.table_flags.add(table_row),
+                }
             }
-            StorageType::SparseSet => self.entities = table.entities().as_ptr(),
-        }
-    }
-
-    #[inline]
-    unsafe fn next_table_dense(&mut self, table: &Table) {
-        let column = table.get_column_unchecked(self.component_id);
-        self.components = column.get_ptr().cast::<T>();
-        self.flags = column.get_flags_mut_ptr();
-    }
-
-    #[inline]
-    unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
-        match self.storage_type {
-            StorageType::Table => Some(Mut {
-                value: &mut *self.components.as_ptr().add(index),
-                flags: &mut *self.flags.add(index),
-            }),
             StorageType::SparseSet => {
-                let entity = *self.entities.add(index);
-                (*self.sparse_set).get_with_flags(entity).map(|(c, f)| Mut {
-                    value: &mut *c.cast::<T>(),
-                    flags: &mut *f,
-                })
+                let entity = *self.entities.add(archetype_index);
+                let (component, flags) = (*self.sparse_set).get_with_flags_unchecked(entity);
+                Mut {
+                    value: &mut *component.cast::<T>(),
+                    flags: &mut *flags,
+                }
             }
         }
     }
 
     #[inline]
-    unsafe fn fetch(&mut self, index: usize) -> Self::Item {
+    unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item {
         Mut {
-            value: &mut *self.components.as_ptr().add(index),
-            flags: &mut *self.flags.add(index),
+            value: &mut *self.table_components.as_ptr().add(table_row),
+            flags: &mut *self.table_flags.add(table_row),
         }
     }
 }
@@ -437,6 +462,11 @@ impl<T: FetchState> FetchState for OptionState<T> {
     fn matches_archetype(&self, _archetype: &Archetype) -> bool {
         true
     }
+
+    fn matches_table(&self, _table: &Table) -> bool {
+        true
+    }
+
 }
 
 impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
@@ -448,14 +478,9 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
         matches: false,
     };
 
-    fn matches_table(&self, _table: &Table) -> bool {
-        true
-    }
-
     #[inline]
     fn is_dense(&self) -> bool {
-        // option queries must always use try_fetch
-        false
+        self.fetch.is_dense()
     }
 
     unsafe fn init(world: &World, state: &Self::State) -> Self {
@@ -466,34 +491,34 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, table: &Table) {
-        self.matches = self.fetch.matches_table(table);
+    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables) {
+        self.matches = state.state.matches_archetype(archetype);
         if self.matches {
-            self.fetch.next_table(table);
+            self.fetch.next_archetype(&state.state, archetype, tables);
         }
     }
 
     #[inline]
-    unsafe fn next_table_dense(&mut self, table: &Table) {
-        self.matches = self.fetch.matches_table(table);
+    unsafe fn next_table(&mut self, state: &Self::State, table: &Table) {
+        self.matches = state.state.matches_table(table);
         if self.matches {
-            self.fetch.next_table_dense(table);
+            self.fetch.next_table(&state.state, table);
         }
     }
 
     #[inline]
-    unsafe fn try_fetch(&mut self, index: usize) -> Option<Self::Item> {
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
         if self.matches {
-            Some(self.fetch.try_fetch(index))
+            Some(self.fetch.archetype_fetch(archetype_index))
         } else {
-            Some(None)
+            None
         }
     }
 
     #[inline]
-    unsafe fn fetch(&mut self, index: usize) -> Self::Item {
+    unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item {
         if self.matches {
-            Some(self.fetch.try_fetch(index)?)
+            Some(self.fetch.table_fetch(table_row))
         } else {
             None
         }
@@ -501,7 +526,7 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
 }
 
 macro_rules! tuple_impl {
-    ($($name: ident),*) => {
+    ($(($name: ident, $state: ident)),*) => {
         #[allow(non_snake_case)]
         impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
             type Item = ($($name::Item,)*);
@@ -521,33 +546,30 @@ macro_rules! tuple_impl {
                 true $(&& $name.is_dense())*
             }
 
-            fn matches_table(&self, _table: &Table) -> bool {
+            #[inline]
+            unsafe fn next_archetype(&mut self, _state: &Self::State, _archetype: &Archetype, _tables: &Tables) {
                 let ($($name,)*) = self;
-                true $(&& $name.matches_table(_table))*
+                let ($($state,)*) = _state;
+                $($name.next_archetype($state, _archetype, _tables);)*
             }
 
             #[inline]
-            unsafe fn next_table(&mut self, _table: &Table) {
+            unsafe fn next_table(&mut self, _state: &Self::State, _table: &Table) {
                 let ($($name,)*) = self;
-                $($name.next_table(_table);)*
+                let ($($state,)*) = _state;
+                $($name.next_table($state, _table);)*
             }
 
             #[inline]
-            unsafe fn next_table_dense(&mut self, _table: &Table) {
+            unsafe fn table_fetch(&mut self, _table_row: usize) -> Self::Item {
                 let ($($name,)*) = self;
-                $($name.next_table_dense(_table);)*
+                ($($name.table_fetch(_table_row),)*)
             }
 
             #[inline]
-            unsafe fn fetch(&mut self, _index: usize) -> Self::Item {
+            unsafe fn archetype_fetch(&mut self, _archetype_index: usize) -> Self::Item {
                 let ($($name,)*) = self;
-                ($($name.fetch(_index),)*)
-            }
-
-            #[inline]
-            unsafe fn try_fetch(&mut self, _index: usize) -> Option<Self::Item> {
-                let ($($name,)*) = self;
-                Some(($($name.try_fetch(_index)?,)*))
+                ($($name.archetype_fetch(_archetype_index),)*)
             }
         }
 
@@ -572,6 +594,10 @@ macro_rules! tuple_impl {
                 true $(&& $name.matches_archetype(_archetype))*
             }
 
+            fn matches_table(&self, _table: &Table) -> bool {
+                let ($($name,)*) = self;
+                true $(&& $name.matches_table(_table))*
+            }
         }
 
         impl<$($name: WorldQuery),*> WorldQuery for ($($name,)*) {
@@ -584,4 +610,4 @@ macro_rules! tuple_impl {
     };
 }
 
-smaller_tuples_too!(tuple_impl, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A);
+smaller_tuples_too!(tuple_impl, (O, OS), (N, NS), (M, MS), (L, LS), (K, KS), (J, JS), (I, IS), (H, HS), (G, GS), (F, FS), (E, ES), (D, DS), (C, CS), (B, BS), (A, AS));

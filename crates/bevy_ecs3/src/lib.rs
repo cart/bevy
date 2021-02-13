@@ -15,11 +15,11 @@ pub mod prelude {
 
 #[macro_export]
 macro_rules! smaller_tuples_too {
-    ($m: ident, $ty: ident) => {
+    ($m: tt, $ty: tt) => {
         $m!{$ty}
         $m!{}
     };
-    ($m: ident, $ty: ident, $($tt: ident),*) => {
+    ($m: tt, $ty: tt, $($tt: tt),*) => {
         $m!{$ty, $($tt),*}
         smaller_tuples_too!{$m, $($tt),*}
     };

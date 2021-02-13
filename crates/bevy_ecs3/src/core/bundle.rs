@@ -163,7 +163,7 @@ impl Bundles {
         unsafe { self.bundle_infos.get_unchecked(id.0) }
     }
 
-    pub(crate) fn init_info<T: Bundle>(&mut self, components: &mut Components) -> &BundleInfo {
+    pub(crate) fn init_info<'a, T: Bundle>(&'a mut self, components: &mut Components) -> &'a BundleInfo {
         let bundle_infos = &mut self.bundle_infos;
         let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
             let type_info = T::static_type_info();
