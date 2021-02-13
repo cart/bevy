@@ -64,14 +64,13 @@ pub fn all_tuples(input: TokenStream) -> TokenStream {
         }
     }
 
-    let mut invocations = Vec::with_capacity(len);
     let macro_ident = &input.macro_ident;
-    for i in input.start..input.end {
+    let invocations = (input.start..input.end).map(|i| {
         let ident_tuples = &ident_tuples[0..i];
-        invocations.push(quote! {
+        quote! {
             #macro_ident!(#(#ident_tuples),*);
-        });
-    }
+        }
+    });
     TokenStream::from(quote! {
         #(
             #invocations
