@@ -46,13 +46,22 @@ impl Entity {
         }
     }
 
-    /// Extract a transiently unique identifier
+    /// Return a transiently unique identifier
     ///
     /// No two simultaneously-live entities share the same ID, but dead entities' IDs may collide
     /// with both live and dead entities. Useful for compactly representing entities within a
     /// specific snapshot of the world, such as when serializing.
+    #[inline]
     pub fn id(self) -> u32 {
         self.id
+    }
+
+    /// Returns the generation of this Entity's id. The generation is incremented each time an entity with
+    /// a given id is despawned. This serves as a "count" of the number of times a given id has been reused
+    /// (id, generation) pairs uniquely identify a given Entity.
+    #[inline]
+    pub fn generation(self) -> u32 {
+        self.generation
     }
 }
 

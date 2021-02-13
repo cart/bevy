@@ -42,9 +42,12 @@
 * todo review
 * readme
 * core
+    * NonSend resources (system param too)
     * drop tests
     * batch_iter
+    * par_iter
     * Update bundle derive macro
+    * Set-able system params
     * Optimize SparseSet::insert (code is written but it has memory issues)
     * fail on duplicate components in bundle
     * un-comment all tests
@@ -57,13 +60,8 @@
     * Foreach tests
     * Test stateful query adapting to archetype changes
     * Give Option fetch access updating some scrutiny
-* high level
-    * par_iter
-    * Set-able system params
     * Rename System::Update() to System::UpdateAccess() (only pass in required data)
     * investigate slower becs3 schedule perf (54 vs 69 us) ... afaik ive only subtracted ops so wtf
-* resources
-    * NonSend (system param too)
 
 ## LATER
 
