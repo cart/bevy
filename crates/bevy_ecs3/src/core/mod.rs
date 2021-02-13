@@ -21,7 +21,7 @@ pub use world::*;
 #[cfg(test)]
 mod tests {
     use crate::core::{
-        Added, Changed, Component, ComponentDescriptor, Entity, Mutated, Or, QueryFilter,
+        Added, Changed, Component, ComponentDescriptor, Entity, Flags, Mutated, Or, QueryFilter,
         StorageType, With, Without, World,
     };
 
@@ -789,37 +789,32 @@ mod tests {
     //     .unwrap();
     // }
 
-    // #[test]
-    // fn flags_query() {
-    //     let mut world = World::default();
-    //     let e1 = world.spawn((A(0), B(0)));
-    //     world.spawn((B(0),));
+    #[test]
+    fn flags_query() {
+        let mut world = World::default();
+        let e1 = world.spawn().insert_bundle((A(0), B(0))).id();
+        world.spawn().insert(B(0));
 
-    //     fn get_flags(world: &World) -> Vec<Flags<A>> {
-    //         <Flags<A>>().collect::<Vec<Flags<A>>>()
-    //     }
-    //     let flags = get_flags(&world);
-    //     assert!(flags[0].with());
-    //     assert!(flags[0].added());
-    //     assert!(!flags[0].mutated());
-    //     assert!(flags[0].changed());
-    //     assert!(!flags[1].with());
-    //     assert!(!flags[1].added());
-    //     assert!(!flags[1].mutated());
-    //     assert!(!flags[1].changed());
-    //     world.clear_trackers();
-    //     let flags = get_flags(&world);
-    //     assert!(flags[0].with());
-    //     assert!(!flags[0].added());
-    //     assert!(!flags[0].mutated());
-    //     assert!(!flags[0].changed());
-    //     *world.get_mut(e1).unwrap() = A(1);
-    //     let flags = get_flags(&world);
-    //     assert!(flags[0].with());
-    //     assert!(!flags[0].added());
-    //     assert!(flags[0].mutated());
-    //     assert!(flags[0].changed());
-    // }
+        let mut flags_query = world.query::<Option<Flags<A>>>();
+        let flags = flags_query.iter(&world).collect::<Vec<_>>();
+        let a_flags = flags[0].as_ref().unwrap();
+        assert!(flags[1].is_none());
+        assert!(a_flags.added());
+        assert!(!a_flags.mutated());
+        assert!(a_flags.changed());
+        world.clear_trackers();
+        let flags = flags_query.iter(&world).collect::<Vec<_>>();
+        let a_flags = flags[0].as_ref().unwrap();
+        assert!(!a_flags.added());
+        assert!(!a_flags.mutated());
+        assert!(!a_flags.changed());
+        *world.get_mut(e1).unwrap() = A(1);
+        let flags = flags_query.iter(&world).collect::<Vec<_>>();
+        let a_flags = flags[0].as_ref().unwrap();
+        assert!(!a_flags.added());
+        assert!(a_flags.mutated());
+        assert!(a_flags.changed());
+    }
 
     #[test]
     fn exact_size_query() {

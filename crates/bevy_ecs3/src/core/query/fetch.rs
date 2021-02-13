@@ -276,7 +276,6 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
 
     #[inline]
     unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
-        // TODO: ensure table row index is looked up
         match self.storage_type {
             StorageType::Table => {
                 let table_row = *self.entity_table_rows.add(archetype_index);
@@ -421,7 +420,6 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
 
     #[inline]
     unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
-        // TODO: ensure table row index is looked up
         match self.storage_type {
             StorageType::Table => {
                 let table_row = *self.entity_table_rows.add(archetype_index);
@@ -555,6 +553,196 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
             Some(self.fetch.table_fetch(table_row))
         } else {
             None
+        }
+    }
+}
+
+/// Flags on component `T` that happened since the start of the frame.
+#[derive(Clone)]
+pub struct Flags<T: Component> {
+    flags: ComponentFlags,
+    marker: std::marker::PhantomData<T>,
+}
+impl<T: Component> std::fmt::Debug for Flags<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Flags")
+            .field("added", &self.added())
+            .field("mutated", &self.mutated())
+            .finish()
+    }
+}
+
+impl<T: Component> Flags<T> {
+    /// Has this component been added since the start of the frame.
+    pub fn added(&self) -> bool {
+        self.flags.contains(ComponentFlags::ADDED)
+    }
+
+    /// Has this component been mutated since the start of the frame.
+    pub fn mutated(&self) -> bool {
+        self.flags.contains(ComponentFlags::MUTATED)
+    }
+
+    /// Has this component been either mutated or added since the start of the frame.
+    pub fn changed(&self) -> bool {
+        self.flags
+            .intersects(ComponentFlags::ADDED | ComponentFlags::MUTATED)
+    }
+}
+
+impl<T: Component> WorldQuery for Flags<T> {
+    type Fetch = FetchFlags<T>;
+    type State = FlagsState<T>;
+}
+
+pub struct FlagsState<T> {
+    component_id: ComponentId,
+    storage_type: StorageType,
+    marker: PhantomData<T>,
+}
+
+// SAFE: component access and archetype component access are properly updated to reflect that T is read
+unsafe impl<T: Component> FetchState for FlagsState<T> {
+    fn init(world: &mut World) -> Self {
+        let component_id = world.components.get_or_insert_id::<T>();
+        // SAFE: component_id exists if there is a TypeId pointing to it
+        let component_info = unsafe { world.components.get_info_unchecked(component_id) };
+        Self {
+            component_id: component_info.id(),
+            storage_type: component_info.storage_type(),
+            marker: PhantomData,
+        }
+    }
+
+    fn update_component_access(&self, access: &mut Access<ComponentId>) {
+        access.add_read(self.component_id)
+    }
+
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+        if let Some(archetype_component_id) =
+            archetype.get_archetype_component_id(self.component_id)
+        {
+            access.add_read(archetype_component_id);
+        }
+    }
+
+    fn matches_archetype(&self, archetype: &Archetype) -> bool {
+        archetype.contains(self.component_id)
+    }
+
+    fn matches_table(&self, table: &Table) -> bool {
+        match self.storage_type {
+            StorageType::Table => table.has_column(self.component_id),
+            // any table could have any sparse set component
+            StorageType::SparseSet => true,
+        }
+    }
+}
+
+pub struct FetchFlags<T> {
+    storage_type: StorageType,
+    table_flags: *const ComponentFlags,
+    entity_table_rows: *const usize,
+    entities: *const Entity,
+    sparse_set: *const ComponentSparseSet,
+    marker: PhantomData<T>,
+}
+
+unsafe impl<T> ReadOnlyFetch for FetchFlags<T> {}
+
+impl<'w, T: Component> Fetch<'w> for FetchFlags<T> {
+    type Item = Flags<T>;
+    type State = FlagsState<T>;
+
+    const DANGLING: Self = Self {
+        storage_type: StorageType::Table,
+        table_flags: ptr::null::<ComponentFlags>(),
+        entities: ptr::null::<Entity>(),
+        entity_table_rows: ptr::null::<usize>(),
+        sparse_set: ptr::null::<ComponentSparseSet>(),
+        marker: PhantomData,
+    };
+
+    #[inline]
+    fn is_dense(&self) -> bool {
+        match self.storage_type {
+            StorageType::Table => true,
+            StorageType::SparseSet => false,
+        }
+    }
+
+    unsafe fn init(world: &World, state: &Self::State) -> Self {
+        let mut value = Self {
+            storage_type: state.storage_type,
+            ..Self::DANGLING
+        };
+        if state.storage_type == StorageType::SparseSet {
+            value.sparse_set = world
+                .storages()
+                .sparse_sets
+                .get_unchecked(state.component_id);
+        }
+        value
+    }
+
+    #[inline]
+    unsafe fn set_archetype(
+        &mut self,
+        state: &Self::State,
+        archetype: &Archetype,
+        tables: &Tables,
+    ) {
+        // SAFE: archetype tables always exist
+        let table = tables.get_unchecked(archetype.table_id());
+        match state.storage_type {
+            StorageType::Table => {
+                self.entity_table_rows = archetype.entity_table_rows().as_ptr();
+                self.table_flags = table
+                    .get_column_unchecked(state.component_id)
+                    .get_flags_mut_ptr()
+                    .cast::<ComponentFlags>();
+            }
+            StorageType::SparseSet => self.entities = archetype.entities().as_ptr(),
+        }
+    }
+
+    #[inline]
+    unsafe fn set_table(&mut self, state: &Self::State, table: &Table) {
+        self.table_flags = table
+            .get_column_unchecked(state.component_id)
+            .get_flags_mut_ptr()
+            .cast::<ComponentFlags>();
+    }
+
+    #[inline]
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
+        match self.storage_type {
+            StorageType::Table => {
+                let table_row = *self.entity_table_rows.add(archetype_index);
+                Flags {
+                    flags: *self.table_flags.add(table_row),
+                    marker: PhantomData,
+                }
+            }
+            StorageType::SparseSet => {
+                let entity = *self.entities.add(archetype_index);
+                Flags {
+                    flags: *(*self.sparse_set).get_flags_unchecked(entity),
+                    marker: PhantomData,
+                }
+            }
+        }
+    }
+
+    #[inline]
+    unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item {
+        Flags {
+            flags: *self.table_flags.add(table_row),
+            marker: PhantomData,
         }
     }
 }

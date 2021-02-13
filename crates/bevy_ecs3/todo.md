@@ -32,6 +32,8 @@
 * New removal system param API
     * old version existed on queries: had no relation to the query
     * caches component id
+* removed `Mut<T>` query impl. better to only support one way `&mut T` 
+* Removed with() from `Flags<T>` in favor of `Option<Flags<T>>`, which allows querying for flags to be "filtered" by default 
 
 ## TODO
 * world id safety
@@ -39,6 +41,7 @@
 * todo review
 * readme
 * core
+    * update matches_table to only check table components (not used in a sparse context)
     * Flags
     * remove one by one (remove_intersection)
     * batch_iter
