@@ -290,6 +290,35 @@ impl Table {
 
     /// Moves the `row` column values to `new_table`, for the columns shared between both tables. Returns the index of the
     /// new row in `new_table` and the entity in this table swapped in to replace it (if an entity was swapped in).
+    /// SAFETY: row must be in-bounds
+    pub unsafe fn move_to_and_drop_missing_unchecked(
+        &mut self,
+        row: usize,
+        new_table: &mut Table,
+    ) -> TableMoveResult {
+        let is_last = row == self.entities.len() - 1;
+        let new_row = new_table.allocate(self.entities.swap_remove(row));
+        for column in self.columns.values_mut() {
+            if let Some(new_column) = new_table.get_column_mut(column.component_id) {
+                let (data, flags) = column.swap_remove_and_forget_unchecked(row);
+                new_column.set_unchecked(new_row, data);
+                *new_column.get_flags_unchecked_mut(new_row) = flags;
+            } else {
+                column.swap_remove_unchecked(row);
+            }
+        }
+        TableMoveResult {
+            new_row,
+            swapped_entity: if is_last {
+                None
+            } else {
+                Some(self.entities[row])
+            },
+        }
+    }
+
+    /// Moves the `row` column values to `new_table`, for the columns shared between both tables. Returns the index of the
+    /// new row in `new_table` and the entity in this table swapped in to replace it (if an entity was swapped in).
     /// SAFETY: `row` must be in-bounds. `new_table` must contain every component this table has
     pub unsafe fn move_to_superset_unchecked(
         &mut self,

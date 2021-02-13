@@ -224,6 +224,7 @@ impl<'w> EntityMut<'w> {
                 components,
                 old_location.archetype_id,
                 bundle_info,
+                false,
             )?
         };
 
@@ -302,7 +303,92 @@ impl<'w> EntityMut<'w> {
 
     /// Remove any components in the bundle that the entity has.
     pub fn remove_bundle_intersection<T: Bundle>(&mut self) {
-        todo!();
+        let archetypes = &mut self.world.archetypes;
+        let storages = &mut self.world.storages;
+        let components = &mut self.world.components;
+        let entities = &mut self.world.entities;
+        let removed_components = &mut self.world.removed_components;
+
+        let bundle_info = self.world.bundles.init_info::<T>(components);
+        let old_location = self.location;
+        let new_archetype_id = unsafe {
+            remove_bundle_from_archetype(
+                archetypes,
+                storages,
+                components,
+                old_location.archetype_id,
+                bundle_info,
+                true,
+            ).expect("intersections should always return a result")
+        };
+
+        if new_archetype_id == old_location.archetype_id {
+            return;
+        }
+
+        // SAFE: current entity archetype is valid
+        let old_archetype = unsafe { archetypes.get_unchecked_mut(old_location.archetype_id) };
+        let entity = self.entity;
+        for component_id in bundle_info.component_ids.iter().cloned() {
+            if old_archetype.contains(component_id) {
+                // SAFE: entity location is valid and table row is removed below
+                unsafe {
+                    remove_component(
+                        components,
+                        storages,
+                        old_archetype,
+                        removed_components,
+                        component_id,
+                        entity,
+                        old_location,
+                    );
+                }
+            }
+        }
+
+        let remove_result = old_archetype.swap_remove(old_location.index);
+        if let Some(swapped_entity) = remove_result.swapped_entity {
+            // SAFE: entity is live and is contained in an archetype that exists
+            entities.meta[swapped_entity.id as usize].location = old_location;
+        }
+        let old_table_row = remove_result.table_row;
+        let old_table_id = old_archetype.table_id();
+        // SAFE: new archetype exists thanks to remove_bundle_from_archetype
+        let new_archetype = unsafe { archetypes.get_unchecked_mut(new_archetype_id) };
+
+        let new_location = if old_table_id == new_archetype.table_id() {
+            unsafe { new_archetype.allocate(entity, old_table_row) }
+        } else {
+            // SAFE: tables stored in archetypes always exist and table ids are different
+            let (old_table, new_table) = unsafe {
+                storages
+                    .tables
+                    .get_2_mut_unchecked(old_table_id, new_archetype.table_id())
+            };
+
+            // SAFE: table_row exists
+            let move_result =
+                unsafe { old_table.move_to_and_drop_missing_unchecked(old_table_row, new_table) };
+
+            // SAFE: new_table_row is a valid position in new_archetype's table
+            let new_location = unsafe { new_archetype.allocate(entity, move_result.new_row) };
+
+            // if an entity was moved into this entity's table spot, update its table row
+            if let Some(swapped_entity) = move_result.swapped_entity {
+                // PERF: entity is guaranteed to exist. we could skip a check here
+                let swapped_location = entities.get(swapped_entity).unwrap();
+                // SAFE: entity is live and is contained in an archetype that exists
+                unsafe {
+                    let archetype = archetypes.get_unchecked_mut(swapped_location.archetype_id);
+                    archetype.set_entity_table_row_unchecked(swapped_location.index, old_table_row);
+                };
+            }
+
+            new_location
+        };
+
+        self.location = new_location;
+        entities.meta[self.entity.id as usize].location = new_location;
     }
 
     pub fn insert<T: Component>(&mut self, value: T) -> &mut Self {
@@ -384,8 +470,7 @@ unsafe fn get_component(
     match component_info.storage_type() {
         StorageType::Table => {
             let table = world.storages.tables.get_unchecked(archetype.table_id());
-            // SAFE: archetypes will always point to valid columns
-            let components = table.get_column_unchecked(component_id);
+            let components = table.get_column(component_id)?;
             let table_row = archetype.entity_table_row_unchecked(location.index);
             // SAFE: archetypes only store valid table_rows and the stored component type is T
             Some(components.get_unchecked(table_row))
@@ -581,6 +666,8 @@ pub(crate) unsafe fn add_bundle_to_archetype(
 /// Removes a bundle from the given archetype and returns the resulting archetype (or None if the removal was invalid).
 /// in the event that adding the given bundle does not result in an Archetype change. Results are cached in the
 /// Archetype Graph to avoid redundant work.
+/// if `intersection` is false, attempting to remove a bundle with components _not_ contained in the current archetype will fail,
+/// returning None. if `intersection` is true, components in the bundle but not in the current archetype will be ignored
 /// SAFETY: `archetype_id` must exist and components in `bundle_info` must exist
 unsafe fn remove_bundle_from_archetype(
     archetypes: &mut Archetypes,
@@ -588,12 +675,19 @@ unsafe fn remove_bundle_from_archetype(
     components: &mut Components,
     archetype_id: ArchetypeId,
     bundle_info: &BundleInfo,
+    intersection: bool,
 ) -> Option<ArchetypeId> {
     // check the archetype graph to see if the Bundle has been removed from this archetype in the past
     let remove_bundle_result = {
         // SAFE: entity location is valid and therefore the archetype exists
         let current_archetype = archetypes.get_unchecked_mut(archetype_id);
-        current_archetype.edges().get_remove_bundle(bundle_info.id)
+        if intersection {
+            current_archetype
+                .edges()
+                .get_remove_bundle_intersection(bundle_info.id)
+        } else {
+            current_archetype.edges().get_remove_bundle(bundle_info.id)
+        }
     };
     let result = if let Some(result) = remove_bundle_result {
         // this Bundle removal result is cached. just return that!
@@ -615,7 +709,7 @@ unsafe fn remove_bundle_from_archetype(
                         StorageType::Table => removed_table_components.push(component_id),
                         StorageType::SparseSet => removed_sparse_set_components.push(component_id),
                     }
-                } else {
+                } else if !intersection {
                     // a component in the bundle was not present in the entity's archetype, so this removal is invalid
                     // cache the result in the archetype graph
                     current_archetype
@@ -656,9 +750,15 @@ unsafe fn remove_bundle_from_archetype(
     // SAFE: entity location is valid and therefore the archetype exists
     let current_archetype = archetypes.get_unchecked_mut(archetype_id);
     // cache the result in an edge
-    current_archetype
-        .edges_mut()
-        .set_remove_bundle(bundle_info.id, result);
+    if intersection {
+        current_archetype
+            .edges_mut()
+            .set_remove_bundle_intersection(bundle_info.id, result);
+    } else {
+        current_archetype
+            .edges_mut()
+            .set_remove_bundle(bundle_info.id, result);
+    }
     result
 }
 

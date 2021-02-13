@@ -130,17 +130,9 @@ where
     T: Bundle + Send + Sync + 'static,
 {
     fn write(self: Box<Self>, world: &mut World) {
-        // TODO: use entity.remove_bundle_intersection once it is implemented"
         if let Some(mut entity_mut) = world.entity_mut(self.entity) {
-            match entity_mut.remove::<T>() {
-                Some(_) => (),
-                None => {
-                    warn!(
-                    "Failed to remove components {:?}. Falling back to inefficient one-by-one component removing.",
-                    std::any::type_name::<T>(),
-                    )
-                }
-            }
+            // remove intersection to gracefully handle components that were removed before running this command
+            entity_mut.remove_bundle_intersection::<T>();
         }
     }
 }

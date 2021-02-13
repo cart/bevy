@@ -749,6 +749,24 @@ mod tests {
         assert_eq!(*world.get_resource::<f64>().expect("resource exists"), -1.0);
     }
 
+    #[test]
+    fn remove_intersection() {
+        let mut world = World::default();
+        let e1 = world.spawn().insert_bundle((1, 1.0, "a")).id();
+
+        let mut e = world.entity_mut(e1).unwrap();
+        assert_eq!(e.get::<&'static str>(), Some(&"a"));
+        assert_eq!(e.get::<i32>(), Some(&1));
+        assert_eq!(e.get::<f64>(), Some(&1.0));
+        assert_eq!(e.get::<usize>(), None, "usize is not in the entity, so it should not exist");
+
+        e.remove_bundle_intersection::<(i32, f64, usize)>();
+        assert_eq!(e.get::<&'static str>(), Some(&"a"), "&'static str is not in the removed bundle, so it should exist");
+        assert_eq!(e.get::<i32>(), None, "i32 is in the removed bundle, so should not exist");
+        assert_eq!(e.get::<f64>(), None, "f64 is in the removed bundle, so should not exist");
+        assert_eq!(e.get::<usize>(), None, "usize is in the removed bundle, so should not exist");
+    }
+
     // #[test]
     // fn non_send_resource() {
     //     let mut resources = Resources::default();

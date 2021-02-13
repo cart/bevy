@@ -34,6 +34,7 @@
     * caches component id
 * removed `Mut<T>` query impl. better to only support one way `&mut T` 
 * Removed with() from `Flags<T>` in favor of `Option<Flags<T>>`, which allows querying for flags to be "filtered" by default 
+* Replaced slow "remove_bundle_one_by_one" used as fallback for Commands::remove_bundle with fast "remove_bundle_intersection"
 
 ## TODO
 * world id safety
@@ -41,7 +42,7 @@
 * todo review
 * readme
 * core
-    * remove one by one (remove_intersection)
+    * drop tests
     * batch_iter
     * Update bundle derive macro
     * Optimize SparseSet::insert (code is written but it has memory issues)

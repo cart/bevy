@@ -48,6 +48,7 @@ pub struct FromBundle {
 pub struct Edges {
     pub add_bundle: SparseArray<BundleId, ArchetypeId>,
     pub remove_bundle: SparseArray<BundleId, Option<ArchetypeId>>,
+    pub remove_bundle_intersection: SparseArray<BundleId, Option<ArchetypeId>>,
     pub from_bundle: SparseArray<BundleId, FromBundle>,
 }
 
@@ -86,6 +87,16 @@ impl Edges {
 
     #[inline]
     pub fn set_remove_bundle(&mut self, bundle_id: BundleId, archetype_id: Option<ArchetypeId>) {
+        self.remove_bundle.insert(bundle_id, archetype_id);
+    }
+
+    #[inline]
+    pub fn get_remove_bundle_intersection(&self, bundle_id: BundleId) -> Option<Option<ArchetypeId>> {
+        self.remove_bundle_intersection.get(bundle_id).cloned()
+    }
+
+    #[inline]
+    pub fn set_remove_bundle_intersection(&mut self, bundle_id: BundleId, archetype_id: Option<ArchetypeId>) {
         self.remove_bundle.insert(bundle_id, archetype_id);
     }
 
