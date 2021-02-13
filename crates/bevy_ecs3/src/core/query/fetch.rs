@@ -17,32 +17,41 @@ pub trait Fetch<'w>: Sized {
     const DANGLING: Self;
     type Item;
     type State: FetchState;
+    /// Creates a new instance of this fetch.
+    /// # Safety
+    /// `state` must have been initialized (via [FetchState::init]) using the same `world` passed in to this function.
     unsafe fn init(world: &World, state: &Self::State) -> Self;
     /// Returns true if (and only if) every table of every archetype matched by this Fetch contains all of the matched components.
     /// This is used to select a more efficient "table iterator" for "dense" queries.
-    /// If this returns true, [Fetch::next_table] and [Fetch::table_fetch] will be called for iterators
-    /// If this returns false, [Fetch::next_archetype] and [Fetch::archetype_fetch] will be called for iterators
+    /// If this returns true, [Fetch::set_table] and [Fetch::table_fetch] will be called for iterators
+    /// If this returns false, [Fetch::set_archetype] and [Fetch::archetype_fetch] will be called for iterators
     fn is_dense(&self) -> bool;
     /// Adjusts internal state to account for the next [Archetype]. This will always be called on archetypes that match this [Fetch]
-    unsafe fn next_archetype(
-        &mut self,
-        state: &Self::State,
-        archetype: &Archetype,
-        tables: &Tables,
-    );
+    /// # Safety
+    /// `archetype` and `tables` must be from the [World] [Fetch::init] was called on. `state` must be the [Self::State] this was initialized with.
+    unsafe fn set_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables);
     /// Adjusts internal state to account for the next [Table]. This will always be called on tables that match this [Fetch]
-    unsafe fn next_table(&mut self, state: &Self::State, table: &Table);
-    /// Fetch [Self::Item] for the given `archetype_index` in the current [Archetype]. This must always be called after [next_archetype] with an `archetype_index`
+    /// # Safety
+    /// `table` must be from the [World] [Fetch::init] was called on. `state` must be the [Self::State] this was initialized with.
+    unsafe fn set_table(&mut self, state: &Self::State, table: &Table);
+    /// Fetch [Self::Item] for the given `archetype_index` in the current [Archetype]. This must always be called after [Fetch::set_archetype] with an `archetype_index`
     /// in the range of the current [Archetype]
+    /// # Safety
+    /// Must always be called _after_ [Fetch::set_archetype]. `archetype_index` must be in the range of the current archetype
     unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item;
-    /// Fetch [Self::Item] for the given `table_row` in the current [Table]. This must always be called after [next_table] with a `table_row`
+    /// Fetch [Self::Item] for the given `table_row` in the current [Table]. This must always be called after [set_table] with a `table_row`
     /// in the range of the current [Table]
+    /// # Safety
+    /// Must always be called _after_ [Fetch::set_table]. `table_row` must be in the range of the current table
     unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item;
 }
 
 /// State used to construct a Fetch. This will be cached inside QueryState, so it is best to move as much data /
-// computation here as possible to reduce the cost of constructing Fetch.
-pub trait FetchState: Sized {
+/// computation here as possible to reduce the cost of constructing Fetch.
+/// SAFETY:
+/// Implementor must ensure that [FetchState::update_component_access] and [FetchState::update_archetype_component_access] exactly
+/// reflects the results of [FetchState::matches_archetype] and [FetchState::matches_table], [Fetch::archetype_fetch], and [Fetch::table_fetch]
+pub unsafe trait FetchState: Sized {
     fn init(world: &mut World) -> Self;
     fn update_component_access(&self, access: &mut Access<ComponentId>);
     fn update_archetype_component_access(
@@ -70,7 +79,8 @@ unsafe impl ReadOnlyFetch for FetchEntity {}
 
 pub struct EntityState;
 
-impl FetchState for EntityState {
+// SAFE: no component or archetype access
+unsafe impl FetchState for EntityState {
     fn init(_world: &mut World) -> Self {
         Self
     }
@@ -113,7 +123,7 @@ impl<'w> Fetch<'w> for FetchEntity {
     }
 
     #[inline]
-    unsafe fn next_archetype(
+    unsafe fn set_archetype(
         &mut self,
         _state: &Self::State,
         archetype: &Archetype,
@@ -123,7 +133,7 @@ impl<'w> Fetch<'w> for FetchEntity {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, _state: &Self::State, table: &Table) {
+    unsafe fn set_table(&mut self, _state: &Self::State, table: &Table) {
         self.entities = table.entities().as_ptr();
     }
 
@@ -149,7 +159,8 @@ pub struct ReadState<T> {
     marker: PhantomData<T>,
 }
 
-impl<T: Component> FetchState for ReadState<T> {
+// SAFE: component access and archetype component access are properly updated to reflect that T is read
+unsafe impl<T: Component> FetchState for ReadState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -235,7 +246,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     }
 
     #[inline]
-    unsafe fn next_archetype(
+    unsafe fn set_archetype(
         &mut self,
         state: &Self::State,
         archetype: &Archetype,
@@ -256,7 +267,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, state: &Self::State, table: &Table) {
+    unsafe fn set_table(&mut self, state: &Self::State, table: &Table) {
         self.table_components = table
             .get_column_unchecked(state.component_id)
             .get_ptr()
@@ -304,7 +315,8 @@ pub struct WriteState<T> {
     marker: PhantomData<T>,
 }
 
-impl<T: Component> FetchState for WriteState<T> {
+// SAFE: component access and archetype component access are properly updated to reflect that T is written
+unsafe impl<T: Component> FetchState for WriteState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -381,7 +393,7 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     }
 
     #[inline]
-    unsafe fn next_archetype(
+    unsafe fn set_archetype(
         &mut self,
         state: &Self::State,
         archetype: &Archetype,
@@ -401,7 +413,7 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, state: &Self::State, table: &Table) {
+    unsafe fn set_table(&mut self, state: &Self::State, table: &Table) {
         let column = table.get_column_unchecked(state.component_id);
         self.table_components = column.get_ptr().cast::<T>();
         self.table_flags = column.get_flags_mut_ptr();
@@ -454,7 +466,8 @@ pub struct OptionState<T: FetchState> {
     state: T,
 }
 
-impl<T: FetchState> FetchState for OptionState<T> {
+// SAFE: component access and archetype component access are properly updated according to the internal Fetch
+unsafe impl<T: FetchState> FetchState for OptionState<T> {
     fn init(world: &mut World) -> Self {
         Self {
             state: T::init(world),
@@ -507,7 +520,7 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
     }
 
     #[inline]
-    unsafe fn next_archetype(
+    unsafe fn set_archetype(
         &mut self,
         state: &Self::State,
         archetype: &Archetype,
@@ -515,15 +528,15 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
     ) {
         self.matches = state.state.matches_archetype(archetype);
         if self.matches {
-            self.fetch.next_archetype(&state.state, archetype, tables);
+            self.fetch.set_archetype(&state.state, archetype, tables);
         }
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, state: &Self::State, table: &Table) {
+    unsafe fn set_table(&mut self, state: &Self::State, table: &Table) {
         self.matches = state.state.matches_table(table);
         if self.matches {
-            self.fetch.next_table(&state.state, table);
+            self.fetch.set_table(&state.state, table);
         }
     }
 
@@ -568,17 +581,17 @@ macro_rules! impl_tuple_fetch {
             }
 
             #[inline]
-            unsafe fn next_archetype(&mut self, _state: &Self::State, _archetype: &Archetype, _tables: &Tables) {
+            unsafe fn set_archetype(&mut self, _state: &Self::State, _archetype: &Archetype, _tables: &Tables) {
                 let ($($name,)*) = self;
                 let ($($state,)*) = _state;
-                $($name.next_archetype($state, _archetype, _tables);)*
+                $($name.set_archetype($state, _archetype, _tables);)*
             }
 
             #[inline]
-            unsafe fn next_table(&mut self, _state: &Self::State, _table: &Table) {
+            unsafe fn set_table(&mut self, _state: &Self::State, _table: &Table) {
                 let ($($name,)*) = self;
                 let ($($state,)*) = _state;
-                $($name.next_table($state, _table);)*
+                $($name.set_table($state, _table);)*
             }
 
             #[inline]
@@ -594,8 +607,9 @@ macro_rules! impl_tuple_fetch {
             }
         }
 
+        // SAFE: update_component_access and update_archetype_component_access are called for each item in the tuple
         #[allow(non_snake_case)]
-        impl<$($name: FetchState),*> FetchState for ($($name,)*) {
+        unsafe impl<$($name: FetchState),*> FetchState for ($($name,)*) {
             fn init(_world: &mut World) -> Self {
                 ($($name::init(_world),)*)
             }

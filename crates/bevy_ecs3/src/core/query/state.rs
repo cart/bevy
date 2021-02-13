@@ -137,8 +137,8 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         let mut fetch = <Q::Fetch as Fetch>::init(world, &self.fetch_state);
         let mut filter = F::init(world, &self.filter_state);
 
-        fetch.next_archetype(&self.fetch_state, archetype, &world.storages().tables);
-        filter.next_archetype(archetype, &world.storages().tables);
+        fetch.set_archetype(&self.fetch_state, archetype, &world.storages().tables);
+        filter.set_archetype(archetype, &world.storages().tables);
         if filter.matches_archetype_entity(location.index) {
             Some(fetch.archetype_fetch(location.index))
         } else {
@@ -226,8 +226,8 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
             let tables = &world.storages().tables;
             for table_id in self.matched_table_ids.iter() {
                 let table = tables.get_unchecked(*table_id);
-                fetch.next_table(&self.fetch_state, table);
-                filter.next_table(table);
+                fetch.set_table(&self.fetch_state, table);
+                filter.set_table(table);
 
                 for table_index in 0..table.len() {
                     if !filter.matches_table_entity(table_index) {
@@ -242,8 +242,8 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
             let tables = &world.storages().tables;
             for archetype_id in self.matched_archetype_ids.iter() {
                 let archetype = archetypes.get_unchecked(*archetype_id);
-                fetch.next_archetype(&self.fetch_state, archetype, tables);
-                filter.next_archetype(archetype, tables);
+                fetch.set_archetype(&self.fetch_state, archetype, tables);
+                filter.set_archetype(archetype, tables);
 
                 for archetype_index in 0..archetype.len() {
                     if !filter.matches_archetype_entity(archetype_index) {

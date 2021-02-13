@@ -10,9 +10,23 @@ pub trait QueryFilter: Sized {
     const DANGLING: Self;
     unsafe fn init(world: &World, state: &Self::State) -> Self;
     fn is_dense(&self) -> bool;
-    unsafe fn next_table(&mut self, table: &Table);
-    unsafe fn next_archetype(&mut self, archetype: &Archetype, tables: &Tables);
+    /// Adjusts internal state to account for the next [Table]. This will always be called on tables that match this [QueryFilter]
+    /// # Safety
+    /// `table` must be from the [World] [QueryFilter::init] was called on. 
+    unsafe fn set_table(&mut self, table: &Table);
+    /// Adjusts internal state to account for the next [Archetype]. This will always be called on archetypes that match this [QueryFilter]
+    /// # Safety
+    /// `archetype` and `tables` must be from the [World] [QueryFilter::init] was called on. 
+    unsafe fn set_archetype(&mut self, archetype: &Archetype, tables: &Tables);
+    /// Returns true if the entity at the given `table_row` matches this filter. This must always be called after [set_table] with a `table_row`
+    /// in the range of the current [Table]
+    /// # Safety
+    /// Must always be called _after_ [QueryFilter::set_table]. `table_row` must be in the range of the current table
     unsafe fn matches_table_entity(&self, table_row: usize) -> bool;
+    /// Returns true if the entity at the given `archetype_index` matches this filter. This must always be called after [set_archetype] with an `archetype_index`
+    /// in the range of the current [Archetype]
+    /// # Safety
+    /// Must always be called _after_ [QueryFilter::set_archetype]. `archetype_index` must be in the range of the current archetype
     unsafe fn matches_archetype_entity(&self, archetype_index: usize) -> bool;
 }
 
@@ -29,7 +43,8 @@ pub struct WithState<T> {
     marker: PhantomData<T>,
 }
 
-impl<T: Component> FetchState for WithState<T> {
+// SAFE: no component access or archetype component access
+unsafe impl<T: Component> FetchState for WithState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: ComponentInfo was just created above
@@ -82,10 +97,10 @@ impl<T: Component> QueryFilter for With<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, _table: &Table) {}
+    unsafe fn set_table(&mut self, _table: &Table) {}
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype, _tables: &Tables) {}
+    unsafe fn set_archetype(&mut self, _archetype: &Archetype, _tables: &Tables) {}
 
     #[inline]
     unsafe fn matches_archetype_entity(&self, _archetype_index: usize) -> bool {
@@ -109,7 +124,8 @@ pub struct WithoutState<T> {
     marker: PhantomData<T>,
 }
 
-impl<T: Component> FetchState for WithoutState<T> {
+// SAFE: no component access or archetype component access
+unsafe impl<T: Component> FetchState for WithoutState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: ComponentInfo was just created above
@@ -162,10 +178,10 @@ impl<T: Component> QueryFilter for Without<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, _table: &Table) {}
+    unsafe fn set_table(&mut self, _table: &Table) {}
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype, _tables: &Tables) {}
+    unsafe fn set_archetype(&mut self, _archetype: &Archetype, _tables: &Tables) {}
 
     #[inline]
     unsafe fn matches_archetype_entity(&self, _archetype_index: usize) -> bool {
@@ -189,7 +205,8 @@ pub struct WithBundleState<T: Bundle> {
     marker: PhantomData<T>,
 }
 
-impl<T: Bundle> FetchState for WithBundleState<T> {
+// SAFE: no component access or archetype component access
+unsafe impl<T: Bundle> FetchState for WithBundleState<T> {
     fn init(world: &mut World) -> Self {
         let bundle_info = world.bundles.init_info::<T>(&mut world.components);
         let components = &world.components;
@@ -243,10 +260,10 @@ impl<T: Bundle> QueryFilter for WithBundle<T> {
     }
 
     #[inline]
-    unsafe fn next_table(&mut self, _table: &Table) {}
+    unsafe fn set_table(&mut self, _table: &Table) {}
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype, _tables: &Tables) {}
+    unsafe fn set_archetype(&mut self, _archetype: &Archetype, _tables: &Tables) {}
 
     #[inline]
     unsafe fn matches_archetype_entity(&self, _archetype_index: usize) -> bool {
@@ -279,15 +296,15 @@ macro_rules! impl_query_filter_tuple {
             }
 
             #[inline]
-            unsafe fn next_table(&mut self, table: &Table) {
+            unsafe fn set_table(&mut self, table: &Table) {
                 let ($($filter,)*) = self;
-                $($filter.next_table(table);)*
+                $($filter.set_table(table);)*
             }
 
             #[inline]
-            unsafe fn next_archetype(&mut self, archetype: &Archetype, tables: &Tables) {
+            unsafe fn set_archetype(&mut self, archetype: &Archetype, tables: &Tables) {
                 let ($($filter,)*) = self;
-                $($filter.next_archetype(archetype, tables);)*
+                $($filter.set_archetype(archetype, tables);)*
             }
 
             #[inline]
@@ -321,15 +338,15 @@ macro_rules! impl_query_filter_tuple {
             }
 
             #[inline]
-            unsafe fn next_table(&mut self, table: &Table) {
+            unsafe fn set_table(&mut self, table: &Table) {
                 let ($($filter,)*) = &mut self.0;
-                $($filter.next_table(table);)*
+                $($filter.set_table(table);)*
             }
 
             #[inline]
-            unsafe fn next_archetype(&mut self, archetype: &Archetype, tables: &Tables) {
+            unsafe fn set_archetype(&mut self, archetype: &Archetype, tables: &Tables) {
                 let ($($filter,)*) = &mut self.0;
-                $($filter.next_archetype(archetype, tables);)*
+                $($filter.set_archetype(archetype, tables);)*
             }
 
 
@@ -346,9 +363,10 @@ macro_rules! impl_query_filter_tuple {
             }
         }
 
+        // SAFE: update_component_access and update_archetype_component_access are called for each item in the tuple
         #[allow(unused_variables)]
         #[allow(non_snake_case)]
-        impl<$($filter: FetchState),*> FetchState for Or<($($filter,)*)> {
+        unsafe impl<$($filter: FetchState),*> FetchState for Or<($($filter,)*)> {
             fn init(world: &mut World) -> Self {
                 Or(($($filter::init(world),)*))
             }
@@ -397,7 +415,8 @@ macro_rules! impl_flag_filter {
             marker: PhantomData<T>,
         }
 
-        impl<T: Component> FetchState for $state_name<T> {
+        // SAFE: this reads the T component. archetype component access and component access are updated to reflect that
+        unsafe impl<T: Component> FetchState for $state_name<T> {
             fn init(world: &mut World) -> Self {
                 let component_id = world.components.get_or_insert_id::<T>();
                 // SAFE: component_id exists if there is a TypeId pointing to it
@@ -468,13 +487,13 @@ macro_rules! impl_flag_filter {
                 self.storage_type == StorageType::Table
             }
 
-            unsafe fn next_table(&mut self, table: &Table) {
+            unsafe fn set_table(&mut self, table: &Table) {
                 self.table_flags = table
                     .get_column_unchecked(self.component_id)
                     .get_flags_mut_ptr();
             }
 
-            unsafe fn next_archetype(&mut self, archetype: &Archetype, tables: &Tables) {
+            unsafe fn set_archetype(&mut self, archetype: &Archetype, tables: &Tables) {
                 let table = tables.get_unchecked(archetype.table_id());
                 match self.storage_type {
                     StorageType::Table => {

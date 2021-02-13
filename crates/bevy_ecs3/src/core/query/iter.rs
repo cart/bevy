@@ -48,8 +48,8 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, 's, Q, F>
                     if self.current_index == self.current_len {
                         let table_id = self.table_id_iter.next()?;
                         let table = self.tables.get_unchecked(*table_id);
-                        self.fetch.next_table(&self.query_state.fetch_state, table);
-                        self.filter.next_table(table);
+                        self.fetch.set_table(&self.query_state.fetch_state, table);
+                        self.filter.set_table(table);
                         self.current_len = table.len();
                         self.current_index = 0;
                         continue;
@@ -70,8 +70,8 @@ impl<'w, 's, Q: WorldQuery, F: QueryFilter> Iterator for QueryIter<'w, 's, Q, F>
                     if self.current_index == self.current_len {
                         let archetype_id = self.archetype_id_iter.next()?;
                         let archetype = self.archetypes.get_unchecked(*archetype_id);
-                        self.fetch.next_archetype(&self.query_state.fetch_state, archetype, self.tables);
-                        self.filter.next_archetype(archetype, self.tables);
+                        self.fetch.set_archetype(&self.query_state.fetch_state, archetype, self.tables);
+                        self.filter.set_archetype(archetype, self.tables);
                         self.current_len = archetype.len();
                         self.current_index = 0;
                         continue;

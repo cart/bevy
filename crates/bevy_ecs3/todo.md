@@ -30,12 +30,10 @@
 * Slightly nicer IntoSystem / FuncSystem impl (inspired by DJMcnab's work)
 
 ## TODO
-* use smaller_tuples_too anywhere
 * world id safety
 * documentation / symbol review
 * todo review
 * core
-    * Make Fetch an unsafe trait
     * Removal Tracking
     * Flags
     * remove one by one (remove_intersection)
