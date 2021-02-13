@@ -41,8 +41,6 @@
 * todo review
 * readme
 * core
-    * update matches_table to only check table components (not used in a sparse context)
-    * Flags
     * remove one by one (remove_intersection)
     * batch_iter
     * Update bundle derive macro

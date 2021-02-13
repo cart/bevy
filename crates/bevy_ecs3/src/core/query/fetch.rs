@@ -193,11 +193,7 @@ unsafe impl<T: Component> FetchState for ReadState<T> {
     }
 
     fn matches_table(&self, table: &Table) -> bool {
-        match self.storage_type {
-            StorageType::Table => table.has_column(self.component_id),
-            // any table could have any sparse set component
-            StorageType::SparseSet => true,
-        }
+        table.has_column(self.component_id)
     }
 }
 
@@ -348,11 +344,7 @@ unsafe impl<T: Component> FetchState for WriteState<T> {
     }
 
     fn matches_table(&self, table: &Table) -> bool {
-        match self.storage_type {
-            StorageType::Table => table.has_column(self.component_id),
-            // any table could have any sparse set component
-            StorageType::SparseSet => true,
-        }
+        table.has_column(self.component_id)
     }
 }
 
@@ -635,11 +627,7 @@ unsafe impl<T: Component> FetchState for FlagsState<T> {
     }
 
     fn matches_table(&self, table: &Table) -> bool {
-        match self.storage_type {
-            StorageType::Table => table.has_column(self.component_id),
-            // any table could have any sparse set component
-            StorageType::SparseSet => true,
-        }
+        table.has_column(self.component_id)
     }
 }
 
