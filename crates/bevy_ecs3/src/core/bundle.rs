@@ -66,7 +66,8 @@ macro_rules! tuple_impl {
     }
 }
 
-smaller_tuples_too!(tuple_impl, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A);
+#[rustfmt::skip]
+smaller_tuples_too!(tuple_impl, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
 
 #[derive(Debug, Clone, Copy)]
 pub struct BundleId(usize);
@@ -163,7 +164,10 @@ impl Bundles {
         unsafe { self.bundle_infos.get_unchecked(id.0) }
     }
 
-    pub(crate) fn init_info<'a, T: Bundle>(&'a mut self, components: &mut Components) -> &'a BundleInfo {
+    pub(crate) fn init_info<'a, T: Bundle>(
+        &'a mut self,
+        components: &mut Components,
+    ) -> &'a BundleInfo {
         let bundle_infos = &mut self.bundle_infos;
         let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
             let type_info = T::static_type_info();

@@ -26,7 +26,12 @@ pub trait Fetch<'w>: Sized {
     /// If this returns false, [next_archetype] and [archetype_fetch] will be called for iterators
     fn is_dense(&self) -> bool;
     /// Adjusts internal state to account for the next [Archetype]. This will always be called on archetypes that match this [Fetch]
-    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables);
+    unsafe fn next_archetype(
+        &mut self,
+        state: &Self::State,
+        archetype: &Archetype,
+        tables: &Tables,
+    );
     /// Adjusts internal state to account for the next [Table]. This will always be called on tables that match this [Fetch]
     unsafe fn next_table(&mut self, state: &Self::State, table: &Table);
     /// Fetch [Self::Item] for the given `archetype_index` in the current [Archetype]. This must always be called after [next_archetype] with an `archetype_index`
@@ -110,7 +115,12 @@ impl<'w> Fetch<'w> for FetchEntity {
     }
 
     #[inline]
-    unsafe fn next_archetype(&mut self, _state: &Self::State, archetype: &Archetype, _tables: &Tables) {
+    unsafe fn next_archetype(
+        &mut self,
+        _state: &Self::State,
+        archetype: &Archetype,
+        _tables: &Tables,
+    ) {
         self.entities = archetype.entities().as_ptr();
     }
 
@@ -180,7 +190,6 @@ impl<T: Component> FetchState for ReadState<T> {
             StorageType::SparseSet => true,
         }
     }
-
 }
 
 pub struct FetchRead<T> {
@@ -228,7 +237,12 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     }
 
     #[inline]
-    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables) {
+    unsafe fn next_archetype(
+        &mut self,
+        state: &Self::State,
+        archetype: &Archetype,
+        tables: &Tables,
+    ) {
         // SAFE: archetype tables always exist
         let table = tables.get_unchecked(archetype.table_id());
         match state.storage_type {
@@ -369,7 +383,12 @@ impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     }
 
     #[inline]
-    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables) {
+    unsafe fn next_archetype(
+        &mut self,
+        state: &Self::State,
+        archetype: &Archetype,
+        tables: &Tables,
+    ) {
         // SAFE: archetype tables always exist
         let table = tables.get_unchecked(archetype.table_id());
         match state.storage_type {
@@ -466,7 +485,6 @@ impl<T: FetchState> FetchState for OptionState<T> {
     fn matches_table(&self, _table: &Table) -> bool {
         true
     }
-
 }
 
 impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
@@ -491,7 +509,12 @@ impl<'w, T: Fetch<'w>> Fetch<'w> for FetchOption<T> {
     }
 
     #[inline]
-    unsafe fn next_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables) {
+    unsafe fn next_archetype(
+        &mut self,
+        state: &Self::State,
+        archetype: &Archetype,
+        tables: &Tables,
+    ) {
         self.matches = state.state.matches_archetype(archetype);
         if self.matches {
             self.fetch.next_archetype(&state.state, archetype, tables);
@@ -610,4 +633,5 @@ macro_rules! tuple_impl {
     };
 }
 
-smaller_tuples_too!(tuple_impl, (O, OS), (N, NS), (M, MS), (L, LS), (K, KS), (J, JS), (I, IS), (H, HS), (G, GS), (F, FS), (E, ES), (D, DS), (C, CS), (B, BS), (A, AS));
+#[rustfmt::skip]
+smaller_tuples_too!(tuple_impl, (A, AS), (B, BS), (C, CS), (D, DS), (E, ES), (F, FS), (G, GS), (H, HS), (I, IS), (J, JS), (K, KS), (L, LS), (M, MS), (N, NS), (O, OS));

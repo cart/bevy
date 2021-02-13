@@ -1,5 +1,6 @@
 use crate::{
     core::{Access, ArchetypeComponentId, ComponentId, World},
+    smaller_tuples_too,
     system::{System, SystemId, SystemParam, SystemParamFetch, SystemParamState},
 };
 use std::{borrow::Cow, marker::PhantomData};
@@ -187,27 +188,16 @@ macro_rules! impl_into_system {
     };
 }
 
-impl_into_system!();
-impl_into_system!(A);
-impl_into_system!(A, B);
-impl_into_system!(A, B, C);
-impl_into_system!(A, B, C, D);
-impl_into_system!(A, B, C, D, E);
-impl_into_system!(A, B, C, D, E, F);
-impl_into_system!(A, B, C, D, E, F, G);
-impl_into_system!(A, B, C, D, E, F, G, H);
-impl_into_system!(A, B, C, D, E, F, G, H, I);
-impl_into_system!(A, B, C, D, E, F, G, H, I, J);
-impl_into_system!(A, B, C, D, E, F, G, H, I, J, K);
-impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L);
-impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M);
-impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
-impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
-impl_into_system!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+#[rustfmt::skip]
+smaller_tuples_too!(impl_into_system, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::{Entity, FromWorld, Or, With, World, Changed, Added, Mutated}, schedule::{Schedule, Stage, SystemStage}, system::{IntoSystem, Local, Query, QuerySet, Res, ResMut, System}};
+    use crate::{
+        core::{Added, Changed, Entity, FromWorld, Mutated, Or, With, World},
+        schedule::{Schedule, Stage, SystemStage},
+        system::{IntoSystem, Local, Query, QuerySet, Res, ResMut, System},
+    };
 
     #[derive(Debug, Eq, PartialEq, Default)]
     struct A;

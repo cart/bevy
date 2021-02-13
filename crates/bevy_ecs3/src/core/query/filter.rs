@@ -1,8 +1,11 @@
-use crate::core::{
-    Access, Archetype, ArchetypeComponentId, Bundle, Component, ComponentFlags, ComponentId,
-    ComponentSparseSet, Entity, FetchState, StorageType, Table, Tables, World,
+use crate::{
+    core::{
+        Access, Archetype, ArchetypeComponentId, Bundle, Component, ComponentFlags, ComponentId,
+        ComponentSparseSet, Entity, FetchState, StorageType, Table, Tables, World,
+    },
+    smaller_tuples_too,
 };
-use std::{marker::PhantomData, ptr, str};
+use std::{marker::PhantomData, ptr};
 
 pub trait QueryFilter: Sized {
     type State: FetchState;
@@ -13,38 +16,6 @@ pub trait QueryFilter: Sized {
     unsafe fn next_archetype(&mut self, archetype: &Archetype, tables: &Tables);
     unsafe fn matches_table_entity(&self, table_row: usize) -> bool;
     unsafe fn matches_archetype_entity(&self, archetype_index: usize) -> bool;
-}
-
-impl QueryFilter for () {
-    type State = ();
-
-    const DANGLING: Self = ();
-
-    #[inline]
-    unsafe fn init(_world: &World, _state: &Self::State) -> Self {
-        ()
-    }
-
-    #[inline]
-    fn is_dense(&self) -> bool {
-        true
-    }
-
-    #[inline]
-    unsafe fn next_table(&mut self, _table: &Table) {}
-
-    #[inline]
-    unsafe fn next_archetype(&mut self, _archetype: &Archetype, _tables: &Tables) {}
-
-    #[inline]
-    unsafe fn matches_archetype_entity(&self, _archetype_index: usize) -> bool {
-        true
-    }
-
-    #[inline]
-    unsafe fn matches_table_entity(&self, _table_row: usize) -> bool {
-        true
-    }
 }
 
 pub struct Or<T>(pub T);
@@ -562,18 +533,5 @@ impl_flag_filter!(
     ComponentFlags::MUTATED
 );
 
-impl_query_filter_tuple!(A);
-impl_query_filter_tuple!(A, B);
-impl_query_filter_tuple!(A, B, C);
-impl_query_filter_tuple!(A, B, C, D);
-impl_query_filter_tuple!(A, B, C, D, E);
-impl_query_filter_tuple!(A, B, C, D, E, F);
-impl_query_filter_tuple!(A, B, C, D, E, F, G);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H, I);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H, I, J);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H, I, J, K);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
-impl_query_filter_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+#[rustfmt::skip]
+smaller_tuples_too!(impl_query_filter_tuple, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);

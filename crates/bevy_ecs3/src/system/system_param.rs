@@ -5,6 +5,7 @@ use crate::{
         Access, ArchetypeId, Component, ComponentFlags, ComponentId, FromWorld, Or, QueryFilter,
         QueryState, World, WorldQuery,
     },
+    smaller_tuples_too,
     system::{CommandQueue, Commands, Query, SystemState},
 };
 use std::{
@@ -448,20 +449,5 @@ macro_rules! impl_system_param_tuple {
     };
 }
 
-impl_system_param_tuple!();
-impl_system_param_tuple!(A);
-impl_system_param_tuple!(A, B);
-impl_system_param_tuple!(A, B, C);
-impl_system_param_tuple!(A, B, C, D);
-impl_system_param_tuple!(A, B, C, D, E);
-impl_system_param_tuple!(A, B, C, D, E, F);
-impl_system_param_tuple!(A, B, C, D, E, F, G);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I, J);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I, J, K);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
-impl_system_param_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+#[rustfmt::skip]
+smaller_tuples_too!(impl_system_param_tuple, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
