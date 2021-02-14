@@ -23,8 +23,8 @@ struct SystemSchedulingMetadata {
     dependencies_now: usize,
     /// Archetype-component access information.
     archetype_component_access: Access<ArchetypeComponentId>,
-    /// Whether or not this system is non-send
-    is_non_send: bool,
+    /// Whether or not this system is send-able
+    is_send: bool,
 }
 
 pub struct ParallelExecutor {
@@ -91,7 +91,7 @@ impl ParallelSystemExecutor for ParallelExecutor {
                 dependants: vec![],
                 dependencies_total,
                 dependencies_now: 0,
-                is_non_send: system.is_non_send(),
+                is_send: system.is_send(),
                 archetype_component_access: Default::default(),
             });
         }
@@ -193,10 +193,10 @@ impl ParallelExecutor {
                         .await
                         .unwrap_or_else(|error| unreachable!(error));
                 };
-                if system_data.is_non_send {
-                    scope.spawn_local(task);
-                } else {
+                if system_data.is_send {
                     scope.spawn(task);
+                } else {
+                    scope.spawn_local(task);
                 }
             }
             // Queue the system if it has no dependencies, otherwise reset its dependency counter.
@@ -212,7 +212,7 @@ impl ParallelExecutor {
     fn can_start_now(&self, index: usize) -> bool {
         let system_data = &self.system_metadata[index];
         // Non-send systems are considered conflicting with each other.
-        !(system_data.is_non_send && self.non_send_running)
+        !(!system_data.is_send && self.non_send_running)
             && system_data
                 .archetype_component_access
                 .is_compatible(&self.active_archetype_component_access)
@@ -241,7 +241,7 @@ impl ParallelExecutor {
                     .await
                     .unwrap_or_else(|error| unreachable!(error));
                 self.running.set(index, true);
-                if system_metadata.is_non_send {
+                if !system_metadata.is_send {
                     self.non_send_running = true;
                 }
                 // Add this system's access information to the active access information.
@@ -263,7 +263,7 @@ impl ParallelExecutor {
     /// in the `dependants_scratch`.
     fn process_finished_system(&mut self, index: usize) {
         let system_data = &self.system_metadata[index];
-        if system_data.is_non_send {
+        if !system_data.is_send {
             self.non_send_running = false;
         }
         self.running.set(index, false);

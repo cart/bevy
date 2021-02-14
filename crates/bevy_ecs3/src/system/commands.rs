@@ -1,23 +1,20 @@
 use crate::core::{Bundle, Component, DynamicBundle, Entity, World};
-use bevy_utils::tracing::{debug, warn};
+use bevy_utils::tracing::debug;
 use std::marker::PhantomData;
 
 /// A [World] mutation
-pub trait Command: Send + Sync {
+pub trait Command: Send + Sync + 'static {
     fn write(self: Box<Self>, world: &mut World);
 }
 
 #[derive(Debug)]
-pub(crate) struct Spawn<T>
-where
-    T: DynamicBundle + Send + Sync + 'static,
-{
+pub(crate) struct Spawn<T> {
     bundle: T,
 }
 
 impl<T> Command for Spawn<T>
 where
-    T: DynamicBundle + Send + Sync + 'static,
+    T: DynamicBundle + Send + Sync,
 {
     fn write(self: Box<Self>, world: &mut World) {
         world.spawn().insert_bundle(self.bundle);
@@ -34,7 +31,7 @@ where
 
 impl<I> Command for SpawnBatch<I>
 where
-    I: IntoIterator + Send + Sync,
+    I: IntoIterator + Send + Sync + 'static,
     I::Item: Bundle,
 {
     fn write(self: Box<Self>, world: &mut World) {
@@ -56,8 +53,6 @@ impl Command for Despawn {
 }
 
 pub struct InsertBundle<T>
-where
-    T: DynamicBundle + Send + Sync + 'static,
 {
     entity: Entity,
     bundle: T,
@@ -76,17 +71,14 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct Insert<T>
-where
-    T: Component,
-{
+pub(crate) struct Insert<T> {
     entity: Entity,
     component: T,
 }
 
 impl<T> Command for Insert<T>
 where
-    T: Component,
+    T: Component + Send + Sync,
 {
     fn write(self: Box<Self>, world: &mut World) {
         world
@@ -98,16 +90,15 @@ where
 
 #[derive(Debug)]
 pub(crate) struct Remove<T>
-where
-    T: Component,
 {
     entity: Entity,
-    phantom: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    phantom: PhantomData<fn() -> T>,
 }
 
 impl<T> Command for Remove<T>
 where
-    T: Component,
+    T: Component + Send + Sync,
 {
     fn write(self: Box<Self>, world: &mut World) {
         if let Some(mut entity_mut) = world.entity_mut(self.entity) {
@@ -118,16 +109,15 @@ where
 
 #[derive(Debug)]
 pub(crate) struct RemoveBundle<T>
-where
-    T: Bundle + Send + Sync + 'static,
 {
     entity: Entity,
-    phantom: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    phantom: PhantomData<fn() -> T>,
 }
 
 impl<T> Command for RemoveBundle<T>
 where
-    T: Bundle + Send + Sync + 'static,
+    T: Bundle + Send + Sync,
 {
     fn write(self: Box<Self>, world: &mut World) {
         if let Some(mut entity_mut) = world.entity_mut(self.entity) {
@@ -209,7 +199,7 @@ impl<'a> Commands<'a> {
     ///     commands.spawn((Component1, Component2));
     /// }
     /// ```
-    pub fn spawn(&mut self, bundle: impl DynamicBundle + Send + Sync + 'static) -> &mut Self {
+    pub fn spawn(&mut self, bundle: impl DynamicBundle + Send + Sync) -> &mut Self {
         let entity = self.world.entities().reserve_entity();
         self.set_current_entity(entity);
         self.insert_bundle(entity, bundle);
@@ -236,7 +226,7 @@ impl<'a> Commands<'a> {
     pub fn insert_bundle(
         &mut self,
         entity: Entity,
-        bundle: impl DynamicBundle + Send + Sync + 'static,
+        bundle: impl DynamicBundle + Send + Sync,
     ) -> &mut Self {
         self.add_command(InsertBundle { entity, bundle })
     }
@@ -244,14 +234,14 @@ impl<'a> Commands<'a> {
     /// Inserts a single component into `entity`.
     ///
     /// See [`World::insert_one`].
-    pub fn insert(&mut self, entity: Entity, component: impl Component) -> &mut Self {
+    pub fn insert(&mut self, entity: Entity, component: impl Component + Send + Sync) -> &mut Self {
         self.add_command(Insert { entity, component })
     }
 
     /// See [`World::remove_one`].
     pub fn remove<T>(&mut self, entity: Entity) -> &mut Self
     where
-        T: Component,
+        T: Component + Send + Sync,
     {
         self.add_command(Remove::<T> {
             entity,
@@ -262,7 +252,7 @@ impl<'a> Commands<'a> {
     /// See [`crate::core::EntityMut::remove_bundle`].
     pub fn remove_bundle<T>(&mut self, entity: Entity) -> &mut Self
     where
-        T: Bundle + Send + Sync + 'static,
+        T: Bundle + Send + Sync,
     {
         self.add_command(RemoveBundle::<T> {
             entity,
@@ -273,7 +263,7 @@ impl<'a> Commands<'a> {
     /// Adds a bundle of components to the current entity.
     ///
     /// See [`Self::with`], [`Self::current_entity`].
-    pub fn with_bundle(&mut self, bundle: impl DynamicBundle + Send + Sync + 'static) -> &mut Self {
+    pub fn with_bundle(&mut self, bundle: impl DynamicBundle + Send + Sync) -> &mut Self {
         let current_entity =  self.current_entity.expect("Cannot add bundle because the 'current entity' is not set. You should spawn an entity first.");
         self.queue.push(Box::new(InsertBundle {
             entity: current_entity,
@@ -318,7 +308,7 @@ impl<'a> Commands<'a> {
     ///     });
     /// }
     /// ```
-    pub fn with(&mut self, component: impl Component) -> &mut Self {
+    pub fn with(&mut self, component: impl Component + Send + Sync) -> &mut Self {
         let current_entity =  self.current_entity.expect("Cannot add component because the 'current entity' is not set. You should spawn an entity first.");
         self.queue.push(Box::new(Insert {
             entity: current_entity,
@@ -328,7 +318,7 @@ impl<'a> Commands<'a> {
     }
 
     /// Adds a command directly to the command list. Prefer this to [`Self::add_command_boxed`] if the type of `command` is statically known.
-    pub fn add_command<C: Command + 'static>(&mut self, command: C) -> &mut Self {
+    pub fn add_command<C: Command>(&mut self, command: C) -> &mut Self {
         self.queue.push(Box::new(command));
         self
     }

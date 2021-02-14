@@ -43,10 +43,14 @@
 * readme
 * core
     * NonSend resources (system param too)
+        * account for is_send difference
+        * non-send commands
+        * make system state private, add getters, hide is_send() in favor of set_non_send
     * drop tests
     * batch_iter
     * par_iter
     * Update bundle derive macro
+    * make type_id totally optional
     * Set-able system params
     * Optimize SparseSet::insert (code is written but it has memory issues)
     * fail on duplicate components in bundle
@@ -62,6 +66,7 @@
     * Give Option fetch access updating some scrutiny
     * Rename System::Update() to System::UpdateAccess() (only pass in required data)
     * investigate slower becs3 schedule perf (54 vs 69 us) ... afaik ive only subtracted ops so wtf
+    * make StorageType a builder on descriptor?
 
 ## LATER
 

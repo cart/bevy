@@ -19,12 +19,6 @@ pub struct QueryState<Q: WorldQuery, F: QueryFilter = ()> {
     pub(crate) filter_state: F::State,
 }
 
-// TODO: try removing these and adding constraints to Q::State
-/// SAFE: Q and F are markers
-unsafe impl<Q: WorldQuery, F: QueryFilter> Send for QueryState<Q, F> {}
-/// SAFE: Q and F are markers
-unsafe impl<Q: WorldQuery, F: QueryFilter> Sync for QueryState<Q, F> {}
-
 impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
     pub fn new(world: &mut World) -> Self {
         let fetch_state = <Q::State as FetchState>::init(world);

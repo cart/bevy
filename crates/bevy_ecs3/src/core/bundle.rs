@@ -31,7 +31,7 @@ pub trait Bundle: DynamicBundle {
 
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
-        impl<$($name: Component),*> DynamicBundle for ($($name,)*) {
+        impl<$($name: Component + Send + Sync),*> DynamicBundle for ($($name,)*) {
             fn type_info(&self) -> Vec<TypeInfo> {
                 Self::static_type_info()
             }
@@ -47,7 +47,7 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<$($name: Component),*> Bundle for ($($name,)*) {
+        impl<$($name: Component + Send + Sync),*> Bundle for ($($name,)*) {
             fn static_type_info() -> Vec<TypeInfo> {
                 vec![$(TypeInfo::of::<$name>()),*]
             }
@@ -187,7 +187,7 @@ fn initialize_bundle(
     let mut storage_types = Vec::new();
 
     for type_info in type_info {
-        let component_id = components.get_with_type_info(&type_info);
+        let component_id = components.get_or_insert_with(type_info.type_id(), || type_info.clone());
         // SAFE: get_with_type_info ensures info was created
         let info = unsafe { components.get_info_unchecked(component_id) };
         component_ids.push(component_id);

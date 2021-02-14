@@ -477,8 +477,30 @@ impl Archetypes {
     }
 
     #[inline]
-    pub(crate) fn insert_resource<T: Component>(
+    pub(crate) fn insert_resource<T: Component + Send + Sync>(
         &mut self,
+        components: &mut Components,
+        value: T,
+    ) {
+        let component_id = components.get_or_insert_resource_id::<T>();
+        self.insert_resource_with_id(component_id, components, value);
+    }
+
+    #[inline]
+    pub(crate) fn insert_non_send_resource<T: Component>(
+        &mut self,
+        components: &mut Components,
+        value: T,
+    ) {
+        let component_id = components.get_or_insert_non_send_resource_id::<T>();
+        self.insert_resource_with_id(component_id, components, value);
+    }
+
+
+    #[inline]
+    fn insert_resource_with_id<T: Component>(
+        &mut self,
+        component_id: ComponentId,
         components: &mut Components,
         mut value: T,
     ) {
@@ -488,7 +510,6 @@ impl Archetypes {
                 .get_unchecked_mut(ArchetypeId::resource_archetype().index())
         };
         let unique_components = &mut resource_archetype.unique_components;
-        let component_id = components.get_or_insert_resource_id::<T>();
         if let Some(column) = unique_components.get_mut(component_id) {
             // SAFE: column is of type T and has already been allocated
             let row = unsafe { &mut *column.get_unchecked(0).cast::<T>() };
@@ -525,7 +546,7 @@ impl Archetypes {
     }
 
     #[inline]
-    pub(crate) fn get_resource_mut<T: Component>(
+    pub(crate) fn get_resource_mut<T: Component + Send + Sync>(
         &mut self,
         components: &Components,
     ) -> Option<Mut<'_, T>> {
@@ -541,7 +562,7 @@ impl Archetypes {
 
     // PERF: optimize this to avoid redundant lookups
     #[inline]
-    pub(crate) fn get_resource_or_insert_with<T: Component>(
+    pub(crate) fn get_resource_or_insert_with<T: Component + Send + Sync>(
         &mut self,
         components: &mut Components,
         func: impl FnOnce() -> T,

@@ -41,7 +41,7 @@ impl<'w> EntityRef<'w> {
         }
     }
 
-    pub fn get<T: Component>(&self) -> Option<&'w T> {
+    pub fn get<T: Component + Send + Sync>(&self) -> Option<&'w T> {
         // SAFE: entity location is valid and returned component is of type T
         unsafe {
             get_component_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
@@ -50,7 +50,7 @@ impl<'w> EntityRef<'w> {
     }
 
     /// SAFETY: this cannot be used to produce aliased mutable access to an entity's component
-    pub unsafe fn get_mut_unchecked<T: Component>(&self) -> Option<Mut<'w, T>> {
+    pub unsafe fn get_mut_unchecked<T: Component + Send + Sync>(&self) -> Option<Mut<'w, T>> {
         get_component_and_flags_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
             .map(|(value, flags)| Mut {
                 value: &mut *value.cast::<T>(),
@@ -95,7 +95,7 @@ impl<'w> EntityMut<'w> {
         }
     }
 
-    pub fn get<T: Component>(&self) -> Option<&'w T> {
+    pub fn get<T: Component + Send + Sync>(&self) -> Option<&'w T> {
         // SAFE: entity location is valid and returned component is of type T
         unsafe {
             get_component_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
@@ -103,7 +103,7 @@ impl<'w> EntityMut<'w> {
         }
     }
 
-    pub fn get_mut<T: Component>(&mut self) -> Option<Mut<'w, T>> {
+    pub fn get_mut<T: Component + Send + Sync>(&mut self) -> Option<Mut<'w, T>> {
         // SAFE: world access is unique, entity location is valid, and returned component is of type T
         unsafe {
             get_component_and_flags_with_type(
@@ -208,7 +208,7 @@ impl<'w> EntityMut<'w> {
         self
     }
 
-    pub fn remove_bundle<T: Bundle>(&mut self) -> Option<T> {
+    pub fn remove_bundle<T: Bundle + Send + Sync>(&mut self) -> Option<T> {
         let archetypes = &mut self.world.archetypes;
         let storages = &mut self.world.storages;
         let components = &mut self.world.components;
@@ -302,7 +302,7 @@ impl<'w> EntityMut<'w> {
     }
 
     /// Remove any components in the bundle that the entity has.
-    pub fn remove_bundle_intersection<T: Bundle>(&mut self) {
+    pub fn remove_bundle_intersection<T: Bundle + Send + Sync>(&mut self) {
         let archetypes = &mut self.world.archetypes;
         let storages = &mut self.world.storages;
         let components = &mut self.world.components;
@@ -391,11 +391,11 @@ impl<'w> EntityMut<'w> {
         entities.meta[self.entity.id as usize].location = new_location;
     }
 
-    pub fn insert<T: Component>(&mut self, value: T) -> &mut Self {
+    pub fn insert<T: Component + Send + Sync>(&mut self, value: T) -> &mut Self {
         self.insert_bundle((value,))
     }
 
-    pub fn remove<T: Component>(&mut self) -> Option<T> {
+    pub fn remove<T: Component + Send + Sync>(&mut self) -> Option<T> {
         self.remove_bundle::<(T,)>().map(|v| v.0)
     }
 

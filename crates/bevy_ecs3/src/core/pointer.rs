@@ -7,9 +7,6 @@ pub struct Mut<'a, T: Component> {
     pub(crate) flags: &'a mut ComponentFlags,
 }
 
-unsafe impl<T: Component> Send for Mut<'_, T> {}
-unsafe impl<T: Component> Sync for Mut<'_, T> {}
-
 impl<'a, T: Component> Deref for Mut<'a, T> {
     type Target = T;
 

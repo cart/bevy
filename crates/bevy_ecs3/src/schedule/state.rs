@@ -140,7 +140,7 @@ impl<T> StateStage<T> {
 }
 
 #[allow(clippy::mem_discriminant_non_enum)]
-impl<T: Component + Clone> Stage for StateStage<T> {
+impl<T: Component + Send + Sync + Clone> Stage for StateStage<T> {
     fn run(&mut self, world: &mut World) {
         let current_stage = loop {
             let (next_stage, current_stage) = {

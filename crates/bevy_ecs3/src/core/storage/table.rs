@@ -71,8 +71,8 @@ impl Column {
         (data, flags)
     }
 
-    /// SAFETY: allocated value must be immediately set 
-    pub (crate) unsafe fn push_uninit(&mut self) {
+    /// SAFETY: allocated value must be immediately set
+    pub(crate) unsafe fn push_uninit(&mut self) {
         self.data.push_uninit();
         (*self.flags.get()).push(ComponentFlags::empty());
     }
@@ -164,10 +164,7 @@ impl Tables {
         b: TableId,
     ) -> (&mut Table, &mut Table) {
         let ptr = self.tables.as_mut_ptr();
-        (
-            &mut *ptr.add(a.index()),
-            &mut *ptr.add(b.index()),
-        )
+        (&mut *ptr.add(a.index()), &mut *ptr.add(b.index()))
     }
 
     // SAFETY: `component_ids` must contain components that exist in `components`
@@ -422,7 +419,8 @@ mod tests {
     #[test]
     fn table() {
         let mut components = Components::default();
-        let component_id = components.get_with_type_info(&TypeInfo::of::<usize>());
+        let type_info = TypeInfo::of::<usize>();
+        let component_id = components.get_or_insert_with(type_info.type_id(), || type_info);
         let columns = &[component_id];
         let mut table = Table::with_capacity(0, columns.len(), 64);
         table.add_column(components.get_info(component_id).unwrap());

@@ -8,7 +8,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
-pub trait WorldQuery: Send + Sync {
+pub trait WorldQuery {
     type Fetch: for<'a> Fetch<'a, State = Self::State>;
     type State: FetchState;
 }
@@ -17,28 +17,34 @@ pub trait Fetch<'w>: Sized {
     const DANGLING: Self;
     type Item;
     type State: FetchState;
+
     /// Creates a new instance of this fetch.
     /// # Safety
     /// `state` must have been initialized (via [FetchState::init]) using the same `world` passed in to this function.
     unsafe fn init(world: &World, state: &Self::State) -> Self;
+
     /// Returns true if (and only if) every table of every archetype matched by this Fetch contains all of the matched components.
     /// This is used to select a more efficient "table iterator" for "dense" queries.
     /// If this returns true, [Fetch::set_table] and [Fetch::table_fetch] will be called for iterators
     /// If this returns false, [Fetch::set_archetype] and [Fetch::archetype_fetch] will be called for iterators
     fn is_dense(&self) -> bool;
+
     /// Adjusts internal state to account for the next [Archetype]. This will always be called on archetypes that match this [Fetch]
     /// # Safety
     /// `archetype` and `tables` must be from the [World] [Fetch::init] was called on. `state` must be the [Self::State] this was initialized with.
     unsafe fn set_archetype(&mut self, state: &Self::State, archetype: &Archetype, tables: &Tables);
+
     /// Adjusts internal state to account for the next [Table]. This will always be called on tables that match this [Fetch]
     /// # Safety
     /// `table` must be from the [World] [Fetch::init] was called on. `state` must be the [Self::State] this was initialized with.
     unsafe fn set_table(&mut self, state: &Self::State, table: &Table);
+
     /// Fetch [Self::Item] for the given `archetype_index` in the current [Archetype]. This must always be called after [Fetch::set_archetype] with an `archetype_index`
     /// in the range of the current [Archetype]
     /// # Safety
     /// Must always be called _after_ [Fetch::set_archetype]. `archetype_index` must be in the range of the current archetype
     unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item;
+
     /// Fetch [Self::Item] for the given `table_row` in the current [Table]. This must always be called after [set_table] with a `table_row`
     /// in the range of the current [Table]
     /// # Safety
@@ -51,7 +57,7 @@ pub trait Fetch<'w>: Sized {
 /// SAFETY:
 /// Implementor must ensure that [FetchState::update_component_access] and [FetchState::update_archetype_component_access] exactly
 /// reflects the results of [FetchState::matches_archetype] and [FetchState::matches_table], [Fetch::archetype_fetch], and [Fetch::table_fetch]
-pub unsafe trait FetchState: Sized {
+pub unsafe trait FetchState: Send + Sync + Sized {
     fn init(world: &mut World) -> Self;
     fn update_component_access(&self, access: &mut Access<ComponentId>);
     fn update_archetype_component_access(
@@ -148,7 +154,7 @@ impl<'w> Fetch<'w> for FetchEntity {
     }
 }
 
-impl<T: Component> WorldQuery for &T {
+impl<T: Component + Send + Sync> WorldQuery for &T {
     type Fetch = FetchRead<T>;
     type State = ReadState<T>;
 }
@@ -156,11 +162,12 @@ impl<T: Component> WorldQuery for &T {
 pub struct ReadState<T> {
     component_id: ComponentId,
     storage_type: StorageType,
-    marker: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
 }
 
 // SAFE: component access and archetype component access are properly updated to reflect that T is read
-unsafe impl<T: Component> FetchState for ReadState<T> {
+unsafe impl<T: Component + Send + Sync> FetchState for ReadState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -207,7 +214,7 @@ pub struct FetchRead<T> {
 
 unsafe impl<T> ReadOnlyFetch for FetchRead<T> {}
 
-impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
+impl<'w, T: Component + Send + Sync> Fetch<'w> for FetchRead<T> {
     type Item = &'w T;
     type State = ReadState<T>;
 
@@ -290,7 +297,7 @@ impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     }
 }
 
-impl<T: Component> WorldQuery for &mut T {
+impl<T: Component + Send + Sync> WorldQuery for &mut T {
     type Fetch = FetchWrite<T>;
     type State = WriteState<T>;
 }
@@ -307,11 +314,12 @@ pub struct FetchWrite<T> {
 pub struct WriteState<T> {
     component_id: ComponentId,
     storage_type: StorageType,
-    marker: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
 }
 
 // SAFE: component access and archetype component access are properly updated to reflect that T is written
-unsafe impl<T: Component> FetchState for WriteState<T> {
+unsafe impl<T: Component + Send + Sync> FetchState for WriteState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -348,7 +356,8 @@ unsafe impl<T: Component> FetchState for WriteState<T> {
     }
 }
 
-impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
+
+impl<'w, T: Component + Send + Sync> Fetch<'w> for FetchWrite<T> {
     type Item = Mut<'w, T>;
     type State = WriteState<T>;
 
@@ -582,7 +591,7 @@ impl<T: Component> Flags<T> {
     }
 }
 
-impl<T: Component> WorldQuery for Flags<T> {
+impl<T: Component + Send + Sync> WorldQuery for Flags<T> {
     type Fetch = FetchFlags<T>;
     type State = FlagsState<T>;
 }
@@ -590,11 +599,12 @@ impl<T: Component> WorldQuery for Flags<T> {
 pub struct FlagsState<T> {
     component_id: ComponentId,
     storage_type: StorageType,
-    marker: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
 }
 
 // SAFE: component access and archetype component access are properly updated to reflect that T is read
-unsafe impl<T: Component> FetchState for FlagsState<T> {
+unsafe impl<T: Component + Send + Sync> FetchState for FlagsState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -642,7 +652,7 @@ pub struct FetchFlags<T> {
 
 unsafe impl<T> ReadOnlyFetch for FetchFlags<T> {}
 
-impl<'w, T: Component> Fetch<'w> for FetchFlags<T> {
+impl<'w, T: Component + Send + Sync> Fetch<'w> for FetchFlags<T> {
     type Item = Flags<T>;
     type State = FlagsState<T>;
 

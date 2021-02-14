@@ -50,9 +50,10 @@ impl World {
         &mut self,
         descriptor: ComponentDescriptor,
     ) -> Result<ComponentId, ComponentsError> {
-        let component_id = self.components.add(&descriptor)?;
+        let storage_type = descriptor.storage_type();
+        let component_id = self.components.add(descriptor)?;
         // ensure sparse set is created for SparseSet components
-        if descriptor.storage_type == StorageType::SparseSet {
+        if storage_type == StorageType::SparseSet {
             // SAFE: just created
             let info = unsafe { self.components.get_info_unchecked(component_id) };
             self.storages.sparse_sets.get_or_insert(info);
@@ -94,12 +95,12 @@ impl World {
     }
 
     #[inline]
-    pub fn get<T: Component>(&self, entity: Entity) -> Option<&T> {
+    pub fn get<T: Component + Send + Sync>(&self, entity: Entity) -> Option<&T> {
         self.entity(entity)?.get()
     }
 
     #[inline]
-    pub fn get_mut<T: Component>(&mut self, entity: Entity) -> Option<Mut<T>> {
+    pub fn get_mut<T: Component + Send + Sync>(&mut self, entity: Entity) -> Option<Mut<T>> {
         self.entity_mut(entity)?.get_mut()
     }
 
@@ -147,22 +148,22 @@ impl World {
     }
 
     #[inline]
-    pub fn insert_resource<T: Component>(&mut self, value: T) {
+    pub fn insert_resource<T: Component + Send + Sync>(&mut self, value: T) {
         self.archetypes.insert_resource(&mut self.components, value);
     }
 
     #[inline]
-    pub fn get_resource<T: Component>(&self) -> Option<&T> {
+    pub fn get_resource<T: Component + Send + Sync>(&self) -> Option<&T> {
         self.archetypes.get_resource(&self.components)
     }
 
     #[inline]
-    pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
+    pub fn get_resource_mut<T: Component + Send + Sync>(&mut self) -> Option<Mut<'_, T>> {
         self.archetypes.get_resource_mut(&self.components)
     }
 
     #[inline]
-    pub fn get_resource_or_insert_with<T: Component>(
+    pub fn get_resource_or_insert_with<T: Component + Send + Sync>(
         &mut self,
         func: impl FnOnce() -> T,
     ) -> Mut<'_, T> {
@@ -171,7 +172,7 @@ impl World {
     }
 
     #[inline]
-    pub fn contains_resource<T: Component>(&mut self) -> bool {
+    pub fn contains_resource<T: Component + Send + Sync>(&mut self) -> bool {
         self.archetypes.contains_resource::<T>(&self.components)
     }
 
@@ -185,7 +186,7 @@ impl World {
         QueryState::new(self)
     }
 
-    pub fn removed<T: Component>(&self) -> std::iter::Cloned<std::slice::Iter<'_, Entity>> {
+    pub fn removed<T: Component + Send + Sync>(&self) -> std::iter::Cloned<std::slice::Iter<'_, Entity>> {
         if let Some(component_id) = self.components.get_id(TypeId::of::<T>()) {
             self.removed_with_id(component_id)
         } else {

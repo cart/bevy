@@ -38,7 +38,7 @@ mod tests {
     fn multi_storage_query() {
         let mut world = World::new();
         world
-            .register_component(ComponentDescriptor::of::<A>(StorageType::SparseSet))
+            .register_component(ComponentDescriptor::new::<A>(StorageType::SparseSet))
             .unwrap();
 
         world.spawn().insert_bundle((A(1), B(2)));

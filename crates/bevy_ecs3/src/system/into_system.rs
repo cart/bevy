@@ -10,7 +10,8 @@ pub struct SystemState {
     pub(crate) name: Cow<'static, str>,
     pub(crate) component_access: Access<ComponentId>,
     pub(crate) archetype_component_access: Access<ArchetypeComponentId>,
-    pub(crate) is_non_send: bool,
+    // NOTE: this must be kept private. making a SystemState non-send is irreversible to prevent SystemParams from overriding each other
+    is_send: bool,
 }
 
 impl SystemState {
@@ -19,9 +20,19 @@ impl SystemState {
             name: std::any::type_name::<T>().into(),
             archetype_component_access: Access::default(),
             component_access: Access::default(),
-            is_non_send: false,
+            is_send: true,
             id: SystemId::new(),
         }
+    }
+
+    #[inline]
+    fn is_send(&self) -> bool {
+        self.is_send
+    }
+
+    #[inline]
+    fn set_non_send(&mut self) {
+        self.is_send = false;
     }
 }
 
@@ -46,15 +57,16 @@ where
     func: F,
     param_state: Option<Param::State>,
     system_state: SystemState,
-    marker: PhantomData<(In, Out, Marker)>,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> (In, Out, Marker)>,
 }
 
 impl<In, Out, Param, Marker, F> IntoSystem<Param, FunctionSystem<In, Out, Param, Marker, F>> for F
 where
-    In: Send + Sync + 'static,
-    Out: Send + Sync + 'static,
-    Param: SystemParam + Send + Sync + 'static,
-    Marker: Send + Sync + 'static,
+    In: 'static,
+    Out: 'static,
+    Param: SystemParam + 'static,
+    Marker: 'static,
     F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
 {
     fn system(self) -> FunctionSystem<In, Out, Param, Marker, F> {
@@ -69,10 +81,10 @@ where
 
 impl<In, Out, Param, Marker, F> System for FunctionSystem<In, Out, Param, Marker, F>
 where
-    In: Send + Sync + 'static,
-    Out: Send + Sync + 'static,
-    Param: SystemParam + Send + Sync + 'static,
-    Marker: Send + Sync + 'static,
+    In: 'static,
+    Out: 'static,
+    Param: SystemParam + 'static,
+    Marker: 'static,
     F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
 {
     type In = In;
@@ -105,8 +117,8 @@ where
     }
 
     #[inline]
-    fn is_non_send(&self) -> bool {
-        self.system_state.is_non_send
+    fn is_send(&self) -> bool {
+        self.system_state.is_send
     }
 
     #[inline]
@@ -134,7 +146,7 @@ where
     }
 }
 
-pub trait SystemFunction<In, Out, Param: SystemParam, Marker> {
+pub trait SystemFunction<In, Out, Param: SystemParam, Marker>: Send + Sync + 'static {
     fn run(
         &mut self,
         input: In,
@@ -151,8 +163,7 @@ macro_rules! impl_system_function {
         where
             Func:
                 FnMut($($param),*) -> Out +
-                FnMut($(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out +
-                Send + Sync + 'static, Out: 'static
+                FnMut($(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out + Send + Sync + 'static, Out: 'static
         {
             #[inline]
             fn run(&mut self, _input: (), state: &mut <($($param,)*) as SystemParam>::State, system_state: &SystemState, world: &World) -> Option<Out> {
@@ -171,8 +182,7 @@ macro_rules! impl_system_function {
         where
             Func:
                 FnMut(In<Input>, $($param),*) -> Out +
-                FnMut(In<Input>, $(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out +
-                Send + Sync + 'static, Out: 'static
+                FnMut(In<Input>, $(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out + Send + Sync + 'static, Out: 'static
         {
             #[inline]
             fn run(&mut self, input: Input, state: &mut <($($param,)*) as SystemParam>::State, system_state: &SystemState, world: &World) -> Option<Out> {

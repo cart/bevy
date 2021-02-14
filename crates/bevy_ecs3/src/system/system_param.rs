@@ -131,16 +131,17 @@ impl<'w, T: Component> Deref for Res<'w, T> {
 
 pub struct ResState<T> {
     component_id: ComponentId,
-    marker: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> X> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
 }
 
-impl<'a, T: Component> SystemParam for Res<'a, T> {
+impl<'a, T: Component + Send + Sync> SystemParam for Res<'a, T> {
     type State = ResState<T>;
 }
 
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
 // with any prior access, a panic will occur.
-unsafe impl<T: Component> SystemParamState for ResState<T> {
+unsafe impl<T: Component + Send + Sync> SystemParamState for ResState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
@@ -172,7 +173,7 @@ unsafe impl<T: Component> SystemParamState for ResState<T> {
     }
 }
 
-impl<'a, T: Component> SystemParamFetch<'a> for ResState<T> {
+impl<'a, T: Component + Send + Sync> SystemParamFetch<'a> for ResState<T> {
     type Item = Res<'a, T>;
 
     #[inline]
@@ -211,16 +212,17 @@ impl<'w, T: Component> DerefMut for ResMut<'w, T> {
 pub struct ResMutFetch<T>(PhantomData<T>);
 pub struct ResMutState<T> {
     component_id: ComponentId,
-    marker: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> X> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
 }
 
-impl<'a, T: Component> SystemParam for ResMut<'a, T> {
+impl<'a, T: Component + Send + Sync> SystemParam for ResMut<'a, T> {
     type State = ResMutState<T>;
 }
 
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
 // with any prior access, a panic will occur.
-unsafe impl<T: Component> SystemParamState for ResMutState<T> {
+unsafe impl<T: Component + Send + Sync> SystemParamState for ResMutState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
@@ -256,7 +258,7 @@ unsafe impl<T: Component> SystemParamState for ResMutState<T> {
     }
 }
 
-impl<'a, T: Component> SystemParamFetch<'a> for ResMutState<T> {
+impl<'a, T: Component + Send + Sync> SystemParamFetch<'a> for ResMutState<T> {
     type Item = ResMut<'a, T>;
 
     #[inline]
@@ -321,20 +323,20 @@ impl<'a, T: Component> DerefMut for Local<'a, T> {
     }
 }
 
-pub struct LocalState<T>(T);
+pub struct LocalState<T: Component + Send + Sync>(T);
 
-impl<'a, T: Component + FromWorld> SystemParam for Local<'a, T> {
+impl<'a, T: Component + Send + Sync + FromWorld> SystemParam for Local<'a, T> {
     type State = LocalState<T>;
 }
 
 // SAFE: only local state is accessed
-unsafe impl<T: Component + FromWorld> SystemParamState for LocalState<T> {
+unsafe impl<T: Component + Send + Sync + FromWorld> SystemParamState for LocalState<T> {
     fn init(world: &mut World, _system_state: &mut SystemState) -> Self {
         Self(T::from_world(world))
     }
 }
 
-impl<'a, T: Component + FromWorld> SystemParamFetch<'a> for LocalState<T> {
+impl<'a, T: Component + Send + Sync + FromWorld> SystemParamFetch<'a> for LocalState<T> {
     type Item = Local<'a, T>;
 
     #[inline]
@@ -361,16 +363,17 @@ impl<'a, T> RemovedComponents<'a, T> {
 
 pub struct RemovedComponentsState<T> {
     component_id: ComponentId,
-    marker: PhantomData<T>,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
 }
 
-impl<'a, T: Component> SystemParam for RemovedComponents<'a, T> {
+impl<'a, T: Component + Send + Sync> SystemParam for RemovedComponents<'a, T> {
     type State = RemovedComponentsState<T>;
 }
 
 // SAFE: no component access. removed component entity collections can be read in parallel and are never mutably borrowed
 // during system execution
-unsafe impl<T: Component> SystemParamState for RemovedComponentsState<T> {
+unsafe impl<T: Component + Send + Sync> SystemParamState for RemovedComponentsState<T> {
     fn init(world: &mut World, _system_state: &mut SystemState) -> Self {
         Self {
             component_id: world.components.get_or_insert_id::<T>(),
@@ -379,7 +382,7 @@ unsafe impl<T: Component> SystemParamState for RemovedComponentsState<T> {
     }
 }
 
-impl<'a, T: Component> SystemParamFetch<'a> for RemovedComponentsState<T> {
+impl<'a, T: Component + Send + Sync> SystemParamFetch<'a> for RemovedComponentsState<T> {
     type Item = RemovedComponents<'a, T>;
 
     #[inline]

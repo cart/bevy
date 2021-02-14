@@ -274,8 +274,8 @@ impl System for RunOnce {
         &self.component_access
     }
 
-    fn is_non_send(&self) -> bool {
-        false
+    fn is_send(&self) -> bool {
+        true
     }
 
     unsafe fn run_unsafe(&mut self, _input: Self::In, _world: &World) -> Option<Self::Out> {

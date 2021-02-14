@@ -51,8 +51,8 @@ impl<SystemA: System, SystemB: System<In = SystemA::Out>> System for ChainSystem
         &self.component_access
     }
 
-    fn is_non_send(&self) -> bool {
-        self.system_a.is_non_send() || self.system_b.is_non_send()
+    fn is_send(&self) -> bool {
+        self.system_a.is_send() && self.system_b.is_send()
     }
 
     unsafe fn run_unsafe(&mut self, input: Self::In, world: &World) -> Option<Self::Out> {
