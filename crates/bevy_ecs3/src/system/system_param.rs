@@ -182,7 +182,7 @@ impl<'a, T: Component> SystemParamFetch<'a> for ResState<T> {
         _system_state: &'a SystemState,
         world: &'a World,
     ) -> Option<Self::Item> {
-        let column = world.archetypes.get_resource_column(state.component_id)?;
+        let column = world.get_resource_column(state.component_id)?;
         Some(Res {
             value: &*column.get_ptr().as_ptr().cast::<T>(),
         })
@@ -267,7 +267,7 @@ impl<'a, T: Component> SystemParamFetch<'a> for ResMutState<T> {
         _system_state: &'a SystemState,
         world: &'a World,
     ) -> Option<Self::Item> {
-        let column = world.archetypes.get_resource_column(state.component_id)?;
+        let column = world.get_resource_column(state.component_id)?;
         Some(ResMut {
             value: &mut *column.get_ptr().as_ptr().cast::<T>(),
             flags: &mut *column.get_flags_mut_ptr(),

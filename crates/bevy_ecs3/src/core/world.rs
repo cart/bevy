@@ -1,9 +1,13 @@
 use crate::core::{
-    ArchetypeId, Archetypes, Bundle, Bundles, Component, ComponentDescriptor, ComponentId,
-    Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryFilter,
-    QueryState, SparseSet, SpawnBatchIter, StorageType, Storages, WorldQuery,
+    ArchetypeComponentId, ArchetypeComponentInfo, ArchetypeId, Archetypes, Bundle, Bundles, Column,
+    Component, ComponentDescriptor, ComponentId, Components, ComponentsError, Entities, Entity,
+    EntityMut, EntityRef, Mut, QueryFilter, QueryState, SparseSet, SpawnBatchIter, StorageType,
+    Storages, WorldQuery,
 };
-use std::{any::TypeId, fmt};
+use std::{
+    any::{Any, TypeId},
+    fmt,
+};
 
 #[derive(Default)]
 pub struct World {
@@ -148,35 +152,6 @@ impl World {
     }
 
     #[inline]
-    pub fn insert_resource<T: Component>(&mut self, value: T) {
-        self.archetypes.insert_resource(&mut self.components, value);
-    }
-
-    #[inline]
-    pub fn get_resource<T: Component>(&self) -> Option<&T> {
-        self.archetypes.get_resource(&self.components)
-    }
-
-    #[inline]
-    pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
-        self.archetypes.get_resource_mut(&self.components)
-    }
-
-    #[inline]
-    pub fn get_resource_or_insert_with<T: Component>(
-        &mut self,
-        func: impl FnOnce() -> T,
-    ) -> Mut<'_, T> {
-        self.archetypes
-            .get_resource_or_insert_with(&mut self.components, func)
-    }
-
-    #[inline]
-    pub fn contains_resource<T: Component>(&mut self) -> bool {
-        self.archetypes.contains_resource::<T>(&self.components)
-    }
-
-    #[inline]
     pub fn query<Q: WorldQuery>(&mut self) -> QueryState<Q, ()> {
         QueryState::new(self)
     }
@@ -203,6 +178,123 @@ impl World {
         } else {
             [].iter().cloned()
         }
+    }
+
+    #[inline]
+    pub fn insert_resource<T: Component>(&mut self, value: T) {
+        let component_id = self.components.get_or_insert_resource_id::<T>();
+        self.insert_resource_with_id(component_id, value);
+    }
+
+    #[inline]
+    pub fn insert_non_send_resource<T: Any>(&mut self, value: T) {
+        let component_id = self.components.get_or_insert_non_send_resource_id::<T>();
+        self.insert_resource_with_id(component_id, value);
+    }
+
+    #[inline]
+    pub fn get_resource<T: Component>(&self) -> Option<&T> {
+        let column = self.get_resource_column_with_type(TypeId::of::<T>())?;
+        // SAFE: resource exists and is of type T
+        unsafe { Some(&*column.get_ptr().as_ptr().cast::<T>()) }
+    }
+
+    #[inline]
+    pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
+        let column = self.get_resource_column_with_type(TypeId::of::<T>())?;
+        // SAFE: resource exists and is of type T
+        unsafe {
+            Some(Mut {
+                value: &mut *column.get_ptr().as_ptr().cast::<T>(),
+                flags: &mut *column.get_flags_mut_ptr(),
+            })
+        }
+    }
+
+    // PERF: optimize this to avoid redundant lookups
+    #[inline]
+    pub(crate) fn get_resource_or_insert_with<T: Component>(
+        &mut self,
+        func: impl FnOnce() -> T,
+    ) -> Mut<'_, T> {
+        if self.contains_resource::<T>() {
+            self.get_resource_mut().unwrap()
+        } else {
+            self.insert_resource(func());
+            self.get_resource_mut().unwrap()
+        }
+    }
+
+    #[inline]
+    pub fn contains_resource<T: Component>(&mut self) -> bool {
+        let component_id =
+            if let Some(component_id) = self.components.get_resource_id(TypeId::of::<T>()) {
+                component_id
+            } else {
+                return false;
+            };
+        // SAFE: resource archetype is guaranteed to exist
+        let resource_archetype = unsafe {
+            self.archetypes
+                .get_unchecked(ArchetypeId::resource_archetype())
+        };
+        let unique_components = resource_archetype.unique_components();
+        unique_components.contains(component_id)
+    }
+
+
+    #[inline]
+    fn insert_resource_with_id<T>(&mut self, component_id: ComponentId, mut value: T) {
+        // SAFE: resource archetype is guaranteed to exist
+        let resource_archetype = unsafe {
+            self.archetypes
+                .archetypes
+                .get_unchecked_mut(ArchetypeId::resource_archetype().index())
+        };
+        let unique_components = &mut resource_archetype.unique_components;
+        if let Some(column) = unique_components.get_mut(component_id) {
+            // SAFE: column is of type T and has already been allocated
+            let row = unsafe { &mut *column.get_unchecked(0).cast::<T>() };
+            *row = value;
+        } else {
+            resource_archetype.components.insert(
+                component_id,
+                ArchetypeComponentInfo {
+                    archetype_component_id: ArchetypeComponentId::new(
+                        self.archetypes.archetype_component_count,
+                    ),
+                    storage_type: StorageType::Table,
+                },
+            );
+            self.archetypes.archetype_component_count += 1;
+            // SAFE: component was initialized above
+            let component_info = unsafe { self.components.get_info_unchecked(component_id) };
+            let mut column = Column::with_capacity(component_info, 1);
+            unsafe {
+                column.push_uninit();
+                // SAFE: column is of type T and has been allocated above
+                let data = (&mut value as *mut T).cast::<u8>();
+                column.set_unchecked(0, data);
+                std::mem::forget(value);
+            }
+
+            unique_components.insert(component_id, column);
+        }
+    }
+
+    fn get_resource_column_with_type(&self, type_id: TypeId) -> Option<&Column> {
+        let component_id = self.components.get_resource_id(type_id)?;
+        self.get_resource_column(component_id)
+    }
+
+    pub(crate) fn get_resource_column(&self, component_id: ComponentId) -> Option<&Column> {
+        // SAFE: resource archetype is guaranteed to exist
+        let resource_archetype = unsafe {
+            self.archetypes
+                .get_unchecked(ArchetypeId::resource_archetype())
+        };
+        let unique_components = resource_archetype.unique_components();
+        unique_components.get(component_id)
     }
 }
 

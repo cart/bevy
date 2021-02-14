@@ -1,9 +1,12 @@
 use crate::core::{
-    BundleId, Column, Component, ComponentFlags, ComponentId, Components, Entity, EntityLocation,
-    Mut, SparseArray, SparseSet, SparseSetIndex, StorageType, TableId,
+    BundleId, Column, ComponentFlags, ComponentId, Entity, EntityLocation, SparseArray, SparseSet,
+    SparseSetIndex, StorageType, TableId,
 };
 use bevy_utils::AHasher;
-use std::{any::{Any, TypeId}, collections::HashMap, hash::{Hash, Hasher}};
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ArchetypeId(usize);
@@ -87,12 +90,19 @@ impl Edges {
     }
 
     #[inline]
-    pub fn get_remove_bundle_intersection(&self, bundle_id: BundleId) -> Option<Option<ArchetypeId>> {
+    pub fn get_remove_bundle_intersection(
+        &self,
+        bundle_id: BundleId,
+    ) -> Option<Option<ArchetypeId>> {
         self.remove_bundle_intersection.get(bundle_id).cloned()
     }
 
     #[inline]
-    pub fn set_remove_bundle_intersection(&mut self, bundle_id: BundleId, archetype_id: Option<ArchetypeId>) {
+    pub fn set_remove_bundle_intersection(
+        &mut self,
+        bundle_id: BundleId,
+        archetype_id: Option<ArchetypeId>,
+    ) {
         self.remove_bundle.insert(bundle_id, archetype_id);
     }
 
@@ -112,20 +122,20 @@ pub(crate) struct ArchetypeSwapRemoveResult {
     pub table_row: usize,
 }
 
-struct ArchetypeComponentInfo {
-    storage_type: StorageType,
-    archetype_component_id: ArchetypeComponentId,
+pub(crate) struct ArchetypeComponentInfo {
+    pub(crate) storage_type: StorageType,
+    pub(crate) archetype_component_id: ArchetypeComponentId,
 }
 
 pub struct Archetype {
     id: ArchetypeId,
-    table_info: TableInfo,
-    components: SparseSet<ComponentId, ArchetypeComponentInfo>,
-    table_components: Vec<ComponentId>,
-    sparse_set_components: Vec<ComponentId>,
-    unique_components: SparseSet<ComponentId, Column>,
     entities: Vec<Entity>,
     edges: Edges,
+    table_info: TableInfo,
+    table_components: Vec<ComponentId>,
+    sparse_set_components: Vec<ComponentId>,
+    pub(crate) unique_components: SparseSet<ComponentId, Column>,
+    pub(crate) components: SparseSet<ComponentId, ArchetypeComponentInfo>,
 }
 
 impl Archetype {
@@ -369,9 +379,9 @@ impl SparseSetIndex for ArchetypeComponentId {
 }
 
 pub struct Archetypes {
-    archetypes: Vec<Archetype>,
+    pub(crate) archetypes: Vec<Archetype>,
+    pub(crate) archetype_component_count: usize,
     archetype_ids: HashMap<u64, ArchetypeId>,
-    archetype_component_count: usize,
 }
 
 impl Default for Archetypes {
@@ -470,141 +480,6 @@ impl Archetypes {
             ));
             id
         })
-    }
-
-    #[inline]
-    pub(crate) fn insert_resource<T: Component>(
-        &mut self,
-        components: &mut Components,
-        value: T,
-    ) {
-        let component_id = components.get_or_insert_resource_id::<T>();
-        self.insert_resource_with_id(component_id, components, value);
-    }
-
-    #[inline]
-    pub(crate) fn insert_non_send_resource<T: Any>(
-        &mut self,
-        components: &mut Components,
-        value: T,
-    ) {
-        let component_id = components.get_or_insert_non_send_resource_id::<T>();
-        self.insert_resource_with_id(component_id, components, value);
-    }
-
-
-    #[inline]
-    fn insert_resource_with_id<T>(
-        &mut self,
-        component_id: ComponentId,
-        components: &mut Components,
-        mut value: T,
-    ) {
-        // SAFE: resource archetype is guaranteed to exist
-        let resource_archetype = unsafe {
-            self.archetypes
-                .get_unchecked_mut(ArchetypeId::resource_archetype().index())
-        };
-        let unique_components = &mut resource_archetype.unique_components;
-        if let Some(column) = unique_components.get_mut(component_id) {
-            // SAFE: column is of type T and has already been allocated
-            let row = unsafe { &mut *column.get_unchecked(0).cast::<T>() };
-            *row = value;
-        } else {
-            resource_archetype.components.insert(
-                component_id,
-                ArchetypeComponentInfo {
-                    archetype_component_id: ArchetypeComponentId(self.archetype_component_count),
-                    storage_type: StorageType::Table,
-                },
-            );
-            self.archetype_component_count += 1;
-            // SAFE: component was initialized above
-            let component_info = unsafe { components.get_info_unchecked(component_id) };
-            let mut column = Column::with_capacity(component_info, 1);
-            unsafe {
-                column.push_uninit();
-                // SAFE: column is of type T and has been allocated above
-                let data = (&mut value as *mut T).cast::<u8>();
-                column.set_unchecked(0, data);
-                std::mem::forget(value);
-            }
-
-            unique_components.insert(component_id, column);
-        }
-    }
-
-    #[inline]
-    pub(crate) fn get_resource<T: Component>(&self, components: &Components) -> Option<&T> {
-        let column = self.get_resource_column_with_type(components, TypeId::of::<T>())?;
-        // SAFE: resource exists and is of type T
-        unsafe { Some(&*column.get_ptr().as_ptr().cast::<T>()) }
-    }
-
-    #[inline]
-    pub(crate) fn get_resource_mut<T: Component>(
-        &mut self,
-        components: &Components,
-    ) -> Option<Mut<'_, T>> {
-        let column = self.get_resource_column_with_type(components, TypeId::of::<T>())?;
-        // SAFE: resource exists and is of type T
-        unsafe {
-            Some(Mut {
-                value: &mut *column.get_ptr().as_ptr().cast::<T>(),
-                flags: &mut *column.get_flags_mut_ptr(),
-            })
-        }
-    }
-
-    // PERF: optimize this to avoid redundant lookups
-    #[inline]
-    pub(crate) fn get_resource_or_insert_with<T: Component>(
-        &mut self,
-        components: &mut Components,
-        func: impl FnOnce() -> T,
-    ) -> Mut<'_, T> {
-        if self.contains_resource::<T>(components) {
-            self.get_resource_mut(components).unwrap()
-        } else {
-            self.insert_resource(components, func());
-            self.get_resource_mut(components).unwrap()
-        }
-    }
-
-    #[inline]
-    pub(crate) fn contains_resource<T: Component>(&mut self, components: &Components) -> bool {
-        let component_id = if let Some(component_id) = components.get_resource_id(TypeId::of::<T>())
-        {
-            component_id
-        } else {
-            return false;
-        };
-        // SAFE: resource archetype is guaranteed to exist
-        let resource_archetype = unsafe {
-            self.archetypes
-                .get_unchecked(ArchetypeId::resource_archetype().index())
-        };
-        let unique_components = resource_archetype.unique_components();
-        unique_components.contains(component_id)
-    }
-
-    fn get_resource_column_with_type(
-        &self,
-        components: &Components,
-        type_id: TypeId,
-    ) -> Option<&Column> {
-        let component_id = components.get_resource_id(type_id)?;
-        self.get_resource_column(component_id)
-    }
-
-    pub(crate) fn get_resource_column(&self, component_id: ComponentId) -> Option<&Column> {
-        // SAFE: resource archetype is guaranteed to exist
-        let resource_archetype = unsafe {
-            self.archetypes
-                .get_unchecked(ArchetypeId::resource_archetype().index())
-        };
-        let unique_components = resource_archetype.unique_components();
-        unique_components.get(component_id)
     }
 
     #[inline]
