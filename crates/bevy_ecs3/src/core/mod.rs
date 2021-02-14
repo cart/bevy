@@ -531,7 +531,7 @@ mod tests {
         let mut world = World::default();
         let e1 = world.spawn().insert(A(0)).id();
 
-        fn get_added<Com: Component + Send + Sync>(world: &mut World) -> Vec<Entity> {
+        fn get_added<Com: Component>(world: &mut World) -> Vec<Entity> {
             world
                 .query_filtered::<Entity, Added<Com>>()
                 .iter(&world)

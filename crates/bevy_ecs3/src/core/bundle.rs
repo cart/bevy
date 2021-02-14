@@ -8,7 +8,7 @@ use std::{any::TypeId, collections::HashMap};
 /// A dynamically typed ordered collection of components
 ///
 /// See [Bundle]
-pub trait DynamicBundle: 'static {
+pub trait DynamicBundle: Send + Sync + 'static {
     /// Gets this [DynamicBundle]'s components type info, in the order of this bundle's Components
     fn type_info(&self) -> Vec<TypeInfo>;
 
@@ -31,7 +31,7 @@ pub trait Bundle: DynamicBundle {
 
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
-        impl<$($name: Component + Send + Sync),*> DynamicBundle for ($($name,)*) {
+        impl<$($name: Component),*> DynamicBundle for ($($name,)*) {
             fn type_info(&self) -> Vec<TypeInfo> {
                 Self::static_type_info()
             }
@@ -47,7 +47,7 @@ macro_rules! tuple_impl {
             }
         }
 
-        impl<$($name: Component + Send + Sync),*> Bundle for ($($name,)*) {
+        impl<$($name: Component),*> Bundle for ($($name,)*) {
             fn static_type_info() -> Vec<TypeInfo> {
                 vec![$(TypeInfo::of::<$name>()),*]
             }

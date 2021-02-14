@@ -97,7 +97,7 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
 
     /// Gets a reference to the entity's component of the given type. This will fail if the entity does not have
     /// the given component type or if the given component type does not match this query.
-    pub fn get_component<T: Component + Send + Sync>(&self, entity: Entity) -> Option<&T> {
+    pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
         let entity_ref = self.world.entity(entity)?;
         let component_id = self.world.components().get_id(TypeId::of::<T>())?;
         let archetype_component = entity_ref
@@ -116,7 +116,7 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
 
     /// Gets a mutable reference to the entity's component of the given type. This will fail if the entity does not have
     /// the given component type or if the given component type does not match this query.
-    pub fn get_component_mut<T: Component + Send + Sync>(&mut self, entity: Entity) -> Option<Mut<'_, T>> {
+    pub fn get_component_mut<T: Component>(&mut self, entity: Entity) -> Option<Mut<'_, T>> {
         // SAFE: unique access to query (preventing aliased access)
         unsafe { self.get_component_unchecked(entity) }
     }
@@ -125,7 +125,7 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
     /// the given component type or the component does not match the query.
     /// # Safety
     /// This allows aliased mutability. You must make sure this call does not result in multiple mutable references to the same component
-    pub unsafe fn get_component_unchecked<T: Component + Send + Sync>(
+    pub unsafe fn get_component_unchecked<T: Component>(
         &self,
         entity: Entity,
     ) -> Option<Mut<'_, T>> {

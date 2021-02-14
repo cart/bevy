@@ -1,10 +1,10 @@
 use crate::core::{SparseSetIndex, TypeInfo};
 use bitflags::bitflags;
-use std::{alloc::Layout, any::TypeId, collections::hash_map::Entry};
+use std::{alloc::Layout, any::{Any, TypeId}, collections::hash_map::Entry};
 use thiserror::Error;
 
-pub trait Component: 'static {}
-impl<T: 'static> Component for T {}
+pub trait Component: Send + Sync + 'static {}
+impl<T: Send + Sync +'static> Component for T {}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StorageType {
@@ -115,18 +115,11 @@ unsafe fn drop_ptr<T>(x: *mut u8) {
 }
 
 impl ComponentDescriptor {
-    pub fn new<T: Component + Send + Sync>(storage_type: StorageType) -> Self {
-        Self {
-            is_send: true,
-            ..Self::new_non_send::<T>(storage_type)
-        }
-    }
-
-    pub fn new_non_send<T: Component>(storage_type: StorageType) -> Self {
+    pub fn new<T: Component>(storage_type: StorageType) -> Self {
         Self {
             name: std::any::type_name::<T>().to_string(),
             storage_type,
-            is_send: false,
+            is_send: true,
             type_id: TypeId::of::<T>(),
             layout: Layout::new::<T>(),
             drop: drop_ptr::<T>,
@@ -215,12 +208,12 @@ impl Components {
     }
 
     #[inline]
-    pub fn get_or_insert_resource_id<T: Component + Send + Sync>(&mut self) -> ComponentId {
+    pub fn get_or_insert_resource_id<T: Component>(&mut self) -> ComponentId {
         self.get_or_insert_resource_with(TypeId::of::<T>(), || TypeInfo::of::<T>())
     }
 
     #[inline]
-    pub fn get_or_insert_non_send_resource_id<T: Component>(&mut self) -> ComponentId {
+    pub fn get_or_insert_non_send_resource_id<T: Any>(&mut self) -> ComponentId {
         self.get_or_insert_resource_with(TypeId::of::<T>(), || TypeInfo::of_non_send::<T>())
     }
 
@@ -259,7 +252,7 @@ impl Components {
     }
 
     #[inline]
-    pub fn get_or_insert_id<T: Component + Send + Sync>(&mut self) -> ComponentId {
+    pub fn get_or_insert_id<T: Component>(&mut self) -> ComponentId {
         self.get_or_insert_with(TypeId::of::<T>(), || TypeInfo::of::<T>())
     }
 

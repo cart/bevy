@@ -3,11 +3,7 @@ use crate::core::{
     Mut, SparseArray, SparseSet, SparseSetIndex, StorageType, TableId,
 };
 use bevy_utils::AHasher;
-use std::{
-    any::TypeId,
-    collections::HashMap,
-    hash::{Hash, Hasher},
-};
+use std::{any::{Any, TypeId}, collections::HashMap, hash::{Hash, Hasher}};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ArchetypeId(usize);
@@ -477,7 +473,7 @@ impl Archetypes {
     }
 
     #[inline]
-    pub(crate) fn insert_resource<T: Component + Send + Sync>(
+    pub(crate) fn insert_resource<T: Component>(
         &mut self,
         components: &mut Components,
         value: T,
@@ -487,7 +483,7 @@ impl Archetypes {
     }
 
     #[inline]
-    pub(crate) fn insert_non_send_resource<T: Component>(
+    pub(crate) fn insert_non_send_resource<T: Any>(
         &mut self,
         components: &mut Components,
         value: T,
@@ -498,7 +494,7 @@ impl Archetypes {
 
 
     #[inline]
-    fn insert_resource_with_id<T: Component>(
+    fn insert_resource_with_id<T>(
         &mut self,
         component_id: ComponentId,
         components: &mut Components,
@@ -546,7 +542,7 @@ impl Archetypes {
     }
 
     #[inline]
-    pub(crate) fn get_resource_mut<T: Component + Send + Sync>(
+    pub(crate) fn get_resource_mut<T: Component>(
         &mut self,
         components: &Components,
     ) -> Option<Mut<'_, T>> {
@@ -562,7 +558,7 @@ impl Archetypes {
 
     // PERF: optimize this to avoid redundant lookups
     #[inline]
-    pub(crate) fn get_resource_or_insert_with<T: Component + Send + Sync>(
+    pub(crate) fn get_resource_or_insert_with<T: Component>(
         &mut self,
         components: &mut Components,
         func: impl FnOnce() -> T,

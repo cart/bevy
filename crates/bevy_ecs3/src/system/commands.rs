@@ -14,7 +14,7 @@ pub(crate) struct Spawn<T> {
 
 impl<T> Command for Spawn<T>
 where
-    T: DynamicBundle + Send + Sync,
+    T: DynamicBundle,
 {
     fn write(self: Box<Self>, world: &mut World) {
         world.spawn().insert_bundle(self.bundle);
@@ -60,7 +60,7 @@ pub struct InsertBundle<T>
 
 impl<T> Command for InsertBundle<T>
 where
-    T: DynamicBundle + Send + Sync + 'static,
+    T: DynamicBundle + 'static,
 {
     fn write(self: Box<Self>, world: &mut World) {
         world
@@ -78,7 +78,7 @@ pub(crate) struct Insert<T> {
 
 impl<T> Command for Insert<T>
 where
-    T: Component + Send + Sync,
+    T: Component,
 {
     fn write(self: Box<Self>, world: &mut World) {
         world
@@ -98,7 +98,7 @@ pub(crate) struct Remove<T>
 
 impl<T> Command for Remove<T>
 where
-    T: Component + Send + Sync,
+    T: Component,
 {
     fn write(self: Box<Self>, world: &mut World) {
         if let Some(mut entity_mut) = world.entity_mut(self.entity) {
@@ -117,7 +117,7 @@ pub(crate) struct RemoveBundle<T>
 
 impl<T> Command for RemoveBundle<T>
 where
-    T: Bundle + Send + Sync,
+    T: Bundle,
 {
     fn write(self: Box<Self>, world: &mut World) {
         if let Some(mut entity_mut) = world.entity_mut(self.entity) {
@@ -125,10 +125,6 @@ where
             entity_mut.remove_bundle_intersection::<T>();
         }
     }
-}
-
-pub trait ResourcesWriter: Send + Sync {
-    fn write(self: Box<Self>);
 }
 
 #[derive(Default)]
@@ -150,7 +146,7 @@ impl CommandQueue {
     }
 }
 
-/// A list of commands that will be run to populate a `World` and `Resources`.
+/// A list of commands that will be run to modify a `World`
 pub struct Commands<'a> {
     queue: &'a mut CommandQueue,
     world: &'a World,
@@ -199,7 +195,7 @@ impl<'a> Commands<'a> {
     ///     commands.spawn((Component1, Component2));
     /// }
     /// ```
-    pub fn spawn(&mut self, bundle: impl DynamicBundle + Send + Sync) -> &mut Self {
+    pub fn spawn(&mut self, bundle: impl DynamicBundle) -> &mut Self {
         let entity = self.world.entities().reserve_entity();
         self.set_current_entity(entity);
         self.insert_bundle(entity, bundle);
@@ -226,7 +222,7 @@ impl<'a> Commands<'a> {
     pub fn insert_bundle(
         &mut self,
         entity: Entity,
-        bundle: impl DynamicBundle + Send + Sync,
+        bundle: impl DynamicBundle,
     ) -> &mut Self {
         self.add_command(InsertBundle { entity, bundle })
     }
@@ -234,14 +230,14 @@ impl<'a> Commands<'a> {
     /// Inserts a single component into `entity`.
     ///
     /// See [`World::insert_one`].
-    pub fn insert(&mut self, entity: Entity, component: impl Component + Send + Sync) -> &mut Self {
+    pub fn insert(&mut self, entity: Entity, component: impl Component) -> &mut Self {
         self.add_command(Insert { entity, component })
     }
 
     /// See [`World::remove_one`].
     pub fn remove<T>(&mut self, entity: Entity) -> &mut Self
     where
-        T: Component + Send + Sync,
+        T: Component,
     {
         self.add_command(Remove::<T> {
             entity,
@@ -252,7 +248,7 @@ impl<'a> Commands<'a> {
     /// See [`crate::core::EntityMut::remove_bundle`].
     pub fn remove_bundle<T>(&mut self, entity: Entity) -> &mut Self
     where
-        T: Bundle + Send + Sync,
+        T: Bundle,
     {
         self.add_command(RemoveBundle::<T> {
             entity,
@@ -263,7 +259,7 @@ impl<'a> Commands<'a> {
     /// Adds a bundle of components to the current entity.
     ///
     /// See [`Self::with`], [`Self::current_entity`].
-    pub fn with_bundle(&mut self, bundle: impl DynamicBundle + Send + Sync) -> &mut Self {
+    pub fn with_bundle(&mut self, bundle: impl DynamicBundle) -> &mut Self {
         let current_entity =  self.current_entity.expect("Cannot add bundle because the 'current entity' is not set. You should spawn an entity first.");
         self.queue.push(Box::new(InsertBundle {
             entity: current_entity,
@@ -308,7 +304,7 @@ impl<'a> Commands<'a> {
     ///     });
     /// }
     /// ```
-    pub fn with(&mut self, component: impl Component + Send + Sync) -> &mut Self {
+    pub fn with(&mut self, component: impl Component) -> &mut Self {
         let current_entity =  self.current_entity.expect("Cannot add component because the 'current entity' is not set. You should spawn an entity first.");
         self.queue.push(Box::new(Insert {
             entity: current_entity,
@@ -366,7 +362,6 @@ mod tests {
             .spawn((1u32, 2u64))
             .current_entity()
             .unwrap();
-        // commands.insert_resource(3.14f32);
         command_queue.apply(&mut world);
         assert!(world.entities().len() == 1);
         let results = world
@@ -375,7 +370,6 @@ mod tests {
             .map(|(a, b)| (*a, *b))
             .collect::<Vec<_>>();
         assert_eq!(results, vec![(1u32, 2u64)]);
-        // assert_eq!(*resources.get::<f32>().unwrap(), 3.14f32);
         // test entity despawn
         Commands::new(&mut command_queue, &world)
             .despawn(entity)

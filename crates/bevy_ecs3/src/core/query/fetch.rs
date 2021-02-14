@@ -154,7 +154,7 @@ impl<'w> Fetch<'w> for FetchEntity {
     }
 }
 
-impl<T: Component + Send + Sync> WorldQuery for &T {
+impl<T: Component> WorldQuery for &T {
     type Fetch = FetchRead<T>;
     type State = ReadState<T>;
 }
@@ -167,7 +167,7 @@ pub struct ReadState<T> {
 }
 
 // SAFE: component access and archetype component access are properly updated to reflect that T is read
-unsafe impl<T: Component + Send + Sync> FetchState for ReadState<T> {
+unsafe impl<T: Component> FetchState for ReadState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -214,7 +214,7 @@ pub struct FetchRead<T> {
 
 unsafe impl<T> ReadOnlyFetch for FetchRead<T> {}
 
-impl<'w, T: Component + Send + Sync> Fetch<'w> for FetchRead<T> {
+impl<'w, T: Component> Fetch<'w> for FetchRead<T> {
     type Item = &'w T;
     type State = ReadState<T>;
 
@@ -297,7 +297,7 @@ impl<'w, T: Component + Send + Sync> Fetch<'w> for FetchRead<T> {
     }
 }
 
-impl<T: Component + Send + Sync> WorldQuery for &mut T {
+impl<T: Component> WorldQuery for &mut T {
     type Fetch = FetchWrite<T>;
     type State = WriteState<T>;
 }
@@ -319,7 +319,7 @@ pub struct WriteState<T> {
 }
 
 // SAFE: component access and archetype component access are properly updated to reflect that T is written
-unsafe impl<T: Component + Send + Sync> FetchState for WriteState<T> {
+unsafe impl<T: Component> FetchState for WriteState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -357,7 +357,7 @@ unsafe impl<T: Component + Send + Sync> FetchState for WriteState<T> {
 }
 
 
-impl<'w, T: Component + Send + Sync> Fetch<'w> for FetchWrite<T> {
+impl<'w, T: Component> Fetch<'w> for FetchWrite<T> {
     type Item = Mut<'w, T>;
     type State = WriteState<T>;
 
@@ -591,7 +591,7 @@ impl<T: Component> Flags<T> {
     }
 }
 
-impl<T: Component + Send + Sync> WorldQuery for Flags<T> {
+impl<T: Component> WorldQuery for Flags<T> {
     type Fetch = FetchFlags<T>;
     type State = FlagsState<T>;
 }
@@ -604,7 +604,7 @@ pub struct FlagsState<T> {
 }
 
 // SAFE: component access and archetype component access are properly updated to reflect that T is read
-unsafe impl<T: Component + Send + Sync> FetchState for FlagsState<T> {
+unsafe impl<T: Component> FetchState for FlagsState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: component_id exists if there is a TypeId pointing to it
@@ -652,7 +652,7 @@ pub struct FetchFlags<T> {
 
 unsafe impl<T> ReadOnlyFetch for FetchFlags<T> {}
 
-impl<'w, T: Component + Send + Sync> Fetch<'w> for FetchFlags<T> {
+impl<'w, T: Component> Fetch<'w> for FetchFlags<T> {
     type Item = Flags<T>;
     type State = FlagsState<T>;
 

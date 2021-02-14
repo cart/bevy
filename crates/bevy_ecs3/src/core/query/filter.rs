@@ -45,7 +45,7 @@ pub struct WithState<T> {
 }
 
 // SAFE: no component access or archetype component access
-unsafe impl<T: Component + Send + Sync> FetchState for WithState<T> {
+unsafe impl<T: Component> FetchState for WithState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: ComponentInfo was just created above
@@ -77,7 +77,7 @@ unsafe impl<T: Component + Send + Sync> FetchState for WithState<T> {
     }
 }
 
-impl<T: Component + Send + Sync> QueryFilter for With<T> {
+impl<T: Component> QueryFilter for With<T> {
     type State = WithState<T>;
 
     const DANGLING: Self = Self {
@@ -127,7 +127,7 @@ pub struct WithoutState<T> {
 }
 
 // SAFE: no component access or archetype component access
-unsafe impl<T: Component + Send + Sync> FetchState for WithoutState<T> {
+unsafe impl<T: Component> FetchState for WithoutState<T> {
     fn init(world: &mut World) -> Self {
         let component_id = world.components.get_or_insert_id::<T>();
         // SAFE: ComponentInfo was just created above
@@ -159,7 +159,7 @@ unsafe impl<T: Component + Send + Sync> FetchState for WithoutState<T> {
     }
 }
 
-impl<T: Component + Send + Sync> QueryFilter for Without<T> {
+impl<T: Component> QueryFilter for Without<T> {
     type State = WithoutState<T>;
 
     const DANGLING: Self = Self {
@@ -420,7 +420,7 @@ macro_rules! impl_flag_filter {
         }
 
         // SAFE: this reads the T component. archetype component access and component access are updated to reflect that
-        unsafe impl<T: Component + Send + Sync> FetchState for $state_name<T> {
+        unsafe impl<T: Component> FetchState for $state_name<T> {
             fn init(world: &mut World) -> Self {
                 let component_id = world.components.get_or_insert_id::<T>();
                 // SAFE: component_id exists if there is a TypeId pointing to it
@@ -459,7 +459,7 @@ macro_rules! impl_flag_filter {
 
 
 
-        impl<T: Component + Send + Sync> QueryFilter for $name<T> {
+        impl<T: Component> QueryFilter for $name<T> {
             type State = $state_name<T>;
             const DANGLING: Self = Self {
                 component_id: ComponentId::new(usize::MAX),
