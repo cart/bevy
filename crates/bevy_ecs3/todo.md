@@ -66,6 +66,7 @@
     * Give Option fetch access updating some scrutiny
     * Rename System::Update() to System::UpdateAccess() (only pass in required data)
     * investigate slower becs3 schedule perf (54 vs 69 us) ... afaik ive only subtracted ops so wtf
+        * busy and contrived benches are 3x slower!!!! wtf!!!
     * make StorageType a builder on descriptor?
 
 ## LATER
