@@ -47,6 +47,7 @@
     * consider reverting all_tuples proc macro. it makes RA sad
     * resource queries?
     * drop tests
+    * Nested Bundles 
     * batch_iter
     * par_iter
     * make type_id totally optional
