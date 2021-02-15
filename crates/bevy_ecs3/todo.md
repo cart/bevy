@@ -35,6 +35,7 @@
 * removed `Mut<T>` query impl. better to only support one way `&mut T` 
 * Removed with() from `Flags<T>` in favor of `Option<Flags<T>>`, which allows querying for flags to be "filtered" by default 
 * Replaced slow "remove_bundle_one_by_one" used as fallback for Commands::remove_bundle with fast "remove_bundle_intersection"
+* Components now have is_send property (currently only resources support non-send)
 
 ## TODO
 * world id safety
@@ -42,18 +43,12 @@
 * todo review
 * readme
 * core
-    * try removing types/ markers when not needed in state
-    * NonSend resources (system param too)
-        * account for is_send difference
-        * non-send commands
-        * make system state private, add getters, hide is_send() in favor of set_non_send
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
-    * resource queries
+    * resource queries?
     * drop tests
     * batch_iter
     * par_iter
-    * Update bundle derive macro
     * make type_id totally optional
     * Set-able system params
     * Optimize SparseSet::insert (code is written but it has memory issues)

@@ -1,7 +1,7 @@
 use std::{alloc::Layout, any::TypeId};
 
 /// Metadata required to store a component
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct TypeInfo {
     id: TypeId,
     layout: Layout,

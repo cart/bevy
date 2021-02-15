@@ -20,10 +20,7 @@ pub use world::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{
-        Added, Changed, Component, ComponentDescriptor, Entity, Flags, Mutated, Or, QueryFilter,
-        StorageType, With, Without, World,
-    };
+    use crate::core::{Added, Bundle, Changed, Component, ComponentDescriptor, Entity, Flags, Mutated, Or, QueryFilter, StorageType, TypeInfo, With, Without, World};
 
     #[derive(Debug, PartialEq, Eq)]
     struct A(usize);
@@ -32,6 +29,40 @@ mod tests {
 
     #[test]
     fn random_access() {
+        let mut world = World::new();
+        world
+            .register_component(ComponentDescriptor::new::<i32>(StorageType::SparseSet))
+            .unwrap();
+        let e = world.spawn().insert_bundle(("abc", 123)).id();
+        let f = world.spawn().insert_bundle(("def", 456, true)).id();
+        assert_eq!(*world.get::<&str>(e).unwrap(), "abc");
+        assert_eq!(*world.get::<i32>(e).unwrap(), 123);
+        assert_eq!(*world.get::<&str>(f).unwrap(), "def");
+        assert_eq!(*world.get::<i32>(f).unwrap(), 456);
+
+        // test archetype get_mut()
+        *world.get_mut::<&'static str>(e).unwrap() = "xyz";
+        assert_eq!(*world.get::<&'static str>(e).unwrap(), "xyz");
+
+        // test sparse set get_mut()
+        *world.get_mut::<i32>(f).unwrap() = 42;
+        assert_eq!(*world.get::<i32>(f).unwrap(), 42);
+    }
+
+    #[test]
+    fn bundle_derive() {
+        use crate as bevy_ecs3;
+        #[derive(Bundle)]
+        struct Foo {
+            x: &'static str,
+            y: i32,
+        }
+
+        assert_eq!(
+            <Foo as Bundle>::static_type_info(),
+            vec![TypeInfo::of::<&'static str>(), TypeInfo::of::<i32>(),]
+        );
+
         let mut world = World::new();
         world
             .register_component(ComponentDescriptor::new::<i32>(StorageType::SparseSet))
@@ -758,13 +789,33 @@ mod tests {
         assert_eq!(e.get::<&'static str>(), Some(&"a"));
         assert_eq!(e.get::<i32>(), Some(&1));
         assert_eq!(e.get::<f64>(), Some(&1.0));
-        assert_eq!(e.get::<usize>(), None, "usize is not in the entity, so it should not exist");
+        assert_eq!(
+            e.get::<usize>(),
+            None,
+            "usize is not in the entity, so it should not exist"
+        );
 
         e.remove_bundle_intersection::<(i32, f64, usize)>();
-        assert_eq!(e.get::<&'static str>(), Some(&"a"), "&'static str is not in the removed bundle, so it should exist");
-        assert_eq!(e.get::<i32>(), None, "i32 is in the removed bundle, so should not exist");
-        assert_eq!(e.get::<f64>(), None, "f64 is in the removed bundle, so should not exist");
-        assert_eq!(e.get::<usize>(), None, "usize is in the removed bundle, so should not exist");
+        assert_eq!(
+            e.get::<&'static str>(),
+            Some(&"a"),
+            "&'static str is not in the removed bundle, so it should exist"
+        );
+        assert_eq!(
+            e.get::<i32>(),
+            None,
+            "i32 is in the removed bundle, so should not exist"
+        );
+        assert_eq!(
+            e.get::<f64>(),
+            None,
+            "f64 is in the removed bundle, so should not exist"
+        );
+        assert_eq!(
+            e.get::<usize>(),
+            None,
+            "usize is in the removed bundle, so should not exist"
+        );
     }
 
     #[test]

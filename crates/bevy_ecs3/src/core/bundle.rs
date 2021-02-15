@@ -1,3 +1,5 @@
+pub use bevy_ecs3_macros::Bundle;
+
 use crate::core::{
     Component, ComponentFlags, ComponentId, Components, Entity, SparseSetIndex, SparseSets,
     StorageType, Table, TypeInfo,
