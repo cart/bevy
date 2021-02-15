@@ -421,14 +421,14 @@ impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
     type Fetch = NonSendState<T>;
 }
 
-// SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
+// SAFE: NonSendComponentId and ArchetypeComponentId access is applied to SystemState. If this NonSend conflicts
 // with any prior access, a panic will occur.
 unsafe impl<T: 'static> SystemParamState for NonSendState<T> {
     fn init(world: &mut World, system_state: &mut SystemState) -> Self {
         let component_id = world.components.get_or_insert_non_send_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
-                "Res<{}> in system {} conflicts with a previous ResMut<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
+                "NonSend<{}> in system {} conflicts with a previous mutable resource access ({0}). Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
                 std::any::type_name::<T>(), system_state.name);
         }
         system_state.component_access.add_read(component_id);
@@ -499,6 +499,74 @@ impl<'a, T: 'static + core::fmt::Debug> core::fmt::Debug for NonSendMut<'a, T> {
         self.value.fmt(f)
     }
 }
+
+pub struct NonSendMutFetch<T>(PhantomData<T>);
+pub struct NonSendMutState<T> {
+    component_id: ComponentId,
+    // NOTE: PhantomData<fn()-> X> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
+    type Fetch = NonSendMutState<T>;
+}
+
+// SAFE: NonSendMut ComponentId and ArchetypeComponentId access is applied to SystemState. If this NonSendMut conflicts
+// with any prior access, a panic will occur.
+unsafe impl<T: 'static> SystemParamState for NonSendMutState<T> {
+    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+        let component_id = world.components.get_or_insert_non_send_id::<T>();
+        if system_state.component_access.has_write(component_id) {
+            panic!(
+                "NonSendMut<{}> in system {} conflicts with a previous mutable resource access ({0}). Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
+                std::any::type_name::<T>(), system_state.name);
+        } else if system_state.component_access.has_read(component_id) {
+            panic!(
+                "NonSendMut<{}> in system {} conflicts with a previous immutable resource access ({0}). Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
+                std::any::type_name::<T>(), system_state.name);
+        }
+        system_state.component_access.add_write(component_id);
+        system_state.set_non_send();
+        Self {
+            component_id,
+            marker: PhantomData,
+        }
+    }
+
+    // PERF: move this into init by somehow creating the archetype component id, even if there is no resource yet
+    fn update(&mut self, world: &World, system_state: &mut SystemState) {
+        // SAFE: resource archetype always exists
+        let archetype = unsafe {
+            world
+                .archetypes()
+                .get_unchecked(ArchetypeId::resource_archetype())
+        };
+
+        if let Some(archetype_component) = archetype.get_archetype_component_id(self.component_id) {
+            system_state
+                .archetype_component_access
+                .add_write(archetype_component);
+        }
+    }
+}
+
+impl<'a, T: 'static> SystemParamFetch<'a> for NonSendMutState<T> {
+    type Item = NonSendMut<'a, T>;
+
+    #[inline]
+    unsafe fn get_param(
+        state: &'a mut Self,
+        _system_state: &'a SystemState,
+        world: &'a World,
+    ) -> Option<Self::Item> {
+        let value = world.get_non_send_mut_unchecked_with_id(state.component_id)?;
+        Some(NonSendMut {
+            value: value.value,
+            flags: value.flags,
+        })
+    }
+}
+
 
 pub struct OrState<T>(T);
 
