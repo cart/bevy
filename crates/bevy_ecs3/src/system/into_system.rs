@@ -55,7 +55,7 @@ where
     Param: SystemParam,
 {
     func: F,
-    param_state: Option<Param::State>,
+    param_state: Option<Param::Fetch>,
     system_state: SystemState,
     // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
     marker: PhantomData<fn() -> (In, Out, Marker)>,
@@ -139,7 +139,7 @@ where
 
     #[inline]
     fn initialize(&mut self, world: &mut World) {
-        self.param_state = Some(<Param::State as SystemParamState>::init(
+        self.param_state = Some(<Param::Fetch as SystemParamState>::init(
             world,
             &mut self.system_state,
         ));
@@ -150,7 +150,7 @@ pub trait SystemFunction<In, Out, Param: SystemParam, Marker>: Send + Sync + 'st
     fn run(
         &mut self,
         input: In,
-        state: &mut Param::State,
+        state: &mut Param::Fetch,
         system_state: &SystemState,
         world: &World,
     ) -> Option<Out>;
@@ -163,12 +163,12 @@ macro_rules! impl_system_function {
         where
             Func:
                 FnMut($($param),*) -> Out +
-                FnMut($(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out + Send + Sync + 'static, Out: 'static
+                FnMut($(<<$param as SystemParam>::Fetch as SystemParamFetch>::Item),*) -> Out + Send + Sync + 'static, Out: 'static
         {
             #[inline]
-            fn run(&mut self, _input: (), state: &mut <($($param,)*) as SystemParam>::State, system_state: &SystemState, world: &World) -> Option<Out> {
+            fn run(&mut self, _input: (), state: &mut <($($param,)*) as SystemParam>::Fetch, system_state: &SystemState, world: &World) -> Option<Out> {
                 unsafe {
-                    if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::State as SystemParamFetch>::get_param(state, system_state, world) {
+                    if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as SystemParamFetch>::get_param(state, system_state, world) {
                         Some(self($($param),*))
                     } else {
                         None
@@ -182,12 +182,12 @@ macro_rules! impl_system_function {
         where
             Func:
                 FnMut(In<Input>, $($param),*) -> Out +
-                FnMut(In<Input>, $(<<$param as SystemParam>::State as SystemParamFetch>::Item),*) -> Out + Send + Sync + 'static, Out: 'static
+                FnMut(In<Input>, $(<<$param as SystemParam>::Fetch as SystemParamFetch>::Item),*) -> Out + Send + Sync + 'static, Out: 'static
         {
             #[inline]
-            fn run(&mut self, input: Input, state: &mut <($($param,)*) as SystemParam>::State, system_state: &SystemState, world: &World) -> Option<Out> {
+            fn run(&mut self, input: Input, state: &mut <($($param,)*) as SystemParam>::Fetch, system_state: &SystemState, world: &World) -> Option<Out> {
                 unsafe {
-                    if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::State as SystemParamFetch>::get_param(state, system_state, world) {
+                    if let Some(($($param,)*)) = <<($($param,)*) as SystemParam>::Fetch as SystemParamFetch>::get_param(state, system_state, world) {
                         Some(self(In(input), $($param),*))
                     } else {
                         None

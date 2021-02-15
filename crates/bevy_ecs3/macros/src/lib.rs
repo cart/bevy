@@ -357,7 +357,7 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
         let query_fn_mut = &query_fn_muts[0..query_count];
         tokens.extend(TokenStream::from(quote! {
             impl<'w, #(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParam for QuerySet<(#(Query<'w, #query, #filter>,)*)> {
-                type State = QuerySetState<(#(QueryState<#query, #filter>,)*)>;
+                type Fetch = QuerySetState<(#(QueryState<#query, #filter>,)*)>;
             }
 
             // SAFE: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemState. If any QueryState conflicts

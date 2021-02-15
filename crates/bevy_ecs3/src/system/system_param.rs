@@ -12,7 +12,7 @@ use std::{
 };
 
 pub trait SystemParam: Sized {
-    type State: SystemParamState + for<'a> SystemParamFetch<'a>;
+    type Fetch: for<'a> SystemParamFetch<'a>;
 }
 
 /// # Safety
@@ -42,7 +42,7 @@ pub trait SystemParamFetch<'a>: SystemParamState {
 pub struct QueryFetch<Q, F>(PhantomData<(Q, F)>);
 
 impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Query<'a, Q, F> {
-    type State = QueryState<Q, F>;
+    type Fetch = QueryState<Q, F>;
 }
 
 // SAFE: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemState. If this QueryState conflicts
@@ -136,7 +136,7 @@ pub struct ResState<T> {
 }
 
 impl<'a, T: Component> SystemParam for Res<'a, T> {
-    type State = ResState<T>;
+    type Fetch = ResState<T>;
 }
 
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
@@ -216,7 +216,7 @@ pub struct ResMutState<T> {
 }
 
 impl<'a, T: Component> SystemParam for ResMut<'a, T> {
-    type State = ResMutState<T>;
+    type Fetch = ResMutState<T>;
 }
 
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
@@ -277,7 +277,7 @@ impl<'a, T: Component> SystemParamFetch<'a> for ResMutState<T> {
 pub struct FetchCommands;
 
 impl<'a> SystemParam for Commands<'a> {
-    type State = CommandQueue;
+    type Fetch = CommandQueue;
 }
 
 // SAFE: only local state is accessed
@@ -325,7 +325,7 @@ impl<'a, T: Component> DerefMut for Local<'a, T> {
 pub struct LocalState<T: Component>(T);
 
 impl<'a, T: Component + FromWorld> SystemParam for Local<'a, T> {
-    type State = LocalState<T>;
+    type Fetch = LocalState<T>;
 }
 
 // SAFE: only local state is accessed
@@ -367,7 +367,7 @@ pub struct RemovedComponentsState<T> {
 }
 
 impl<'a, T: Component> SystemParam for RemovedComponents<'a, T> {
-    type State = RemovedComponentsState<T>;
+    type Fetch = RemovedComponentsState<T>;
 }
 
 // SAFE: no component access. removed component entity collections can be read in parallel and are never mutably borrowed
@@ -418,7 +418,7 @@ pub struct NonSendState<T> {
 }
 
 impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
-    type State = NonSendState<T>;
+    type Fetch = NonSendState<T>;
 }
 
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
@@ -505,7 +505,7 @@ pub struct OrState<T>(T);
 macro_rules! impl_system_param_tuple {
     ($($param: ident),*) => {
         impl<$($param: SystemParam),*> SystemParam for ($($param,)*) {
-            type State = ($($param::State,)*);
+            type Fetch = ($($param::Fetch,)*);
         }
         #[allow(unused_variables)]
         #[allow(non_snake_case)]
@@ -546,7 +546,7 @@ macro_rules! impl_system_param_tuple {
         }
 
         impl<$($param: SystemParam),*> SystemParam for Or<($(Option<$param>,)*)> {
-            type State = OrState<($($param::State,)*)>;
+            type Fetch = OrState<($($param::Fetch,)*)>;
         }
 
         #[allow(non_snake_case)]
