@@ -213,7 +213,7 @@ impl Components {
     }
 
     #[inline]
-    pub fn get_or_insert_non_send_resource_id<T: Any>(&mut self) -> ComponentId {
+    pub fn get_or_insert_non_send_id<T: Any>(&mut self) -> ComponentId {
         self.get_or_insert_resource_with(TypeId::of::<T>(), || TypeInfo::of_non_send::<T>())
     }
 

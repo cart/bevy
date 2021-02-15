@@ -42,10 +42,14 @@
 * todo review
 * readme
 * core
+    * try removing types/ markers when not needed in state
     * NonSend resources (system param too)
         * account for is_send difference
         * non-send commands
         * make system state private, add getters, hide is_send() in favor of set_non_send
+    * panic on conflicting fetches (&A, &mut A)
+    * consider reverting all_tuples proc macro. it makes RA sad
+    * resource queries
     * drop tests
     * batch_iter
     * par_iter

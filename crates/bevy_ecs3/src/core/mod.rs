@@ -767,45 +767,26 @@ mod tests {
         assert_eq!(e.get::<usize>(), None, "usize is in the removed bundle, so should not exist");
     }
 
-    // #[test]
-    // fn non_send_resource() {
-    //     let mut resources = Resources::default();
-    //     resources.insert_non_send(123i32);
-    //     resources.insert_non_send(456i64);
-    //     assert_eq!(*resources.get_non_send::<i32>().unwrap(), 123);
-    //     assert_eq!(*resources.get_non_send_mut::<i64>().unwrap(), 456);
-    // }
+    #[test]
+    fn non_send_resource() {
+        let mut world = World::default();
+        world.insert_non_send(123i32);
+        world.insert_non_send(456i64);
+        assert_eq!(*world.get_non_send::<i32>().unwrap(), 123);
+        assert_eq!(*world.get_non_send_mut::<i64>().unwrap(), 456);
+    }
 
-    // #[test]
-    // fn non_send_resource_ref_aliasing() {
-    //     let mut resources = Resources::default();
-    //     resources.insert_non_send(123i32);
-    //     let a = resources.get_non_send::<i32>().unwrap();
-    //     let b = resources.get_non_send::<i32>().unwrap();
-    //     assert_eq!(*a, 123);
-    //     assert_eq!(*b, 123);
-    // }
-
-    // #[test]
-    // #[should_panic]
-    // fn non_send_resource_mut_ref_aliasing() {
-    //     let mut resources = Resources::default();
-    //     resources.insert_non_send(123i32);
-    //     let _a = resources.get_non_send::<i32>().unwrap();
-    //     let _b = resources.get_non_send_mut::<i32>().unwrap();
-    // }
-
-    // #[test]
-    // #[should_panic]
-    // fn non_send_resource_panic() {
-    //     let mut resources = Resources::default();
-    //     resources.insert_non_send(0i32);
-    //     std::thread::spawn(move || {
-    //         let _ = resources.get_non_send_mut::<i32>();
-    //     })
-    //     .join()
-    //     .unwrap();
-    // }
+    #[test]
+    #[should_panic]
+    fn non_send_resource_panic() {
+        let mut world = World::default();
+        world.insert_non_send(0i32);
+        std::thread::spawn(move || {
+            let _ = world.get_non_send_mut::<i32>();
+        })
+        .join()
+        .unwrap();
+    }
 
     #[test]
     fn flags_query() {

@@ -4,10 +4,7 @@ use crate::core::{
     EntityMut, EntityRef, Mut, QueryFilter, QueryState, SparseSet, SpawnBatchIter, StorageType,
     Storages, WorldQuery,
 };
-use std::{
-    any::{Any, TypeId},
-    fmt,
-};
+use std::{any::TypeId, fmt};
 
 #[derive(Default)]
 pub struct World {
@@ -17,6 +14,7 @@ pub struct World {
     pub(crate) storages: Storages,
     pub(crate) bundles: Bundles,
     pub(crate) removed_components: SparseSet<ComponentId, Vec<Entity>>,
+    thread_validator: ThreadValidator,
 }
 
 impl World {
@@ -187,28 +185,93 @@ impl World {
     }
 
     #[inline]
-    pub fn insert_non_send_resource<T: Any>(&mut self, value: T) {
-        let component_id = self.components.get_or_insert_non_send_resource_id::<T>();
+    pub fn insert_non_send<T: 'static>(&mut self, value: T) {
+        let component_id = self.components.get_or_insert_non_send_id::<T>();
         self.insert_resource_with_id(component_id, value);
     }
 
     #[inline]
     pub fn get_resource<T: Component>(&self) -> Option<&T> {
-        let column = self.get_resource_column_with_type(TypeId::of::<T>())?;
-        // SAFE: resource exists and is of type T
-        unsafe { Some(&*column.get_ptr().as_ptr().cast::<T>()) }
+        let component_id = self.components.get_resource_id(TypeId::of::<T>())?;
+        unsafe { self.get_resource_with_id(component_id) }
     }
 
     #[inline]
     pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
-        let column = self.get_resource_column_with_type(TypeId::of::<T>())?;
-        // SAFE: resource exists and is of type T
-        unsafe {
-            Some(Mut {
-                value: &mut *column.get_ptr().as_ptr().cast::<T>(),
-                flags: &mut *column.get_flags_mut_ptr(),
-            })
-        }
+        let component_id = self.components.get_resource_id(TypeId::of::<T>())?;
+        unsafe { self.get_resource_mut_unchecked_with_id(component_id) }
+    }
+
+    #[inline]
+    pub fn get_non_send<T: 'static>(&self) -> Option<&T> {
+        let component_id = self.components.get_resource_id(TypeId::of::<T>())?;
+        // SAFE: component id matches type T
+        unsafe { self.get_non_send_with_id(component_id) }
+    }
+
+    #[inline]
+    pub fn get_non_send_mut<T: 'static>(&mut self) -> Option<Mut<'_, T>> {
+        // SAFE: unique world access
+        unsafe { self.get_non_send_mut_unchecked() }
+    }
+
+    /// # Safety
+    /// `component_id` must be assigned to a component of type T
+    /// Caller must ensure this doesn't violate Rust mutability rules for the given resource.
+    #[inline]
+    pub(crate) unsafe fn get_resource_with_id<T: 'static>(
+        &self,
+        component_id: ComponentId,
+    ) -> Option<&T> {
+        let column = self.get_resource_column(component_id)?;
+        Some(&*column.get_ptr().as_ptr().cast::<T>())
+    }
+
+    /// # Safety
+    /// `component_id` must be assigned to a component of type T.
+    /// Caller must ensure this doesn't violate Rust mutability rules for the given resource.
+    #[inline]
+    pub(crate) unsafe fn get_resource_mut_unchecked_with_id<T>(
+        &self,
+        component_id: ComponentId,
+    ) -> Option<Mut<'_, T>> {
+        let column = self.get_resource_column(component_id)?;
+        Some(Mut {
+            value: &mut *column.get_ptr().as_ptr().cast::<T>(),
+            flags: &mut *column.get_flags_mut_ptr(),
+        })
+    }
+
+    /// # Safety
+    /// Caller must ensure this doesn't violate Rust mutability rules for the given resource.
+    #[inline]
+    pub unsafe fn get_non_send_mut_unchecked<T: 'static>(&self) -> Option<Mut<'_, T>> {
+        let component_id = self.components.get_resource_id(TypeId::of::<T>())?;
+        self.get_non_send_mut_unchecked_with_id(component_id)
+    }
+
+    /// # Safety
+    /// `component_id` must be assigned to a component of type T
+    /// Caller must ensure this doesn't violate Rust mutability rules for the given resource.
+    #[inline]
+    pub(crate) unsafe fn get_non_send_with_id<T: 'static>(
+        &self,
+        component_id: ComponentId,
+    ) -> Option<&T> {
+        self.validate_non_send_access::<T>();
+        self.get_resource_with_id(component_id)
+    }
+
+    /// # Safety
+    /// `component_id` must be assigned to a component of type T.
+    /// Caller must ensure this doesn't violate Rust mutability rules for the given resource.
+    #[inline]
+    pub(crate) unsafe fn get_non_send_mut_unchecked_with_id<T: 'static>(
+        &self,
+        component_id: ComponentId,
+    ) -> Option<Mut<'_, T>> {
+        self.validate_non_send_access::<T>();
+        self.get_resource_mut_unchecked_with_id(component_id)
     }
 
     // PERF: optimize this to avoid redundant lookups
@@ -241,7 +304,6 @@ impl World {
         let unique_components = resource_archetype.unique_components();
         unique_components.contains(component_id)
     }
-
 
     #[inline]
     fn insert_resource_with_id<T>(&mut self, component_id: ComponentId, mut value: T) {
@@ -282,11 +344,6 @@ impl World {
         }
     }
 
-    fn get_resource_column_with_type(&self, type_id: TypeId) -> Option<&Column> {
-        let component_id = self.components.get_resource_id(type_id)?;
-        self.get_resource_column(component_id)
-    }
-
     pub(crate) fn get_resource_column(&self, component_id: ComponentId) -> Option<&Column> {
         // SAFE: resource archetype is guaranteed to exist
         let resource_archetype = unsafe {
@@ -295,6 +352,15 @@ impl World {
         };
         let unique_components = resource_archetype.unique_components();
         unique_components.get(component_id)
+    }
+
+    fn validate_non_send_access<T: 'static>(&self) {
+        if !self.thread_validator.is_main_thread() {
+            panic!(
+                "attempted to access NonSend resource {} off of the main thread",
+                std::any::type_name::<T>()
+            );
+        }
     }
 }
 
@@ -316,5 +382,23 @@ pub trait FromWorld {
 impl<T: Default> FromWorld for T {
     fn from_world(_world: &World) -> Self {
         T::default()
+    }
+}
+
+struct ThreadValidator {
+    main_thread: std::thread::ThreadId,
+}
+
+impl ThreadValidator {
+    fn is_main_thread(&self) -> bool {
+        self.main_thread == std::thread::current().id()
+    }
+}
+
+impl Default for ThreadValidator {
+    fn default() -> Self {
+        Self {
+            main_thread: std::thread::current().id(),
+        }
     }
 }

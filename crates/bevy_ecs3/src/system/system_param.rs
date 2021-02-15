@@ -182,9 +182,8 @@ impl<'a, T: Component> SystemParamFetch<'a> for ResState<T> {
         _system_state: &'a SystemState,
         world: &'a World,
     ) -> Option<Self::Item> {
-        let column = world.get_resource_column(state.component_id)?;
         Some(Res {
-            value: &*column.get_ptr().as_ptr().cast::<T>(),
+            value: world.get_resource_with_id::<T>(state.component_id)?,
         })
     }
 }
@@ -267,10 +266,10 @@ impl<'a, T: Component> SystemParamFetch<'a> for ResMutState<T> {
         _system_state: &'a SystemState,
         world: &'a World,
     ) -> Option<Self::Item> {
-        let column = world.get_resource_column(state.component_id)?;
+        let value = world.get_resource_mut_unchecked_with_id(state.component_id)?;
         Some(ResMut {
-            value: &mut *column.get_ptr().as_ptr().cast::<T>(),
-            flags: &mut *column.get_flags_mut_ptr(),
+            value: value.value,
+            flags: value.flags,
         })
     }
 }
@@ -396,6 +395,108 @@ impl<'a, T: Component> SystemParamFetch<'a> for RemovedComponentsState<T> {
             component_id: state.component_id,
             marker: PhantomData,
         })
+    }
+}
+
+/// Shared borrow of a NonSend resource
+pub struct NonSend<'w, T> {
+    pub(crate) value: &'w T,
+}
+
+impl<'w, T: 'static> Deref for NonSend<'w, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.value
+    }
+}
+
+pub struct NonSendState<T> {
+    component_id: ComponentId,
+    // NOTE: PhantomData<fn()-> X> gives this safe Send/Sync impls
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
+    type State = NonSendState<T>;
+}
+
+// SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
+// with any prior access, a panic will occur.
+unsafe impl<T: 'static> SystemParamState for NonSendState<T> {
+    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+        let component_id = world.components.get_or_insert_non_send_id::<T>();
+        if system_state.component_access.has_write(component_id) {
+            panic!(
+                "Res<{}> in system {} conflicts with a previous ResMut<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
+                std::any::type_name::<T>(), system_state.name);
+        }
+        system_state.component_access.add_read(component_id);
+        system_state.set_non_send();
+        Self {
+            component_id,
+            marker: PhantomData,
+        }
+    }
+
+    // PERF: move this into init by somehow creating the archetype component id, even if there is no resource yet
+    fn update(&mut self, world: &World, system_state: &mut SystemState) {
+        // SAFE: resource archetype always exists
+        let archetype = unsafe {
+            world
+                .archetypes()
+                .get_unchecked(ArchetypeId::resource_archetype())
+        };
+
+        if let Some(archetype_component) = archetype.get_archetype_component_id(self.component_id) {
+            system_state
+                .archetype_component_access
+                .add_read(archetype_component);
+        }
+    }
+}
+
+impl<'a, T: 'static> SystemParamFetch<'a> for NonSendState<T> {
+    type Item = NonSend<'a, T>;
+
+    #[inline]
+    unsafe fn get_param(
+        state: &'a mut Self,
+        _system_state: &'a SystemState,
+        world: &'a World,
+    ) -> Option<Self::Item> {
+        Some(NonSend {
+            value: world.get_non_send_with_id::<T>(state.component_id)?,
+        })
+    }
+}
+
+/// Unique borrow of a NonSend resource
+pub struct NonSendMut<'a, T: 'static> {
+    pub(crate) value: &'a mut T,
+    pub(crate) flags: &'a mut ComponentFlags,
+}
+
+impl<'a, T: 'static> Deref for NonSendMut<'a, T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &T {
+        self.value
+    }
+}
+
+impl<'a, T: 'static> DerefMut for NonSendMut<'a, T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut T {
+        self.flags.insert(ComponentFlags::MUTATED);
+        self.value
+    }
+}
+
+impl<'a, T: 'static + core::fmt::Debug> core::fmt::Debug for NonSendMut<'a, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.value.fmt(f)
     }
 }
 

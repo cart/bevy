@@ -311,11 +311,7 @@ enum SchedulingEvent {
 #[cfg(test)]
 mod tests {
     use super::SchedulingEvent::{self, *};
-    use crate::{
-        prelude::*,
-        schedule::{Stage, SystemStage},
-        system::{IntoSystem, Query, Res, ResMut},
-    };
+    use crate::{prelude::*, schedule::{SingleThreadedExecutor, Stage, SystemStage}, system::{IntoSystem, NonSend, Query, Res, ResMut}};
     use async_channel::Receiver;
 
     fn receive_events(world: &World) -> Vec<SchedulingEvent> {
@@ -425,33 +421,33 @@ mod tests {
         assert_eq!(receive_events(&world), vec![StartedSystems(2),]);
     }
 
-    // TODO: re-enable when NonSend is implemented
-    // #[test]
-    // fn non_send_resource() {
-    //     let mut world = World::new();
-    //     resources.insert_non_send(thread::current().id());
-    //     fn non_send(thread_id: NonSend<ThreadId>) {
-    //         assert_eq!(thread::current().id(), *thread_id);
-    //     }
-    //     fn empty() {}
-    //     let mut stage = SystemStage::parallel()
-    //         .with_system(non_send.system())
-    //         .with_system(non_send.system())
-    //         .with_system(empty.system())
-    //         .with_system(empty.system())
-    //         .with_system(non_send.system())
-    //         .with_system(non_send.system());
-    //     stage.run(&mut world);
-    //     assert_eq!(
-    //         receive_events(&world),
-    //         vec![
-    //             StartedSystems(3),
-    //             StartedSystems(1),
-    //             StartedSystems(1),
-    //             StartedSystems(1),
-    //         ]
-    //     );
-    //     stage.set_executor(Box::new(SingleThreadedExecutor::default()));
-    //     stage.run(&mut world);
-    // }
+    #[test]
+    fn non_send_resource() {
+        use std::thread;
+        let mut world = World::new();
+        world.insert_non_send(thread::current().id());
+        fn non_send(thread_id: NonSend<thread::ThreadId>) {
+            assert_eq!(thread::current().id(), *thread_id);
+        }
+        fn empty() {}
+        let mut stage = SystemStage::parallel()
+            .with_system(non_send.system())
+            .with_system(non_send.system())
+            .with_system(empty.system())
+            .with_system(empty.system())
+            .with_system(non_send.system())
+            .with_system(non_send.system());
+        stage.run(&mut world);
+        assert_eq!(
+            receive_events(&world),
+            vec![
+                StartedSystems(3),
+                StartedSystems(1),
+                StartedSystems(1),
+                StartedSystems(1),
+            ]
+        );
+        stage.set_executor(Box::new(SingleThreadedExecutor::default()));
+        stage.run(&mut world);
+    }
 }

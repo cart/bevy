@@ -26,12 +26,12 @@ impl SystemState {
     }
 
     #[inline]
-    fn is_send(&self) -> bool {
+    pub fn is_send(&self) -> bool {
         self.is_send
     }
 
     #[inline]
-    fn set_non_send(&mut self) {
+    pub fn set_non_send(&mut self) {
         self.is_send = false;
     }
 }
