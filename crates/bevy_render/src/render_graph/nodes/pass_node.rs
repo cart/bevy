@@ -13,7 +13,7 @@ use crate::{
     },
 };
 use bevy_asset::{Assets, Handle};
-use bevy_ecs::{ReadOnlyFetch, Resources, World, WorldQuery};
+use bevy_ecs::core::{QueryState, ReadOnlyFetch, World, WorldQuery};
 use bevy_utils::tracing::debug;
 use std::{fmt, marker::PhantomData, ops::Deref};
 
@@ -32,7 +32,7 @@ pub struct PassNode<Q: WorldQuery> {
     depth_stencil_attachment_input_index: Option<usize>,
     default_clear_color_inputs: Vec<usize>,
     camera_bind_group_descriptor: BindGroupDescriptor,
-    _marker: PhantomData<Q>,
+    query_state: Option<QueryState<Q>>,
 }
 
 impl<Q: WorldQuery> fmt::Debug for PassNode<Q> {
@@ -125,7 +125,7 @@ impl<Q: WorldQuery> PassNode<Q> {
             depth_stencil_attachment_input_index,
             default_clear_color_inputs: Vec::new(),
             camera_bind_group_descriptor,
-            _marker: PhantomData::default(),
+            query_state: None,
         }
     }
 
@@ -152,18 +152,17 @@ where
     fn update(
         &mut self,
         world: &World,
-        resources: &Resources,
         render_context: &mut dyn RenderContext,
         input: &ResourceSlots,
         _output: &mut ResourceSlots,
     ) {
-        let render_resource_bindings = resources.get::<RenderResourceBindings>().unwrap();
-        let pipelines = resources.get::<Assets<PipelineDescriptor>>().unwrap();
-        let active_cameras = resources.get::<ActiveCameras>().unwrap();
+        let render_resource_bindings = world.get_resource::<RenderResourceBindings>().unwrap();
+        let pipelines = world.get_resource::<Assets<PipelineDescriptor>>().unwrap();
+        let active_cameras = world.get_resource::<ActiveCameras>().unwrap();
 
         for (i, color_attachment) in self.descriptor.color_attachments.iter_mut().enumerate() {
             if self.default_clear_color_inputs.contains(&i) {
-                if let Some(default_clear_color) = resources.get::<ClearColor>() {
+                if let Some(default_clear_color) = world.get_resource::<ClearColor>() {
                     color_attachment.ops.load = LoadOp::Clear(default_clear_color.0);
                 }
             }
@@ -205,6 +204,8 @@ where
             }
         }
 
+        let query_state = self.query_state.get_or_insert_with(|| world.query::<Q>());
+
         render_context.begin_pass(
             &self.descriptor,
             &render_resource_bindings,
@@ -226,18 +227,18 @@ where
                     // attempt to draw each visible entity
                     let mut draw_state = DrawState::default();
                     for visible_entity in visible_entities.iter() {
-                        if world.query_one::<Q>(visible_entity.entity).is_err() {
+                        if query_state.get(world, visible_entity.entity).is_none() {
                             // visible entity does not match the Pass query
                             continue;
                         }
 
-                        let draw = if let Ok(draw) = world.get::<Draw>(visible_entity.entity) {
+                        let draw = if let Some(draw) = world.get::<Draw>(visible_entity.entity) {
                             draw
                         } else {
                             continue;
                         };
 
-                        if let Ok(visible) = world.get::<Visible>(visible_entity.entity) {
+                        if let Some(visible) = world.get::<Visible>(visible_entity.entity) {
                             if !visible.is_visible {
                                 continue;
                             }

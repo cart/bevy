@@ -1,6 +1,6 @@
 use crate::{serde::SceneSerializer, Scene};
 use anyhow::Result;
-use bevy_ecs::{EntityMap, Resources, World};
+use bevy_ecs::core::{EntityMap, World};
 use bevy_reflect::{Reflect, ReflectComponent, ReflectMapEntities, TypeRegistryArc, TypeUuid};
 use serde::Serialize;
 use thiserror::Error;
@@ -61,15 +61,15 @@ impl DynamicScene {
 
     pub fn write_to_world(
         &self,
-        world: &mut World,
-        resources: &Resources,
+        scene_world: &mut World,
+        world: &World,
     ) -> Result<(), DynamicSceneToWorldError> {
-        let type_registry = resources.get::<TypeRegistryArc>().unwrap();
-        let type_registry = type_registry.read();
+        let registry = world.get_resource::<TypeRegistryArc>().unwrap().clone();
+        let type_registry = registry.read();
         let mut entity_map = EntityMap::default();
         for scene_entity in self.entities.iter() {
-            let new_entity = world.reserve_entity();
-            entity_map.insert(bevy_ecs::Entity::new(scene_entity.entity), new_entity);
+            let new_entity = scene_world.entities().reserve_entity();
+            entity_map.insert(bevy_ecs::core::Entity::new(scene_entity.entity), new_entity);
             for component in scene_entity.components.iter() {
                 let registration = type_registry
                     .get_with_name(component.type_name())
@@ -82,10 +82,10 @@ impl DynamicScene {
                             type_name: component.type_name().to_string(),
                         }
                     })?;
-                if world.has_component_type(new_entity, registration.type_id()) {
-                    reflect_component.apply_component(world, new_entity, &**component);
+                if scene_world.has_component_type(new_entity, registration.type_id()) {
+                    reflect_component.apply_component(scene_world, new_entity, &**component);
                 } else {
-                    reflect_component.add_component(world, resources, new_entity, &**component);
+                    reflect_component.add_component(scene_world, world, new_entity, &**component);
                 }
             }
         }
@@ -93,7 +93,7 @@ impl DynamicScene {
         for registration in type_registry.iter() {
             if let Some(map_entities_reflect) = registration.data::<ReflectMapEntities>() {
                 map_entities_reflect
-                    .map_entities(world, &entity_map)
+                    .map_entities(scene_world, &entity_map)
                     .unwrap();
             }
         }
@@ -106,10 +106,10 @@ impl DynamicScene {
         serialize_ron(SceneSerializer::new(self, registry))
     }
 
-    pub fn get_scene(&self, resources: &Resources) -> Result<Scene, DynamicSceneToWorldError> {
-        let mut world = World::default();
-        self.write_to_world(&mut world, resources)?;
-        Ok(Scene::new(world))
+    pub fn get_scene(&self, world: &World) -> Result<Scene, DynamicSceneToWorldError> {
+        let mut scene_world = World::default();
+        self.write_to_world(&mut scene_world, world)?;
+        Ok(Scene::new(scene_world))
     }
 }
 

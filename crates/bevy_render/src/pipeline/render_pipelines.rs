@@ -6,7 +6,7 @@ use crate::{
     renderer::RenderResourceBindings,
 };
 use bevy_asset::{Assets, Handle};
-use bevy_ecs::{Query, Res, ResMut};
+use bevy_ecs::system::{Query, Res, ResMut};
 use bevy_reflect::{Reflect, ReflectComponent};
 use bevy_utils::HashSet;
 

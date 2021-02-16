@@ -5,7 +5,7 @@ mod scene_loader;
 mod scene_spawner;
 pub mod serde;
 
-use bevy_ecs::{IntoExclusiveSystem, SystemStage};
+use bevy_ecs::{schedule::SystemStage, system::IntoExclusiveSystem};
 pub use command::*;
 pub use dynamic_scene::*;
 pub use scene::*;

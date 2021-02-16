@@ -1,4 +1,4 @@
-use bevy_ecs::{prelude::*, system::RemovedComponents};
+use bevy_ecs::{core::{Changed, Entity}, system::{Query, RemovedComponents, ResMut}};
 use bevy_reflect::{Reflect, ReflectComponent};
 use bevy_utils::{HashMap, HashSet};
 use std::{
@@ -115,6 +115,8 @@ pub(crate) fn entity_labels_system(
 
 #[cfg(test)]
 mod tests {
+    use bevy_ecs::{core::World, schedule::{Schedule, Stage, SystemStage}, system::IntoSystem};
+
     use super::*;
 
     fn setup() -> (World, Schedule) {

@@ -9,7 +9,7 @@ use crate::{
     shader::Shader,
 };
 use bevy_asset::{Asset, Assets, Handle};
-use bevy_ecs::{Query, Res, ResMut, SystemParam};
+use bevy_ecs::system::{Query, Res, ResMut, SystemParam};
 use bevy_reflect::{Reflect, ReflectComponent};
 use std::{ops::Range, sync::Arc};
 use thiserror::Error;

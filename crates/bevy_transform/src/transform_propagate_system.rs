@@ -1,5 +1,9 @@
+use bevy_ecs::{
+    core::{Changed, Entity, With, Without},
+    system::Query,
+};
+
 use crate::components::*;
-use bevy_ecs::prelude::*;
 
 pub fn transform_propagate_system(
     mut root_query: Query<
@@ -69,7 +73,11 @@ fn propagate_recursive(
 
 #[cfg(test)]
 mod test {
-    use bevy_ecs::system::{CommandQueue, Commands};
+    use bevy_ecs::{
+        core::World,
+        schedule::{Schedule, Stage, SystemStage},
+        system::{CommandQueue, Commands, IntoSystem},
+    };
 
     use super::*;
     use crate::hierarchy::{parent_update_system, BuildChildren};

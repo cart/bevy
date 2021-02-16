@@ -5,7 +5,7 @@ use crate::{
 use bevy_app::prelude::EventReader;
 use bevy_asset::{AssetEvent, Assets, Handle};
 use bevy_core::AsBytes;
-use bevy_ecs::{Changed, Entity, Local, Mut, Query, QuerySet, Res, With};
+use bevy_ecs::{core::{Changed, Entity, Mut, With}, system::{Local, Query, QuerySet, Res}};
 use bevy_math::*;
 use bevy_reflect::TypeUuid;
 use std::borrow::Cow;

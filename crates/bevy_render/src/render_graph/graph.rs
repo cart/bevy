@@ -1,12 +1,15 @@
 use super::{Edge, Node, NodeId, NodeLabel, NodeState, RenderGraphError, SlotLabel, SystemNode};
-use bevy_ecs::{Commands, Schedule, SystemStage};
+use bevy_ecs::{
+    schedule::{Schedule, SystemStage},
+    system::{CommandQueue, Commands},
+};
 use bevy_utils::HashMap;
 use std::{borrow::Cow, fmt::Debug};
 pub struct RenderGraph {
     nodes: HashMap<NodeId, NodeState>,
     node_names: HashMap<Cow<'static, str>, NodeId>,
     system_node_schedule: Option<Schedule>,
-    commands: Commands,
+    commands: CommandQueue,
 }
 
 impl Default for RenderGraph {
@@ -274,7 +277,7 @@ impl RenderGraph {
             .map(move |(edge, input_node_id)| (edge, self.get_node_state(input_node_id).unwrap())))
     }
 
-    pub fn take_commands(&mut self) -> Commands {
+    pub fn take_commands(&mut self) -> CommandQueue {
         std::mem::take(&mut self.commands)
     }
 }
@@ -298,7 +301,7 @@ mod tests {
         render_graph::{Edge, Node, NodeId, RenderGraphError, ResourceSlotInfo, ResourceSlots},
         renderer::{RenderContext, RenderResourceType},
     };
-    use bevy_ecs::{Resources, World};
+    use bevy_ecs::core::World;
     use bevy_utils::HashSet;
     use std::iter::FromIterator;
 
@@ -339,7 +342,6 @@ mod tests {
         fn update(
             &mut self,
             _: &World,
-            _: &Resources,
             _: &mut dyn RenderContext,
             _: &ResourceSlots,
             _: &mut ResourceSlots,
@@ -413,7 +415,6 @@ mod tests {
             fn update(
                 &mut self,
                 _: &World,
-                _: &Resources,
                 _: &mut dyn RenderContext,
                 _: &ResourceSlots,
                 _: &mut ResourceSlots,

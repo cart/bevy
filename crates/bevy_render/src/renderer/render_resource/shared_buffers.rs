@@ -3,7 +3,7 @@ use crate::{
     render_graph::CommandQueue,
     renderer::{BufferMapMode, BufferUsage, RenderContext, RenderResourceContext},
 };
-use bevy_ecs::{Res, ResMut};
+use bevy_ecs::system::{Res, ResMut};
 
 pub struct SharedBuffers {
     staging_buffer: Option<BufferId>,

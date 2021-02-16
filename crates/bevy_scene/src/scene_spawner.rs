@@ -1,7 +1,7 @@
 use crate::{DynamicScene, Scene};
 use bevy_app::{prelude::*, ManualEventReader};
 use bevy_asset::{AssetEvent, Assets, Handle};
-use bevy_ecs::{Entity, EntityMap, Resources, World};
+use bevy_ecs::core::{Entity, EntityMap, World};
 use bevy_reflect::{ReflectComponent, ReflectMapEntities, TypeRegistryArc};
 use bevy_transform::prelude::Parent;
 use bevy_utils::HashMap;
@@ -90,14 +90,13 @@ impl SceneSpawner {
     pub fn spawn_dynamic_sync(
         &mut self,
         world: &mut World,
-        resources: &Resources,
         scene_handle: &Handle<DynamicScene>,
     ) -> Result<(), SceneSpawnError> {
         let instance_id = InstanceId::new();
         let mut instance_info = InstanceInfo {
             entity_map: EntityMap::default(),
         };
-        Self::spawn_dynamic_internal(world, resources, scene_handle, &mut instance_info)?;
+        Self::spawn_dynamic_internal(world, scene_handle, &mut instance_info)?;
         self.spawned_instances.insert(instance_id, instance_info);
         let spawned = self
             .spawned_dynamic_scenes
@@ -109,13 +108,12 @@ impl SceneSpawner {
 
     fn spawn_dynamic_internal(
         world: &mut World,
-        resources: &Resources,
         scene_handle: &Handle<DynamicScene>,
         instance_info: &mut InstanceInfo,
     ) -> Result<(), SceneSpawnError> {
-        let type_registry = resources.get::<TypeRegistryArc>().unwrap();
+        let type_registry = world.get_resource::<TypeRegistryArc>().unwrap();
         let type_registry = type_registry.read();
-        let scenes = resources.get::<Assets<DynamicScene>>().unwrap();
+        let scenes = world.get_resource::<Assets<DynamicScene>>().unwrap();
         let scene = scenes
             .get(scene_handle)
             .ok_or_else(|| SceneSpawnError::NonExistentScene {
@@ -126,8 +124,8 @@ impl SceneSpawner {
             let entity = *instance_info
                 .entity_map
                 // TODO: use Entity type directly in scenes to properly encode generation / avoid the need to patch things up?
-                .entry(bevy_ecs::Entity::new(scene_entity.entity))
-                .or_insert_with(|| world.reserve_entity());
+                .entry(Entity::new(scene_entity.entity))
+                .or_insert_with(|| world.entities().reserve_entity());
             for component in scene_entity.components.iter() {
                 let registration = type_registry
                     .get_with_name(component.type_name())
@@ -145,7 +143,7 @@ impl SceneSpawner {
                         reflect_component.apply_component(world, entity, &**component);
                     }
                 } else {
-                    reflect_component.add_component(world, resources, entity, &**component);
+                    reflect_component.add_component(world, entity, &**component);
                 }
             }
         }
@@ -155,25 +153,23 @@ impl SceneSpawner {
     pub fn spawn_sync(
         &mut self,
         world: &mut World,
-        resources: &Resources,
         scene_handle: Handle<Scene>,
     ) -> Result<InstanceId, SceneSpawnError> {
-        self.spawn_sync_internal(world, resources, scene_handle, InstanceId::new())
+        self.spawn_sync_internal(world, scene_handle, InstanceId::new())
     }
 
     fn spawn_sync_internal(
         &mut self,
         world: &mut World,
-        resources: &Resources,
         scene_handle: Handle<Scene>,
         instance_id: InstanceId,
     ) -> Result<InstanceId, SceneSpawnError> {
         let mut instance_info = InstanceInfo {
             entity_map: EntityMap::default(),
         };
-        let type_registry = resources.get::<TypeRegistryArc>().unwrap();
+        let type_registry = world.get_resource::<TypeRegistryArc>().unwrap();
         let type_registry = type_registry.read();
-        let scenes = resources.get::<Assets<Scene>>().unwrap();
+        let scenes = world.get_resource::<Assets<Scene>>().unwrap();
         let scene =
             scenes
                 .get(&scene_handle)
@@ -186,7 +182,7 @@ impl SceneSpawner {
                 let entity = *instance_info
                     .entity_map
                     .entry(*scene_entity)
-                    .or_insert_with(|| world.reserve_entity());
+                    .or_insert_with(|| world.entities().reserve_entity());
                 for type_info in archetype.types() {
                     let registration = type_registry.get(type_info.id()).ok_or_else(|| {
                         SceneSpawnError::UnregisteredType {
@@ -202,7 +198,6 @@ impl SceneSpawner {
                     reflect_component.copy_component(
                         &scene.world,
                         world,
-                        resources,
                         *scene_entity,
                         entity,
                     );
@@ -228,7 +223,6 @@ impl SceneSpawner {
     pub fn update_spawned_scenes(
         &mut self,
         world: &mut World,
-        resources: &Resources,
         scene_handles: &[Handle<DynamicScene>],
     ) -> Result<(), SceneSpawnError> {
         for scene_handle in scene_handles {
@@ -237,7 +231,6 @@ impl SceneSpawner {
                     if let Some(instance_info) = self.spawned_instances.get_mut(instance_id) {
                         Self::spawn_dynamic_internal(
                             world,
-                            resources,
                             scene_handle,
                             instance_info,
                         )?;
@@ -260,12 +253,11 @@ impl SceneSpawner {
     pub fn spawn_queued_scenes(
         &mut self,
         world: &mut World,
-        resources: &Resources,
     ) -> Result<(), SceneSpawnError> {
         let scenes_to_spawn = std::mem::take(&mut self.dynamic_scenes_to_spawn);
 
         for scene_handle in scenes_to_spawn {
-            match self.spawn_dynamic_sync(world, resources, &scene_handle) {
+            match self.spawn_dynamic_sync(world, &scene_handle) {
                 Ok(_) => {}
                 Err(SceneSpawnError::NonExistentScene { .. }) => {
                     self.dynamic_scenes_to_spawn.push(scene_handle)
@@ -277,7 +269,7 @@ impl SceneSpawner {
         let scenes_to_spawn = std::mem::take(&mut self.scenes_to_spawn);
 
         for (scene_handle, instance_id) in scenes_to_spawn {
-            match self.spawn_sync_internal(world, resources, scene_handle, instance_id) {
+            match self.spawn_sync_internal(world, scene_handle, instance_id) {
                 Ok(_) => {}
                 Err(SceneSpawnError::NonExistentRealScene { handle }) => {
                     self.scenes_to_spawn.push((handle, instance_id))
@@ -323,9 +315,9 @@ impl SceneSpawner {
     }
 }
 
-pub fn scene_spawner_system(world: &mut World, resources: &mut Resources) {
-    let mut scene_spawner = resources.get_mut::<SceneSpawner>().unwrap();
-    let scene_asset_events = resources.get::<Events<AssetEvent<DynamicScene>>>().unwrap();
+pub fn scene_spawner_system(world: &mut World) {
+    let mut scene_spawner = world.get_resource_mut::<SceneSpawner>().unwrap();
+    let scene_asset_events = world.get_resource::<Events<AssetEvent<DynamicScene>>>().unwrap();
 
     let mut updated_spawned_scenes = Vec::new();
     for event in scene_spawner
@@ -341,10 +333,10 @@ pub fn scene_spawner_system(world: &mut World, resources: &mut Resources) {
 
     scene_spawner.despawn_queued_scenes(world).unwrap();
     scene_spawner
-        .spawn_queued_scenes(world, resources)
+        .spawn_queued_scenes(world)
         .unwrap_or_else(|err| panic!("{}", err));
     scene_spawner
-        .update_spawned_scenes(world, resources, &updated_spawned_scenes)
+        .update_spawned_scenes(world, &updated_spawned_scenes)
         .unwrap();
     scene_spawner.set_scene_instance_parent_sync(world);
 }

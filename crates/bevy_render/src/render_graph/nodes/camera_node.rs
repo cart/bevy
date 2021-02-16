@@ -7,9 +7,9 @@ use crate::{
     },
 };
 use bevy_core::AsBytes;
-
 use bevy_ecs::{
-    BoxedSystem, Commands, IntoSystem, Local, Query, Res, ResMut, Resources, System, World,
+    core::World,
+    system::{BoxedSystem, IntoSystem, Local, Query, Res, ResMut, System},
 };
 use bevy_transform::prelude::*;
 use std::borrow::Cow;
@@ -36,7 +36,6 @@ impl Node for CameraNode {
     fn update(
         &mut self,
         _world: &World,
-        _resources: &Resources,
         render_context: &mut dyn RenderContext,
         _input: &ResourceSlots,
         _output: &mut ResourceSlots,
@@ -46,7 +45,7 @@ impl Node for CameraNode {
 }
 
 impl SystemNode for CameraNode {
-    fn get_system(&self, commands: &mut Commands) -> BoxedSystem {
+    fn get_system(&self, commands: &mut bevy_ecs::system::CommandQueue) -> BoxedSystem {
         let system = camera_node_system.system();
         commands.insert_local_resource(
             system.id(),

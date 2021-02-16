@@ -1,4 +1,4 @@
-use bevy_ecs::World;
+use bevy_ecs::core::World;
 use bevy_reflect::TypeUuid;
 
 #[derive(Debug, TypeUuid)]
