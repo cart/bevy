@@ -1,4 +1,7 @@
-use bevy_ecs::{core::{Changed, Entity}, system::{Query, RemovedComponents, ResMut}};
+use bevy_ecs::{
+    core::{Changed, Entity},
+    system::{Query, RemovedComponents, ResMut},
+};
 use bevy_reflect::{Reflect, ReflectComponent};
 use bevy_utils::{HashMap, HashSet};
 use std::{
@@ -115,7 +118,11 @@ pub(crate) fn entity_labels_system(
 
 #[cfg(test)]
 mod tests {
-    use bevy_ecs::{core::World, schedule::{Schedule, Stage, SystemStage}, system::IntoSystem};
+    use bevy_ecs::{
+        core::World,
+        schedule::{Schedule, Stage, SystemStage},
+        system::IntoSystem,
+    };
 
     use super::*;
 
@@ -200,7 +207,7 @@ mod tests {
         let e1 = world.spawn().insert(holy_cow()).id();
         schedule.run(&mut world);
 
-        world.entity_mut(e1).unwrap().remove::<Labels>().unwrap();
+        world.entity_mut(e1).remove::<Labels>().unwrap();
         schedule.run(&mut world);
 
         let entity_labels = world.get_resource::<EntityLabels>().unwrap();

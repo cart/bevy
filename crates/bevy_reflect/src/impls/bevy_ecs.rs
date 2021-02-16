@@ -69,7 +69,7 @@ impl<C: Component + Reflect + FromWorld> FromType<C> for ReflectComponent {
             add_component: |world, entity, reflected_component| {
                 let mut component = C::from_world(world);
                 component.apply(reflected_component);
-                world.entity_mut(entity).unwrap().insert(component);
+                world.entity_mut(entity).insert(component);
             },
             apply_component: |world, entity, reflected_component| {
                 let mut component = world.get_mut::<C>(entity).unwrap();
@@ -81,7 +81,6 @@ impl<C: Component + Reflect + FromWorld> FromType<C> for ReflectComponent {
                 destination_component.apply(source_component);
                 destination_world
                     .entity_mut(destination_entity)
-                    .unwrap()
                     .insert(destination_component);
             },
             reflect_component: |archetype, index| {
@@ -133,7 +132,6 @@ impl<Scene: Component + IntoComponent<Runtime>, Runtime: Component> FromType<Sce
                 let destination_component = scene_component.into_component(runtime_world);
                 runtime_world
                     .entity_mut(runtime_entity)
-                    .unwrap()
                     .insert(destination_component);
             },
             marker: Default::default(),
@@ -167,10 +165,7 @@ impl<Runtime: Component + IntoComponent<Scene>, Scene: Component> FromType<Runti
             copy_runtime_to_scene: |runtime_world, scene_world, runtime_entity, scene_entity| {
                 let runtime_component = runtime_world.get::<Runtime>(runtime_entity).unwrap();
                 let scene_component = runtime_component.into_component(runtime_world);
-                scene_world
-                    .entity_mut(scene_entity)
-                    .unwrap()
-                    .insert(scene_component);
+                scene_world.entity_mut(scene_entity).insert(scene_component);
             },
             marker: Default::default(),
         }

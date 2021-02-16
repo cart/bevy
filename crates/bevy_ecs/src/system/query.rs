@@ -98,7 +98,7 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
     /// Gets a reference to the entity's component of the given type. This will fail if the entity does not have
     /// the given component type or if the given component type does not match this query.
     pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
-        let entity_ref = self.world.entity(entity)?;
+        let entity_ref = self.world.get_entity(entity)?;
         let component_id = self.world.components().get_id(TypeId::of::<T>())?;
         let archetype_component = entity_ref
             .archetype()
@@ -129,7 +129,7 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
         &self,
         entity: Entity,
     ) -> Option<Mut<'_, T>> {
-        let entity_ref = self.world.entity(entity)?;
+        let entity_ref = self.world.get_entity(entity)?;
         let component_id = self.world.components().get_id(TypeId::of::<T>())?;
         let archetype_component = entity_ref
             .archetype()

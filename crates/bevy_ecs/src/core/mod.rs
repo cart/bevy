@@ -280,7 +280,7 @@ mod tests {
             &[(e1, 42, true), (e2, 0, false)]
         );
 
-        assert_eq!(world.entity_mut(e1).unwrap().remove::<i32>(), Some(42));
+        assert_eq!(world.entity_mut(e1).remove::<i32>(), Some(42));
         assert_eq!(
             world
                 .query::<(Entity, &i32, &bool)>()
@@ -297,7 +297,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             &[(e2, false, "xyz"), (e1, true, "abc")]
         );
-        world.entity_mut(e1).unwrap().insert(43);
+        world.entity_mut(e1).insert(43);
         assert_eq!(
             world
                 .query::<(Entity, &i32, &bool)>()
@@ -306,7 +306,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             &[(e2, 0, false), (e1, 43, true)]
         );
-        world.entity_mut(e1).unwrap().insert(1.0f32);
+        world.entity_mut(e1).insert(1.0f32);
         assert_eq!(
             world
                 .query::<(Entity, &f32)>()
@@ -326,11 +326,11 @@ mod tests {
         }
 
         for (i, entity) in entities.iter().cloned().enumerate() {
-            world.entity_mut(entity).unwrap().insert(i);
+            world.entity_mut(entity).insert(i);
         }
 
         for (i, entity) in entities.iter().cloned().enumerate() {
-            assert_eq!(world.entity_mut(entity).unwrap().remove::<usize>(), Some(i));
+            assert_eq!(world.entity_mut(entity).remove::<usize>(), Some(i));
         }
     }
 
@@ -346,11 +346,11 @@ mod tests {
         }
 
         for (i, entity) in entities.iter().cloned().enumerate() {
-            world.entity_mut(entity).unwrap().insert(i);
+            world.entity_mut(entity).insert(i);
         }
 
         for (i, entity) in entities.iter().cloned().enumerate() {
-            assert_eq!(world.entity_mut(entity).unwrap().remove::<usize>(), Some(i));
+            assert_eq!(world.entity_mut(entity).remove::<usize>(), Some(i));
         }
     }
 
@@ -367,7 +367,7 @@ mod tests {
     fn remove_missing() {
         let mut world = World::new();
         let e = world.spawn().insert_bundle(("abc", 123)).id();
-        assert!(world.entity_mut(e).unwrap().remove::<bool>().is_none());
+        assert!(world.entity_mut(e).remove::<bool>().is_none());
     }
 
     // #[test]
@@ -432,7 +432,7 @@ mod tests {
         let a = world.spawn().insert_bundle(("abc", 123)).id();
         let b = world.spawn().insert_bundle(("abc", 123)).id();
 
-        world.entity_mut(a).unwrap().despawn();
+        world.entity_mut(a).despawn();
         assert_eq!(
             world.removed::<i32>().collect::<Vec<_>>(),
             &[a],
@@ -444,14 +444,14 @@ mod tests {
             "despawning results in 'removed component' state for sparse set components"
         );
 
-        world.entity_mut(b).unwrap().insert(10.0);
+        world.entity_mut(b).insert(10.0);
         assert_eq!(
             world.removed::<i32>().collect::<Vec<_>>(),
             &[a],
             "archetype moves does not result in 'removed component' state"
         );
 
-        world.entity_mut(b).unwrap().remove::<i32>();
+        world.entity_mut(b).remove::<i32>();
         assert_eq!(
             world.removed::<i32>().collect::<Vec<_>>(),
             &[a, b],
@@ -571,7 +571,7 @@ mod tests {
         }
 
         assert_eq!(get_added::<A>(&mut world), vec![e1]);
-        world.entity_mut(e1).unwrap().insert(B(0));
+        world.entity_mut(e1).insert(B(0));
         assert_eq!(get_added::<A>(&mut world), vec![e1]);
         assert_eq!(get_added::<B>(&mut world), vec![e1]);
 
@@ -612,12 +612,12 @@ mod tests {
         assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e1, e3]);
 
         // ensure changing an entity's archetypes also moves its mutated state
-        world.entity_mut(e1).unwrap().insert(C);
+        world.entity_mut(e1).insert(C);
 
         assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e3, e1], "changed entities list should not change (although the order will due to archetype moves)");
 
         // spawning a new A entity should not change existing mutated state
-        world.entity_mut(e1).unwrap().insert_bundle((A(0), B));
+        world.entity_mut(e1).insert_bundle((A(0), B));
         assert_eq!(
             get_filtered::<Mutated<A>>(&mut world),
             vec![e3, e1],
@@ -646,11 +646,11 @@ mod tests {
 
         let e4 = world.spawn().id();
 
-        world.entity_mut(e4).unwrap().insert(A(0));
+        world.entity_mut(e4).insert(A(0));
         assert!(get_filtered::<Mutated<A>>(&mut world).is_empty());
         assert_eq!(get_filtered::<Added<A>>(&mut world), vec![e4]);
 
-        world.entity_mut(e4).unwrap().insert(A(1));
+        world.entity_mut(e4).insert(A(1));
         assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e4]);
 
         world.clear_trackers();
@@ -658,7 +658,7 @@ mod tests {
         // ensure inserting multiple components set mutated state for
         // already existing components and set added state for
         // non existing components even when changing archetype.
-        world.entity_mut(e4).unwrap().insert_bundle((A(0), B(0)));
+        world.entity_mut(e4).insert_bundle((A(0), B(0)));
 
         assert!(get_filtered::<Added<A>>(&mut world).is_empty());
         assert_eq!(get_filtered::<Mutated<A>>(&mut world), vec![e4]);
@@ -670,7 +670,7 @@ mod tests {
     fn empty_spawn() {
         let mut world = World::default();
         let e = world.spawn().id();
-        let mut e_mut = world.entity_mut(e).unwrap();
+        let mut e_mut = world.entity_mut(e);
         e_mut.insert(A(0));
         assert_eq!(e_mut.get::<A>().unwrap(), &A(0));
     }
@@ -680,7 +680,7 @@ mod tests {
         let mut world = World::default();
         let e = world.entities().reserve_entity();
         world.flush();
-        let mut e_mut = world.entity_mut(e).unwrap();
+        let mut e_mut = world.entity_mut(e);
         e_mut.insert(A(0));
         assert_eq!(e_mut.get::<A>().unwrap(), &A(0));
     }
@@ -786,7 +786,7 @@ mod tests {
         let mut world = World::default();
         let e1 = world.spawn().insert_bundle((1, 1.0, "a")).id();
 
-        let mut e = world.entity_mut(e1).unwrap();
+        let mut e = world.entity_mut(e1);
         assert_eq!(e.get::<&'static str>(), Some(&"a"));
         assert_eq!(e.get::<i32>(), Some(&1));
         assert_eq!(e.get::<f64>(), Some(&1.0));

@@ -78,13 +78,24 @@ impl World {
     }
 
     #[inline]
-    pub fn entity(&self, entity: Entity) -> Option<EntityRef> {
+    pub fn entity(&self, entity: Entity) -> EntityRef {
+        self.get_entity(entity).expect("Entity does not exist")
+    }
+
+    #[inline]
+    pub fn entity_mut(&mut self, entity: Entity) -> EntityMut {
+        self.get_entity_mut(entity).expect("Entity does not exist")
+    }
+
+
+    #[inline]
+    pub fn get_entity(&self, entity: Entity) -> Option<EntityRef> {
         let location = self.entities.get(entity)?;
         Some(EntityRef::new(self, entity, location))
     }
 
     #[inline]
-    pub fn entity_mut(&mut self, entity: Entity) -> Option<EntityMut> {
+    pub fn get_entity_mut(&mut self, entity: Entity) -> Option<EntityMut> {
         let location = self.entities.get(entity)?;
         Some(EntityMut::new(self, entity, location))
     }
@@ -111,17 +122,17 @@ impl World {
 
     #[inline]
     pub fn get<T: Component>(&self, entity: Entity) -> Option<&T> {
-        self.entity(entity)?.get()
+        self.get_entity(entity)?.get()
     }
 
     #[inline]
     pub fn get_mut<T: Component>(&mut self, entity: Entity) -> Option<Mut<T>> {
-        self.entity_mut(entity)?.get_mut()
+        self.get_entity_mut(entity)?.get_mut()
     }
 
     #[inline]
     pub fn despawn(&mut self, entity: Entity) -> bool {
-        self.entity_mut(entity)
+        self.get_entity_mut(entity)
             .map(|e| {
                 e.despawn();
                 true

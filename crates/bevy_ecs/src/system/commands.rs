@@ -52,8 +52,7 @@ impl Command for Despawn {
     }
 }
 
-pub struct InsertBundle<T>
-{
+pub struct InsertBundle<T> {
     entity: Entity,
     bundle: T,
 }
@@ -63,10 +62,7 @@ where
     T: DynamicBundle + 'static,
 {
     fn write(self: Box<Self>, world: &mut World) {
-        world
-            .entity_mut(self.entity)
-            .unwrap()
-            .insert_bundle(self.bundle);
+        world.entity_mut(self.entity).insert_bundle(self.bundle);
     }
 }
 
@@ -81,16 +77,12 @@ where
     T: Component,
 {
     fn write(self: Box<Self>, world: &mut World) {
-        world
-            .entity_mut(self.entity)
-            .unwrap()
-            .insert(self.component);
+        world.entity_mut(self.entity).insert(self.component);
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct Remove<T>
-{
+pub(crate) struct Remove<T> {
     entity: Entity,
     // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
     phantom: PhantomData<fn() -> T>,
@@ -101,15 +93,14 @@ where
     T: Component,
 {
     fn write(self: Box<Self>, world: &mut World) {
-        if let Some(mut entity_mut) = world.entity_mut(self.entity) {
+        if let Some(mut entity_mut) = world.get_entity_mut(self.entity) {
             entity_mut.remove::<T>();
         }
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct RemoveBundle<T>
-{
+pub(crate) struct RemoveBundle<T> {
     entity: Entity,
     // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
     phantom: PhantomData<fn() -> T>,
@@ -120,7 +111,7 @@ where
     T: Bundle,
 {
     fn write(self: Box<Self>, world: &mut World) {
-        if let Some(mut entity_mut) = world.entity_mut(self.entity) {
+        if let Some(mut entity_mut) = world.get_entity_mut(self.entity) {
             // remove intersection to gracefully handle components that were removed before running this command
             entity_mut.remove_bundle_intersection::<T>();
         }
@@ -219,11 +210,7 @@ impl<'a> Commands<'a> {
     /// Inserts a bundle of components into `entity`.
     ///
     /// See [`World::insert`].
-    pub fn insert_bundle(
-        &mut self,
-        entity: Entity,
-        bundle: impl DynamicBundle,
-    ) -> &mut Self {
+    pub fn insert_bundle(&mut self, entity: Entity, bundle: impl DynamicBundle) -> &mut Self {
         self.add_command(InsertBundle { entity, bundle })
     }
 

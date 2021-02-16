@@ -357,7 +357,7 @@ mod tests {
         world.insert_resource(false);
         world.insert_resource(Despawned(a));
 
-        world.entity_mut(a).unwrap().despawn();
+        world.entity_mut(a).despawn();
 
         fn validate_removed(
             removed_i32: RemovedComponents<i32>,

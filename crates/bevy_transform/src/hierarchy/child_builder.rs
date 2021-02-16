@@ -17,7 +17,6 @@ impl Command for InsertChildren {
         for child in self.children.iter() {
             world
                 .entity_mut(*child)
-                .unwrap()
                 .insert_bundle((Parent(self.parent), PreviousParent(self.parent)));
         }
         {
@@ -31,7 +30,6 @@ impl Command for InsertChildren {
             if !added {
                 world
                     .entity_mut(self.parent)
-                    .unwrap()
                     .insert(Children(self.children));
             }
         }
@@ -54,7 +52,6 @@ impl Command for PushChildren {
         for child in self.children.iter() {
             world
                 .entity_mut(*child)
-                .unwrap()
                 .insert_bundle((Parent(self.parent), PreviousParent(self.parent)));
         }
         {
@@ -68,7 +65,6 @@ impl Command for PushChildren {
             if !added {
                 world
                     .entity_mut(self.parent)
-                    .unwrap()
                     .insert(Children(self.children));
             }
         }
