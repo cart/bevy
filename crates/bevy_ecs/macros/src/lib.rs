@@ -4,14 +4,7 @@ use find_crate::Manifest;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{format_ident, quote};
-use syn::{
-    parse::{Parse, ParseStream},
-    parse_macro_input,
-    punctuated::Punctuated,
-    token::Comma,
-    Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Ident, Index, LitInt, Path, Result,
-    Token,
-};
+use syn::{Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Ident, Index, Lifetime, LitInt, Path, Result, Token, parse::{Parse, ParseStream}, parse_macro_input, punctuated::Punctuated, token::Comma};
 
 struct AllTuples {
     macro_ident: Ident,
@@ -162,27 +155,35 @@ fn get_idents(fmt_string: fn(usize) -> String, count: usize) -> Vec<Ident> {
         .collect::<Vec<Ident>>()
 }
 
+fn get_lifetimes(fmt_string: fn(usize) -> String, count: usize) -> Vec<Lifetime> {
+    (0..count)
+        .map(|i| Lifetime::new(&fmt_string(i), Span::call_site()))
+        .collect::<Vec<Lifetime>>()
+}
+
 #[proc_macro]
 pub fn impl_query_set(_input: TokenStream) -> TokenStream {
     let mut tokens = TokenStream::new();
     let max_queries = 4;
     let queries = get_idents(|i| format!("Q{}", i), max_queries);
     let filters = get_idents(|i| format!("F{}", i), max_queries);
+    let lifetimes = get_lifetimes(|i| format!("'q{}", i), max_queries);
     let mut query_fns = Vec::new();
     let mut query_fn_muts = Vec::new();
     for i in 0..max_queries {
         let query = &queries[i];
         let filter = &filters[i];
+        let lifetime = &lifetimes[i];
         let fn_name = Ident::new(&format!("q{}", i), Span::call_site());
         let fn_name_mut = Ident::new(&format!("q{}_mut", i), Span::call_site());
         let index = Index::from(i);
         query_fns.push(quote! {
-            pub fn #fn_name(&self) -> &Query<'w, #query, #filter> {
+            pub fn #fn_name(&self) -> &Query<#lifetime, #query, #filter> {
                 &self.0.#index
             }
         });
         query_fn_muts.push(quote! {
-            pub fn #fn_name_mut(&mut self) -> &mut Query<'w, #query, #filter> {
+            pub fn #fn_name_mut(&mut self) -> &mut Query<#lifetime, #query, #filter> {
                 &mut self.0.#index
             }
         });
@@ -191,11 +192,11 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
     for query_count in 1..=max_queries {
         let query = &queries[0..query_count];
         let filter = &filters[0..query_count];
-        // let lifetime = &lifetimes[0..query_count];
+        let lifetime = &lifetimes[0..query_count];
         let query_fn = &query_fns[0..query_count];
         let query_fn_mut = &query_fn_muts[0..query_count];
         tokens.extend(TokenStream::from(quote! {
-            impl<'w, #(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParam for QuerySet<(#(Query<'w, #query, #filter>,)*)> {
+            impl<#(#lifetime,)*  #(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParam for QuerySet<(#(Query<#lifetime, #query, #filter>,)*)> {
                 type Fetch = QuerySetState<(#(QueryState<#query, #filter>,)*)>;
             }
 
@@ -229,7 +230,7 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<'w, #(#query: WorldQuery,)* #(#filter: QueryFilter,)*> QuerySet<(#(Query<'w, #query, #filter>,)*)> {
+            impl<#(#lifetime,)* #(#query: WorldQuery,)* #(#filter: QueryFilter,)*> QuerySet<(#(Query<#lifetime, #query, #filter>,)*)> {
                 #(#query_fn)*
                 #(#query_fn_mut)*
             }
