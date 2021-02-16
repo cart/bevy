@@ -226,7 +226,7 @@ pub fn visible_entities_system(
                 continue;
             }
 
-            let order = if let Some(global_transform) = visible_transform_query.get(entity) {
+            let order = if let Ok(global_transform) = visible_transform_query.get(entity) {
                 let position = global_transform.translation;
                 // smaller distances are sorted to lower indices by using the distance from the camera
                 FloatOrd(match camera.depth_calculation {

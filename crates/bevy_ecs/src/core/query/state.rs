@@ -3,6 +3,7 @@ use crate::core::{
     FetchState, QueryFilter, QueryIter, ReadOnlyFetch, TableId, World, WorldQuery,
 };
 use fixedbitset::FixedBitSet;
+use thiserror::Error;
 
 // TODO: consider splitting out into QueryState and SystemQueryState
 pub struct QueryState<Q: WorldQuery, F: QueryFilter = ()> {
@@ -86,7 +87,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         &mut self,
         world: &'w World,
         entity: Entity,
-    ) -> Option<<Q::Fetch as Fetch<'w>>::Item>
+    ) -> Result<<Q::Fetch as Fetch<'w>>::Item, QueryEntityError>
     where
         Q::Fetch: ReadOnlyFetch,
     {
@@ -99,7 +100,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         &mut self,
         world: &'w mut World,
         entity: Entity,
-    ) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
+    ) -> Result<<Q::Fetch as Fetch<'w>>::Item, QueryEntityError> {
         // SAFE: query has unique world access
         unsafe { self.get_unchecked(world, entity) }
     }
@@ -109,7 +110,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         &mut self,
         world: &'w World,
         entity: Entity,
-    ) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
+    ) -> Result<<Q::Fetch as Fetch<'w>>::Item, QueryEntityError> {
         self.update_archetypes(world);
         self.get_unchecked_manual(world, entity)
     }
@@ -118,13 +119,16 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         &self,
         world: &'w World,
         entity: Entity,
-    ) -> Option<<Q::Fetch as Fetch<'w>>::Item> {
-        let location = world.entities.get(entity)?;
+    ) -> Result<<Q::Fetch as Fetch<'w>>::Item, QueryEntityError> {
+        let location = world
+            .entities
+            .get(entity)
+            .ok_or(QueryEntityError::NoSuchEntity)?;
         if !self
             .matched_archetypes
             .contains(location.archetype_id.index())
         {
-            return None;
+            return Err(QueryEntityError::QueryDoesNotMatch);
         }
         // SAFE: live entities always exist in an archetype
         let archetype = world.archetypes.get_unchecked(location.archetype_id);
@@ -134,9 +138,9 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
         fetch.set_archetype(&self.fetch_state, archetype, &world.storages().tables);
         filter.set_archetype(archetype, &world.storages().tables);
         if filter.matches_archetype_entity(location.index) {
-            Some(fetch.archetype_fetch(location.index))
+            Ok(fetch.archetype_fetch(location.index))
         } else {
-            None
+            Err(QueryEntityError::QueryDoesNotMatch)
         }
     }
 
@@ -248,4 +252,13 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
             }
         }
     }
+}
+
+/// An error that occurs when retrieving a specific [Entity]'s query result.
+#[derive(Error, Debug)]
+pub enum QueryEntityError {
+    #[error("The given entity does not have the requested component.")]
+    QueryDoesNotMatch,
+    #[error("The requested entity does not exist.")]
+    NoSuchEntity,
 }

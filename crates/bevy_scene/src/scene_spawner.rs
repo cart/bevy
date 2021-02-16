@@ -195,12 +195,7 @@ impl SceneSpawner {
                                 type_name: registration.name().to_string(),
                             }
                         })?;
-                    reflect_component.copy_component(
-                        &scene.world,
-                        world,
-                        *scene_entity,
-                        entity,
-                    );
+                    reflect_component.copy_component(&scene.world, world, *scene_entity, entity);
                 }
             }
         }
@@ -229,11 +224,7 @@ impl SceneSpawner {
             if let Some(spawned_instances) = self.spawned_dynamic_scenes.get(scene_handle) {
                 for instance_id in spawned_instances.iter() {
                     if let Some(instance_info) = self.spawned_instances.get_mut(instance_id) {
-                        Self::spawn_dynamic_internal(
-                            world,
-                            scene_handle,
-                            instance_info,
-                        )?;
+                        Self::spawn_dynamic_internal(world, scene_handle, instance_info)?;
                     }
                 }
             }
@@ -250,10 +241,7 @@ impl SceneSpawner {
         Ok(())
     }
 
-    pub fn spawn_queued_scenes(
-        &mut self,
-        world: &mut World,
-    ) -> Result<(), SceneSpawnError> {
+    pub fn spawn_queued_scenes(&mut self, world: &mut World) -> Result<(), SceneSpawnError> {
         let scenes_to_spawn = std::mem::take(&mut self.dynamic_scenes_to_spawn);
 
         for scene_handle in scenes_to_spawn {
@@ -287,10 +275,10 @@ impl SceneSpawner {
         for (instance_id, parent) in scenes_with_parent {
             if let Some(instance) = self.spawned_instances.get(&instance_id) {
                 for entity in instance.entity_map.values() {
-                    if let Err(bevy_ecs::ComponentError::MissingComponent(_)) =
-                        world.get::<Parent>(entity)
-                    {
-                        let _ = world.insert_one(entity, Parent(parent));
+                    if let Some(entity_mut) = world.get_entity_mut(entity) {
+                        if !entity_mut.contains::<Parent>() {
+                            entity_mut.insert(Parent(parent));
+                        }
                     }
                 }
             } else {
@@ -317,7 +305,9 @@ impl SceneSpawner {
 
 pub fn scene_spawner_system(world: &mut World) {
     let mut scene_spawner = world.get_resource_mut::<SceneSpawner>().unwrap();
-    let scene_asset_events = world.get_resource::<Events<AssetEvent<DynamicScene>>>().unwrap();
+    let scene_asset_events = world
+        .get_resource::<Events<AssetEvent<DynamicScene>>>()
+        .unwrap();
 
     let mut updated_spawned_scenes = Vec::new();
     for event in scene_spawner

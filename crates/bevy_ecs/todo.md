@@ -48,7 +48,6 @@
     * WorldChildBuilder
     * using component access for query collisions is very restrictive 
     * HasComponentTYpe
-    * Real error handling is required
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad

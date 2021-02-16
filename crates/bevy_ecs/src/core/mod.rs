@@ -517,16 +517,16 @@ mod tests {
                 .count(),
             1
         );
-        assert!(world.query::<&i32>().get(&world, a).is_some());
+        assert!(world.query::<&i32>().get(&world, a).is_ok());
         assert!(world
             .query_filtered::<(), Added<i32>>()
             .get(&world, a)
-            .is_some());
-        assert!(world.query::<&i32>().get(&world, a).is_some());
+            .is_ok());
+        assert!(world.query::<&i32>().get(&world, a).is_ok());
         assert!(world
             .query_filtered::<(), Added<i32>>()
             .get(&world, a)
-            .is_some());
+            .is_ok());
 
         world.clear_trackers();
 
@@ -546,16 +546,16 @@ mod tests {
                 .count(),
             0
         );
-        assert!(world.query::<&i32>().get(&world, a).is_some());
+        assert!(world.query::<&i32>().get(&world, a).is_ok());
         assert!(world
             .query_filtered::<(), Added<i32>>()
             .get(&world, a)
-            .is_none());
-        assert!(world.query::<&i32>().get(&world, a).is_some());
+            .is_err());
+        assert!(world.query::<&i32>().get(&world, a).is_ok());
         assert!(world
             .query_filtered::<(), Added<i32>>()
             .get(&world, a)
-            .is_none());
+            .is_err());
     }
 
     #[test]

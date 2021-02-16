@@ -16,7 +16,7 @@ pub fn transform_propagate_system(
 ) {
     for (entity, children, transform, mut global_transform) in root_query.iter_mut() {
         let mut changed = false;
-        if changed_transform_query.get(entity).is_some() {
+        if changed_transform_query.get(entity).is_ok() {
             *global_transform = GlobalTransform::from(*transform);
             changed = true;
         }
@@ -44,10 +44,10 @@ fn propagate_recursive(
     entity: Entity,
     mut changed: bool,
 ) {
-    changed |= changed_transform_query.get(entity).is_some();
+    changed |= changed_transform_query.get(entity).is_ok();
 
     let global_matrix = {
-        if let Some((transform, mut global_transform)) = transform_query.get_mut(entity) {
+        if let Ok((transform, mut global_transform)) = transform_query.get_mut(entity) {
             if changed {
                 *global_transform = parent.mul_transform(*transform);
             }
@@ -57,7 +57,7 @@ fn propagate_recursive(
         }
     };
 
-    if let Some(Some(children)) = children_query.get(entity) {
+    if let Ok(Some(children)) = children_query.get(entity) {
         for child in children.0.iter() {
             propagate_recursive(
                 &global_matrix,

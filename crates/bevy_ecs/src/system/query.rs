@@ -1,22 +1,14 @@
 use crate::core::{
-    Component, Entity, Fetch, Mut, QueryFilter, QueryIter, QueryState, ReadOnlyFetch, World,
-    WorldQuery,
+    Component, Entity, Fetch, Mut, QueryEntityError, QueryFilter, QueryIter, QueryState,
+    ReadOnlyFetch, World, WorldQuery,
 };
 use std::any::TypeId;
+use thiserror::Error;
 
 /// Provides scoped access to a World according to a given [WorldQuery] and [QueryFilter]
 pub struct Query<'w, Q: WorldQuery, F: QueryFilter = ()> {
     pub(crate) world: &'w World,
     pub(crate) state: &'w QueryState<Q, F>,
-}
-
-/// An error that occurs when using a [Query]
-#[derive(Debug)]
-pub enum QueryError {
-    CannotReadArchetype,
-    CannotWriteArchetype,
-    MissingComponent,
-    NoSuchEntity,
 }
 
 impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
@@ -71,7 +63,7 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
 
     /// Gets the query result for the given `entity`
     #[inline]
-    pub fn get(&self, entity: Entity) -> Option<<Q::Fetch as Fetch>::Item>
+    pub fn get(&self, entity: Entity) -> Result<<Q::Fetch as Fetch>::Item, QueryEntityError>
     where
         Q::Fetch: ReadOnlyFetch,
     {
@@ -81,7 +73,10 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
 
     /// Gets the query result for the given `entity`
     #[inline]
-    pub fn get_mut(&mut self, entity: Entity) -> Option<<Q::Fetch as Fetch>::Item> {
+    pub fn get_mut(
+        &mut self,
+        entity: Entity,
+    ) -> Result<<Q::Fetch as Fetch>::Item, QueryEntityError> {
         // // SAFE: system runs without conflicts with other systems. same-system queries have runtime borrow checks when they conflict
         unsafe { self.state.get_unchecked_manual(self.world, entity) }
     }
@@ -90,58 +85,83 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
     /// # Safety
     /// This allows aliased mutability. You must make sure this call does not result in multiple mutable references to the same component
     #[inline]
-    pub unsafe fn get_unchecked(&self, entity: Entity) -> Option<<Q::Fetch as Fetch>::Item> {
+    pub unsafe fn get_unchecked(
+        &self,
+        entity: Entity,
+    ) -> Result<<Q::Fetch as Fetch>::Item, QueryEntityError> {
         // SEMI-SAFE: system runs without conflicts with other systems. same-system queries have runtime borrow checks when they conflict
         self.state.get_unchecked_manual(self.world, entity)
     }
 
     /// Gets a reference to the entity's component of the given type. This will fail if the entity does not have
     /// the given component type or if the given component type does not match this query.
-    pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
-        let entity_ref = self.world.get_entity(entity)?;
-        let component_id = self.world.components().get_id(TypeId::of::<T>())?;
+    #[inline]
+    pub fn get_component<T: Component>(&self, entity: Entity) -> Result<&T, QueryComponentError> {
+        let world = self.world;
+        let entity_ref = world
+            .get_entity(entity)
+            .ok_or(QueryComponentError::NoSuchEntity)?;
+        let component_id = world
+            .components()
+            .get_id(TypeId::of::<T>())
+            .ok_or(QueryComponentError::MissingComponent)?;
         let archetype_component = entity_ref
             .archetype()
-            .get_archetype_component_id(component_id)?;
+            .get_archetype_component_id(component_id)
+            .ok_or(QueryComponentError::MissingComponent)?;
         if self
             .state
             .archetype_component_access
             .has_read(archetype_component)
         {
-            entity_ref.get::<T>()
+            entity_ref
+                .get::<T>()
+                .ok_or(QueryComponentError::MissingComponent)
         } else {
-            None
+            Err(QueryComponentError::MissingReadAccess)
         }
     }
 
     /// Gets a mutable reference to the entity's component of the given type. This will fail if the entity does not have
     /// the given component type or if the given component type does not match this query.
-    pub fn get_component_mut<T: Component>(&mut self, entity: Entity) -> Option<Mut<'_, T>> {
+    pub fn get_component_mut<T: Component>(
+        &mut self,
+        entity: Entity,
+    ) -> Result<Mut<'_, T>, QueryComponentError> {
         // SAFE: unique access to query (preventing aliased access)
-        unsafe { self.get_component_unchecked(entity) }
+        unsafe { self.get_component_unchecked_mut(entity) }
     }
 
     /// Gets a mutable reference to the entity's component of the given type. This will fail if the entity does not have
     /// the given component type or the component does not match the query.
     /// # Safety
     /// This allows aliased mutability. You must make sure this call does not result in multiple mutable references to the same component
-    pub unsafe fn get_component_unchecked<T: Component>(
+    pub unsafe fn get_component_unchecked_mut<T: Component>(
         &self,
         entity: Entity,
-    ) -> Option<Mut<'_, T>> {
-        let entity_ref = self.world.get_entity(entity)?;
-        let component_id = self.world.components().get_id(TypeId::of::<T>())?;
+    ) -> Result<Mut<'_, T>, QueryComponentError> {
+        let world = self.world;
+        let entity_ref = world
+            .get_entity(entity)
+            .ok_or(QueryComponentError::NoSuchEntity)?;
+        let component_id = world
+            .components()
+            .get_id(TypeId::of::<T>())
+            .ok_or(QueryComponentError::MissingComponent)?;
         let archetype_component = entity_ref
             .archetype()
-            .get_archetype_component_id(component_id)?;
+            .get_archetype_component_id(component_id)
+            .ok_or(QueryComponentError::MissingComponent)?;
         if self
             .state
             .archetype_component_access
-            .has_read(archetype_component)
+            .has_write(archetype_component)
         {
-            entity_ref.get_mut_unchecked::<T>()
+            entity_ref
+                .get_mut_unchecked::<T>()
+                .ok_or(QueryComponentError::MissingComponent)
         } else {
-            None
+            Err(QueryComponentError::MissingWriteAccess)
         }
     }
 }
@@ -167,3 +187,16 @@ impl<'w, Q: WorldQuery, F: QueryFilter> Query<'w, Q, F> {
 //         self.batched_iter.next()
 //     }
 // }
+
+/// An error that occurs when retrieving a specific [Entity]'s component from a [Query]
+#[derive(Error, Debug)]
+pub enum QueryComponentError {
+    #[error("This query does not have read access to the requested component.")]
+    MissingReadAccess,
+    #[error("This query does not have read access to the requested component.")]
+    MissingWriteAccess,
+    #[error("The given entity does not have the requested component.")]
+    MissingComponent,
+    #[error("The requested entity does not exist.")]
+    NoSuchEntity,
+}

@@ -17,7 +17,7 @@ pub fn parent_update_system(
     // Entities with a missing `Parent` (ie. ones that have a `PreviousParent`), remove
     // them from the `Children` of the `PreviousParent`.
     for (entity, previous_parent) in parent_queries.q0().iter() {
-        if let Some(mut previous_parent_children) = children_query.get_mut(previous_parent.0) {
+        if let Ok(mut previous_parent_children) = children_query.get_mut(previous_parent.0) {
             previous_parent_children.0.retain(|e| *e != entity);
             commands.remove::<PreviousParent>(entity);
         }
@@ -35,7 +35,7 @@ pub fn parent_update_system(
             }
 
             // Remove from `PreviousParent.Children`.
-            if let Some(mut previous_parent_children) = children_query.get_mut(previous_parent.0) {
+            if let Ok(mut previous_parent_children) = children_query.get_mut(previous_parent.0) {
                 (*previous_parent_children).0.retain(|e| *e != entity);
             }
 
@@ -47,7 +47,7 @@ pub fn parent_update_system(
 
         // Add to the parent's `Children` (either the real component, or
         // `children_additions`).
-        if let Some(mut new_parent_children) = children_query.get_mut(parent.0) {
+        if let Ok(mut new_parent_children) = children_query.get_mut(parent.0) {
             // This is the parent
             debug_assert!(
                 !(*new_parent_children).0.contains(&entity),

@@ -41,6 +41,13 @@ impl<'w> EntityRef<'w> {
         }
     }
 
+    #[inline]
+    pub fn contains<T: Component>(&self) -> bool {
+        // SAFE: entity location is valid
+        unsafe { contains_component_with_type(self.world, TypeId::of::<T>(), self.location) }
+    }
+
+    #[inline]
     pub fn get<T: Component>(&self) -> Option<&'w T> {
         // SAFE: entity location is valid and returned component is of type T
         unsafe {
@@ -50,6 +57,7 @@ impl<'w> EntityRef<'w> {
     }
 
     /// SAFETY: this cannot be used to produce aliased mutable access to an entity's component
+    #[inline]
     pub unsafe fn get_mut_unchecked<T: Component>(&self) -> Option<Mut<'w, T>> {
         get_component_and_flags_with_type(self.world, TypeId::of::<T>(), self.entity, self.location)
             .map(|(value, flags)| Mut {
@@ -95,6 +103,13 @@ impl<'w> EntityMut<'w> {
         }
     }
 
+    #[inline]
+    pub fn contains<T: Component>(&self) -> bool {
+        // SAFE: entity location is valid
+        unsafe { contains_component_with_type(self.world, TypeId::of::<T>(), self.location) }
+    }
+
+    #[inline]
     pub fn get<T: Component>(&self) -> Option<&'w T> {
         // SAFE: entity location is valid and returned component is of type T
         unsafe {
@@ -103,6 +118,7 @@ impl<'w> EntityMut<'w> {
         }
     }
 
+    #[inline]
     pub fn get_mut<T: Component>(&mut self) -> Option<Mut<'w, T>> {
         // SAFE: world access is unique, entity location is valid, and returned component is of type T
         unsafe {
@@ -319,7 +335,8 @@ impl<'w> EntityMut<'w> {
                 old_location.archetype_id,
                 bundle_info,
                 true,
-            ).expect("intersections should always return a result")
+            )
+            .expect("intersections should always return a result")
         };
 
         if new_archetype_id == old_location.archetype_id {
@@ -546,9 +563,8 @@ unsafe fn remove_component(
     }
 }
 
-/// SAFETY: `entity_location` must be within bounds of an archetype that exists.
-// TODO: remove inlining to cut down on monomorphization (just measure perf first)
-#[inline]
+/// # Safety
+/// `entity_location` must be within bounds of an archetype that exists.
 unsafe fn get_component_with_type(
     world: &World,
     type_id: TypeId,
@@ -559,7 +575,8 @@ unsafe fn get_component_with_type(
     get_component(world, component_id, entity, location)
 }
 
-#[inline]
+/// # Safety
+/// `entity_location` must be within bounds of an archetype that exists.
 unsafe fn get_component_and_flags_with_type<'w>(
     world: &World,
     type_id: TypeId,
@@ -568,6 +585,21 @@ unsafe fn get_component_and_flags_with_type<'w>(
 ) -> Option<(*mut u8, *mut ComponentFlags)> {
     let component_id = world.components.get_id(type_id)?;
     get_component_and_flags(world, component_id, entity, location)
+}
+
+/// # Safety
+/// `entity_location` must be within bounds of an archetype that exists.
+unsafe fn contains_component_with_type(
+    world: &World,
+    type_id: TypeId,
+    location: EntityLocation,
+) -> bool {
+    if let Some(component_id) = world.components.get_id(type_id) {
+        let archetype = world.archetypes.get_unchecked(location.archetype_id);
+        archetype.contains(component_id)
+    } else {
+        false
+    }
 }
 
 /// Adds a bundle to the given archetype and returns the resulting archetype. This could be the same [ArchetypeId],
