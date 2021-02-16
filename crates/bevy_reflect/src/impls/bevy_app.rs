@@ -1,6 +1,6 @@
 use crate::{impl_reflect_value, GetTypeRegistration, ReflectDeserialize, TypeRegistryArc};
 use bevy_app::{AppBuilder, Plugin};
-use bevy_ecs::Entity;
+use bevy_ecs::core::Entity;
 
 #[derive(Default)]
 pub struct ReflectPlugin;
@@ -35,7 +35,7 @@ impl Plugin for ReflectPlugin {
         }
         #[cfg(feature = "bevy_ecs")]
         {
-            app.register_type::<bevy_ecs::Entity>();
+            app.register_type::<bevy_ecs::core::Entity>();
         }
     }
 }
@@ -49,7 +49,10 @@ pub trait RegisterTypeBuilder {
 impl RegisterTypeBuilder for AppBuilder {
     fn register_type<T: GetTypeRegistration>(&mut self) -> &mut Self {
         {
-            let registry = self.resources().get_mut::<TypeRegistryArc>().unwrap();
+            let registry = self
+                .world_mut()
+                .get_resource_mut::<TypeRegistryArc>()
+                .unwrap();
             registry.write().register::<T>();
         }
         self

@@ -1,7 +1,6 @@
-// modified by Bevy contributors
-
-use crate::Entity;
 use serde::{de::Visitor, Deserialize, Serialize, Serializer};
+
+use crate::core::Entity;
 
 impl Serialize for Entity {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

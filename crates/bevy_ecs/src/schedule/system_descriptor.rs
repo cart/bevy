@@ -1,5 +1,6 @@
-use crate::{BoxedSystem, ExclusiveSystem, ExclusiveSystemCoerced, ExclusiveSystemFn, System};
 use std::borrow::Cow;
+
+use crate::system::{BoxedSystem, ExclusiveSystem, ExclusiveSystemCoerced, ExclusiveSystemFn, System};
 
 /// Encapsulates a system and information on when it run in a `SystemStage`.
 ///

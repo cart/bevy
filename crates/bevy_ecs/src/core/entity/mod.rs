@@ -1,8 +1,12 @@
 mod entity_ref;
 mod spawn_batch;
+mod map_entities;
+mod serde;
 
 pub use entity_ref::*;
 pub use spawn_batch::*;
+pub use map_entities::*;
+pub use self::serde::*;
 
 use crate::core::{ArchetypeId, SparseSetIndex};
 use std::{

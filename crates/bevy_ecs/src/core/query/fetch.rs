@@ -2,7 +2,7 @@ use crate::core::{
     Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId,
     ComponentSparseSet, Entity, Mut, StorageType, Table, Tables, World,
 };
-use bevy_ecs3_macros::all_tuples;
+use bevy_ecs_macros::all_tuples;
 use std::{
     marker::PhantomData,
     ptr::{self, NonNull},

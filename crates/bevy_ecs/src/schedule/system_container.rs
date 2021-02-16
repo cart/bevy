@@ -1,6 +1,8 @@
+use crate::{
+    schedule::{ExclusiveSystemDescriptor, ParallelSystemDescriptor},
+    system::{ExclusiveSystem, System},
+};
 use std::{borrow::Cow, ptr::NonNull};
-
-use crate::{ExclusiveSystem, ExclusiveSystemDescriptor, ParallelSystemDescriptor, System};
 
 pub(super) trait SystemContainer {
     fn display_name(&self) -> Cow<'static, str>;
@@ -124,10 +126,6 @@ impl SystemContainer for ParallelSystemContainer {
         self.system()
             .component_access()
             .is_compatible(other.system().component_access())
-            && self
-                .system()
-                .resource_access()
-                .is_compatible(other.system().resource_access())
     }
 }
 

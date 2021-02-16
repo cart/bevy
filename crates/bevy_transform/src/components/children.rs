@@ -1,4 +1,4 @@
-use bevy_ecs::{Entity, MapEntities};
+use bevy_ecs::core::{Entity, EntityMap, MapEntities, MapEntitiesError};
 use bevy_reflect::{Reflect, ReflectComponent, ReflectMapEntities};
 use smallvec::SmallVec;
 use std::ops::Deref;
@@ -8,10 +8,7 @@ use std::ops::Deref;
 pub struct Children(pub(crate) SmallVec<[Entity; 8]>);
 
 impl MapEntities for Children {
-    fn map_entities(
-        &mut self,
-        entity_map: &bevy_ecs::EntityMap,
-    ) -> Result<(), bevy_ecs::MapEntitiesError> {
+    fn map_entities(&mut self, entity_map: &EntityMap) -> Result<(), MapEntitiesError> {
         for entity in self.0.iter_mut() {
             *entity = entity_map.get(*entity)?;
         }

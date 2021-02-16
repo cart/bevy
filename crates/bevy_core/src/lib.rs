@@ -7,7 +7,7 @@ mod time;
 
 use std::ops::Range;
 
-use bevy_ecs::IntoSystem;
+use bevy_ecs::system::IntoSystem;
 use bevy_reflect::RegisterTypeBuilder;
 pub use bytes::*;
 pub use float_ord::*;
@@ -29,10 +29,11 @@ pub struct CorePlugin;
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut AppBuilder) {
         // Setup the default bevy task pools
-        app.resources_mut()
-            .get_cloned::<DefaultTaskPoolOptions>()
+        app.world_mut()
+            .get_resource::<DefaultTaskPoolOptions>()
+            .cloned()
             .unwrap_or_else(DefaultTaskPoolOptions::default)
-            .create_default_pools(app.resources_mut());
+            .create_default_pools(app.world_mut());
 
         app.init_resource::<Time>()
             .init_resource::<EntityLabels>()

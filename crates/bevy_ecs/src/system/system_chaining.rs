@@ -1,14 +1,17 @@
-use crate::{ArchetypeComponent, Resources, System, SystemId, TypeAccess, World};
-use std::{any::TypeId, borrow::Cow};
+use std::borrow::Cow;
+
+use crate::{
+    core::{Access, ArchetypeComponentId, ComponentId, World},
+    system::{System, SystemId},
+};
 
 pub struct ChainSystem<SystemA, SystemB> {
     system_a: SystemA,
     system_b: SystemB,
     name: Cow<'static, str>,
     id: SystemId,
-    archetype_component_access: TypeAccess<ArchetypeComponent>,
-    component_access: TypeAccess<TypeId>,
-    resource_access: TypeAccess<TypeId>,
+    component_access: Access<ComponentId>,
+    archetype_component_access: Access<ArchetypeComponentId>,
 }
 
 impl<SystemA: System, SystemB: System<In = SystemA::Out>> System for ChainSystem<SystemA, SystemB> {
@@ -23,12 +26,12 @@ impl<SystemA: System, SystemB: System<In = SystemA::Out>> System for ChainSystem
         self.id
     }
 
-    fn update_access(&mut self, world: &World) {
+    fn update(&mut self, world: &World) {
         self.archetype_component_access.clear();
         self.component_access.clear();
-        self.resource_access.clear();
-        self.system_a.update_access(world);
-        self.system_b.update_access(world);
+
+        self.system_a.update(world);
+        self.system_b.update(world);
 
         self.archetype_component_access
             .extend(self.system_a.archetype_component_access());
@@ -38,44 +41,33 @@ impl<SystemA: System, SystemB: System<In = SystemA::Out>> System for ChainSystem
             .extend(self.system_a.component_access());
         self.component_access
             .extend(self.system_b.component_access());
-        self.resource_access.extend(self.system_a.resource_access());
-        self.resource_access.extend(self.system_b.resource_access());
     }
 
-    fn archetype_component_access(&self) -> &TypeAccess<ArchetypeComponent> {
+    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
         &self.archetype_component_access
     }
 
-    fn component_access(&self) -> &TypeAccess<TypeId> {
+    fn component_access(&self) -> &Access<ComponentId> {
         &self.component_access
     }
 
-    fn resource_access(&self) -> &TypeAccess<TypeId> {
-        &self.resource_access
+    fn is_send(&self) -> bool {
+        self.system_a.is_send() && self.system_b.is_send()
     }
 
-    fn is_non_send(&self) -> bool {
-        self.system_a.is_non_send() || self.system_b.is_non_send()
+    unsafe fn run_unsafe(&mut self, input: Self::In, world: &World) -> Option<Self::Out> {
+        let out = self.system_a.run_unsafe(input, world).unwrap();
+        self.system_b.run_unsafe(out, world)
     }
 
-    unsafe fn run_unsafe(
-        &mut self,
-        input: Self::In,
-        world: &World,
-        resources: &Resources,
-    ) -> Option<Self::Out> {
-        let out = self.system_a.run_unsafe(input, world, resources).unwrap();
-        self.system_b.run_unsafe(out, world, resources)
+    fn apply_buffers(&mut self, world: &mut World) {
+        self.system_a.apply_buffers(world);
+        self.system_b.apply_buffers(world);
     }
 
-    fn apply_buffers(&mut self, world: &mut World, resources: &mut Resources) {
-        self.system_a.apply_buffers(world, resources);
-        self.system_b.apply_buffers(world, resources);
-    }
-
-    fn initialize(&mut self, world: &mut World, resources: &mut Resources) {
-        self.system_a.initialize(world, resources);
-        self.system_b.initialize(world, resources);
+    fn initialize(&mut self, world: &mut World) {
+        self.system_a.initialize(world);
+        self.system_b.initialize(world);
     }
 }
 
@@ -98,7 +90,6 @@ where
             system_b: system,
             archetype_component_access: Default::default(),
             component_access: Default::default(),
-            resource_access: Default::default(),
             id: SystemId::new(),
         }
     }

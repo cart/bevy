@@ -2,7 +2,7 @@ use crate::core::{
     Access, Archetype, ArchetypeComponentId, Bundle, Component, ComponentFlags, ComponentId,
     ComponentSparseSet, Entity, FetchState, StorageType, Table, Tables, World,
 };
-use bevy_ecs3_macros::all_tuples;
+use bevy_ecs_macros::all_tuples;
 use std::{marker::PhantomData, ptr};
 
 pub trait QueryFilter: Sized {

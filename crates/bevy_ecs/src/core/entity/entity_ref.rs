@@ -497,7 +497,7 @@ unsafe fn get_component_and_flags(
         StorageType::Table => {
             let table = world.storages.tables.get_unchecked(archetype.table_id());
             // SAFE: archetypes will always point to valid columns
-            let components = table.get_column_unchecked(component_id);
+            let components = table.get_column(component_id)?;
             let table_row = archetype.entity_table_row_unchecked(location.index);
             // SAFE: archetypes only store valid table_rows and the stored component type is T
             Some((

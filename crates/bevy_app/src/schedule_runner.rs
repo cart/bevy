@@ -48,8 +48,8 @@ pub struct ScheduleRunnerPlugin {}
 impl Plugin for ScheduleRunnerPlugin {
     fn build(&self, app: &mut AppBuilder) {
         let settings = app
-            .resources_mut()
-            .get_or_insert_with(ScheduleRunnerSettings::default)
+            .world_mut()
+            .get_resource_or_insert_with(ScheduleRunnerSettings::default)
             .to_owned();
         app.set_runner(move |mut app: App| {
             let mut app_exit_event_reader = ManualEventReader::<AppExit>::default();
@@ -63,7 +63,7 @@ impl Plugin for ScheduleRunnerPlugin {
                           -> Result<Option<Duration>, AppExit> {
                         let start_time = Instant::now();
 
-                        if let Some(app_exit_events) = app.resources.get_mut::<Events<AppExit>>() {
+                        if let Some(app_exit_events) = app.world.get_resource_mut::<Events<AppExit>>() {
                             if let Some(exit) = app_exit_event_reader.iter(&app_exit_events).last()
                             {
                                 return Err(exit.clone());
@@ -72,7 +72,7 @@ impl Plugin for ScheduleRunnerPlugin {
 
                         app.update();
 
-                        if let Some(app_exit_events) = app.resources.get_mut::<Events<AppExit>>() {
+                        if let Some(app_exit_events) = app.world.get_resource_mut::<Events<AppExit>>() {
                             if let Some(exit) = app_exit_event_reader.iter(&app_exit_events).last()
                             {
                                 return Err(exit.clone());

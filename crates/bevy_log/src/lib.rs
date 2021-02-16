@@ -42,7 +42,9 @@ impl Default for LogSettings {
 impl Plugin for LogPlugin {
     fn build(&self, app: &mut AppBuilder) {
         let default_filter = {
-            let settings = app.resources_mut().get_or_insert_with(LogSettings::default);
+            let settings = app
+                .world_mut()
+                .get_resource_or_insert_with(LogSettings::default);
             format!("{},{}", settings.level, settings.filter)
         };
 

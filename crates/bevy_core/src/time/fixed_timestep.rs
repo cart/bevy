@@ -1,5 +1,9 @@
 use crate::Time;
-use bevy_ecs::{ArchetypeComponent, ShouldRun, System, SystemId, TypeAccess};
+use bevy_ecs::{
+    core::{Access, ArchetypeComponentId, ComponentId, World},
+    schedule::ShouldRun,
+    system::{System, SystemId},
+};
 use bevy_utils::HashMap;
 use std::{any::TypeId, borrow::Cow};
 
@@ -47,9 +51,8 @@ pub struct FixedTimestep {
     looping: bool,
     system_id: SystemId,
     label: Option<String>, // TODO: consider making this a TypedLabel
-    archetype_access: TypeAccess<ArchetypeComponent>,
-    component_access: TypeAccess<TypeId>,
-    resource_access: TypeAccess<TypeId>,
+    archetype_access: Access<ArchetypeComponentId>,
+    component_access: Access<ComponentId>,
 }
 
 impl Default for FixedTimestep {
@@ -62,7 +65,6 @@ impl Default for FixedTimestep {
             label: None,
             component_access: Default::default(),
             archetype_access: Default::default(),
-            resource_access: Default::default(),
         }
     }
 }
@@ -115,34 +117,28 @@ impl System for FixedTimestep {
         self.system_id
     }
 
-    fn update_access(&mut self, _world: &bevy_ecs::World) {}
+    fn update(&mut self, _world: &World) {}
 
-    fn archetype_component_access(&self) -> &TypeAccess<ArchetypeComponent> {
+    fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
         &self.archetype_access
     }
 
-    fn component_access(&self) -> &TypeAccess<TypeId> {
+    fn component_access(&self) -> &Access<ComponentId> {
         &self.component_access
     }
 
-    fn resource_access(&self) -> &TypeAccess<TypeId> {
-        &self.resource_access
+    fn is_send(&self) -> bool {
+        true
     }
 
-    fn is_non_send(&self) -> bool {
-        false
-    }
-
-    unsafe fn run_unsafe(
-        &mut self,
-        _input: Self::In,
-        _world: &bevy_ecs::World,
-        resources: &bevy_ecs::Resources,
-    ) -> Option<Self::Out> {
-        let time = resources.get::<Time>().unwrap();
-        let result = self.update(&time);
+    unsafe fn run_unsafe(&mut self, _input: Self::In, world: &World) -> Option<Self::Out> {
+        todo!("add archetype component access for time and fixed timesteps");
+        todo!("consider reworking this");
+        let result = self.update(world.get_resource::<Time>().unwrap());
         if let Some(ref label) = self.label {
-            let mut fixed_timesteps = resources.get_mut::<FixedTimesteps>().unwrap();
+            let mut fixed_timesteps = world
+                .get_resource_mut_unchecked::<FixedTimesteps>()
+                .unwrap();
             let state = fixed_timesteps.fixed_timesteps.get_mut(label).unwrap();
             state.step = self.step;
             state.accumulator = self.accumulator;
@@ -151,17 +147,13 @@ impl System for FixedTimestep {
         Some(result)
     }
 
-    fn apply_buffers(
-        &mut self,
-        _world: &mut bevy_ecs::World,
-        _resources: &mut bevy_ecs::Resources,
-    ) {
-    }
+    fn apply_buffers(&mut self, _world: &mut World) {}
 
-    fn initialize(&mut self, _world: &mut bevy_ecs::World, resources: &mut bevy_ecs::Resources) {
-        self.resource_access.add_read(TypeId::of::<Time>());
+    fn initialize(&mut self, world: &mut World) {
+        let time_id = world.components_mut().get_or_insert_resource_id::<Time>();
+        self.component_access.add_read(time_id);
         if let Some(ref label) = self.label {
-            let mut fixed_timesteps = resources.get_mut::<FixedTimesteps>().unwrap();
+            let mut fixed_timesteps = world.get_resource_mut::<FixedTimesteps>().unwrap();
             fixed_timesteps.fixed_timesteps.insert(
                 label.clone(),
                 FixedTimestepState {

@@ -1,0 +1,331 @@
+
+empty_systems/000_systems                                                                             
+                        time:   [6.9815 us 7.1036 us 7.2245 us]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+empty_systems/001_systems                                                                             
+                        time:   [3.3267 us 3.3638 us 3.3998 us]
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+empty_systems/002_systems                                                                             
+                        time:   [4.2376 us 4.2669 us 4.2981 us]
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low mild
+  7 (7.00%) high mild
+empty_systems/003_systems                                                                             
+                        time:   [5.2234 us 5.2598 us 5.2983 us]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+empty_systems/004_systems                                                                             
+                        time:   [6.2049 us 6.2447 us 6.2841 us]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+empty_systems/005_systems                                                                             
+                        time:   [7.1534 us 7.1909 us 7.2282 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low severe
+empty_systems/010_systems                                                                             
+                        time:   [11.384 us 11.432 us 11.477 us]
+Found 6 outliers among 100 measurements (6.00%)
+  6 (6.00%) low mild
+empty_systems/015_systems                                                                             
+                        time:   [15.276 us 15.328 us 15.379 us]
+Found 9 outliers among 100 measurements (9.00%)
+  3 (3.00%) low severe
+  6 (6.00%) low mild
+empty_systems/020_systems                                                                             
+                        time:   [18.612 us 18.653 us 18.691 us]
+Found 12 outliers among 100 measurements (12.00%)
+  5 (5.00%) low severe
+  3 (3.00%) low mild
+  4 (4.00%) high mild
+empty_systems/025_systems                                                                             
+                        time:   [22.255 us 22.437 us 22.645 us]
+Found 9 outliers among 100 measurements (9.00%)
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+  5 (5.00%) high severe
+empty_systems/030_systems                                                                             
+                        time:   [25.275 us 25.304 us 25.333 us]
+Found 8 outliers among 100 measurements (8.00%)
+  4 (4.00%) low mild
+  4 (4.00%) high mild
+empty_systems/035_systems                                                                             
+                        time:   [28.381 us 28.410 us 28.442 us]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+empty_systems/040_systems                                                                            
+                        time:   [31.989 us 32.040 us 32.097 us]
+Found 11 outliers among 100 measurements (11.00%)
+  1 (1.00%) low mild
+  6 (6.00%) high mild
+  4 (4.00%) high severe
+empty_systems/045_systems                                                                            
+                        time:   [35.471 us 35.557 us 35.668 us]
+Found 8 outliers among 100 measurements (8.00%)
+  2 (2.00%) low severe
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+empty_systems/050_systems                                                                            
+                        time:   [38.926 us 39.009 us 39.132 us]
+Found 5 outliers among 100 measurements (5.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+empty_systems/055_systems                                                                            
+                        time:   [42.503 us 42.671 us 42.980 us]
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+empty_systems/060_systems                                                                            
+                        time:   [45.938 us 46.105 us 46.314 us]
+Found 8 outliers among 100 measurements (8.00%)
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+empty_systems/065_systems                                                                            
+                        time:   [49.992 us 50.122 us 50.298 us]
+Found 11 outliers among 100 measurements (11.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  9 (9.00%) high severe
+empty_systems/070_systems                                                                            
+                        time:   [53.952 us 54.313 us 54.737 us]
+Found 10 outliers among 100 measurements (10.00%)
+  10 (10.00%) high severe
+empty_systems/075_systems                                                                            
+                        time:   [56.799 us 56.965 us 57.179 us]
+Found 14 outliers among 100 measurements (14.00%)
+  1 (1.00%) low severe
+  3 (3.00%) high mild
+  10 (10.00%) high severe
+empty_systems/080_systems                                                                            
+                        time:   [60.675 us 61.181 us 61.838 us]
+Found 14 outliers among 100 measurements (14.00%)
+  3 (3.00%) high mild
+  11 (11.00%) high severe
+empty_systems/085_systems                                                                            
+                        time:   [64.273 us 64.656 us 65.110 us]
+Found 16 outliers among 100 measurements (16.00%)
+  6 (6.00%) high mild
+  10 (10.00%) high severe
+empty_systems/090_systems                                                                            
+                        time:   [69.122 us 70.008 us 71.083 us]
+Found 13 outliers among 100 measurements (13.00%)
+  9 (9.00%) high mild
+  4 (4.00%) high severe
+empty_systems/095_systems                                                                            
+                        time:   [71.675 us 72.236 us 72.849 us]
+Found 13 outliers among 100 measurements (13.00%)
+  1 (1.00%) low severe
+  6 (6.00%) high mild
+  6 (6.00%) high severe
+empty_systems/100_systems                                                                            
+                        time:   [75.465 us 76.201 us 77.033 us]
+Found 12 outliers among 100 measurements (12.00%)
+  6 (6.00%) high mild
+  6 (6.00%) high severe
+
+busy_systems/01x_entities_03_systems                                                                            
+                        time:   [267.73 us 273.21 us 278.91 us]
+busy_systems/01x_entities_06_systems                                                                            
+                        time:   [450.74 us 455.21 us 459.76 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking busy_systems/01x_entities_09_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 3.8s, enable flat sampling, or reduce sample count to 60.
+busy_systems/01x_entities_09_systems                                                                             
+                        time:   [718.89 us 724.88 us 731.15 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+Benchmarking busy_systems/01x_entities_12_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 5.2s, enable flat sampling, or reduce sample count to 50.
+busy_systems/01x_entities_12_systems                                                                             
+                        time:   [913.36 us 915.69 us 918.30 us]
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+Benchmarking busy_systems/01x_entities_15_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 5.7s, enable flat sampling, or reduce sample count to 50.
+busy_systems/01x_entities_15_systems                                                                             
+                        time:   [1.1276 ms 1.1355 ms 1.1439 ms]
+busy_systems/02x_entities_03_systems                                                                            
+                        time:   [476.45 us 479.45 us 482.59 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking busy_systems/02x_entities_06_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 4.6s, enable flat sampling, or reduce sample count to 50.
+busy_systems/02x_entities_06_systems                                                                             
+                        time:   [882.64 us 889.42 us 896.71 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+busy_systems/02x_entities_09_systems                                                                             
+                        time:   [1.3292 ms 1.3389 ms 1.3502 ms]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high severe
+busy_systems/02x_entities_12_systems                                                                             
+                        time:   [1.7933 ms 1.7993 ms 1.8060 ms]
+Found 11 outliers among 100 measurements (11.00%)
+  7 (7.00%) high mild
+  4 (4.00%) high severe
+busy_systems/02x_entities_15_systems                                                                             
+                        time:   [2.2154 ms 2.2284 ms 2.2420 ms]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking busy_systems/03x_entities_03_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 3.5s, enable flat sampling, or reduce sample count to 60.
+busy_systems/03x_entities_03_systems                                                                             
+                        time:   [689.56 us 691.88 us 694.51 us]
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low severe
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+busy_systems/03x_entities_06_systems                                                                             
+                        time:   [1.3908 ms 1.3999 ms 1.4084 ms]
+Found 16 outliers among 100 measurements (16.00%)
+  14 (14.00%) low severe
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+busy_systems/03x_entities_09_systems                                                                             
+                        time:   [2.0546 ms 2.0629 ms 2.0717 ms]
+Found 6 outliers among 100 measurements (6.00%)
+  4 (4.00%) low severe
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+busy_systems/03x_entities_12_systems                                                                             
+                        time:   [2.6552 ms 2.6601 ms 2.6653 ms]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+busy_systems/03x_entities_15_systems                                                                             
+                        time:   [3.3354 ms 3.3537 ms 3.3720 ms]
+Benchmarking busy_systems/04x_entities_03_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 5.2s, enable flat sampling, or reduce sample count to 50.
+busy_systems/04x_entities_03_systems                                                                             
+                        time:   [923.64 us 930.36 us 937.78 us]
+busy_systems/04x_entities_06_systems                                                                             
+                        time:   [1.8001 ms 1.8102 ms 1.8242 ms]
+Found 16 outliers among 100 measurements (16.00%)
+  11 (11.00%) high mild
+  5 (5.00%) high severe
+busy_systems/04x_entities_09_systems                                                                             
+                        time:   [2.6711 ms 2.6777 ms 2.6851 ms]
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+busy_systems/04x_entities_12_systems                                                                            
+                        time:   [3.7169 ms 3.7520 ms 3.7878 ms]
+busy_systems/04x_entities_15_systems                                                                            
+                        time:   [4.4018 ms 4.4129 ms 4.4247 ms]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+busy_systems/05x_entities_03_systems                                                                             
+                        time:   [1.1809 ms 1.1908 ms 1.2007 ms]
+busy_systems/05x_entities_06_systems                                                                             
+                        time:   [2.4324 ms 2.4759 ms 2.5196 ms]
+busy_systems/05x_entities_09_systems                                                                            
+                        time:   [3.5837 ms 3.6310 ms 3.6781 ms]
+busy_systems/05x_entities_12_systems                                                                            
+                        time:   [4.3920 ms 4.4049 ms 4.4197 ms]
+Found 7 outliers among 100 measurements (7.00%)
+  6 (6.00%) high mild
+  1 (1.00%) high severe
+busy_systems/05x_entities_15_systems                                                                            
+                        time:   [5.8013 ms 5.8590 ms 5.9168 ms]
+
+contrived/01x_entities_03_systems                                                                            
+                        time:   [87.124 us 88.840 us 90.490 us]
+contrived/01x_entities_06_systems                                                                            
+                        time:   [159.99 us 162.71 us 165.49 us]
+contrived/01x_entities_09_systems                                                                            
+                        time:   [248.53 us 253.94 us 258.81 us]
+contrived/01x_entities_12_systems                                                                            
+                        time:   [333.40 us 339.21 us 344.91 us]
+contrived/01x_entities_15_systems                                                                            
+                        time:   [385.90 us 395.95 us 407.02 us]
+contrived/02x_entities_03_systems                                                                            
+                        time:   [146.64 us 149.04 us 151.36 us]
+contrived/02x_entities_06_systems                                                                            
+                        time:   [275.86 us 280.23 us 285.33 us]
+contrived/02x_entities_09_systems                                                                            
+                        time:   [422.34 us 431.98 us 441.47 us]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+Benchmarking contrived/02x_entities_12_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 3.0s, enable flat sampling, or reduce sample count to 70.
+contrived/02x_entities_12_systems                                                                             
+                        time:   [558.50 us 572.19 us 585.67 us]
+Benchmarking contrived/02x_entities_15_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 3.4s, enable flat sampling, or reduce sample count to 60.
+contrived/02x_entities_15_systems                                                                             
+                        time:   [665.56 us 677.88 us 689.94 us]
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
+contrived/03x_entities_03_systems                                                                            
+                        time:   [219.00 us 222.83 us 226.77 us]
+contrived/03x_entities_06_systems                                                                            
+                        time:   [411.46 us 418.14 us 424.84 us]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+Benchmarking contrived/03x_entities_09_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 3.2s, enable flat sampling, or reduce sample count to 60.
+contrived/03x_entities_09_systems                                                                             
+                        time:   [588.42 us 596.60 us 606.31 us]
+Benchmarking contrived/03x_entities_12_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 4.2s, enable flat sampling, or reduce sample count to 50.
+contrived/03x_entities_12_systems                                                                             
+                        time:   [799.81 us 815.71 us 831.86 us]
+Benchmarking contrived/03x_entities_15_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 5.5s, enable flat sampling, or reduce sample count to 50.
+contrived/03x_entities_15_systems                                                                             
+                        time:   [972.94 us 993.74 us 1.0168 ms]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+contrived/04x_entities_03_systems                                                                            
+                        time:   [277.24 us 282.01 us 287.19 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+contrived/04x_entities_06_systems                                                                            
+                        time:   [534.44 us 542.48 us 550.99 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking contrived/04x_entities_09_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 3.9s, enable flat sampling, or reduce sample count to 60.
+contrived/04x_entities_09_systems                                                                             
+                        time:   [777.90 us 790.97 us 804.36 us]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking contrived/04x_entities_12_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 5.3s, enable flat sampling, or reduce sample count to 50.
+contrived/04x_entities_12_systems                                                                             
+                        time:   [1.0175 ms 1.0361 ms 1.0567 ms]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+contrived/04x_entities_15_systems                                                                             
+                        time:   [1.2734 ms 1.2966 ms 1.3213 ms]
+contrived/05x_entities_03_systems                                                                            
+                        time:   [335.49 us 340.06 us 345.38 us]
+Benchmarking contrived/05x_entities_06_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 3.6s, enable flat sampling, or reduce sample count to 60.
+contrived/05x_entities_06_systems                                                                             
+                        time:   [651.46 us 662.22 us 674.50 us]
+Found 14 outliers among 100 measurements (14.00%)
+  7 (7.00%) high mild
+  7 (7.00%) high severe
+Benchmarking contrived/05x_entities_09_systems: Warming up for 500.00 ms
+Warning: Unable to complete 100 samples in 3.0s. You may wish to increase target time to 5.2s, enable flat sampling, or reduce sample count to 50.
+contrived/05x_entities_09_systems                                                                             
+                        time:   [946.63 us 959.46 us 974.24 us]
+Found 17 outliers among 100 measurements (17.00%)
+  7 (7.00%) high mild
+  10 (10.00%) high severe
+contrived/05x_entities_12_systems                                                                             
+                        time:   [1.3225 ms 1.3524 ms 1.3837 ms]
+contrived/05x_entities_15_systems                                                                             
+                        time:   [1.6335 ms 1.6655 ms 1.6990 ms]

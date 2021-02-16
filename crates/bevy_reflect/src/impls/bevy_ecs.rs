@@ -1,28 +1,22 @@
-use crate::{FromType, Reflect};
-use bevy_ecs::{
-    Archetype, Component, Entity, EntityMap, FromResources, MapEntities, MapEntitiesError,
-    Resources, World,
+use bevy_ecs::core::{
+    Archetype, Component, Entity, EntityMap, FromWorld, MapEntities, MapEntitiesError, World,
 };
+
+use crate::{FromType, Reflect};
 use std::marker::PhantomData;
 
 #[derive(Clone)]
 pub struct ReflectComponent {
-    add_component: fn(&mut World, resources: &Resources, Entity, &dyn Reflect),
+    add_component: fn(&mut World, Entity, &dyn Reflect),
     apply_component: fn(&mut World, Entity, &dyn Reflect),
     reflect_component: unsafe fn(&Archetype, usize) -> &dyn Reflect,
     reflect_component_mut: unsafe fn(&Archetype, usize) -> &mut dyn Reflect,
-    copy_component: fn(&World, &mut World, &Resources, Entity, Entity),
+    copy_component: fn(&World, &mut World, Entity, Entity),
 }
 
 impl ReflectComponent {
-    pub fn add_component(
-        &self,
-        world: &mut World,
-        resources: &Resources,
-        entity: Entity,
-        component: &dyn Reflect,
-    ) {
-        (self.add_component)(world, resources, entity, component);
+    pub fn add_component(&self, world: &mut World, entity: Entity, component: &dyn Reflect) {
+        (self.add_component)(world, entity, component);
     }
 
     pub fn apply_component(&self, world: &mut World, entity: Entity, component: &dyn Reflect) {
@@ -57,57 +51,55 @@ impl ReflectComponent {
         &self,
         source_world: &World,
         destination_world: &mut World,
-        resources: &Resources,
         source_entity: Entity,
         destination_entity: Entity,
     ) {
         (self.copy_component)(
             source_world,
             destination_world,
-            resources,
             source_entity,
             destination_entity,
         );
     }
 }
 
-impl<C: Component + Reflect + FromResources> FromType<C> for ReflectComponent {
+impl<C: Component + Reflect + FromWorld> FromType<C> for ReflectComponent {
     fn from_type() -> Self {
         ReflectComponent {
-            add_component: |world, resources, entity, reflected_component| {
-                let mut component = C::from_resources(resources);
+            add_component: |world, entity, reflected_component| {
+                let mut component = C::from_world(world);
                 component.apply(reflected_component);
-                world.insert_one(entity, component).unwrap();
+                world.entity_mut(entity).unwrap().insert(component);
             },
             apply_component: |world, entity, reflected_component| {
                 let mut component = world.get_mut::<C>(entity).unwrap();
                 component.apply(reflected_component);
             },
-            copy_component: |source_world,
-                             destination_world,
-                             resources,
-                             source_entity,
-                             destination_entity| {
+            copy_component: |source_world, destination_world, source_entity, destination_entity| {
                 let source_component = source_world.get::<C>(source_entity).unwrap();
-                let mut destination_component = C::from_resources(resources);
+                let mut destination_component = C::from_world(destination_world);
                 destination_component.apply(source_component);
                 destination_world
-                    .insert_one(destination_entity, destination_component)
-                    .unwrap();
+                    .entity_mut(destination_entity)
+                    .unwrap()
+                    .insert(destination_component);
             },
             reflect_component: |archetype, index| {
-                unsafe {
-                    // the type has been looked up by the caller, so this is safe
-                    let ptr = archetype.get::<C>().unwrap().as_ptr().add(index);
-                    ptr.as_ref().unwrap()
-                }
+                // TODO: fix these impls
+                todo!("adapt this to new bevy ecs")
+                // unsafe {
+                //     // the type has been looked up by the caller, so this is safe
+                //     let ptr = archetype.get::<C>().unwrap().as_ptr().add(index);
+                //     ptr.as_ref().unwrap()
+                // }
             },
             reflect_component_mut: |archetype, index| {
-                unsafe {
-                    // the type has been looked up by the caller, so this is safe
-                    let ptr = archetype.get::<C>().unwrap().as_ptr().add(index);
-                    &mut *ptr
-                }
+                todo!("adapt this to new bevy ecs")
+                // unsafe {
+                //     // the type has been looked up by the caller, so this is safe
+                //     let ptr = archetype.get::<C>().unwrap().as_ptr().add(index);
+                //     &mut *ptr
+                // }
             },
         }
     }
@@ -115,7 +107,7 @@ impl<C: Component + Reflect + FromResources> FromType<C> for ReflectComponent {
 
 #[derive(Clone)]
 pub struct SceneComponent<Scene: Component, Runtime: Component> {
-    copy_scene_to_runtime: fn(&World, &mut World, &Resources, Entity, Entity),
+    copy_scene_to_runtime: fn(&World, &mut World, Entity, Entity),
     marker: PhantomData<(Scene, Runtime)>,
 }
 
@@ -124,17 +116,10 @@ impl<Scene: Component + IntoComponent<Runtime>, Runtime: Component> SceneCompone
         &self,
         scene_world: &World,
         runtime_world: &mut World,
-        resources: &Resources,
         scene_entity: Entity,
         runtime_entity: Entity,
     ) {
-        (self.copy_scene_to_runtime)(
-            scene_world,
-            runtime_world,
-            resources,
-            scene_entity,
-            runtime_entity,
-        );
+        (self.copy_scene_to_runtime)(scene_world, runtime_world, scene_entity, runtime_entity);
     }
 }
 
@@ -143,16 +128,13 @@ impl<Scene: Component + IntoComponent<Runtime>, Runtime: Component> FromType<Sce
 {
     fn from_type() -> Self {
         SceneComponent {
-            copy_scene_to_runtime: |scene_world,
-                                    runtime_world,
-                                    resources,
-                                    scene_entity,
-                                    runtime_entity| {
+            copy_scene_to_runtime: |scene_world, runtime_world, scene_entity, runtime_entity| {
                 let scene_component = scene_world.get::<Scene>(scene_entity).unwrap();
-                let destination_component = scene_component.into_component(resources);
+                let destination_component = scene_component.into_component(runtime_world);
                 runtime_world
-                    .insert_one(runtime_entity, destination_component)
-                    .unwrap();
+                    .entity_mut(runtime_entity)
+                    .unwrap()
+                    .insert(destination_component);
             },
             marker: Default::default(),
         }
@@ -161,7 +143,7 @@ impl<Scene: Component + IntoComponent<Runtime>, Runtime: Component> FromType<Sce
 
 #[derive(Clone)]
 pub struct RuntimeComponent<Runtime: Component, Scene: Component> {
-    copy_runtime_to_scene: fn(&World, &mut World, &Resources, Entity, Entity),
+    copy_runtime_to_scene: fn(&World, &mut World, Entity, Entity),
     marker: PhantomData<(Runtime, Scene)>,
 }
 
@@ -170,17 +152,10 @@ impl<Runtime: Component + IntoComponent<Scene>, Scene: Component> RuntimeCompone
         &self,
         runtime_world: &World,
         scene_world: &mut World,
-        resources: &Resources,
         runtime_entity: Entity,
         scene_entity: Entity,
     ) {
-        (self.copy_runtime_to_scene)(
-            runtime_world,
-            scene_world,
-            resources,
-            runtime_entity,
-            scene_entity,
-        );
+        (self.copy_runtime_to_scene)(runtime_world, scene_world, runtime_entity, scene_entity);
     }
 }
 
@@ -189,16 +164,13 @@ impl<Runtime: Component + IntoComponent<Scene>, Scene: Component> FromType<Runti
 {
     fn from_type() -> Self {
         RuntimeComponent {
-            copy_runtime_to_scene: |runtime_world,
-                                    scene_world,
-                                    resources,
-                                    runtime_entity,
-                                    scene_entity| {
+            copy_runtime_to_scene: |runtime_world, scene_world, runtime_entity, scene_entity| {
                 let runtime_component = runtime_world.get::<Runtime>(runtime_entity).unwrap();
-                let scene_component = runtime_component.into_component(resources);
+                let scene_component = runtime_component.into_component(runtime_world);
                 scene_world
-                    .insert_one(scene_entity, scene_component)
-                    .unwrap();
+                    .entity_mut(scene_entity)
+                    .unwrap()
+                    .insert(scene_component);
             },
             marker: Default::default(),
         }
@@ -225,7 +197,7 @@ impl<C: Component + MapEntities> FromType<C> for ReflectMapEntities {
         ReflectMapEntities {
             map_entities: |world, entity_map| {
                 for entity in entity_map.values() {
-                    if let Ok(mut component) = world.get_mut::<C>(entity) {
+                    if let Some(mut component) = world.get_mut::<C>(entity) {
                         component.map_entities(entity_map)?;
                     }
                 }
@@ -237,5 +209,5 @@ impl<C: Component + MapEntities> FromType<C> for ReflectMapEntities {
 }
 
 pub trait IntoComponent<ToComponent: Component> {
-    fn into_component(&self, resources: &Resources) -> ToComponent;
+    fn into_component(&self, world: &World) -> ToComponent;
 }

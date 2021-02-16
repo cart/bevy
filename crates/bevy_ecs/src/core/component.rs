@@ -186,6 +186,16 @@ impl Components {
     }
 
     #[inline]
+    pub fn get_or_insert_id<T: Component>(&mut self) -> ComponentId {
+        self.get_or_insert_with(TypeId::of::<T>(), || TypeInfo::of::<T>())
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.components.len()
+    }
+
+    #[inline]
     pub fn get_info(&self, id: ComponentId) -> Option<&ComponentInfo> {
         self.components.get(id.0)
     }
@@ -249,16 +259,6 @@ impl Components {
         });
 
         ComponentId(*index)
-    }
-
-    #[inline]
-    pub fn get_or_insert_id<T: Component>(&mut self) -> ComponentId {
-        self.get_or_insert_with(TypeId::of::<T>(), || TypeInfo::of::<T>())
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.components.len()
     }
 }
 

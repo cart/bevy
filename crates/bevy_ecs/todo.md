@@ -42,6 +42,10 @@
 * documentation / symbol review
 * todo review
 * readme
+* bevy port
+    * FixedTimestep borked
+    * WorldChildBuilder
+    * QuerySet q0_mut() lifetime broken 
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
