@@ -1,7 +1,7 @@
 use crate::prelude::{Children, Parent, PreviousParent};
 use bevy_ecs::{
     core::{Component, DynamicBundle, Entity, World},
-    system::{Command, CommandQueue, Commands},
+    system::{Command, Commands},
 };
 use smallvec::SmallVec;
 

@@ -4,7 +4,14 @@ use find_crate::Manifest;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{format_ident, quote};
-use syn::{Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Ident, Index, Lifetime, LitInt, Path, Result, Token, parse::{Parse, ParseStream}, parse_macro_input, punctuated::Punctuated, token::Comma};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input,
+    punctuated::Punctuated,
+    token::Comma,
+    Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Ident, Index, Lifetime, LitInt,
+    Path, Result, Token,
+};
 
 struct AllTuples {
     macro_ident: Ident,
@@ -205,7 +212,23 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
             unsafe impl<#(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParamState for QuerySetState<(#(QueryState<#query, #filter>,)*)> {
                 fn init(world: &mut World, system_state: &mut SystemState) -> Self {
                     #(
-                        let #query = QueryState::<#query, #filter>::init(world, system_state);
+                        let mut #query = QueryState::<#query, #filter>::new(world);
+                        assert_component_access_compatibility(
+                            &system_state.name,
+                            std::any::type_name::<#query>(),
+                            std::any::type_name::<#filter>(),
+                            &#query.component_access,
+                            &system_state.component_access,
+                            world,
+                        );
+                    )*
+                    #(
+                        system_state
+                            .component_access
+                            .extend(&#query.component_access);
+                        system_state
+                            .archetype_component_access
+                            .extend(&#query.archetype_component_access);
                     )*
                     QuerySetState((#(#query,)*))
                 }

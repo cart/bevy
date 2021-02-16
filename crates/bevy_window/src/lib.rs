@@ -3,7 +3,7 @@ mod system;
 mod window;
 mod windows;
 
-use bevy_ecs::IntoSystem;
+use bevy_ecs::system::IntoSystem;
 pub use event::*;
 pub use system::*;
 pub use window::*;

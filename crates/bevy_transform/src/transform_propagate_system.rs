@@ -4,7 +4,7 @@ use bevy_ecs::prelude::*;
 pub fn transform_propagate_system(
     mut root_query: Query<
         (Entity, Option<&Children>, &Transform, &mut GlobalTransform),
-        (Without<Parent>, With<GlobalTransform>),
+        Without<Parent>,
     >,
     mut transform_query: Query<(&Transform, &mut GlobalTransform), With<Parent>>,
     changed_transform_query: Query<Entity, Changed<Transform>>,

@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn query_set_system() {
-        fn sys(mut _set: QuerySet<(Query<&mut A>, Query<&B>)>) {}
+        fn sys(mut _set: QuerySet<(Query<&mut A>, Query<&A>)>) {}
         let mut world = World::default();
         world.spawn().insert(A);
 

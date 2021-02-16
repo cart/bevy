@@ -45,7 +45,7 @@
 * bevy port
     * FixedTimestep borked
     * WorldChildBuilder
-    * QuerySet q0_mut() lifetime broken 
+    * using component access for query collisions is very restrictive 
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
