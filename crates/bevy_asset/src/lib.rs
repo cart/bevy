@@ -14,7 +14,7 @@ mod path;
 
 pub use asset_server::*;
 pub use assets::*;
-use bevy_ecs::{IntoSystem, SystemStage};
+use bevy_ecs::{schedule::SystemStage, system::IntoSystem};
 use bevy_reflect::RegisterTypeBuilder;
 use bevy_tasks::IoTaskPool;
 pub use handle::*;
@@ -58,8 +58,8 @@ impl Default for AssetServerSettings {
 /// delegate to the default `AssetIo` for the platform.
 pub fn create_platform_default_asset_io(app: &mut AppBuilder) -> Box<dyn AssetIo> {
     let settings = app
-        .resources_mut()
-        .get_or_insert_with(AssetServerSettings::default);
+        .world_mut()
+        .get_resource_or_insert_with(AssetServerSettings::default);
 
     #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
     let source = FileAssetIo::new(&settings.asset_folder);
@@ -73,10 +73,10 @@ pub fn create_platform_default_asset_io(app: &mut AppBuilder) -> Box<dyn AssetIo
 
 impl Plugin for AssetPlugin {
     fn build(&self, app: &mut AppBuilder) {
-        if app.resources().get::<AssetServer>().is_none() {
+        if app.world().get_resource::<AssetServer>().is_none() {
             let task_pool = app
-                .resources()
-                .get::<IoTaskPool>()
+                .world()
+                .get_resource::<IoTaskPool>()
                 .expect("`IoTaskPool` resource not found.")
                 .0
                 .clone();

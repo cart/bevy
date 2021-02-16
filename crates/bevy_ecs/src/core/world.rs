@@ -1,8 +1,8 @@
 use crate::core::{
-    ArchetypeComponentId, ArchetypeComponentInfo, ArchetypeId, Archetypes, Bundle, Bundles, Column,
-    Component, ComponentDescriptor, ComponentId, Components, ComponentsError, Entities, Entity,
-    EntityMut, EntityRef, Mut, QueryFilter, QueryState, SparseSet, SpawnBatchIter, StorageType,
-    Storages, WorldQuery,
+    world_cell::WorldCell, ArchetypeComponentId, ArchetypeComponentInfo, ArchetypeId, Archetypes,
+    Bundle, Bundles, Column, Component, ComponentDescriptor, ComponentId, Components,
+    ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryFilter, QueryState,
+    SparseSet, SpawnBatchIter, StorageType, Storages, WorldQuery,
 };
 use std::{any::TypeId, fmt};
 
@@ -14,7 +14,7 @@ pub struct World {
     pub(crate) storages: Storages,
     pub(crate) bundles: Bundles,
     pub(crate) removed_components: SparseSet<ComponentId, Vec<Entity>>,
-    thread_validator: ThreadValidator,
+    main_thread_validator: MainThreadValidator,
 }
 
 impl World {
@@ -51,6 +51,14 @@ impl World {
     #[inline]
     pub fn bundles(&self) -> &Bundles {
         &self.bundles
+    }
+
+    #[inline]
+    pub fn cell(&mut self) -> WorldCell<'_> {
+        WorldCell {
+            world: self,
+            access: Default::default(),
+        }
     }
 
     pub fn register_component(
@@ -204,7 +212,7 @@ impl World {
     #[inline]
     pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
         // SAFE: unique world access
-        unsafe {self.get_resource_mut_unchecked() }
+        unsafe { self.get_resource_mut_unchecked() }
     }
 
     #[inline]
@@ -366,7 +374,7 @@ impl World {
     }
 
     fn validate_non_send_access<T: 'static>(&self) {
-        if !self.thread_validator.is_main_thread() {
+        if !self.main_thread_validator.is_main_thread() {
             panic!(
                 "attempted to access NonSend resource {} off of the main thread",
                 std::any::type_name::<T>()
@@ -396,17 +404,17 @@ impl<T: Default> FromWorld for T {
     }
 }
 
-struct ThreadValidator {
+struct MainThreadValidator {
     main_thread: std::thread::ThreadId,
 }
 
-impl ThreadValidator {
+impl MainThreadValidator {
     fn is_main_thread(&self) -> bool {
         self.main_thread == std::thread::current().id()
     }
 }
 
-impl Default for ThreadValidator {
+impl Default for MainThreadValidator {
     fn default() -> Self {
         Self {
             main_thread: std::thread::current().id(),

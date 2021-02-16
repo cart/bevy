@@ -7,6 +7,7 @@ mod query;
 mod storage;
 mod type_info;
 mod world;
+mod world_cell;
 
 pub use archetype::*;
 pub use bundle::*;

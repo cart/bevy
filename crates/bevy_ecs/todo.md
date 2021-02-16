@@ -36,6 +36,7 @@
 * Removed with() from `Flags<T>` in favor of `Option<Flags<T>>`, which allows querying for flags to be "filtered" by default 
 * Replaced slow "remove_bundle_one_by_one" used as fallback for Commands::remove_bundle with fast "remove_bundle_intersection"
 * Components now have is_send property (currently only resources support non-send)
+* WorldCell
 
 ## TODO
 * world id safety
