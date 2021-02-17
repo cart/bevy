@@ -45,7 +45,7 @@ impl Node for CameraNode {
 }
 
 impl SystemNode for CameraNode {
-    fn get_system(&self, commands: &mut bevy_ecs::system::CommandQueue) -> BoxedSystem {
+    fn get_system(&self) -> BoxedSystem {
         let system = camera_node_system.system();
         commands.insert_local_resource(
             system.id(),

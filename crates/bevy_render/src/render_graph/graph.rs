@@ -1,7 +1,7 @@
 use super::{Edge, Node, NodeId, NodeLabel, NodeState, RenderGraphError, SlotLabel, SystemNode};
 use bevy_ecs::{
     schedule::{Schedule, SystemStage},
-    system::{CommandQueue, Commands},
+    system::{CommandQueue},
 };
 use bevy_utils::HashMap;
 use std::{borrow::Cow, fmt::Debug};
@@ -9,7 +9,6 @@ pub struct RenderGraph {
     nodes: HashMap<NodeId, NodeState>,
     node_names: HashMap<Cow<'static, str>, NodeId>,
     system_node_schedule: Option<Schedule>,
-    commands: CommandQueue,
 }
 
 impl Default for RenderGraph {
@@ -20,7 +19,6 @@ impl Default for RenderGraph {
             nodes: Default::default(),
             node_names: Default::default(),
             system_node_schedule: Some(schedule),
-            commands: Default::default(),
         }
     }
 }
@@ -45,7 +43,7 @@ impl RenderGraph {
     {
         let schedule = self.system_node_schedule.as_mut().unwrap();
         let stage = schedule.get_stage_mut::<SystemStage>("update").unwrap();
-        stage.add_system(node.get_system(&mut self.commands));
+        stage.add_system(node.get_system());
         self.add_node(name, node)
     }
 
@@ -275,10 +273,6 @@ impl RenderGraph {
             .iter()
             .map(|edge| (edge, edge.get_input_node()))
             .map(move |(edge, input_node_id)| (edge, self.get_node_state(input_node_id).unwrap())))
-    }
-
-    pub fn take_commands(&mut self) -> CommandQueue {
-        std::mem::take(&mut self.commands)
     }
 }
 

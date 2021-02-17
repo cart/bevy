@@ -402,7 +402,7 @@ impl<T> SystemNode for RenderResourcesNode<T>
 where
     T: renderer::RenderResources,
 {
-    fn get_system(&self, commands: &mut bevy_ecs::system::CommandQueue) -> BoxedSystem {
+    fn get_system(&self) -> BoxedSystem {
         let system = render_resources_node_system::<T>.system();
         commands.insert_local_resource(
             system.id(),
@@ -585,7 +585,7 @@ impl<T> SystemNode for AssetRenderResourcesNode<T>
 where
     T: renderer::RenderResources + Asset,
 {
-    fn get_system(&self, commands: &mut bevy_ecs::system::CommandQueue) -> BoxedSystem {
+    fn get_system(&self) -> BoxedSystem {
         let system = asset_render_resources_node_system::<T>.system();
         commands.insert_local_resource(
             system.id(),
@@ -750,7 +750,7 @@ fn asset_render_resources_node_system<T: RenderResources + Asset>(
 
     // update removed entity asset mapping
     for entity in removed_handles.iter() {
-        if let Some(mut render_pipelines) = queries.q1_mut().get_mut(entity) {
+        if let Ok(mut render_pipelines) = queries.q1_mut().get_mut(entity) {
             render_pipelines
                 .bindings
                 .remove_asset_with_type(TypeId::of::<T>())
