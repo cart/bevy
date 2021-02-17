@@ -67,7 +67,7 @@ where
     Out: 'static,
     Param: SystemParam + 'static,
     Marker: 'static,
-    F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
+    F: SystemParamFunction<In, Out, Param, Marker> + Send + Sync + 'static,
 {
     fn system(self) -> FunctionSystem<In, Out, Param, Marker, F> {
         FunctionSystem {
@@ -85,7 +85,7 @@ where
     Out: 'static,
     Param: SystemParam + 'static,
     Marker: 'static,
-    F: SystemFunction<In, Out, Param, Marker> + Send + Sync + 'static,
+    F: SystemParamFunction<In, Out, Param, Marker> + Send + Sync + 'static,
 {
     type In = In;
     type Out = Out;
@@ -146,7 +146,7 @@ where
     }
 }
 
-pub trait SystemFunction<In, Out, Param: SystemParam, Marker>: Send + Sync + 'static {
+pub trait SystemParamFunction<In, Out, Param: SystemParam, Marker>: Send + Sync + 'static {
     fn run(
         &mut self,
         input: In,
@@ -159,7 +159,7 @@ pub trait SystemFunction<In, Out, Param: SystemParam, Marker>: Send + Sync + 'st
 macro_rules! impl_system_function {
     ($($param: ident),*) => {
         #[allow(non_snake_case)]
-        impl<Out, Func, $($param: SystemParam),*> SystemFunction<(), Out, ($($param,)*), ()> for Func
+        impl<Out, Func, $($param: SystemParam),*> SystemParamFunction<(), Out, ($($param,)*), ()> for Func
         where
             Func:
                 FnMut($($param),*) -> Out +
@@ -178,7 +178,7 @@ macro_rules! impl_system_function {
         }
 
         #[allow(non_snake_case)]
-        impl<Input, Out, Func, $($param: SystemParam),*> SystemFunction<Input, Out, ($($param,)*), InputMarker> for Func
+        impl<Input, Out, Func, $($param: SystemParam),*> SystemParamFunction<Input, Out, ($($param,)*), InputMarker> for Func
         where
             Func:
                 FnMut(In<Input>, $($param),*) -> Out +
