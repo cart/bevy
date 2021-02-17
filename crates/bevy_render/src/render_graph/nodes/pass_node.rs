@@ -227,7 +227,7 @@ where
                     // attempt to draw each visible entity
                     let mut draw_state = DrawState::default();
                     for visible_entity in visible_entities.iter() {
-                        if query_state.get(world, visible_entity.entity).is_none() {
+                        if query_state.get(world, visible_entity.entity).is_err() {
                             // visible entity does not match the Pass query
                             continue;
                         }

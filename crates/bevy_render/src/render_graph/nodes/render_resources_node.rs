@@ -458,7 +458,7 @@ fn render_resources_node_system<T: RenderResources>(
 
     // handle entities that were waiting for texture loads on the last update
     for entity in std::mem::take(&mut *entities_waiting_for_textures) {
-        if let Some((entity, uniforms, _visible, mut render_pipelines)) =
+        if let Ok((entity, uniforms, _visible, mut render_pipelines)) =
             queries.q1_mut().get_mut(entity)
         {
             if !setup_uniform_texture_resources::<T>(
