@@ -403,15 +403,13 @@ where
     T: renderer::RenderResources,
 {
     fn get_system(&self) -> BoxedSystem {
-        let system = render_resources_node_system::<T>.system();
-        commands.insert_local_resource(
-            system.id(),
-            RenderResourcesNodeState {
+        let system = render_resources_node_system::<T>.system().config(|config| {
+            config.0 = Some(RenderResourcesNodeState {
                 command_queue: self.command_queue.clone(),
                 uniform_buffer_arrays: UniformBufferArrays::<Entity, T>::default(),
                 dynamic_uniforms: self.dynamic_uniforms,
-            },
-        );
+            })
+        });
 
         Box::new(system)
     }
@@ -586,15 +584,15 @@ where
     T: renderer::RenderResources + Asset,
 {
     fn get_system(&self) -> BoxedSystem {
-        let system = asset_render_resources_node_system::<T>.system();
-        commands.insert_local_resource(
-            system.id(),
-            RenderResourcesNodeState {
-                command_queue: self.command_queue.clone(),
-                uniform_buffer_arrays: UniformBufferArrays::<HandleId, T>::default(),
-                dynamic_uniforms: self.dynamic_uniforms,
-            },
-        );
+        let system = asset_render_resources_node_system::<T>
+            .system()
+            .config(|config| {
+                config.0 = Some(RenderResourcesNodeState {
+                    command_queue: self.command_queue.clone(),
+                    uniform_buffer_arrays: UniformBufferArrays::<HandleId, T>::default(),
+                    dynamic_uniforms: self.dynamic_uniforms,
+                })
+            });
 
         Box::new(system)
     }

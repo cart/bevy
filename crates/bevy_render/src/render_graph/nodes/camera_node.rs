@@ -46,16 +46,14 @@ impl Node for CameraNode {
 
 impl SystemNode for CameraNode {
     fn get_system(&self) -> BoxedSystem {
-        let system = camera_node_system.system();
-        commands.insert_local_resource(
-            system.id(),
-            CameraNodeState {
+        let system = camera_node_system.system().config(|config| {
+            config.0 = Some(CameraNodeState {
                 camera_name: self.camera_name.clone(),
                 command_queue: self.command_queue.clone(),
                 camera_buffer: None,
                 staging_buffer: None,
-            },
-        );
+            })
+        });
         Box::new(system)
     }
 }

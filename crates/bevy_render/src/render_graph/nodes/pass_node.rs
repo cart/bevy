@@ -15,7 +15,7 @@ use crate::{
 use bevy_asset::{Assets, Handle};
 use bevy_ecs::core::{QueryState, ReadOnlyFetch, World, WorldQuery};
 use bevy_utils::tracing::debug;
-use std::{fmt, marker::PhantomData, ops::Deref};
+use std::{fmt, ops::Deref};
 
 #[derive(Debug)]
 struct CameraInfo {

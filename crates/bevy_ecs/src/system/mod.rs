@@ -376,4 +376,22 @@ mod tests {
         run_system(&mut world, validate_removed.system());
         assert_eq!(*world.get_resource::<bool>().unwrap(), true, "system ran");
     }
+
+    #[test]
+    fn configure_system_local() {
+        let mut world = World::default();
+        world.insert_resource(false);
+        fn sys(local: Local<usize>, mut modified: ResMut<bool>) {
+            assert_eq!(*local, 42);
+            *modified = true;
+        }
+
+        run_system(
+            &mut world,
+            sys.system().config(|config| config.0 = Some(42)),
+        );
+
+        // ensure the system actually ran
+        assert_eq!(*world.get_resource::<bool>().unwrap(), true);
+    }
 }

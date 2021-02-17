@@ -210,7 +210,8 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
             // SAFE: Relevant query ComponentId and ArchetypeComponentId access is applied to SystemState. If any QueryState conflicts
             // with any prior access, a panic will occur.
             unsafe impl<#(#query: WorldQuery + 'static,)* #(#filter: QueryFilter + 'static,)*> SystemParamState for QuerySetState<(#(QueryState<#query, #filter>,)*)> {
-                fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+                type Config = ();
+                fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
                     #(
                         let mut #query = QueryState::<#query, #filter>::new(world);
                         assert_component_access_compatibility(
@@ -362,9 +363,10 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         }
 
         unsafe impl<TSystemParamState: #path::system::SystemParamState, #punctuated_generics> #path::system::SystemParamState for #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> {
-            fn init(world: &mut #path::core::World, system_state: &mut #path::system::SystemState) -> Self {
+            type Config = TSystemParamState::Config;
+            fn init(world: &mut #path::core::World, system_state: &mut #path::system::SystemState, config: Self::Config) -> Self {
                 Self {
-                    state: TSystemParamState::init(world, system_state),
+                    state: TSystemParamState::init(world, system_state, config),
                     marker: std::marker::PhantomData,
                 }
             }

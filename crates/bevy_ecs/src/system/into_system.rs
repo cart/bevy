@@ -57,8 +57,19 @@ where
     func: F,
     param_state: Option<Param::Fetch>,
     system_state: SystemState,
+    config: Option<<Param::Fetch as SystemParamState>::Config>,
     // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
     marker: PhantomData<fn() -> (In, Out, Marker)>,
+}
+
+impl<In, Out, Param: SystemParam, Marker, F> FunctionSystem<In, Out, Param, Marker, F> {
+    pub fn config(
+        mut self,
+        f: impl FnOnce(&mut <Param::Fetch as SystemParamState>::Config),
+    ) -> Self {
+        f(self.config.as_mut().unwrap());
+        self
+    }
 }
 
 impl<In, Out, Param, Marker, F> IntoSystem<Param, FunctionSystem<In, Out, Param, Marker, F>> for F
@@ -73,6 +84,7 @@ where
         FunctionSystem {
             func: self,
             param_state: None,
+            config: Some(Default::default()),
             system_state: SystemState::new::<F>(),
             marker: PhantomData,
         }
@@ -142,6 +154,7 @@ where
         self.param_state = Some(<Param::Fetch as SystemParamState>::init(
             world,
             &mut self.system_state,
+            self.config.take().unwrap(),
         ));
     }
 }
@@ -198,4 +211,4 @@ macro_rules! impl_system_function {
     };
 }
 
-all_tuples!(impl_system_function, 0, 16, F);
+all_tuples!(impl_system_function, 0, 12, F);

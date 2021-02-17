@@ -18,7 +18,6 @@ pub mod uniform {
 
 use crate::prelude::StandardMaterial;
 use bevy_asset::Assets;
-use bevy_ecs::Resources;
 use bevy_render::{
     pipeline::PipelineDescriptor,
     render_graph::{base, AssetRenderResourcesNode, RenderGraph, RenderResourcesNode},

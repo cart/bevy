@@ -21,7 +21,8 @@ pub trait SystemParam: Sized {
 /// [World] access used by the SystemParamState (and associated FetchSystemParam). Additionally, it is the
 /// implementor's responsibility to ensure there is no conflicting access across all SystemParams.
 pub unsafe trait SystemParamState: Send + Sync + 'static {
-    fn init(world: &mut World, system_state: &mut SystemState) -> Self;
+    type Config: Default + Send + Sync;
+    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self;
     #[inline]
     fn update(&mut self, _world: &World, _system_state: &mut SystemState) {}
     #[inline]
@@ -51,7 +52,9 @@ impl<'a, Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParam for Quer
 unsafe impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState
     for QueryState<Q, F>
 {
-    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+    type Config = ();
+
+    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
         let state = QueryState::new(world);
         assert_component_access_compatibility(
             &system_state.name,
@@ -143,7 +146,9 @@ impl<'a, T: Component> SystemParam for Res<'a, T> {
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
 // with any prior access, a panic will occur.
 unsafe impl<T: Component> SystemParamState for ResState<T> {
-    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+    type Config = ();
+
+    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
@@ -223,7 +228,9 @@ impl<'a, T: Component> SystemParam for ResMut<'a, T> {
 // SAFE: Res ComponentId and ArchetypeComponentId access is applied to SystemState. If this Res conflicts
 // with any prior access, a panic will occur.
 unsafe impl<T: Component> SystemParamState for ResMutState<T> {
-    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+    type Config = ();
+
+    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
@@ -283,7 +290,9 @@ impl<'a> SystemParam for Commands<'a> {
 
 // SAFE: only local state is accessed
 unsafe impl SystemParamState for CommandQueue {
-    fn init(_world: &mut World, _system_state: &mut SystemState) -> Self {
+    type Config = ();
+
+    fn init(_world: &mut World, _system_state: &mut SystemState, config: Self::Config) -> Self {
         Default::default()
     }
 
@@ -331,8 +340,10 @@ impl<'a, T: Component + FromWorld> SystemParam for Local<'a, T> {
 
 // SAFE: only local state is accessed
 unsafe impl<T: Component + FromWorld> SystemParamState for LocalState<T> {
-    fn init(world: &mut World, _system_state: &mut SystemState) -> Self {
-        Self(T::from_world(world))
+    type Config = Option<T>;
+
+    fn init(world: &mut World, _system_state: &mut SystemState, config: Self::Config) -> Self {
+        Self(config.unwrap_or_else(|| T::from_world(world)))
     }
 }
 
@@ -374,7 +385,9 @@ impl<'a, T: Component> SystemParam for RemovedComponents<'a, T> {
 // SAFE: no component access. removed component entity collections can be read in parallel and are never mutably borrowed
 // during system execution
 unsafe impl<T: Component> SystemParamState for RemovedComponentsState<T> {
-    fn init(world: &mut World, _system_state: &mut SystemState) -> Self {
+    type Config = ();
+
+    fn init(world: &mut World, _system_state: &mut SystemState, config: Self::Config) -> Self {
         Self {
             component_id: world.components.get_or_insert_id::<T>(),
             marker: PhantomData,
@@ -425,7 +438,9 @@ impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
 // SAFE: NonSendComponentId and ArchetypeComponentId access is applied to SystemState. If this NonSend conflicts
 // with any prior access, a panic will occur.
 unsafe impl<T: 'static> SystemParamState for NonSendState<T> {
-    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+    type Config = ();
+
+    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_non_send_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
@@ -515,7 +530,9 @@ impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
 // SAFE: NonSendMut ComponentId and ArchetypeComponentId access is applied to SystemState. If this NonSendMut conflicts
 // with any prior access, a panic will occur.
 unsafe impl<T: 'static> SystemParamState for NonSendMutState<T> {
-    fn init(world: &mut World, system_state: &mut SystemState) -> Self {
+    type Config = ();
+
+    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_non_send_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
@@ -595,9 +612,11 @@ macro_rules! impl_system_param_tuple {
         /// SAFE: implementors of each SystemParamState in the tuple have validated their impls
         #[allow(non_snake_case)]
         unsafe impl<$($param: SystemParamState),*> SystemParamState for ($($param,)*) {
+            type Config = ($(<$param as SystemParamState>::Config,)*);
             #[inline]
-            fn init(_world: &mut World, _system_state: &mut SystemState) -> Self {
-                (($($param::init(_world, _system_state),)*))
+            fn init(_world: &mut World, _system_state: &mut SystemState, config: Self::Config) -> Self {
+                let ($($param,)*) = config;
+                (($($param::init(_world, _system_state, $param),)*))
             }
 
             #[inline]
@@ -619,9 +638,11 @@ macro_rules! impl_system_param_tuple {
 
         #[allow(non_snake_case)]
         unsafe impl<$($param: SystemParamState),*> SystemParamState for OrState<($($param,)*)> {
+            type Config = ($(<$param as SystemParamState>::Config,)*);
             #[inline]
-            fn init(_world: &mut World, _system_state: &mut SystemState) -> Self {
-                OrState((($($param::init(_world, _system_state),)*)))
+            fn init(_world: &mut World, _system_state: &mut SystemState, config: Self::Config) -> Self {
+                let ($($param,)*) = config;
+                OrState((($($param::init(_world, _system_state, $param),)*)))
             }
 
             #[inline]
@@ -668,4 +689,6 @@ macro_rules! impl_system_param_tuple {
     };
 }
 
-all_tuples!(impl_system_param_tuple, 0, 16, P);
+// TODO: consider creating a Config trait with a default() function, then implementing that for tuples
+// that would allow us to go past tuples of len 12
+all_tuples!(impl_system_param_tuple, 0, 12, P);
