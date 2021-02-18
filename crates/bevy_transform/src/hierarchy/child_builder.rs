@@ -1,6 +1,6 @@
 use crate::prelude::{Children, Parent, PreviousParent};
 use bevy_ecs::{
-    core::{Component, DynamicBundle, Entity, World},
+    core::{Component, DynamicBundle, Entity, EntityMut, World},
     system::{Command, Commands},
 };
 use smallvec::SmallVec;
@@ -194,6 +194,102 @@ impl<'a, 'b> BuildChildren for ChildBuilder<'a, 'b> {
             index,
             parent,
         });
+        self
+    }
+}
+
+#[derive(Debug)]
+pub struct WorldChildBuilder<'w> {
+    world: &'w mut World,
+    current_entity: Option<Entity>,
+    parent_entities: Vec<Entity>,
+}
+
+impl<'w> WorldChildBuilder<'w> {
+    pub fn spawn(&mut self, bundle: impl DynamicBundle + Send + Sync + 'static) -> &mut Self {
+        let parent_entity = self
+            .parent_entities
+            .last()
+            .cloned()
+            .expect("There should always be a parent at this point.");
+        let entity = self
+            .world
+            .spawn()
+            .insert_bundle(bundle)
+            .insert_bundle((Parent(parent_entity), PreviousParent(parent_entity)))
+            .id();
+        if let Some(mut parent) = self.world.get_entity_mut(parent_entity) {
+            if let Some(mut children) = parent.get_mut::<Children>() {
+                children.0.push(entity);
+            } else {
+                parent.insert(Children(smallvec::smallvec![entity]));
+            }
+        }
+        self
+    }
+
+    pub fn with_bundle(&mut self, bundle: impl DynamicBundle + Send + Sync + 'static) -> &mut Self {
+        self.world
+            .entity_mut(self.current_entity.unwrap())
+            .insert_bundle(bundle);
+        self
+    }
+
+    pub fn with(&mut self, component: impl Component) -> &mut Self {
+        self.world
+            .entity_mut(self.current_entity.unwrap())
+            .insert(component);
+        self
+    }
+
+    pub fn current_entity(&self) -> Option<Entity> {
+        self.current_entity
+    }
+}
+
+pub trait BuildWorldChildren {
+    fn with_children(
+        &mut self,
+        spawn_children: impl FnOnce(&mut WorldChildBuilder),
+    ) -> &mut Self;
+}
+
+impl<'w> BuildWorldChildren for EntityMut<'w> {
+    fn with_children(
+        &mut self,
+        spawn_children: impl FnOnce(&mut WorldChildBuilder),
+    ) -> &mut Self {
+        {
+            let entity = self.id();
+            let mut builder = WorldChildBuilder {
+                current_entity: None,
+                parent_entities: vec![entity],
+                // SAFE: self.update_location() is called below. It is impossible to make EntityMut function calls on `self`
+                // within the scope defined here
+                world: unsafe { self.world() },
+            };
+
+            spawn_children(&mut builder);
+        }
+        self.update_location();
+        self
+    }
+}
+
+impl<'w> BuildWorldChildren for WorldChildBuilder<'w> {
+    fn with_children(
+        &mut self,
+        spawn_children: impl FnOnce(&mut WorldChildBuilder<'w>),
+    ) -> &mut Self {
+        let current_entity = self
+            .current_entity
+            .expect("Cannot add children without a parent. Try creating an entity first.");
+        self.parent_entities.push(current_entity);
+        self.current_entity = None;
+
+        spawn_children(self);
+
+        self.current_entity = self.parent_entities.pop();
         self
     }
 }

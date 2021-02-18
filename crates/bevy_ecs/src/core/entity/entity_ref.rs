@@ -74,8 +74,14 @@ pub struct EntityMut<'w> {
 }
 
 impl<'w> EntityMut<'w> {
+    /// # Safety
+    /// entity and location _must_ be valid
     #[inline]
-    pub(crate) fn new(world: &'w mut World, entity: Entity, location: EntityLocation) -> Self {
+    pub(crate) unsafe fn new(
+        world: &'w mut World,
+        entity: Entity,
+        location: EntityLocation,
+    ) -> Self {
         EntityMut {
             world,
             entity,
@@ -470,6 +476,20 @@ impl<'w> EntityMut<'w> {
                 archetype.set_entity_table_row_unchecked(moved_location.index, table_row);
             };
         }
+    }
+
+    /// # Safety
+    /// Caller should not modify the world in a way that changes the current entity's location
+    /// If the caller _does_ do something that could change the location, self.update_location() should be
+    /// called before using any other methods in EntityMut
+    pub unsafe fn world(&mut self) -> &mut World {
+        self.world
+    }
+
+    /// Updates the internal entity location to match the current location in the internal [World].
+    /// This is only needed if the user called [EntityMut::world], which enables the location to change.
+    pub fn update_location(&mut self) {
+        self.location = self.world.entities().get(self.entity).unwrap();
     }
 }
 

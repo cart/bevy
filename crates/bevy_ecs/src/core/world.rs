@@ -87,7 +87,6 @@ impl World {
         self.get_entity_mut(entity).expect("Entity does not exist")
     }
 
-
     #[inline]
     pub fn get_entity(&self, entity: Entity) -> Option<EntityRef> {
         let location = self.entities.get(entity)?;
@@ -97,7 +96,8 @@ impl World {
     #[inline]
     pub fn get_entity_mut(&mut self, entity: Entity) -> Option<EntityMut> {
         let location = self.entities.get(entity)?;
-        Some(EntityMut::new(self, entity, location))
+        // SAFE: `entity` exists and `location` is that entity's location
+        Some(unsafe { EntityMut::new(self, entity, location) })
     }
 
     pub fn spawn(&mut self) -> EntityMut {
