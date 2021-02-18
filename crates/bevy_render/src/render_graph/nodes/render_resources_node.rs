@@ -13,9 +13,7 @@ use bevy_app::EventReader;
 use bevy_asset::{Asset, AssetEvent, Assets, Handle, HandleId};
 use bevy_ecs::{
     core::{Changed, Entity, Or, With, World},
-    system::{
-        BoxedSystem, IntoSystem, Local, Query, QuerySet, RemovedComponents, Res, ResMut, System,
-    },
+    system::{BoxedSystem, IntoSystem, Local, Query, QuerySet, RemovedComponents, Res, ResMut},
 };
 use bevy_utils::HashMap;
 use renderer::{AssetRenderResourceBindings, BufferId, RenderResourceType, RenderResources};
@@ -625,7 +623,6 @@ fn asset_render_resources_node_system<T: RenderResources + Asset>(
         Query<(&Handle<T>, &mut RenderPipelines), Changed<Handle<T>>>,
         Query<&mut RenderPipelines, With<Handle<T>>>,
     )>,
-    entity_query: Query<Entity>,
 ) {
     let state = state.deref_mut();
     let uniform_buffer_arrays = &mut state.uniform_buffer_arrays;

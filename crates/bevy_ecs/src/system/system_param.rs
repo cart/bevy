@@ -54,7 +54,7 @@ unsafe impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState
 {
     type Config = ();
 
-    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
+    fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let state = QueryState::new(world);
         assert_component_access_compatibility(
             &system_state.name,
@@ -148,7 +148,7 @@ impl<'a, T: Component> SystemParam for Res<'a, T> {
 unsafe impl<T: Component> SystemParamState for ResState<T> {
     type Config = ();
 
-    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
+    fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
@@ -230,7 +230,7 @@ impl<'a, T: Component> SystemParam for ResMut<'a, T> {
 unsafe impl<T: Component> SystemParamState for ResMutState<T> {
     type Config = ();
 
-    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
+    fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
@@ -292,7 +292,7 @@ impl<'a> SystemParam for Commands<'a> {
 unsafe impl SystemParamState for CommandQueue {
     type Config = ();
 
-    fn init(_world: &mut World, _system_state: &mut SystemState, config: Self::Config) -> Self {
+    fn init(_world: &mut World, _system_state: &mut SystemState, _config: Self::Config) -> Self {
         Default::default()
     }
 
@@ -387,7 +387,7 @@ impl<'a, T: Component> SystemParam for RemovedComponents<'a, T> {
 unsafe impl<T: Component> SystemParamState for RemovedComponentsState<T> {
     type Config = ();
 
-    fn init(world: &mut World, _system_state: &mut SystemState, config: Self::Config) -> Self {
+    fn init(world: &mut World, _system_state: &mut SystemState, _config: Self::Config) -> Self {
         Self {
             component_id: world.components.get_or_insert_id::<T>(),
             marker: PhantomData,
@@ -440,7 +440,7 @@ impl<'a, T: 'static> SystemParam for NonSend<'a, T> {
 unsafe impl<T: 'static> SystemParamState for NonSendState<T> {
     type Config = ();
 
-    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
+    fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_non_send_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(
@@ -532,7 +532,7 @@ impl<'a, T: 'static> SystemParam for NonSendMut<'a, T> {
 unsafe impl<T: 'static> SystemParamState for NonSendMutState<T> {
     type Config = ();
 
-    fn init(world: &mut World, system_state: &mut SystemState, config: Self::Config) -> Self {
+    fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_non_send_id::<T>();
         if system_state.component_access.has_write(component_id) {
             panic!(

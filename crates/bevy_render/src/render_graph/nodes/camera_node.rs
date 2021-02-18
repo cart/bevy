@@ -9,7 +9,7 @@ use crate::{
 use bevy_core::AsBytes;
 use bevy_ecs::{
     core::World,
-    system::{BoxedSystem, IntoSystem, Local, Query, Res, ResMut, System},
+    system::{BoxedSystem, IntoSystem, Local, Query, Res, ResMut},
 };
 use bevy_transform::prelude::*;
 use std::borrow::Cow;

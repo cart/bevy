@@ -9,7 +9,6 @@ pub mod update;
 pub mod widget;
 
 pub use anchors::*;
-use bevy_asset::Assets;
 pub use flex::*;
 pub use focus::*;
 pub use margins::*;
@@ -24,12 +23,6 @@ use bevy_app::prelude::*;
 use bevy_ecs::{
     schedule::{ParallelSystemDescriptorCoercion, SystemStage},
     system::IntoSystem,
-};
-use bevy_render::{
-    camera::ActiveCameras,
-    pipeline::PipelineDescriptor,
-    render_graph::{base::Msaa, RenderGraph},
-    shader::Shader,
 };
 use update::ui_z_system;
 

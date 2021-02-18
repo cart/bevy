@@ -1,6 +1,6 @@
 use super::{Edge, RenderGraphError, ResourceSlotInfo, ResourceSlots};
 use crate::renderer::RenderContext;
-use bevy_ecs::{core::World, system::{BoxedSystem, CommandQueue}};
+use bevy_ecs::{core::World, system::BoxedSystem};
 use bevy_utils::Uuid;
 use downcast_rs::{impl_downcast, Downcast};
 use std::{borrow::Cow, fmt::Debug};

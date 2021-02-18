@@ -1,12 +1,11 @@
 pub use bevy_ecs_macros::Bundle;
-use bevy_utils::HashSet;
 
 use crate::core::{
     Component, ComponentFlags, ComponentId, Components, Entity, SparseSetIndex, SparseSets,
     StorageType, Table, TypeInfo,
 };
 use bevy_ecs_macros::all_tuples;
-use std::{any::TypeId, collections::HashMap, iter::FromIterator};
+use std::{any::TypeId, collections::HashMap};
 
 /// A dynamically typed ordered collection of components
 ///

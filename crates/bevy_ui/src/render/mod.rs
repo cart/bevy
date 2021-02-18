@@ -1,6 +1,6 @@
 use crate::Node;
 use bevy_asset::{Assets, HandleUntyped};
-use bevy_ecs::core::{QueryState, World};
+use bevy_ecs::core::World;
 use bevy_reflect::TypeUuid;
 use bevy_render::{
     camera::ActiveCameras,
