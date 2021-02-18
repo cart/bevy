@@ -78,6 +78,7 @@
 
 ## LATER
 
+* it is currently impossible to use resources during a "write query" or entity insertion with safe code directly on &mut World. This could be solved by adding "mixed entity / resource queries" or expanding WorldCell to include spawn and query ops. (see ecs_guide.rs for example)
 * world.clear
 * world.reserve
 * ChangedRes -> Res::is_changed

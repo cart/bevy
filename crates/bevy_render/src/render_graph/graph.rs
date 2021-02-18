@@ -1,8 +1,5 @@
 use super::{Edge, Node, NodeId, NodeLabel, NodeState, RenderGraphError, SlotLabel, SystemNode};
-use bevy_ecs::{
-    schedule::{Schedule, SystemStage},
-    system::{CommandQueue},
-};
+use bevy_ecs::{core::World, schedule::{Schedule, SystemStage}};
 use bevy_utils::HashMap;
 use std::{borrow::Cow, fmt::Debug};
 pub struct RenderGraph {
@@ -274,6 +271,12 @@ impl RenderGraph {
             .map(|edge| (edge, edge.get_input_node()))
             .map(move |(edge, input_node_id)| (edge, self.get_node_state(input_node_id).unwrap())))
     }
+    
+    pub fn prepare(&mut self, world: &mut World) {
+        for node in self.nodes.values_mut() {
+            node.node.prepare(world);
+        }
+    } 
 }
 
 impl Debug for RenderGraph {

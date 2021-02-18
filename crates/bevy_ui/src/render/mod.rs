@@ -78,7 +78,6 @@ pub mod camera {
 }
 
 pub(crate) fn add_ui_graph(world: &mut World) {
-    let query_state = world.query();
     let world = world.cell();
     let mut graph = world.get_resource_mut::<RenderGraph>().unwrap();
     let mut pipelines = world
@@ -91,7 +90,6 @@ pub(crate) fn add_ui_graph(world: &mut World) {
     pipelines.set_untracked(UI_PIPELINE_HANDLE, build_ui_pipeline(&mut shaders));
 
     let mut ui_pass_node = PassNode::<&Node>::new(
-        query_state,
         PassDescriptor {
             color_attachments: vec![msaa.color_attachment_descriptor(
                 TextureAttachment::Input("color_attachment".to_string()),

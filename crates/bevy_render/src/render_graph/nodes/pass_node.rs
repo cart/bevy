@@ -32,7 +32,7 @@ pub struct PassNode<Q: WorldQuery> {
     depth_stencil_attachment_input_index: Option<usize>,
     default_clear_color_inputs: Vec<usize>,
     camera_bind_group_descriptor: BindGroupDescriptor,
-    query_state: QueryState<Q>,
+    query_state: Option<QueryState<Q>>,
 }
 
 impl<Q: WorldQuery> fmt::Debug for PassNode<Q> {
@@ -66,7 +66,7 @@ impl<Q: WorldQuery> fmt::Debug for PassNode<Q> {
 }
 
 impl<Q: WorldQuery> PassNode<Q> {
-    pub fn new(query_state: QueryState<Q>, descriptor: PassDescriptor) -> Self {
+    pub fn new(descriptor: PassDescriptor) -> Self {
         let mut inputs = Vec::new();
         let mut color_attachment_input_indices = Vec::new();
         let mut color_resolve_target_indices = Vec::new();
@@ -125,7 +125,7 @@ impl<Q: WorldQuery> PassNode<Q> {
             depth_stencil_attachment_input_index,
             default_clear_color_inputs: Vec::new(),
             camera_bind_group_descriptor,
-            query_state,
+            query_state: None,
         }
     }
 
@@ -147,6 +147,10 @@ where
 {
     fn input(&self) -> &[ResourceSlotInfo] {
         &self.inputs
+    }
+
+    fn prepare(&mut self, world: &mut World) {
+        self.query_state.get_or_insert_with(|| world.query());
     }
 
     fn update(
@@ -204,10 +208,9 @@ where
             }
         }
 
-        let query_state = &mut self.query_state;
+        let query_state = self.query_state.as_mut().unwrap();
         let cameras = &self.cameras;
         let camera_bind_group_descriptor = &self.camera_bind_group_descriptor;
-
         render_context.begin_pass(
             &self.descriptor,
             &render_resource_bindings,

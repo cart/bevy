@@ -96,7 +96,6 @@ impl Default for BaseRenderGraphConfig {
 /// By itself this graph doesn't do much, but it allows Render plugins to interop with each other by having a common
 /// set of nodes. It can be customized using `BaseRenderGraphConfig`.
 pub(crate) fn add_base_graph(config: &BaseRenderGraphConfig, world: &mut World) {
-    let query_state = world.query();
     let world = world.cell();
     let mut graph = world.get_resource_mut::<RenderGraph>().unwrap();
     let msaa = world.get_resource::<Msaa>().unwrap();
@@ -134,7 +133,6 @@ pub(crate) fn add_base_graph(config: &BaseRenderGraphConfig, world: &mut World) 
 
     if config.add_main_pass {
         let mut main_pass_node = PassNode::<&MainPass>::new(
-            query_state,
             PassDescriptor {
                 color_attachments: vec![msaa.color_attachment_descriptor(
                     TextureAttachment::Input("color_attachment".to_string()),

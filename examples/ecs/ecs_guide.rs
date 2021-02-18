@@ -199,18 +199,22 @@ fn new_player_system(
 #[allow(dead_code)]
 fn thread_local_system(world: &mut World) {
     // this does the same thing as "new_player_system"
-    let mut game_state = resources.get_mut::<GameState>().unwrap();
-    let game_rules = resources.get::<GameRules>().unwrap();
+    let total_players = world.get_resource_mut::<GameState>().unwrap().total_players;
+    let should_add_player = {
+        let game_rules = world.get_resource::<GameRules>().unwrap();
+        let add_new_player = random::<bool>();
+        add_new_player && total_players < game_rules.max_players
+    };
     // Randomly add a new player
-    let add_new_player = random::<bool>();
-    if add_new_player && game_state.total_players < game_rules.max_players {
+    if should_add_player {
         world.spawn().insert_bundle((
             Player {
-                name: format!("Player {}", game_state.total_players),
+                name: format!("Player {}", total_players),
             },
             Score { value: 0 },
         ));
 
+        let mut game_state = world.get_resource_mut::<GameState>().unwrap();
         game_state.total_players += 1;
     }
 }
