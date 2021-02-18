@@ -27,7 +27,7 @@ pub mod prelude {
 
 use bevy_app::prelude::*;
 use bevy_asset::AddAsset;
-use bevy_ecs::{Entity, IntoSystem};
+use bevy_ecs::{core::Entity, system::IntoSystem};
 
 pub type DefaultTextPipeline = TextPipeline<Entity>;
 

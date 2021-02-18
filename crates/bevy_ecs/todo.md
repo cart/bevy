@@ -48,6 +48,9 @@
     * WorldChildBuilder
     * using component access for query collisions is very restrictive 
     * HasComponentTYpe
+    * Fix scenes
+    * SharedBuffers mutability is an issue
+    * evaluate all Flags to see if they should be Option<Flags> (ui flex.rs need it)
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad

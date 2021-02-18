@@ -30,33 +30,34 @@ impl DynamicScene {
     pub fn from_world(world: &World, type_registry: &TypeRegistryArc) -> Self {
         let mut scene = DynamicScene::default();
         let type_registry = type_registry.read();
-        for archetype in world.archetypes() {
-            let mut entities = Vec::new();
-            for (index, entity) in archetype.iter_entities().enumerate() {
-                if index == entities.len() {
-                    entities.push(Entity {
-                        entity: entity.id(),
-                        components: Vec::new(),
-                    })
-                }
-                for type_info in archetype.types() {
-                    if let Some(registration) = type_registry.get(type_info.id()) {
-                        if let Some(reflect_component) = registration.data::<ReflectComponent>() {
-                            // SAFE: the index comes directly from a currently live component
-                            unsafe {
-                                let component =
-                                    reflect_component.reflect_component(&archetype, index);
-                                entities[index].components.push(component.clone_value());
-                            }
-                        }
-                    }
-                }
-            }
+        todo!("port scenes");
+        // for archetype in world.archetypes() {
+        //     let mut entities = Vec::new();
+        //     for (index, entity) in archetype.iter_entities().enumerate() {
+        //         if index == entities.len() {
+        //             entities.push(Entity {
+        //                 entity: entity.id(),
+        //                 components: Vec::new(),
+        //             })
+        //         }
+        //         for type_info in archetype.types() {
+        //             if let Some(registration) = type_registry.get(type_info.id()) {
+        //                 if let Some(reflect_component) = registration.data::<ReflectComponent>() {
+        //                     // SAFE: the index comes directly from a currently live component
+        //                     unsafe {
+        //                         let component =
+        //                             reflect_component.reflect_component(&archetype, index);
+        //                         entities[index].components.push(component.clone_value());
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
 
-            scene.entities.extend(entities.drain(..));
-        }
+        //     scene.entities.extend(entities.drain(..));
+        // }
 
-        scene
+        // scene
     }
 
     pub fn write_to_world(
@@ -64,41 +65,42 @@ impl DynamicScene {
         scene_world: &mut World,
         world: &World,
     ) -> Result<(), DynamicSceneToWorldError> {
-        let registry = world.get_resource::<TypeRegistryArc>().unwrap().clone();
-        let type_registry = registry.read();
-        let mut entity_map = EntityMap::default();
-        for scene_entity in self.entities.iter() {
-            let new_entity = scene_world.entities().reserve_entity();
-            entity_map.insert(bevy_ecs::core::Entity::new(scene_entity.entity), new_entity);
-            for component in scene_entity.components.iter() {
-                let registration = type_registry
-                    .get_with_name(component.type_name())
-                    .ok_or_else(|| DynamicSceneToWorldError::UnregisteredComponent {
-                        type_name: component.type_name().to_string(),
-                    })?;
-                let reflect_component =
-                    registration.data::<ReflectComponent>().ok_or_else(|| {
-                        DynamicSceneToWorldError::UnregisteredComponent {
-                            type_name: component.type_name().to_string(),
-                        }
-                    })?;
-                if scene_world.has_component_type(new_entity, registration.type_id()) {
-                    reflect_component.apply_component(scene_world, new_entity, &**component);
-                } else {
-                    reflect_component.add_component(scene_world, world, new_entity, &**component);
-                }
-            }
-        }
+        todo!("port scenes");
+        // let registry = world.get_resource::<TypeRegistryArc>().unwrap().clone();
+        // let type_registry = registry.read();
+        // let mut entity_map = EntityMap::default();
+        // for scene_entity in self.entities.iter() {
+        //     let new_entity = scene_world.entities().reserve_entity();
+        //     entity_map.insert(bevy_ecs::core::Entity::new(scene_entity.entity), new_entity);
+        //     for component in scene_entity.components.iter() {
+        //         let registration = type_registry
+        //             .get_with_name(component.type_name())
+        //             .ok_or_else(|| DynamicSceneToWorldError::UnregisteredComponent {
+        //                 type_name: component.type_name().to_string(),
+        //             })?;
+        //         let reflect_component =
+        //             registration.data::<ReflectComponent>().ok_or_else(|| {
+        //                 DynamicSceneToWorldError::UnregisteredComponent {
+        //                     type_name: component.type_name().to_string(),
+        //                 }
+        //             })?;
+        //         if scene_world.has_component_type(new_entity, registration.type_id()) {
+        //             reflect_component.apply_component(scene_world, new_entity, &**component);
+        //         } else {
+        //             reflect_component.add_component(scene_world, world, new_entity, &**component);
+        //         }
+        //     }
+        // }
 
-        for registration in type_registry.iter() {
-            if let Some(map_entities_reflect) = registration.data::<ReflectMapEntities>() {
-                map_entities_reflect
-                    .map_entities(scene_world, &entity_map)
-                    .unwrap();
-            }
-        }
+        // for registration in type_registry.iter() {
+        //     if let Some(map_entities_reflect) = registration.data::<ReflectMapEntities>() {
+        //         map_entities_reflect
+        //             .map_entities(scene_world, &entity_map)
+        //             .unwrap();
+        //     }
+        // }
 
-        Ok(())
+        // Ok(())
     }
 
     // TODO: move to AssetSaver when it is implemented

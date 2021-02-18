@@ -1,6 +1,6 @@
 use crate::{light::Light, material::StandardMaterial, render_graph::FORWARD_PIPELINE_HANDLE};
 use bevy_asset::Handle;
-use bevy_ecs::Bundle;
+use bevy_ecs::core::Bundle;
 use bevy_render::{
     draw::Draw,
     mesh::Mesh,

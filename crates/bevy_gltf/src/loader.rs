@@ -1,7 +1,9 @@
 use anyhow::Result;
-use bevy_asset::{AssetIoError, AssetLoader, AssetPath, Handle, LoadContext, LoadedAsset};
+use bevy_asset::{
+    AssetIoError, AssetLoader, AssetPath, BoxedFuture, Handle, LoadContext, LoadedAsset,
+};
 use bevy_core::Name;
-use bevy_ecs::{bevy_utils::BoxedFuture, World, WorldBuilderSource};
+use bevy_ecs::core::World;
 use bevy_math::Mat4;
 use bevy_pbr::prelude::{PbrBundle, StandardMaterial};
 use bevy_render::{

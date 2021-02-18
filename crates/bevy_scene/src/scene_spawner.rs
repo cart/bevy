@@ -4,7 +4,7 @@ use bevy_asset::{AssetEvent, Assets, Handle};
 use bevy_ecs::core::{Entity, EntityMap, World};
 use bevy_reflect::{ReflectComponent, ReflectMapEntities, TypeRegistryArc};
 use bevy_transform::prelude::Parent;
-use bevy_utils::HashMap;
+use bevy_utils::{HashMap, tracing::error};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -111,43 +111,44 @@ impl SceneSpawner {
         scene_handle: &Handle<DynamicScene>,
         instance_info: &mut InstanceInfo,
     ) -> Result<(), SceneSpawnError> {
-        let type_registry = world.get_resource::<TypeRegistryArc>().unwrap();
-        let type_registry = type_registry.read();
-        let scenes = world.get_resource::<Assets<DynamicScene>>().unwrap();
-        let scene = scenes
-            .get(scene_handle)
-            .ok_or_else(|| SceneSpawnError::NonExistentScene {
-                handle: scene_handle.clone_weak(),
-            })?;
+        todo!("port scenes");
+        // let type_registry = world.get_resource::<TypeRegistryArc>().unwrap();
+        // let type_registry = type_registry.read();
+        // let scenes = world.get_resource::<Assets<DynamicScene>>().unwrap();
+        // let scene = scenes
+        //     .get(scene_handle)
+        //     .ok_or_else(|| SceneSpawnError::NonExistentScene {
+        //         handle: scene_handle.clone_weak(),
+        //     })?;
 
-        for scene_entity in scene.entities.iter() {
-            let entity = *instance_info
-                .entity_map
-                // TODO: use Entity type directly in scenes to properly encode generation / avoid the need to patch things up?
-                .entry(Entity::new(scene_entity.entity))
-                .or_insert_with(|| world.entities().reserve_entity());
-            for component in scene_entity.components.iter() {
-                let registration = type_registry
-                    .get_with_name(component.type_name())
-                    .ok_or_else(|| SceneSpawnError::UnregisteredType {
-                        type_name: component.type_name().to_string(),
-                    })?;
-                let reflect_component =
-                    registration.data::<ReflectComponent>().ok_or_else(|| {
-                        SceneSpawnError::UnregisteredComponent {
-                            type_name: component.type_name().to_string(),
-                        }
-                    })?;
-                if world.has_component_type(entity, registration.type_id()) {
-                    if registration.short_name() != "Camera" {
-                        reflect_component.apply_component(world, entity, &**component);
-                    }
-                } else {
-                    reflect_component.add_component(world, entity, &**component);
-                }
-            }
-        }
-        Ok(())
+        // for scene_entity in scene.entities.iter() {
+        //     let entity = *instance_info
+        //         .entity_map
+        //         // TODO: use Entity type directly in scenes to properly encode generation / avoid the need to patch things up?
+        //         .entry(Entity::new(scene_entity.entity))
+        //         .or_insert_with(|| world.entities().reserve_entity());
+        //     for component in scene_entity.components.iter() {
+        //         let registration = type_registry
+        //             .get_with_name(component.type_name())
+        //             .ok_or_else(|| SceneSpawnError::UnregisteredType {
+        //                 type_name: component.type_name().to_string(),
+        //             })?;
+        //         let reflect_component =
+        //             registration.data::<ReflectComponent>().ok_or_else(|| {
+        //                 SceneSpawnError::UnregisteredComponent {
+        //                     type_name: component.type_name().to_string(),
+        //                 }
+        //             })?;
+        //         if world.has_component_type(entity, registration.type_id()) {
+        //             if registration.short_name() != "Camera" {
+        //                 reflect_component.apply_component(world, entity, &**component);
+        //             }
+        //         } else {
+        //             reflect_component.add_component(world, entity, &**component);
+        //         }
+        //     }
+        // }
+        // Ok(())
     }
 
     pub fn spawn_sync(
@@ -164,55 +165,56 @@ impl SceneSpawner {
         scene_handle: Handle<Scene>,
         instance_id: InstanceId,
     ) -> Result<InstanceId, SceneSpawnError> {
-        let mut instance_info = InstanceInfo {
-            entity_map: EntityMap::default(),
-        };
-        let type_registry = world.get_resource::<TypeRegistryArc>().unwrap();
-        let type_registry = type_registry.read();
-        let scenes = world.get_resource::<Assets<Scene>>().unwrap();
-        let scene =
-            scenes
-                .get(&scene_handle)
-                .ok_or_else(|| SceneSpawnError::NonExistentRealScene {
-                    handle: scene_handle.clone(),
-                })?;
+        todo!("port scenes");
+        // let mut instance_info = InstanceInfo {
+        //     entity_map: EntityMap::default(),
+        // };
+        // let type_registry = world.get_resource::<TypeRegistryArc>().unwrap();
+        // let type_registry = type_registry.read();
+        // let scenes = world.get_resource::<Assets<Scene>>().unwrap();
+        // let scene =
+        //     scenes
+        //         .get(&scene_handle)
+        //         .ok_or_else(|| SceneSpawnError::NonExistentRealScene {
+        //             handle: scene_handle.clone(),
+        //         })?;
 
-        for archetype in scene.world.archetypes() {
-            for scene_entity in archetype.iter_entities() {
-                let entity = *instance_info
-                    .entity_map
-                    .entry(*scene_entity)
-                    .or_insert_with(|| world.entities().reserve_entity());
-                for type_info in archetype.types() {
-                    let registration = type_registry.get(type_info.id()).ok_or_else(|| {
-                        SceneSpawnError::UnregisteredType {
-                            type_name: type_info.type_name().to_string(),
-                        }
-                    })?;
-                    let reflect_component =
-                        registration.data::<ReflectComponent>().ok_or_else(|| {
-                            SceneSpawnError::UnregisteredComponent {
-                                type_name: registration.name().to_string(),
-                            }
-                        })?;
-                    reflect_component.copy_component(&scene.world, world, *scene_entity, entity);
-                }
-            }
-        }
-        for registration in type_registry.iter() {
-            if let Some(map_entities_reflect) = registration.data::<ReflectMapEntities>() {
-                map_entities_reflect
-                    .map_entities(world, &instance_info.entity_map)
-                    .unwrap();
-            }
-        }
-        self.spawned_instances.insert(instance_id, instance_info);
-        let spawned = self
-            .spawned_scenes
-            .entry(scene_handle)
-            .or_insert_with(Vec::new);
-        spawned.push(instance_id);
-        Ok(instance_id)
+        // for archetype in scene.world.archetypes() {
+        //     for scene_entity in archetype.iter_entities() {
+        //         let entity = *instance_info
+        //             .entity_map
+        //             .entry(*scene_entity)
+        //             .or_insert_with(|| world.entities().reserve_entity());
+        //         for type_info in archetype.types() {
+        //             let registration = type_registry.get(type_info.id()).ok_or_else(|| {
+        //                 SceneSpawnError::UnregisteredType {
+        //                     type_name: type_info.type_name().to_string(),
+        //                 }
+        //             })?;
+        //             let reflect_component =
+        //                 registration.data::<ReflectComponent>().ok_or_else(|| {
+        //                     SceneSpawnError::UnregisteredComponent {
+        //                         type_name: registration.name().to_string(),
+        //                     }
+        //                 })?;
+        //             reflect_component.copy_component(&scene.world, world, *scene_entity, entity);
+        //         }
+        //     }
+        // }
+        // for registration in type_registry.iter() {
+        //     if let Some(map_entities_reflect) = registration.data::<ReflectMapEntities>() {
+        //         map_entities_reflect
+        //             .map_entities(world, &instance_info.entity_map)
+        //             .unwrap();
+        //     }
+        // }
+        // self.spawned_instances.insert(instance_id, instance_info);
+        // let spawned = self
+        //     .spawned_scenes
+        //     .entry(scene_handle)
+        //     .or_insert_with(Vec::new);
+        // spawned.push(instance_id);
+        // Ok(instance_id)
     }
 
     pub fn update_spawned_scenes(
@@ -275,7 +277,7 @@ impl SceneSpawner {
         for (instance_id, parent) in scenes_with_parent {
             if let Some(instance) = self.spawned_instances.get(&instance_id) {
                 for entity in instance.entity_map.values() {
-                    if let Some(entity_mut) = world.get_entity_mut(entity) {
+                    if let Some(mut entity_mut) = world.get_entity_mut(entity) {
                         if !entity_mut.contains::<Parent>() {
                             entity_mut.insert(Parent(parent));
                         }
@@ -305,28 +307,29 @@ impl SceneSpawner {
 
 pub fn scene_spawner_system(world: &mut World) {
     let mut scene_spawner = world.get_resource_mut::<SceneSpawner>().unwrap();
-    let scene_asset_events = world
-        .get_resource::<Events<AssetEvent<DynamicScene>>>()
-        .unwrap();
+    error!("port scenes");
+    // let scene_asset_events = world
+    //     .get_resource::<Events<AssetEvent<DynamicScene>>>()
+    //     .unwrap();
 
-    let mut updated_spawned_scenes = Vec::new();
-    for event in scene_spawner
-        .scene_asset_event_reader
-        .iter(&scene_asset_events)
-    {
-        if let AssetEvent::Modified { handle } = event {
-            if scene_spawner.spawned_dynamic_scenes.contains_key(handle) {
-                updated_spawned_scenes.push(handle.clone_weak());
-            }
-        }
-    }
+    // let mut updated_spawned_scenes = Vec::new();
+    // for event in scene_spawner
+    //     .scene_asset_event_reader
+    //     .iter(&scene_asset_events)
+    // {
+    //     if let AssetEvent::Modified { handle } = event {
+    //         if scene_spawner.spawned_dynamic_scenes.contains_key(handle) {
+    //             updated_spawned_scenes.push(handle.clone_weak());
+    //         }
+    //     }
+    // }
 
-    scene_spawner.despawn_queued_scenes(world).unwrap();
-    scene_spawner
-        .spawn_queued_scenes(world)
-        .unwrap_or_else(|err| panic!("{}", err));
-    scene_spawner
-        .update_spawned_scenes(world, &updated_spawned_scenes)
-        .unwrap();
-    scene_spawner.set_scene_instance_parent_sync(world);
+    // scene_spawner.despawn_queued_scenes(world).unwrap();
+    // scene_spawner
+    //     .spawn_queued_scenes(world)
+    //     .unwrap_or_else(|err| panic!("{}", err));
+    // scene_spawner
+    //     .update_spawned_scenes(world, &updated_spawned_scenes)
+    //     .unwrap();
+    // scene_spawner.set_scene_instance_parent_sync(world);
 }

@@ -1,4 +1,5 @@
 use bevy_ecs::core::World;
+use bevy_utils::tracing::error;
 
 use crate::{
     render_graph::{Node, ResourceSlots},
@@ -16,7 +17,9 @@ impl Node for SharedBuffersNode {
         _input: &ResourceSlots,
         _output: &mut ResourceSlots,
     ) {
-        let mut shared_buffers = world.get_resource_mut::<SharedBuffers>().unwrap();
+        error!("this is unsafe and should be fixed");
+        let mut shared_buffers =
+            unsafe { world.get_resource_mut_unchecked::<SharedBuffers>().unwrap() };
         shared_buffers.apply(render_context);
     }
 }

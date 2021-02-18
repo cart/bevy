@@ -45,7 +45,7 @@ use pipeline::{
     ShaderSpecialization,
 };
 use render_graph::{
-    base::{self, BaseRenderGraphBuilder, BaseRenderGraphConfig, MainPass},
+    base::{self, BaseRenderGraphConfig, MainPass},
     RenderGraph,
 };
 use renderer::{AssetRenderResourceBindings, RenderResourceBindings};
@@ -179,11 +179,8 @@ impl Plugin for RenderPlugin {
         app.init_resource::<Msaa>();
 
         if let Some(ref config) = self.base_render_graph_config {
-            let world = app.world_mut().cell();
-            let mut render_graph = world.get_resource_mut::<RenderGraph>().unwrap();
-            let msaa = world.get_resource::<Msaa>().unwrap();
-            render_graph.add_base_graph(config, &msaa);
-            let mut active_cameras = world.get_resource_mut::<ActiveCameras>().unwrap();
+            crate::base::add_base_graph(config, app.world_mut());
+            let mut active_cameras = app.world_mut().get_resource_mut::<ActiveCameras>().unwrap();
             if config.add_3d_camera {
                 active_cameras.add(base::camera::CAMERA_3D);
             }

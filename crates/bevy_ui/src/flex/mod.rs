@@ -2,7 +2,10 @@ mod convert;
 
 use crate::{Node, Style};
 use bevy_app::EventReader;
-use bevy_ecs::{Changed, Entity, Flags, Query, QueryFilter, Res, ResMut, With, Without};
+use bevy_ecs::{
+    core::{Changed, Entity, Flags, QueryFilter, With, Without},
+    system::{Query, Res, ResMut},
+};
 use bevy_log::warn;
 use bevy_math::Vec2;
 use bevy_text::CalculatedSize;
@@ -202,7 +205,7 @@ pub fn flex_node_system(
         &mut Node,
         &mut Transform,
         Option<&Parent>,
-        Flags<Parent>,
+        Option<Flags<Parent>>,
         Flags<Transform>,
     )>,
 ) {
@@ -280,7 +283,7 @@ pub fn flex_node_system(
         let position = &mut transform.translation;
         position.x = to_logical(layout.location.x + layout.size.width / 2.0);
         position.y = to_logical(layout.location.y + layout.size.height / 2.0);
-        if parent_flags.changed() || transform_flags.changed() {
+        if parent_flags.map_or(false, |f| f.changed()) || transform_flags.changed() {
             if let Some(parent) = parent {
                 if let Ok(parent_layout) = flex_surface.get_layout(parent.0) {
                     position.x -= to_logical(parent_layout.size.width / 2.0);

@@ -14,6 +14,8 @@ mod path;
 
 pub use asset_server::*;
 pub use assets::*;
+pub use bevy_utils::BoxedFuture;
+
 use bevy_ecs::{schedule::SystemStage, system::IntoSystem};
 use bevy_reflect::RegisterTypeBuilder;
 use bevy_tasks::IoTaskPool;

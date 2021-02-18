@@ -32,7 +32,7 @@ pub struct PassNode<Q: WorldQuery> {
     depth_stencil_attachment_input_index: Option<usize>,
     default_clear_color_inputs: Vec<usize>,
     camera_bind_group_descriptor: BindGroupDescriptor,
-    query_state: Option<QueryState<Q>>,
+    query_state: QueryState<Q>,
 }
 
 impl<Q: WorldQuery> fmt::Debug for PassNode<Q> {
@@ -66,7 +66,7 @@ impl<Q: WorldQuery> fmt::Debug for PassNode<Q> {
 }
 
 impl<Q: WorldQuery> PassNode<Q> {
-    pub fn new(descriptor: PassDescriptor) -> Self {
+    pub fn new(query_state: QueryState<Q>, descriptor: PassDescriptor) -> Self {
         let mut inputs = Vec::new();
         let mut color_attachment_input_indices = Vec::new();
         let mut color_resolve_target_indices = Vec::new();
@@ -125,7 +125,7 @@ impl<Q: WorldQuery> PassNode<Q> {
             depth_stencil_attachment_input_index,
             default_clear_color_inputs: Vec::new(),
             camera_bind_group_descriptor,
-            query_state: None,
+            query_state,
         }
     }
 
@@ -204,13 +204,15 @@ where
             }
         }
 
-        let query_state = self.query_state.get_or_insert_with(|| world.query::<Q>());
+        let query_state = &mut self.query_state;
+        let cameras = &self.cameras;
+        let camera_bind_group_descriptor = &self.camera_bind_group_descriptor;
 
         render_context.begin_pass(
             &self.descriptor,
             &render_resource_bindings,
             &mut |render_pass| {
-                for camera_info in self.cameras.iter() {
+                for camera_info in cameras.iter() {
                     let camera_bind_group_id= if let Some(bind_group_id) = camera_info.bind_group_id {
                         bind_group_id
                     } else {
@@ -258,7 +260,7 @@ where
                                     // try to set current camera bind group
                                     let layout = descriptor.get_layout().unwrap();
                                     if let Some(descriptor) = layout.get_bind_group(0) {
-                                        if *descriptor == self.camera_bind_group_descriptor {
+                                        if descriptor == camera_bind_group_descriptor {
                                             draw_state.set_bind_group(0, camera_bind_group_id);
                                             render_pass.set_bind_group(
                                                 0,

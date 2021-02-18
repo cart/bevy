@@ -3,7 +3,7 @@ use crate::{
     TextureAtlasSprite, QUAD_HANDLE, SPRITE_SHEET_PIPELINE_HANDLE,
 };
 use bevy_asset::Handle;
-use bevy_ecs::Bundle;
+use bevy_ecs::core::Bundle;
 use bevy_render::{
     mesh::Mesh,
     pipeline::{RenderPipeline, RenderPipelines},
