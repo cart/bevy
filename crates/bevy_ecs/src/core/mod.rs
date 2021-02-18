@@ -18,10 +18,14 @@ pub use query::*;
 pub use storage::*;
 pub use type_info::*;
 pub use world::*;
+pub use world_cell::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{Added, Bundle, Changed, Component, ComponentDescriptor, Entity, Flags, Mutated, Or, QueryFilter, StorageType, TypeInfo, With, Without, World};
+    use crate::core::{
+        Added, Bundle, Changed, Component, ComponentDescriptor, Entity, Flags, Mutated, Or,
+        QueryFilter, StorageType, TypeInfo, With, Without, World,
+    };
 
     #[derive(Debug, PartialEq, Eq)]
     struct A(usize);

@@ -230,13 +230,13 @@ pub fn winit_runner_with(mut app: App, mut event_loop: EventLoop<()>) {
             }
         }
 
-        let world = app.world.cell();
         match event {
             event::Event::WindowEvent {
                 event,
                 window_id: winit_window_id,
                 ..
             } => {
+                let world = app.world.cell();
                 let winit_windows = world.get_resource_mut::<WinitWindows>().unwrap();
                 let mut windows = world.get_resource_mut::<Windows>().unwrap();
                 let window_id =
@@ -311,8 +311,9 @@ pub fn winit_runner_with(mut app: App, mut event_loop: EventLoop<()>) {
                         cursor_left_events.send(CursorLeft { id: window_id });
                     }
                     WindowEvent::MouseInput { state, button, .. } => {
-                        let mut mouse_button_input_events =
-                            world.get_resource_mut::<Events<MouseButtonInput>>().unwrap();
+                        let mut mouse_button_input_events = world
+                            .get_resource_mut::<Events<MouseButtonInput>>()
+                            .unwrap();
                         mouse_button_input_events.send(MouseButtonInput {
                             button: converters::convert_mouse_button(button),
                             state: converters::convert_element_state(state),
@@ -449,7 +450,7 @@ pub fn winit_runner_with(mut app: App, mut event_loop: EventLoop<()>) {
                 ..
             } => {
                 let mut mouse_motion_events =
-                    world.get_resource_mut::<Events<MouseMotion>>().unwrap();
+                    app.world.get_resource_mut::<Events<MouseMotion>>().unwrap();
                 mouse_motion_events.send(MouseMotion {
                     delta: Vec2::new(delta.0 as f32, delta.1 as f32),
                 });
