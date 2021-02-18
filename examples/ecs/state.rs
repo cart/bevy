@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{ecs::core::FromWorld, prelude::*};
 
 /// This example illustrates how to use States to control transitioning from a Menu state to an InGame state.
 fn main() {
@@ -157,9 +157,9 @@ struct ButtonMaterials {
     pressed: Handle<ColorMaterial>,
 }
 
-impl FromResources for ButtonMaterials {
-    fn from_resources(resources: &Resources) -> Self {
-        let mut materials = resources.get_mut::<Assets<ColorMaterial>>().unwrap();
+impl FromWorld for ButtonMaterials {
+    fn from_world(world: &mut World) -> Self {
+        let mut materials = world.get_resource_mut::<Assets<ColorMaterial>>().unwrap();
         ButtonMaterials {
             normal: materials.add(Color::rgb(0.15, 0.15, 0.15).into()),
             hovered: materials.add(Color::rgb(0.25, 0.25, 0.25).into()),
