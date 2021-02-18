@@ -5,8 +5,8 @@ pub mod system;
 pub mod prelude {
     pub use crate::{
         core::{
-            Added, Changed, Entity, Flags, Mut, Mutated, QueryState, With, WithBundle, Without,
-            World,
+            Added, Bundle, Changed, Entity, Flags, Mut, Mutated, QueryState, With, WithBundle,
+            Without, World,
         },
         schedule::{
             ExclusiveSystemDescriptorCoercion, ParallelSystemDescriptorCoercion, Schedule, Stage,
