@@ -110,7 +110,8 @@ impl WgpuRenderer {
         let graph_executor = WgpuRenderGraphExecutor {
             max_thread_count: 2,
         };
-        graph_executor.execute(world, self.device.clone(), &mut self.queue, &mut borrowed);
+        todo!("re-enable this");
+        // graph_executor.execute(world, self.device.clone(), &mut self.queue, &mut borrowed);
     }
 
     pub fn update(&mut self, world: &mut World) {

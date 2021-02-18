@@ -12,7 +12,7 @@ pub struct SceneLoader {
 }
 
 impl FromWorld for SceneLoader {
-    fn from_world(world: &World) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let type_registry = world.get_resource::<TypeRegistryArc>().unwrap();
         SceneLoader {
             type_registry: (&*type_registry).clone(),

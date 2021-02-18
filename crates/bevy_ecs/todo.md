@@ -45,16 +45,17 @@
 * readme
 * bevy port
     * FixedTimestep borked
-    * WorldChildBuilder
     * using component access for query collisions is very restrictive 
     * HasComponentTYpe
     * Fix scenes
     * SharedBuffers mutability is an issue
+    * Constructing RenderPassNode in normal systems is now impossible because QueryState is needed 
     * evaluate all Flags to see if they should be Option<Flags> (ui flex.rs need it)
+    * Make WorldCell cheap / allocation-free
+        * add borrow counters to each archetype's component metadata: there can only be one active WorldCell at a given time, so theres no need to allocate each time
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
-    * resource queries?
     * drop tests
     * Nested Bundles 
     * batch_iter
@@ -62,7 +63,6 @@
     * make type_id totally optional
     * Set-able system params
     * Optimize SparseSet::insert (code is written but it has memory issues)
-    * fail on duplicate components in bundle
     * un-comment all tests
     * try removing pre-hash in favor of non-owned get (to allow collision resolution)
     * prevent allocating in empty archetype on init (maybe use a EntityMutUninit?)

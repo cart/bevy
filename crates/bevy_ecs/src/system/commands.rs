@@ -7,117 +7,6 @@ pub trait Command: Send + Sync + 'static {
     fn write(self: Box<Self>, world: &mut World);
 }
 
-#[derive(Debug)]
-pub(crate) struct Spawn<T> {
-    bundle: T,
-}
-
-impl<T> Command for Spawn<T>
-where
-    T: DynamicBundle,
-{
-    fn write(self: Box<Self>, world: &mut World) {
-        world.spawn().insert_bundle(self.bundle);
-    }
-}
-
-pub(crate) struct SpawnBatch<I>
-where
-    I: IntoIterator,
-    I::Item: Bundle,
-{
-    bundles_iter: I,
-}
-
-impl<I> Command for SpawnBatch<I>
-where
-    I: IntoIterator + Send + Sync + 'static,
-    I::Item: Bundle,
-{
-    fn write(self: Box<Self>, world: &mut World) {
-        world.spawn_batch(self.bundles_iter);
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Despawn {
-    entity: Entity,
-}
-
-impl Command for Despawn {
-    fn write(self: Box<Self>, world: &mut World) {
-        if !world.despawn(self.entity) {
-            debug!("Failed to despawn non-existent entity {:?}", self.entity);
-        }
-    }
-}
-
-pub struct InsertBundle<T> {
-    entity: Entity,
-    bundle: T,
-}
-
-impl<T> Command for InsertBundle<T>
-where
-    T: DynamicBundle + 'static,
-{
-    fn write(self: Box<Self>, world: &mut World) {
-        world.entity_mut(self.entity).insert_bundle(self.bundle);
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Insert<T> {
-    entity: Entity,
-    component: T,
-}
-
-impl<T> Command for Insert<T>
-where
-    T: Component,
-{
-    fn write(self: Box<Self>, world: &mut World) {
-        world.entity_mut(self.entity).insert(self.component);
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Remove<T> {
-    entity: Entity,
-    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
-    phantom: PhantomData<fn() -> T>,
-}
-
-impl<T> Command for Remove<T>
-where
-    T: Component,
-{
-    fn write(self: Box<Self>, world: &mut World) {
-        if let Some(mut entity_mut) = world.get_entity_mut(self.entity) {
-            entity_mut.remove::<T>();
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct RemoveBundle<T> {
-    entity: Entity,
-    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
-    phantom: PhantomData<fn() -> T>,
-}
-
-impl<T> Command for RemoveBundle<T>
-where
-    T: Bundle,
-{
-    fn write(self: Box<Self>, world: &mut World) {
-        if let Some(mut entity_mut) = world.get_entity_mut(self.entity) {
-            // remove intersection to gracefully handle components that were removed before running this command
-            entity_mut.remove_bundle_intersection::<T>();
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct CommandQueue {
     commands: Vec<Box<dyn Command>>,
@@ -232,6 +121,11 @@ impl<'a> Commands<'a> {
         })
     }
 
+    /// See [`World::insert_resource`].
+    pub fn insert_resource<T: Component>(&mut self, resource: T) -> &mut Self {
+        self.add_command(InsertResource { resource })
+    }
+
     /// See [`crate::core::EntityMut::remove_bundle`].
     pub fn remove_bundle<T>(&mut self, entity: Entity) -> &mut Self
     where
@@ -331,6 +225,128 @@ impl<'a> Commands<'a> {
             .expect("The 'current entity' is not set. You should spawn an entity first.");
         f(current_entity);
         self
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Spawn<T> {
+    bundle: T,
+}
+
+impl<T> Command for Spawn<T>
+where
+    T: DynamicBundle,
+{
+    fn write(self: Box<Self>, world: &mut World) {
+        world.spawn().insert_bundle(self.bundle);
+    }
+}
+
+pub(crate) struct SpawnBatch<I>
+where
+    I: IntoIterator,
+    I::Item: Bundle,
+{
+    bundles_iter: I,
+}
+
+impl<I> Command for SpawnBatch<I>
+where
+    I: IntoIterator + Send + Sync + 'static,
+    I::Item: Bundle,
+{
+    fn write(self: Box<Self>, world: &mut World) {
+        world.spawn_batch(self.bundles_iter);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Despawn {
+    entity: Entity,
+}
+
+impl Command for Despawn {
+    fn write(self: Box<Self>, world: &mut World) {
+        if !world.despawn(self.entity) {
+            debug!("Failed to despawn non-existent entity {:?}", self.entity);
+        }
+    }
+}
+
+pub struct InsertBundle<T> {
+    entity: Entity,
+    bundle: T,
+}
+
+impl<T> Command for InsertBundle<T>
+where
+    T: DynamicBundle + 'static,
+{
+    fn write(self: Box<Self>, world: &mut World) {
+        world.entity_mut(self.entity).insert_bundle(self.bundle);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Insert<T> {
+    entity: Entity,
+    component: T,
+}
+
+impl<T> Command for Insert<T>
+where
+    T: Component,
+{
+    fn write(self: Box<Self>, world: &mut World) {
+        world.entity_mut(self.entity).insert(self.component);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Remove<T> {
+    entity: Entity,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    phantom: PhantomData<fn() -> T>,
+}
+
+impl<T> Command for Remove<T>
+where
+    T: Component,
+{
+    fn write(self: Box<Self>, world: &mut World) {
+        if let Some(mut entity_mut) = world.get_entity_mut(self.entity) {
+            entity_mut.remove::<T>();
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct RemoveBundle<T> {
+    entity: Entity,
+    // NOTE: PhantomData<fn()-> T> gives this safe Send/Sync impls
+    phantom: PhantomData<fn() -> T>,
+}
+
+impl<T> Command for RemoveBundle<T>
+where
+    T: Bundle,
+{
+    fn write(self: Box<Self>, world: &mut World) {
+        if let Some(mut entity_mut) = world.get_entity_mut(self.entity) {
+            // remove intersection to gracefully handle components that were removed before running this command
+            entity_mut.remove_bundle_intersection::<T>();
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct InsertResource<T> {
+    resource: T,
+}
+
+impl<T: Component> Command for InsertResource<T> {
+    fn write(self: Box<Self>, world: &mut World) {
+        world.insert_resource(self.resource);
     }
 }
 

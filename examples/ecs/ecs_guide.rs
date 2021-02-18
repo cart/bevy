@@ -1,6 +1,5 @@
 use bevy::{
     app::{AppExit, ScheduleRunnerPlugin, ScheduleRunnerSettings},
-    ecs::SystemStage,
     prelude::*,
     utils::Duration,
 };
@@ -141,7 +140,7 @@ fn game_over_system(
 // the initial "state" of our game. The only thing that distinguishes a "startup" system from a "normal" system is how it is registered:
 //      Startup: app.add_startup_system(startup_system)
 //      Normal:  app.add_system(normal_system)
-fn startup_system(commands: &mut Commands, mut game_state: ResMut<GameState>) {
+fn startup_system(mut commands: Commands, mut game_state: ResMut<GameState>) {
     // Create our game rules resource
     commands.insert_resource(GameRules {
         max_rounds: 10,
@@ -174,7 +173,7 @@ fn startup_system(commands: &mut Commands, mut game_state: ResMut<GameState>) {
 // Our World contains all of our components, so mutating arbitrary parts of it in parallel is not thread safe.
 // Command buffers give us the ability to queue up changes to our World without directly accessing it
 fn new_player_system(
-    commands: &mut Commands,
+    mut commands: Commands,
     game_rules: Res<GameRules>,
     mut game_state: ResMut<GameState>,
 ) {
@@ -198,14 +197,14 @@ fn new_player_system(
 // WARNING: These will block all parallel execution of other systems until they finish, so they should generally be avoided if you
 // care about performance
 #[allow(dead_code)]
-fn thread_local_system(world: &mut World, resources: &mut Resources) {
+fn thread_local_system(world: &mut World) {
     // this does the same thing as "new_player_system"
     let mut game_state = resources.get_mut::<GameState>().unwrap();
     let game_rules = resources.get::<GameRules>().unwrap();
     // Randomly add a new player
     let add_new_player = random::<bool>();
     if add_new_player && game_state.total_players < game_rules.max_players {
-        world.spawn((
+        world.spawn().insert_bundle((
             Player {
                 name: format!("Player {}", game_state.total_players),
             },

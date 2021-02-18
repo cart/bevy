@@ -48,7 +48,7 @@ impl<Sys: System> IntoSystem<(), Sys> for Sys {
 }
 
 pub struct In<In>(pub In);
-struct InputMarker;
+pub struct InputMarker;
 
 pub struct FunctionSystem<In, Out, Param, Marker, F>
 where

@@ -330,7 +330,7 @@ mod tests {
         }
 
         impl FromWorld for Foo {
-            fn from_world(world: &World) -> Self {
+            fn from_world(world: &mut World) -> Self {
                 Foo {
                     value: *world.get_resource::<u32>().unwrap() + 1,
                 }

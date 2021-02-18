@@ -406,11 +406,11 @@ unsafe impl Sync for World {}
 /// Creates `Self` using data from the given [World]
 pub trait FromWorld {
     /// Creates `Self` using data from the given [World]
-    fn from_world(world: &World) -> Self;
+    fn from_world(world: &mut World) -> Self;
 }
 
 impl<T: Default> FromWorld for T {
-    fn from_world(_world: &World) -> Self {
+    fn from_world(_world: &mut World) -> Self {
         T::default()
     }
 }

@@ -1,5 +1,6 @@
 use bevy::{
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    ecs::core::FromWorld,
     prelude::*,
 };
 use rand::Rng;
@@ -21,10 +22,11 @@ struct Bird {
 
 struct BirdMaterial(Handle<ColorMaterial>);
 
-impl FromResources for BirdMaterial {
-    fn from_resources(resources: &Resources) -> Self {
-        let mut color_materials = resources.get_mut::<Assets<ColorMaterial>>().unwrap();
-        let asset_server = resources.get_mut::<AssetServer>().unwrap();
+impl FromWorld for BirdMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let world = world.cell();
+        let mut color_materials = world.get_resource_mut::<Assets<ColorMaterial>>().unwrap();
+        let asset_server = world.get_resource_mut::<AssetServer>().unwrap();
         BirdMaterial(color_materials.add(asset_server.load("branding/icon.png").into()))
     }
 }
@@ -51,7 +53,7 @@ fn main() {
         .run();
 }
 
-fn setup(commands: &mut Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn(OrthographicCameraBundle::new_2d())
         .spawn(UiCameraBundle::default())
@@ -108,7 +110,7 @@ fn setup(commands: &mut Commands, asset_server: Res<AssetServer>) {
 
 #[allow(clippy::too_many_arguments)]
 fn mouse_handler(
-    commands: &mut Commands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     time: Res<Time>,
     mouse_button_input: Res<Input<MouseButton>>,

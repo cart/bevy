@@ -46,7 +46,7 @@ const COL_SELECTED: Color = Color::WHITE;
 const SHOWCASE_TIMER_SECS: f32 = 3.0;
 
 fn setup(
-    commands: &mut Commands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {

@@ -242,7 +242,7 @@ impl AppBuilder {
         // modify the map. However, we would need to be borrowing resources both mutably and immutably,
         // so we would need to be extremely certain this is correct
         if !self.world_mut().contains_resource::<R>() {
-            let resource = R::from_world(self.world());
+            let resource = R::from_world(self.world_mut());
             self.insert_resource(resource);
         }
         self
@@ -254,7 +254,7 @@ impl AppBuilder {
     {
         // See perf comment in init_resource
         if self.app.world.get_non_send::<R>().is_none() {
-            let resource = R::from_world(self.world());
+            let resource = R::from_world(self.world_mut());
             self.app.world.insert_non_send(resource);
         }
         self

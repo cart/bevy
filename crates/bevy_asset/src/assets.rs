@@ -237,7 +237,8 @@ impl AddAsset for AppBuilder {
     where
         T: AssetLoader + FromWorld,
     {
-        self.add_asset_loader(T::from_world(&self.app.world))
+        let result = T::from_world(self.world_mut());
+        self.add_asset_loader(result)
     }
 
     fn add_asset_loader<T>(&mut self, loader: T) -> &mut Self

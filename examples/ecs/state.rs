@@ -29,7 +29,7 @@ struct MenuData {
 }
 
 fn setup_menu(
-    commands: &mut Commands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     button_materials: Res<ButtonMaterials>,
 ) {
@@ -93,12 +93,12 @@ fn menu(
     }
 }
 
-fn cleanup_menu(commands: &mut Commands, menu_data: Res<MenuData>) {
+fn cleanup_menu(mut commands: Commands, menu_data: Res<MenuData>) {
     commands.despawn_recursive(menu_data.button_entity);
 }
 
 fn setup_game(
-    commands: &mut Commands,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {

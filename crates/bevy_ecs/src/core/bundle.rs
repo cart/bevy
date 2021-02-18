@@ -1,11 +1,12 @@
 pub use bevy_ecs_macros::Bundle;
+use bevy_utils::HashSet;
 
 use crate::core::{
     Component, ComponentFlags, ComponentId, Components, Entity, SparseSetIndex, SparseSets,
     StorageType, Table, TypeInfo,
 };
 use bevy_ecs_macros::all_tuples;
-use std::{any::TypeId, collections::HashMap};
+use std::{any::TypeId, collections::HashMap, iter::FromIterator};
 
 /// A dynamically typed ordered collection of components
 ///
@@ -155,7 +156,8 @@ impl Bundles {
         let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
             let type_info = bundle.type_info();
             let id = BundleId(bundle_infos.len());
-            let bundle_info = initialize_bundle(&type_info, id, components);
+            let bundle_info =
+                initialize_bundle(std::any::type_name::<T>(), &type_info, id, components);
             bundle_infos.push(bundle_info);
             id
         });
@@ -171,7 +173,8 @@ impl Bundles {
         let id = self.bundle_ids.entry(TypeId::of::<T>()).or_insert_with(|| {
             let type_info = T::static_type_info();
             let id = BundleId(bundle_infos.len());
-            let bundle_info = initialize_bundle(&type_info, id, components);
+            let bundle_info =
+                initialize_bundle(std::any::type_name::<T>(), &type_info, id, components);
             bundle_infos.push(bundle_info);
             id
         });
@@ -181,6 +184,7 @@ impl Bundles {
 }
 
 fn initialize_bundle(
+    bundle_type_name: &'static str,
     type_info: &[TypeInfo],
     id: BundleId,
     components: &mut Components,
@@ -194,6 +198,13 @@ fn initialize_bundle(
         let info = unsafe { components.get_info_unchecked(component_id) };
         component_ids.push(component_id);
         storage_types.push(info.storage_type());
+    }
+
+    let mut deduped = component_ids.clone();
+    deduped.sort();
+    deduped.dedup();
+    if deduped.len() != component_ids.len() {
+        panic!("Bundle {} has duplicate components", bundle_type_name);
     }
 
     BundleInfo {

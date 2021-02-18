@@ -879,10 +879,10 @@ mod tests {
         assert_eq!(query.iter(&world).len(), 3);
     }
 
-    // #[test]
-    // #[should_panic]
-    // fn duplicate_components_panic() {
-    //     let mut world = World::new();
-    //     world.spawn().insert_bundle((1, 2));
-    // }
+    #[test]
+    #[should_panic]
+    fn duplicate_components_panic() {
+        let mut world = World::new();
+        world.spawn().insert_bundle((1, 2));
+    }
 }
