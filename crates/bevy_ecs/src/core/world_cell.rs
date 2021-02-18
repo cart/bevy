@@ -256,7 +256,11 @@ impl<'w> WorldCell<'w> {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::World;
+    use std::any::TypeId;
+
+    use crate::core::{ArchetypeId, World};
+
+    use super::BASE_ACCESS;
 
     #[test]
     fn world_cell() {
@@ -307,7 +311,26 @@ mod tests {
             }
         }
 
-        assert!(world.archetype_component_access.access.capacity() != 0);
+        let u32_component_id = world
+            .components
+            .get_resource_id(TypeId::of::<u32>())
+            .unwrap();
+        let resource_archetype = world
+            .archetypes
+            .get(ArchetypeId::resource_archetype())
+            .unwrap();
+        let u32_archetype_component_id = resource_archetype
+            .get_archetype_component_id(u32_component_id)
+            .unwrap();
+        assert_eq!(world.archetype_component_access.access.len(), 1);
+        assert_eq!(
+            world
+                .archetype_component_access
+                .access
+                .get(u32_archetype_component_id),
+            Some(&BASE_ACCESS),
+            "reused access count is 'base'"
+        );
     }
 
     #[test]
