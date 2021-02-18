@@ -828,8 +828,8 @@ mod tests {
         let mut world = World::default();
         world.insert_non_send(123i32);
         world.insert_non_send(456i64);
-        assert_eq!(*world.get_non_send::<i32>().unwrap(), 123);
-        assert_eq!(*world.get_non_send_mut::<i64>().unwrap(), 456);
+        assert_eq!(*world.get_non_send_resource::<i32>().unwrap(), 123);
+        assert_eq!(*world.get_non_send_resource_mut::<i64>().unwrap(), 456);
     }
 
     #[test]
@@ -838,7 +838,7 @@ mod tests {
         let mut world = World::default();
         world.insert_non_send(0i32);
         std::thread::spawn(move || {
-            let _ = world.get_non_send_mut::<i32>();
+            let _ = world.get_non_send_resource_mut::<i32>();
         })
         .join()
         .unwrap();

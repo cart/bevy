@@ -253,7 +253,7 @@ impl AppBuilder {
         R: FromWorld + 'static,
     {
         // See perf comment in init_resource
-        if self.app.world.get_non_send::<R>().is_none() {
+        if self.app.world.get_non_send_resource::<R>().is_none() {
             let resource = R::from_world(self.world_mut());
             self.app.world.insert_non_send(resource);
         }

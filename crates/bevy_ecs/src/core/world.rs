@@ -226,16 +226,16 @@ impl World {
     }
 
     #[inline]
-    pub fn get_non_send<T: 'static>(&self) -> Option<&T> {
+    pub fn get_non_send_resource<T: 'static>(&self) -> Option<&T> {
         let component_id = self.components.get_resource_id(TypeId::of::<T>())?;
         // SAFE: component id matches type T
         unsafe { self.get_non_send_with_id(component_id) }
     }
 
     #[inline]
-    pub fn get_non_send_mut<T: 'static>(&mut self) -> Option<Mut<'_, T>> {
+    pub fn get_non_send_resource_mut<T: 'static>(&mut self) -> Option<Mut<'_, T>> {
         // SAFE: unique world access
-        unsafe { self.get_non_send_mut_unchecked() }
+        unsafe { self.get_non_send_resource_mut_unchecked() }
     }
 
     /// # Safety
@@ -268,7 +268,7 @@ impl World {
     /// # Safety
     /// Caller must ensure this doesn't violate Rust mutability rules for the given resource.
     #[inline]
-    pub unsafe fn get_non_send_mut_unchecked<T: 'static>(&self) -> Option<Mut<'_, T>> {
+    pub unsafe fn get_non_send_resource_mut_unchecked<T: 'static>(&self) -> Option<Mut<'_, T>> {
         let component_id = self.components.get_resource_id(TypeId::of::<T>())?;
         self.get_non_send_mut_unchecked_with_id(component_id)
     }
