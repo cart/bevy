@@ -51,9 +51,6 @@
     * SharedBuffers mutability is an issue
     * Constructing RenderPassNode in normal systems is now impossible because QueryState is needed 
     * evaluate all Flags to see if they should be Option<Flags> (ui flex.rs need it)
-    * Make WorldCell cheap / allocation-free
-        * reuse the same Rc<ArchetypeAccessCounter>
-        * or add borrow counters to each archetype's component metadata: there can only be one active WorldCell at a given time, so theres no need to allocate each time
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad

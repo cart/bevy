@@ -266,7 +266,7 @@ pub struct SparseSet<I, V: 'static> {
 
 impl<I: SparseSetIndex, V> Default for SparseSet<I, V> {
     fn default() -> Self {
-        Self::with_capacity(64)
+        Self::new()
     }
 }
 impl<I, V> SparseSet<I, V> {
@@ -286,6 +286,11 @@ impl<I: SparseSetIndex, V> SparseSet<I, V> {
             indices: Vec::with_capacity(capacity),
             sparse: Default::default(),
         }
+    }
+
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.dense.capacity()
     }
 
     pub fn insert(&mut self, index: I, value: V) {

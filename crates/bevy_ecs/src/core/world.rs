@@ -1,9 +1,4 @@
-use crate::core::{
-    world_cell::WorldCell, ArchetypeComponentId, ArchetypeComponentInfo, ArchetypeId, Archetypes,
-    Bundle, Bundles, Column, Component, ComponentDescriptor, ComponentId, Components,
-    ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryFilter, QueryState,
-    SparseSet, SpawnBatchIter, StorageType, Storages, WorldQuery,
-};
+use crate::core::{ArchetypeComponentId, ArchetypeComponentInfo, ArchetypeId, Archetypes, Bundle, Bundles, Column, Component, ComponentDescriptor, ComponentId, Components, ComponentsError, Entities, Entity, EntityMut, EntityRef, Mut, QueryFilter, QueryState, SparseSet, SpawnBatchIter, StorageType, Storages, WorldQuery, world_cell::{ArchetypeComponentAccess, WorldCell}};
 use std::{any::TypeId, fmt};
 
 #[derive(Default)]
@@ -14,6 +9,7 @@ pub struct World {
     pub(crate) storages: Storages,
     pub(crate) bundles: Bundles,
     pub(crate) removed_components: SparseSet<ComponentId, Vec<Entity>>,
+    pub(crate) archetype_component_access: ArchetypeComponentAccess,
     main_thread_validator: MainThreadValidator,
 }
 
@@ -55,10 +51,7 @@ impl World {
 
     #[inline]
     pub fn cell(&mut self) -> WorldCell<'_> {
-        WorldCell {
-            world: self,
-            access: Default::default(),
-        }
+        WorldCell::new(self)
     }
 
     pub fn register_component(

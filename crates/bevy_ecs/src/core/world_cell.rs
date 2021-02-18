@@ -13,14 +13,27 @@ pub struct WorldCell<'w> {
     pub(crate) access: Rc<RefCell<ArchetypeComponentAccess>>,
 }
 
-#[derive(Default)]
 pub(crate) struct ArchetypeComponentAccess {
     access: SparseSet<ArchetypeComponentId, usize>,
+}
+
+impl Default for ArchetypeComponentAccess {
+    fn default() -> Self {
+        Self {
+            access: SparseSet::new(),
+        }
+    }
 }
 
 const UNIQUE_ACCESS: usize = 0;
 const BASE_ACCESS: usize = 1;
 impl ArchetypeComponentAccess {
+    const fn new() -> Self {
+        Self {
+            access: SparseSet::new(),
+        }
+    }
+
     fn read(&mut self, id: ArchetypeComponentId) -> bool {
         let id_access = self.access.get_or_insert_with(id, || BASE_ACCESS);
         if *id_access == UNIQUE_ACCESS {
@@ -49,6 +62,16 @@ impl ArchetypeComponentAccess {
     fn drop_write(&mut self, id: ArchetypeComponentId) {
         let id_access = self.access.get_or_insert_with(id, || BASE_ACCESS);
         *id_access = BASE_ACCESS;
+    }
+}
+
+impl<'w> Drop for WorldCell<'w> {
+    fn drop(&mut self) {
+        let mut access = self.access.borrow_mut();
+        // this is cheap because ArchetypeComponentAccess::new() is const / allocation free
+        let access = std::mem::replace(&mut *access, ArchetypeComponentAccess::new());
+        // give world ArchetypeComponentAccess back to reuse allocations
+        let _ = std::mem::replace(&mut self.world.archetype_component_access, access);
     }
 }
 
@@ -143,6 +166,19 @@ impl<'w, T> Drop for WorldBorrowMut<'w, T> {
 }
 
 impl<'w> WorldCell<'w> {
+    pub(crate) fn new(world: &'w mut World) -> Self {
+        // this is cheap because ArchetypeComponentAccess::new() is const / allocation free
+        let access = std::mem::replace(
+            &mut world.archetype_component_access,
+            ArchetypeComponentAccess::new(),
+        );
+        // world's ArchetypeComponentAccess is recycled to cut down on allocations
+        Self {
+            world,
+            access: Rc::new(RefCell::new(access)),
+        }
+    }
+
     pub fn get_resource<T: Component>(&self) -> Option<WorldBorrow<'_, T>> {
         let component_id = self.world.components.get_resource_id(TypeId::of::<T>())?;
         // SAFE: resource archetype is guaranteed to exist
@@ -256,6 +292,22 @@ mod tests {
                 "ensure multiple non-conflicting mutable accesses can occur at the same time"
             );
         }
+    }
+
+    #[test]
+    fn world_access_reused() {
+        let mut world = World::default();
+        world.insert_resource(1u32);
+        {
+            let cell = world.cell();
+            {
+                let mut a = cell.get_resource_mut::<u32>().unwrap();
+                assert_eq!(1, *a);
+                *a = 2;
+            }
+        }
+
+        assert!(world.archetype_component_access.access.capacity() != 0);
     }
 
     #[test]
