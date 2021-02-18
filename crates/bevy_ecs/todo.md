@@ -49,8 +49,6 @@
     * HasComponentTYpe
     * Fix scenes
     * SharedBuffers mutability is an issue
-    * Constructing RenderPassNode in normal systems is now impossible because QueryState is needed 
-    * evaluate all Flags to see if they should be Option<Flags> (ui flex.rs need it)
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
@@ -66,7 +64,7 @@
     * prevent allocating in empty archetype on init (maybe use a EntityMutUninit?)
         * last attempt dropped perf
     * simplify SAFETY text
-    * consistent unchecked_mut
+    * consistent unchecked_mut (unsafe_mut == potential Mut aliasing, unchecked_mut == no bounds checks)
     * try removing "unchecked" methods to cut down on unsafe and see if it cuts perf 
     * Foreach tests
     * Test stateful query adapting to archetype changes

@@ -782,7 +782,16 @@ mod tests {
             *value = -1.0;
         }
 
-        assert_eq!(*world.get_resource::<f64>().expect("resource exists"), -1.0);
+        assert_eq!(world.get_resource::<f64>(), Some(&-1.0), "resource changes are preserved");
+
+        assert_eq!(world.remove_resource::<f64>(), Some(-1.0), "removed resource has the correct value");
+        assert_eq!(world.get_resource::<f64>(), None, "removed resource no longer exists");
+        assert_eq!(world.remove_resource::<f64>(), None, "double remove returns nothing");
+        
+        world.insert_resource(1.0f64);
+        assert_eq!(world.get_resource::<f64>(), Some(&1.0), "re-inserting resources works");
+
+        assert_eq!(world.get_resource::<i32>(), Some(&123), "other resources are unaffected");
     }
 
     #[test]

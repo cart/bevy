@@ -214,6 +214,23 @@ impl World {
     }
 
     #[inline]
+    pub fn remove_resource<T: Component>(&mut self) -> Option<T> {
+        let component_id = self.components.get_resource_id(TypeId::of::<T>())?;
+        // SAFE: resource archetype is guaranteed to exist
+        let resource_archetype = unsafe {
+            self.archetypes
+                .get_unchecked_mut(ArchetypeId::resource_archetype())
+        };
+        let unique_components = resource_archetype.unique_components_mut();
+        let mut column = unique_components.remove(component_id)?;
+        // SAFE: if a resource column exists, row 0 exists as well. caller takes ownership of the ptr value / drop is called when 
+        // T is dropped
+        let (ptr, _) = unsafe { column.swap_remove_and_forget_unchecked(0) };
+        // SAFE: column is of type T
+        Some(unsafe { ptr.cast::<T>().read() })
+    }
+
+    #[inline]
     pub fn get_resource_mut<T: Component>(&mut self) -> Option<Mut<'_, T>> {
         // SAFE: unique world access
         unsafe { self.get_resource_mut_unchecked() }

@@ -100,8 +100,8 @@ impl WgpuRenderer {
     }
 
     pub fn run_graph(&mut self, world: &mut World) {
-        let mut render_graph = world.get_resource_mut::<RenderGraph>().unwrap();
-        // render_graph.prepare(world);
+        let mut render_graph = world.remove_resource::<RenderGraph>().unwrap();
+        render_graph.prepare(world);
         // stage nodes
         let mut stager = DependentNodeStager::loose_grouping();
         let stages = stager.get_stages(&render_graph).unwrap();
@@ -111,8 +111,8 @@ impl WgpuRenderer {
         let graph_executor = WgpuRenderGraphExecutor {
             max_thread_count: 2,
         };
-        todo!("re-enable this");
-        // graph_executor.execute(world, self.device.clone(), &mut self.queue, &mut borrowed);
+        graph_executor.execute(world, self.device.clone(), &mut self.queue, &mut borrowed);
+        world.insert_resource(render_graph);
     }
 
     pub fn update(&mut self, world: &mut World) {
