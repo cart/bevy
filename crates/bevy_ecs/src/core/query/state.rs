@@ -57,7 +57,7 @@ impl<Q: WorldQuery, F: QueryFilter> QueryState<Q, F> {
                 old_generation.value()..archetypes.len()
             }
         };
-        for archetype_index in archetype_index_range.clone() {
+        for archetype_index in archetype_index_range {
             // SAFE: archetype indices less than the archetype generation are guaranteed to exist
             let archetype = unsafe { archetypes.get_unchecked(ArchetypeId::new(archetype_index)) };
             let table_index = archetype.table_id().index();
