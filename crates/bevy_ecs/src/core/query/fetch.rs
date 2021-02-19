@@ -1,7 +1,4 @@
-use crate::core::{
-    Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId,
-    ComponentSparseSet, Entity, Mut, StorageType, Table, Tables, World,
-};
+use crate::core::{Access, Archetype, ArchetypeComponentId, Component, ComponentFlags, ComponentId, ComponentSparseSet, Entity, FilteredAccess, Mut, StorageType, Table, Tables, World};
 use bevy_ecs_macros::all_tuples;
 use std::{
     marker::PhantomData,
@@ -59,7 +56,7 @@ pub trait Fetch<'w>: Sized {
 /// reflects the results of [FetchState::matches_archetype], [FetchState::matches_table], [Fetch::archetype_fetch], and [Fetch::table_fetch]
 pub unsafe trait FetchState: Send + Sync + Sized {
     fn init(world: &mut World) -> Self;
-    fn update_component_access(&self, access: &mut Access<ComponentId>);
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>);
     fn update_archetype_component_access(
         &self,
         archetype: &Archetype,
@@ -91,7 +88,7 @@ unsafe impl FetchState for EntityState {
         Self
     }
 
-    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, _access: &mut FilteredAccess<ComponentId>) {}
 
     fn update_archetype_component_access(
         &self,
@@ -179,8 +176,8 @@ unsafe impl<T: Component> FetchState for ReadState<T> {
         }
     }
 
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        access.add_read(self.component_id)
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
+        access.access_mut().add_read(self.component_id)
     }
 
     fn update_archetype_component_access(
@@ -331,8 +328,8 @@ unsafe impl<T: Component> FetchState for WriteState<T> {
         }
     }
 
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        access.add_write(self.component_id);
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
+        access.access_mut().add_write(self.component_id);
     }
 
     fn update_archetype_component_access(
@@ -473,7 +470,7 @@ unsafe impl<T: FetchState> FetchState for OptionState<T> {
         }
     }
 
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
         self.state.update_component_access(access);
     }
 
@@ -616,8 +613,8 @@ unsafe impl<T: Component> FetchState for FlagsState<T> {
         }
     }
 
-    fn update_component_access(&self, access: &mut Access<ComponentId>) {
-        access.add_read(self.component_id)
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
+        access.access_mut().add_read(self.component_id)
     }
 
     fn update_archetype_component_access(
@@ -800,7 +797,7 @@ macro_rules! impl_tuple_fetch {
                 ($($name::init(_world),)*)
             }
 
-            fn update_component_access(&self, _access: &mut Access<ComponentId>) {
+            fn update_component_access(&self, _access: &mut FilteredAccess<ComponentId>) {
                 let ($($name,)*) = self;
                 $($name.update_component_access(_access);)*
             }

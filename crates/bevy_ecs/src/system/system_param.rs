@@ -1,7 +1,7 @@
 use crate::{
     core::{
-        Access, ArchetypeId, Component, ComponentFlags, ComponentId, Entity, FromWorld, Or,
-        QueryFilter, QueryState, World, WorldQuery,
+        Access, ArchetypeId, Component, ComponentFlags, ComponentId, Entity, FilteredAccess,
+        FilteredAccessSet, FromWorld, Or, QueryFilter, QueryState, World, WorldQuery,
     },
     system::{CommandQueue, Commands, Query, SystemState},
 };
@@ -60,13 +60,13 @@ unsafe impl<Q: WorldQuery + 'static, F: QueryFilter + 'static> SystemParamState
             &system_state.name,
             std::any::type_name::<Q>(),
             std::any::type_name::<F>(),
+            &system_state.component_access_set,
             &state.component_access,
-            &system_state.component_access,
             world,
         );
         system_state
-            .component_access
-            .extend(&state.component_access);
+            .component_access_set
+            .add(state.component_access.clone());
         system_state
             .archetype_component_access
             .extend(&state.archetype_component_access);
@@ -100,20 +100,21 @@ fn assert_component_access_compatibility(
     system_name: &str,
     query_type: &'static str,
     filter_type: &'static str,
-    current: &Access<ComponentId>,
-    previous: &Access<ComponentId>,
+    system_access: &FilteredAccessSet<ComponentId>,
+    current: &FilteredAccess<ComponentId>,
     world: &World,
 ) {
-    if !current.is_compatible(&previous) {
-        let conflicting_components = current
-            .get_conflicts(previous)
-            .drain(..)
-            .map(|component_id| world.components.get_info(component_id).unwrap().name())
-            .collect::<Vec<&str>>();
-        let accesses = conflicting_components.join(", ");
-        panic!("Query<{}, {}> in system {} accesses component(s) {} in a way that conflicts with a previous system parameter. Allowing this would break Rust's mutability rules. Consider merging conflicting Queries into a QuerySet.",
-            query_type, filter_type, system_name, accesses);
+    let mut conflicts = system_access.get_conflicts(current);
+    if conflicts.is_empty() {
+        return;
     }
+    let conflicting_components = conflicts
+        .drain(..)
+        .map(|component_id| world.components.get_info(component_id).unwrap().name())
+        .collect::<Vec<&str>>();
+    let accesses = conflicting_components.join(", ");
+    panic!("Query<{}, {}> in system {} accesses component(s) {} in a way that conflicts with a previous system parameter. Allowing this would break Rust's mutability rules. Consider merging conflicting Queries into a QuerySet.",
+                query_type, filter_type, system_name, accesses);
 }
 
 pub struct QuerySet<T>(T);
@@ -150,12 +151,13 @@ unsafe impl<T: Component> SystemParamState for ResState<T> {
 
     fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
-        if system_state.component_access.has_write(component_id) {
+        let combined_access = system_state.component_access_set.combined_access_mut();
+        if combined_access.has_write(component_id) {
             panic!(
                 "Res<{}> in system {} conflicts with a previous ResMut<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
                 std::any::type_name::<T>(), system_state.name);
         }
-        system_state.component_access.add_read(component_id);
+        combined_access.add_read(component_id);
         Self {
             component_id,
             marker: PhantomData,
@@ -232,16 +234,17 @@ unsafe impl<T: Component> SystemParamState for ResMutState<T> {
 
     fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_resource_id::<T>();
-        if system_state.component_access.has_write(component_id) {
+        let combined_access = system_state.component_access_set.combined_access_mut();
+        if combined_access.has_write(component_id) {
             panic!(
                 "ResMut<{}> in system {} conflicts with a previous ResMut<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
                 std::any::type_name::<T>(), system_state.name);
-        } else if system_state.component_access.has_read(component_id) {
+        } else if combined_access.has_read(component_id) {
             panic!(
                 "ResMut<{}> in system {} conflicts with a previous Res<{0}> access. Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
                 std::any::type_name::<T>(), system_state.name);
         }
-        system_state.component_access.add_write(component_id);
+        combined_access.add_write(component_id);
         Self {
             component_id,
             marker: PhantomData,
@@ -442,12 +445,13 @@ unsafe impl<T: 'static> SystemParamState for NonSendState<T> {
 
     fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_non_send_id::<T>();
-        if system_state.component_access.has_write(component_id) {
+        let combined_access = system_state.component_access_set.combined_access_mut();
+        if combined_access.has_write(component_id) {
             panic!(
                 "NonSend<{}> in system {} conflicts with a previous mutable resource access ({0}). Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
                 std::any::type_name::<T>(), system_state.name);
         }
-        system_state.component_access.add_read(component_id);
+        combined_access.add_read(component_id);
         system_state.set_non_send();
         Self {
             component_id,
@@ -534,16 +538,17 @@ unsafe impl<T: 'static> SystemParamState for NonSendMutState<T> {
 
     fn init(world: &mut World, system_state: &mut SystemState, _config: Self::Config) -> Self {
         let component_id = world.components.get_or_insert_non_send_id::<T>();
-        if system_state.component_access.has_write(component_id) {
+        let combined_access = system_state.component_access_set.combined_access_mut();
+        if combined_access.has_write(component_id) {
             panic!(
                 "NonSendMut<{}> in system {} conflicts with a previous mutable resource access ({0}). Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
                 std::any::type_name::<T>(), system_state.name);
-        } else if system_state.component_access.has_read(component_id) {
+        } else if combined_access.has_read(component_id) {
             panic!(
                 "NonSendMut<{}> in system {} conflicts with a previous immutable resource access ({0}). Allowing this would break Rust's mutability rules. Consider removing the duplicate access.",
                 std::any::type_name::<T>(), system_state.name);
         }
-        system_state.component_access.add_write(component_id);
+        combined_access.add_write(component_id);
         system_state.set_non_send();
         Self {
             component_id,

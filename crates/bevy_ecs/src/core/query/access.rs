@@ -98,3 +98,96 @@ impl<T: SparseSetIndex> Access<T> {
             .collect()
     }
 }
+
+#[derive(Clone)]
+pub struct FilteredAccess<T: SparseSetIndex> {
+    access: Access<T>,
+    with: FixedBitSet,
+    without: FixedBitSet,
+}
+
+impl<T: SparseSetIndex> Default for FilteredAccess<T> {
+    fn default() -> Self {
+        Self {
+            access: Access::default(),
+            with: Default::default(),
+            without: Default::default(),
+        }
+    }
+}
+
+impl<T: SparseSetIndex> FilteredAccess<T> {
+    #[inline]
+    pub fn access(&self) -> &Access<T> {
+        &self.access
+    }
+
+    #[inline]
+    pub fn access_mut(&mut self) -> &mut Access<T> {
+        &mut self.access
+    }
+
+    pub fn add_with(&mut self, index: T) {
+        self.with.grow(index.sparse_set_index() + 1);
+        self.with.insert(index.sparse_set_index());
+    }
+
+    pub fn add_without(&mut self, index: T) {
+        self.without.grow(index.sparse_set_index() + 1);
+        self.without.insert(index.sparse_set_index());
+    }
+
+    pub fn is_compatible(&self, other: &FilteredAccess<T>) -> bool {
+        if self.access.is_compatible(&other.access) {
+            true
+        } else {
+            self.with.intersection(&other.without).next().is_some()
+                || self.without.intersection(&other.with).next().is_some()
+        }
+    }
+}
+
+pub struct FilteredAccessSet<T: SparseSetIndex> {
+    combined_access: Access<T>,
+    filtered_accesses: Vec<FilteredAccess<T>>,
+}
+
+impl<T: SparseSetIndex> FilteredAccessSet<T> {
+    #[inline]
+    pub fn combined_access(&self) -> &Access<T> {
+        &self.combined_access
+    }
+
+    #[inline]
+    pub fn combined_access_mut(&mut self) -> &mut Access<T> {
+        &mut self.combined_access
+    }
+
+    pub fn get_conflicts(&self, filtered_access: &FilteredAccess<T>) -> Vec<T> {
+        // if combined unfiltered access is incompatible, check each filtered access for compatibility
+        if !filtered_access.access.is_compatible(&self.combined_access) {
+            for current_filtered_access in self.filtered_accesses.iter() {
+                if !current_filtered_access.is_compatible(&filtered_access) {
+                    return current_filtered_access
+                        .access
+                        .get_conflicts(&filtered_access.access);
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    pub fn add(&mut self, filtered_access: FilteredAccess<T>) {
+        self.combined_access.extend(&filtered_access.access);
+        self.filtered_accesses.push(filtered_access);
+    }
+}
+
+impl<T: SparseSetIndex> Default for FilteredAccessSet<T> {
+    fn default() -> Self {
+        Self {
+            combined_access: Default::default(),
+            filtered_accesses: Vec::new(),
+        }
+    }
+}

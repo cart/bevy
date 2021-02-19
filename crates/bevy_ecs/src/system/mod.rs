@@ -17,11 +17,9 @@ pub use system_param::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        core::{Added, Changed, Entity, FromWorld, Mutated, Or, With, World},
-        schedule::{Schedule, Stage, SystemStage},
-        system::{IntoSystem, Local, Query, QuerySet, RemovedComponents, Res, ResMut, System},
-    };
+    use fixedbitset::FixedBitSet;
+
+    use crate::{core::{Added, Changed, Entity, FromWorld, Mutated, Or, With, Without, World}, schedule::{Schedule, Stage, SystemStage}, system::{IntoSystem, Local, Query, QuerySet, RemovedComponents, Res, ResMut, System}};
 
     #[derive(Debug, Eq, PartialEq, Default)]
     struct A;
@@ -226,8 +224,14 @@ mod tests {
         fn sys(_q1: Query<&mut A>, _q2: Query<&mut A>) {}
 
         let mut world = World::default();
-        world.spawn().insert(A);
+        run_system(&mut world, sys.system());
+    }
 
+    #[test]
+    fn disjoint_query_mut_system() {
+        fn sys(_q1: Query<&mut A, With<B>>, _q2: Query<&mut A, Without<B>>) {}
+
+        let mut world = World::default();
         run_system(&mut world, sys.system());
     }
 
@@ -237,17 +241,14 @@ mod tests {
         fn sys(_q1: Query<&A>, _q2: Query<&mut A>) {}
 
         let mut world = World::default();
-        world.spawn().insert(A);
-
         run_system(&mut world, sys.system());
     }
+
 
     #[test]
     fn query_set_system() {
         fn sys(mut _set: QuerySet<(Query<&mut A>, Query<&A>)>) {}
         let mut world = World::default();
-        world.spawn().insert(A);
-
         run_system(&mut world, sys.system());
     }
 
@@ -257,8 +258,6 @@ mod tests {
         fn sys(_query: Query<&mut A>, _set: QuerySet<(Query<&mut A>, Query<&B>)>) {}
 
         let mut world = World::default();
-        world.spawn().insert(A);
-
         run_system(&mut world, sys.system());
     }
 
@@ -268,7 +267,6 @@ mod tests {
         fn sys(_set_1: QuerySet<(Query<&mut A>,)>, _set_2: QuerySet<(Query<&mut A>, Query<&B>)>) {}
 
         let mut world = World::default();
-        world.spawn().insert(A);
         run_system(&mut world, sys.system());
     }
 

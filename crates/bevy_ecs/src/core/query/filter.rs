@@ -1,6 +1,6 @@
 use crate::core::{
     Access, Archetype, ArchetypeComponentId, Bundle, Component, ComponentFlags, ComponentId,
-    ComponentSparseSet, Entity, FetchState, StorageType, Table, Tables, World,
+    ComponentSparseSet, Entity, FetchState, FilteredAccess, StorageType, Table, Tables, World,
 };
 use bevy_ecs_macros::all_tuples;
 use std::{marker::PhantomData, ptr};
@@ -12,11 +12,11 @@ pub trait QueryFilter: Sized {
     fn is_dense(&self) -> bool;
     /// Adjusts internal state to account for the next [Table]. This will always be called on tables that match this [QueryFilter]
     /// # Safety
-    /// `table` must be from the [World] [QueryFilter::init] was called on. 
+    /// `table` must be from the [World] [QueryFilter::init] was called on.
     unsafe fn set_table(&mut self, table: &Table);
     /// Adjusts internal state to account for the next [Archetype]. This will always be called on archetypes that match this [QueryFilter]
     /// # Safety
-    /// `archetype` and `tables` must be from the [World] [QueryFilter::init] was called on. 
+    /// `archetype` and `tables` must be from the [World] [QueryFilter::init] was called on.
     unsafe fn set_archetype(&mut self, archetype: &Archetype, tables: &Tables);
     /// Returns true if the entity at the given `table_row` matches this filter. This must always be called after [set_table] with a `table_row`
     /// in the range of the current [Table]
@@ -58,7 +58,9 @@ unsafe impl<T: Component> FetchState for WithState<T> {
     }
 
     #[inline]
-    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
+        access.add_with(self.component_id);
+    }
 
     #[inline]
     fn update_archetype_component_access(
@@ -140,7 +142,9 @@ unsafe impl<T: Component> FetchState for WithoutState<T> {
     }
 
     #[inline]
-    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
+        access.add_without(self.component_id);
+    }
 
     #[inline]
     fn update_archetype_component_access(
@@ -223,7 +227,11 @@ unsafe impl<T: Bundle> FetchState for WithBundleState<T> {
     }
 
     #[inline]
-    fn update_component_access(&self, _access: &mut Access<ComponentId>) {}
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
+        for component_id in self.component_ids.iter().cloned() {
+            access.add_with(component_id);
+        }
+    }
 
     #[inline]
     fn update_archetype_component_access(
@@ -374,7 +382,7 @@ macro_rules! impl_query_filter_tuple {
                 Or(($($filter::init(world),)*))
             }
 
-            fn update_component_access(&self, access: &mut Access<ComponentId>) {
+            fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
                 let ($($filter,)*) = &self.0;
                 $($filter.update_component_access(access);)*
             }
@@ -433,8 +441,8 @@ macro_rules! impl_flag_filter {
             }
 
             #[inline]
-            fn update_component_access(&self, access: &mut Access<ComponentId>) {
-                access.add_read(self.component_id);
+            fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) {
+                access.access_mut().add_read(self.component_id);
             }
 
             #[inline]

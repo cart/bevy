@@ -45,11 +45,11 @@
 * readme
 * bevy port
     * FixedTimestep borked
-    * using component access for query collisions is very restrictive 
     * HasComponentTYpe
     * Fix scenes
     * SharedBuffers mutability is an issue
 * core
+    * rename SparseSetIndex to DenseIndex
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
     * drop tests
@@ -57,7 +57,6 @@
     * batch_iter
     * par_iter
     * make type_id totally optional
-    * Set-able system params
     * Optimize SparseSet::insert (code is written but it has memory issues)
     * un-comment all tests
     * try removing pre-hash in favor of non-owned get (to allow collision resolution)
@@ -82,6 +81,7 @@
 * ChangedRes -> Res::is_changed
 
 ## Maybe
+* fixedbitset could be allocation free (store blocks in a SmallVec)
 * World Error Handling (EntityRef)
 * consider adding Unique to StorageType
 * TrackedWorld

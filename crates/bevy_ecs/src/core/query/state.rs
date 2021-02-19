@@ -1,7 +1,4 @@
-use crate::core::{
-    Access, ArchetypeComponentId, ArchetypeGeneration, ArchetypeId, ComponentId, Entity, Fetch,
-    FetchState, QueryFilter, QueryIter, ReadOnlyFetch, TableId, World, WorldQuery,
-};
+use crate::core::{Access, ArchetypeComponentId, ArchetypeGeneration, ArchetypeId, ComponentId, Entity, Fetch, FetchState, FilteredAccess, QueryFilter, QueryIter, ReadOnlyFetch, TableId, World, WorldQuery};
 use fixedbitset::FixedBitSet;
 use thiserror::Error;
 
@@ -11,7 +8,7 @@ pub struct QueryState<Q: WorldQuery, F: QueryFilter = ()> {
     pub(crate) matched_tables: FixedBitSet,
     pub(crate) matched_archetypes: FixedBitSet,
     pub(crate) archetype_component_access: Access<ArchetypeComponentId>,
-    pub(crate) component_access: Access<ComponentId>,
+    pub(crate) component_access: FilteredAccess<ComponentId>,
     // NOTE: we maintain both a TableId bitset and a vec because iterating the vec is faster
     pub(crate) matched_table_ids: Vec<TableId>,
     // NOTE: we maintain both a ArchetypeId bitset and a vec because iterating the vec is faster

@@ -218,15 +218,15 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
                             &system_state.name,
                             std::any::type_name::<#query>(),
                             std::any::type_name::<#filter>(),
+                            &system_state.component_access_set,
                             &#query.component_access,
-                            &system_state.component_access,
                             world,
                         );
                     )*
                     #(
                         system_state
-                            .component_access
-                            .extend(&#query.component_access);
+                            .component_access_set
+                            .add(#query.component_access.clone());
                         system_state
                             .archetype_component_access
                             .extend(&#query.archetype_component_access);
