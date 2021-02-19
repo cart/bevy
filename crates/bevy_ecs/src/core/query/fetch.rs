@@ -56,7 +56,7 @@ pub trait Fetch<'w>: Sized {
 /// computation here as possible to reduce the cost of constructing Fetch.
 /// SAFETY:
 /// Implementor must ensure that [FetchState::update_component_access] and [FetchState::update_archetype_component_access] exactly
-/// reflects the results of [FetchState::matches_archetype] and [FetchState::matches_table], [Fetch::archetype_fetch], and [Fetch::table_fetch]
+/// reflects the results of [FetchState::matches_archetype], [FetchState::matches_table], [Fetch::archetype_fetch], and [Fetch::table_fetch]
 pub unsafe trait FetchState: Send + Sync + Sized {
     fn init(world: &mut World) -> Self;
     fn update_component_access(&self, access: &mut Access<ComponentId>);
