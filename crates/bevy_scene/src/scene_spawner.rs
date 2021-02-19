@@ -306,8 +306,8 @@ impl SceneSpawner {
 }
 
 pub fn scene_spawner_system(world: &mut World) {
+    // TODO: port scenes
     let mut scene_spawner = world.get_resource_mut::<SceneSpawner>().unwrap();
-    error!("port scenes");
     // let scene_asset_events = world
     //     .get_resource::<Events<AssetEvent<DynamicScene>>>()
     //     .unwrap();

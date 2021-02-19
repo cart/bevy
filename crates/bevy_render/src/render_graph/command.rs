@@ -153,7 +153,7 @@ impl CommandQueue {
             .extend(command_queue.queue.lock().drain(..))
     }
 
-    pub fn execute(&mut self, render_context: &mut dyn RenderContext) {
+    pub fn execute(&self, render_context: &mut dyn RenderContext) {
         for command in self.queue.lock().drain(..) {
             match command {
                 Command::CopyBufferToBuffer {

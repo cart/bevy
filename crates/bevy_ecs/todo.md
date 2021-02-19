@@ -48,7 +48,6 @@
     * HasComponentTYpe
     * Fix scenes
 * core
-    * rename SparseSetIndex to DenseIndex
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
     * drop tests
