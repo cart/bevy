@@ -1,15 +1,20 @@
-use bevy_ecs::core::World;
-use bevy_utils::tracing::error;
-
 use crate::{
-    render_graph::{Node, ResourceSlots},
+    render_graph::{CommandQueue, Node, ResourceSlots},
     renderer::{RenderContext, SharedBuffers},
 };
+use bevy_ecs::core::World;
 
-#[derive(Debug, Default)]
-pub struct SharedBuffersNode;
+#[derive(Default)]
+pub struct SharedBuffersNode {
+    command_queue: CommandQueue,
+}
 
 impl Node for SharedBuffersNode {
+    fn prepare(&mut self, world: &mut World) {
+        let mut shared_buffers = world.get_resource_mut::<SharedBuffers>().unwrap();
+        self.command_queue.take_commands(shared_buffers.command_queue_mut());
+    }
+
     fn update(
         &mut self,
         world: &World,
@@ -17,9 +22,8 @@ impl Node for SharedBuffersNode {
         _input: &ResourceSlots,
         _output: &mut ResourceSlots,
     ) {
-        error!("this is unsafe and should be fixed");
-        let mut shared_buffers =
-            unsafe { world.get_resource_mut_unchecked::<SharedBuffers>().unwrap() };
-        shared_buffers.apply(render_context);
+        let shared_buffers = world.get_resource::<SharedBuffers>().unwrap();
+        shared_buffers.unmap_buffer(render_context);
+        self.command_queue.execute(render_context);
     }
 }

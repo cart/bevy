@@ -47,7 +47,6 @@
     * FixedTimestep borked
     * HasComponentTYpe
     * Fix scenes
-    * SharedBuffers mutability is an issue
 * core
     * rename SparseSetIndex to DenseIndex
     * panic on conflicting fetches (&A, &mut A)

@@ -147,6 +147,12 @@ impl CommandQueue {
         self.queue.lock().clear();
     }
 
+    pub fn take_commands(&mut self, command_queue: &mut CommandQueue) {
+        self.queue
+            .lock()
+            .extend(command_queue.queue.lock().drain(..))
+    }
+
     pub fn execute(&mut self, render_context: &mut dyn RenderContext) {
         for command in self.queue.lock().drain(..) {
             match command {
