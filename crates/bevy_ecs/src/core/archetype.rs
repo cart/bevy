@@ -56,6 +56,11 @@ impl Edges {
     pub fn get_add_bundle(&self, bundle_id: BundleId) -> Option<ArchetypeId> {
         self.add_bundle.get(bundle_id).cloned()
     }
+    
+    #[inline]
+    pub fn set_add_bundle(&mut self, bundle_id: BundleId, archetype_id: ArchetypeId) {
+        self.add_bundle.insert(bundle_id, archetype_id);
+    }
 
     /// SAFETY: bundle must exist
     #[inline]
@@ -103,12 +108,7 @@ impl Edges {
         bundle_id: BundleId,
         archetype_id: Option<ArchetypeId>,
     ) {
-        self.remove_bundle.insert(bundle_id, archetype_id);
-    }
-
-    #[inline]
-    pub fn set_add_bundle(&mut self, bundle_id: BundleId, archetype_id: ArchetypeId) {
-        self.add_bundle.insert(bundle_id, archetype_id);
+        self.remove_bundle_intersection.insert(bundle_id, archetype_id);
     }
 }
 
