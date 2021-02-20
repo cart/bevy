@@ -80,6 +80,7 @@
 
 ## Maybe
 * fixedbitset could be allocation free (store blocks in a SmallVec)
+* fixedbitset could have a const constructor 
 * World Error Handling (EntityRef)
 * consider adding Unique to StorageType
 * TrackedWorld

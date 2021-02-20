@@ -1,11 +1,12 @@
 use crate::Time;
 use bevy_ecs::{
     core::{Access, ArchetypeComponentId, ComponentId, World},
+    prelude::{IntoSystem, Local, Res, ResMut},
     schedule::ShouldRun,
     system::{System, SystemId},
 };
 use bevy_utils::HashMap;
-use std::{any::TypeId, borrow::Cow};
+use std::borrow::Cow;
 
 pub struct FixedTimestepState {
     pub step: f64,
@@ -46,25 +47,15 @@ impl FixedTimesteps {
 }
 
 pub struct FixedTimestep {
-    step: f64,
-    accumulator: f64,
-    looping: bool,
-    system_id: SystemId,
-    label: Option<String>, // TODO: consider making this a TypedLabel
-    archetype_access: Access<ArchetypeComponentId>,
-    component_access: Access<ComponentId>,
+    state: State, // TODO: consider making this a TypedLabel
+    internal_system: Box<dyn System<In = (), Out = ShouldRun>>,
 }
 
 impl Default for FixedTimestep {
     fn default() -> Self {
         Self {
-            system_id: SystemId::new(),
-            step: 1.0 / 60.0,
-            accumulator: 0.0,
-            looping: false,
-            label: None,
-            component_access: Default::default(),
-            archetype_access: Default::default(),
+            state: State::default(),
+            internal_system: Box::new(Self::prepare_system.system()),
         }
     }
 }
@@ -72,24 +63,66 @@ impl Default for FixedTimestep {
 impl FixedTimestep {
     pub fn step(step: f64) -> Self {
         Self {
-            step,
+            state: State {
+                step,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
 
     pub fn steps_per_second(rate: f64) -> Self {
         Self {
-            step: 1.0 / rate,
+            state: State {
+                step: 1.0 / rate,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
 
     pub fn with_label(mut self, label: &str) -> Self {
-        self.label = Some(label.to_string());
+        self.state.label = Some(label.to_string());
         self
     }
 
-    pub fn update(&mut self, time: &Time) -> ShouldRun {
+    fn prepare_system(
+        mut state: Local<State>,
+        time: Res<Time>,
+        mut fixed_timesteps: ResMut<FixedTimesteps>,
+    ) -> ShouldRun {
+        let should_run = state.update(&time);
+        if let Some(ref label) = state.label {
+            let res_state = fixed_timesteps.fixed_timesteps.get_mut(label).unwrap();
+            res_state.step = state.step;
+            res_state.accumulator = state.accumulator;
+        }
+
+        should_run
+    }
+}
+
+#[derive(Clone)]
+pub struct State {
+    label: Option<String>,
+    step: f64,
+    accumulator: f64,
+    looping: bool,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            step: 1.0 / 60.0,
+            accumulator: 0.0,
+            label: None,
+            looping: false,
+        }
+    }
+}
+
+impl State {
+    fn update(&mut self, time: &Time) -> ShouldRun {
         if !self.looping {
             self.accumulator += time.delta_seconds_f64();
         }
@@ -114,51 +147,49 @@ impl System for FixedTimestep {
     }
 
     fn id(&self) -> SystemId {
-        self.system_id
+        self.internal_system.id()
     }
 
-    fn update(&mut self, _world: &World) {}
+    fn update(&mut self, world: &World) {
+        self.internal_system.update(world);
+    }
 
     fn archetype_component_access(&self) -> &Access<ArchetypeComponentId> {
-        &self.archetype_access
+        self.internal_system.archetype_component_access()
     }
 
     fn component_access(&self) -> &Access<ComponentId> {
-        &self.component_access
+        self.internal_system.component_access()
     }
 
     fn is_send(&self) -> bool {
-        true
+        self.internal_system.is_send()
     }
 
     unsafe fn run_unsafe(&mut self, _input: Self::In, world: &World) -> Option<Self::Out> {
-        todo!("add archetype component access for time and fixed timesteps");
-        todo!("consider reworking this");
-        let result = self.update(world.get_resource::<Time>().unwrap());
-        if let Some(ref label) = self.label {
-            let mut fixed_timesteps = world
-                .get_resource_mut_unchecked::<FixedTimesteps>()
-                .unwrap();
-            let state = fixed_timesteps.fixed_timesteps.get_mut(label).unwrap();
-            state.step = self.step;
-            state.accumulator = self.accumulator;
-        }
-
-        Some(result)
+        // SAFE: this system inherits the internal system's component access and archetype component access,
+        // which means the caller has ensured running the internal system is safe
+        self.internal_system.run_unsafe((), world)
     }
 
-    fn apply_buffers(&mut self, _world: &mut World) {}
+    fn apply_buffers(&mut self, world: &mut World) {
+        self.internal_system.apply_buffers(world)
+    }
 
     fn initialize(&mut self, world: &mut World) {
-        let time_id = world.components_mut().get_or_insert_resource_id::<Time>();
-        self.component_access.add_read(time_id);
-        if let Some(ref label) = self.label {
+        self.internal_system = Box::new(
+            Self::prepare_system
+                .system()
+                .config(|c| c.0 = Some(self.state.clone())),
+        );
+        self.internal_system.initialize(world);
+        if let Some(ref label) = self.state.label {
             let mut fixed_timesteps = world.get_resource_mut::<FixedTimesteps>().unwrap();
             fixed_timesteps.fixed_timesteps.insert(
                 label.clone(),
                 FixedTimestepState {
                     accumulator: 0.0,
-                    step: self.step,
+                    step: self.state.step,
                 },
             );
         }
