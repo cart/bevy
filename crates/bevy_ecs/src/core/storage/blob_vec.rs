@@ -12,7 +12,6 @@ pub struct BlobVec {
 
 impl BlobVec {
     pub fn new(item_layout: Layout, drop: unsafe fn(*mut u8), capacity: usize) -> BlobVec {
-        // TODO: should this function be unsafe? should we check for non-zero layout sizes? what about unit structs?
         unsafe {
             let swap_scratch =
                 UnsafeCell::new(NonNull::new(std::alloc::alloc(item_layout)).unwrap());
@@ -24,7 +23,11 @@ impl BlobVec {
                 data: UnsafeCell::new(NonNull::dangling()),
                 drop,
             };
-            blob_vec.grow(capacity);
+            if item_layout.size() == 0 {
+                blob_vec.capacity = usize::MAX;
+            } else {
+                blob_vec.reserve(capacity);
+            }
             blob_vec
         }
     }
@@ -43,7 +46,16 @@ impl BlobVec {
         self.capacity
     }
 
-    pub fn grow(&mut self, increment: usize) {
+    pub fn reserve(&mut self, amount: usize) {
+        let available_space = self.capacity - self.len;
+        if available_space < amount {
+            self.grow(amount - available_space);
+        }
+    }
+
+    fn grow(&mut self, increment: usize) {
+        debug_assert!(self.item_layout.size() != 0);
+
         let new_capacity = self.capacity + increment;
         unsafe {
             let new_data = if self.capacity == 0 {
@@ -85,9 +97,7 @@ impl BlobVec {
     /// SAFETY: the newly allocated space must be immediately populated with a valid value
     #[inline]
     pub unsafe fn push_uninit(&mut self) {
-        if self.len == self.capacity {
-            self.grow(1);
-        }
+        self.reserve(1);
         self.len += 1;
     }
 
@@ -302,7 +312,7 @@ mod tests {
         let mut blob_vec = BlobVec::new_typed::<usize>(64);
         unsafe {
             for _ in 0..10_000 {
-                blob_vec.push_type(1);
+                blob_vec.push_type(1usize);
             }
         }
     }

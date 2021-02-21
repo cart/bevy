@@ -18,6 +18,7 @@
     * sparse component add/removes 
 * Query conflicts are determined by Component access instead of Archetype Component access
     * stricter, but more predictable. lets see how it plays out
+    * With/Without are still taken into account for conflicts, so this should still be pretty comfy to use
 * Smaller Codebase (verify numbers at the end, at the very least core is smaller?)
 * Reduced monomorphization (ty measuring compile time difference)
 * More granular module organization
@@ -44,6 +45,11 @@
 * todo review
 * readme
 * core
+    * resolve remaining miri errors
+    * Fix or filter test (un comment code)
+    * Or filters break when some archetypes match and others don't
+        * consider making or filters non-dense. then each item's matches_archetype could be used in Or::set_archetype to determine if it should be accessed
+        * alternatively make all filters capable of handling mismatched calls to set_table/set_archetype (and check for item existence on each set_table)
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
     * drop tests

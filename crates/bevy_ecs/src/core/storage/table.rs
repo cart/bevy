@@ -79,7 +79,7 @@ impl Column {
 
     #[inline]
     pub(crate) fn reserve(&mut self, additional: usize) {
-        self.data.grow(additional);
+        self.data.reserve(additional);
         // SAFE: unique access to self
         unsafe {
             let flags = &mut (*self.flags.get());
