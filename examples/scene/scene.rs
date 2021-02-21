@@ -72,23 +72,23 @@ fn print_system(query: Query<(Entity, &ComponentA), Changed<ComponentA>>) {
     }
 }
 
-fn save_scene_system(_world: &mut World) {
+fn save_scene_system(world: &mut World) {
     // Scenes can be created from any ECS World. You can either create a new one for the scene or use the current World.
-    let mut world = World::new();
-    let mut component_b = ComponentB::from_world(&mut world);
+    let mut scene_world = World::new();
+    let mut component_b = ComponentB::from_world(world);
     component_b.value = "hello".to_string();
-    world.spawn().insert_bundle((
+    scene_world.spawn().insert_bundle((
         component_b,
         ComponentA { x: 1.0, y: 2.0 },
         Transform::default(),
     ));
-    world
+    scene_world
         .spawn()
         .insert_bundle((ComponentA { x: 3.0, y: 4.0 },));
 
     // The TypeRegistry resource contains information about all registered types (including components). This is used to construct scenes.
     let type_registry = world.get_resource::<TypeRegistry>().unwrap();
-    let scene = DynamicScene::from_world(&world, &type_registry);
+    let scene = DynamicScene::from_world(&scene_world, &type_registry);
 
     // Scenes can be serialized like this:
     println!("{}", scene.serialize_ron(&type_registry).unwrap());

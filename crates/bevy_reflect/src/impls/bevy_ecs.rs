@@ -1,5 +1,5 @@
 use bevy_ecs::core::{
-    Archetype, Component, Entity, EntityMap, FromWorld, MapEntities, MapEntitiesError, World,
+    Component, Entity, EntityMap, FromWorld, MapEntities, MapEntitiesError, World,
 };
 
 use crate::{FromType, Reflect};
@@ -7,44 +7,27 @@ use std::marker::PhantomData;
 
 #[derive(Clone)]
 pub struct ReflectComponent {
-    add_component: fn(&mut World, Entity, &dyn Reflect),
+    add_component_from_source: fn(&mut World, Entity, &dyn Reflect),
     apply_component: fn(&mut World, Entity, &dyn Reflect),
-    reflect_component: unsafe fn(&Archetype, usize) -> &dyn Reflect,
-    reflect_component_mut: unsafe fn(&Archetype, usize) -> &mut dyn Reflect,
+    reflect_component: fn(&World, Entity) -> Option<&dyn Reflect>,
     copy_component: fn(&World, &mut World, Entity, Entity),
 }
 
 impl ReflectComponent {
     pub fn add_component(&self, world: &mut World, entity: Entity, component: &dyn Reflect) {
-        (self.add_component)(world, entity, component);
+        (self.add_component_from_source)(world, entity, component);
     }
 
     pub fn apply_component(&self, world: &mut World, entity: Entity, component: &dyn Reflect) {
         (self.apply_component)(world, entity, component);
     }
 
-    /// # Safety
-    /// This does not do bound checks on entity_index. You must make sure entity_index is within bounds before calling.
-    pub unsafe fn reflect_component<'a>(
+    pub fn reflect_component<'a>(
         &self,
-        archetype: &'a Archetype,
-        entity_index: usize,
-    ) -> &'a dyn Reflect {
-        (self.reflect_component)(archetype, entity_index)
-    }
-
-    /// # Safety
-    /// This does not do bound checks on entity_index. You must make sure entity_index is within bounds before calling.
-    /// This method does not prevent you from having two mutable pointers to the same data, violating Rust's aliasing rules. To avoid this:
-    /// * Only call this method in a thread-local system to avoid sharing across threads.
-    /// * Don't call this method more than once in the same scope for a given component.
-    #[allow(clippy::mut_from_ref)]
-    pub unsafe fn reflect_component_mut<'a>(
-        &self,
-        archetype: &'a Archetype,
-        entity_index: usize,
-    ) -> &'a mut dyn Reflect {
-        (self.reflect_component_mut)(archetype, entity_index)
+        world: &'a World,
+        entity: Entity,
+    ) -> Option<&'a dyn Reflect> {
+        (self.reflect_component)(world, entity)
     }
 
     pub fn copy_component(
@@ -66,7 +49,7 @@ impl ReflectComponent {
 impl<C: Component + Reflect + FromWorld> FromType<C> for ReflectComponent {
     fn from_type() -> Self {
         ReflectComponent {
-            add_component: |world, entity, reflected_component| {
+            add_component_from_source: |world, entity, reflected_component| {
                 let mut component = C::from_world(world);
                 component.apply(reflected_component);
                 world.entity_mut(entity).insert(component);
@@ -83,22 +66,8 @@ impl<C: Component + Reflect + FromWorld> FromType<C> for ReflectComponent {
                     .entity_mut(destination_entity)
                     .insert(destination_component);
             },
-            reflect_component: |archetype, index| {
-                // TODO: fix these impls
-                todo!("adapt this to new bevy ecs")
-                // unsafe {
-                //     // the type has been looked up by the caller, so this is safe
-                //     let ptr = archetype.get::<C>().unwrap().as_ptr().add(index);
-                //     ptr.as_ref().unwrap()
-                // }
-            },
-            reflect_component_mut: |archetype, index| {
-                todo!("adapt this to new bevy ecs")
-                // unsafe {
-                //     // the type has been looked up by the caller, so this is safe
-                //     let ptr = archetype.get::<C>().unwrap().as_ptr().add(index);
-                //     &mut *ptr
-                // }
+            reflect_component: |world, entity| {
+                world.get_entity(entity)?.get::<C>().map(|c| c as &dyn Reflect)
             },
         }
     }

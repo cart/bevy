@@ -43,10 +43,6 @@
 * documentation / symbol review
 * todo review
 * readme
-* bevy port
-    * FixedTimestep borked
-    * HasComponentTYpe
-    * Fix scenes
 * core
     * panic on conflicting fetches (&A, &mut A)
     * consider reverting all_tuples proc macro. it makes RA sad
@@ -55,6 +51,7 @@
     * batch_iter
     * par_iter
     * make type_id totally optional
+    * test same archetype / component id when resource removed
     * Optimize SparseSet::insert (code is written but it has memory issues)
     * un-comment all tests
     * try removing pre-hash in favor of non-owned get (to allow collision resolution)

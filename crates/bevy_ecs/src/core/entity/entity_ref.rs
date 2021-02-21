@@ -1,8 +1,4 @@
-use crate::core::{
-    Archetype, ArchetypeId, Archetypes, Bundle, BundleInfo, Component, ComponentFlags, ComponentId,
-    Components, DynamicBundle, Entity, EntityLocation, Mut, SparseSet, StorageType, Storages,
-    World,
-};
+use crate::core::{Archetype, ArchetypeId, Archetypes, Bundle, BundleInfo, Component, ComponentFlags, ComponentId, Components, DynamicBundle, Entity, EntityLocation, Mut, SparseSet, StorageType, Storages, TypeInfo, World};
 use std::any::TypeId;
 
 pub struct EntityRef<'w> {
@@ -43,8 +39,19 @@ impl<'w> EntityRef<'w> {
 
     #[inline]
     pub fn contains<T: Component>(&self) -> bool {
+        self.contains_type_id(TypeId::of::<T>())
+    }
+
+    #[inline]
+    pub fn contains_id(&self, component_id: ComponentId) -> bool {
         // SAFE: entity location is valid
-        unsafe { contains_component_with_type(self.world, TypeId::of::<T>(), self.location) }
+        unsafe { contains_component_with_id(self.world, component_id, self.location) }
+    }
+
+    #[inline]
+    pub fn contains_type_id(&self, type_id: TypeId) -> bool {
+        // SAFE: entity location is valid
+        unsafe { contains_component_with_type(self.world, type_id, self.location) }
     }
 
     #[inline]
@@ -111,8 +118,19 @@ impl<'w> EntityMut<'w> {
 
     #[inline]
     pub fn contains<T: Component>(&self) -> bool {
+        self.contains_type_id(TypeId::of::<T>())
+    }
+
+    #[inline]
+    pub fn contains_id(&self, component_id: ComponentId) -> bool {
         // SAFE: entity location is valid
-        unsafe { contains_component_with_type(self.world, TypeId::of::<T>(), self.location) }
+        unsafe { contains_component_with_id(self.world, component_id, self.location) }
+    }
+
+    #[inline]
+    pub fn contains_type_id(&self, type_id: TypeId) -> bool {
+        // SAFE: entity location is valid
+        unsafe { contains_component_with_type(self.world, type_id, self.location) }
     }
 
     #[inline]
@@ -615,11 +633,21 @@ unsafe fn contains_component_with_type(
     location: EntityLocation,
 ) -> bool {
     if let Some(component_id) = world.components.get_id(type_id) {
-        let archetype = world.archetypes.get_unchecked(location.archetype_id);
-        archetype.contains(component_id)
+        contains_component_with_id(world, component_id, location)
     } else {
         false
     }
+}
+
+/// # Safety
+/// `entity_location` must be within bounds of an archetype that exists.
+unsafe fn contains_component_with_id(
+    world: &World,
+    component_id: ComponentId,
+    location: EntityLocation,
+) -> bool {
+    let archetype = world.archetypes.get_unchecked(location.archetype_id);
+    archetype.contains(component_id)
 }
 
 /// Adds a bundle to the given archetype and returns the resulting archetype. This could be the same [ArchetypeId],

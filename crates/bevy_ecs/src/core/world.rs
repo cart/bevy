@@ -141,7 +141,7 @@ impl World {
         SpawnBatchIter::new(self, iter.into_iter())
     }
 
-    pub(crate) fn flush(&mut self) {
+    pub fn flush(&mut self) {
         // SAFE: empty archetype is initialized when the world is constructed
         unsafe {
             let empty_archetype = self
@@ -343,6 +343,15 @@ impl World {
         };
         let unique_components = resource_archetype.unique_components();
         unique_components.contains(component_id)
+    }
+
+    /// Temporarily removes the requested resource from this [World], then re-adds it before returning.
+    /// This enables safe mutable access to a resource while still providing mutable world access 
+    pub fn resource_scope<T: Component, U>(&mut self, f: impl FnOnce(&mut T, &mut World) -> U) -> U {
+        let mut resource = self.remove_resource::<T>().expect("resource does not exist");
+        let result = f(&mut resource, self);
+        self.insert_resource(resource);
+        result
     }
 
     #[inline]
