@@ -141,7 +141,7 @@ impl World {
         SpawnBatchIter::new(self, iter.into_iter())
     }
 
-    pub fn flush(&mut self) {
+    pub(crate) fn flush(&mut self) {
         // SAFE: empty archetype is initialized when the world is constructed
         unsafe {
             let empty_archetype = self

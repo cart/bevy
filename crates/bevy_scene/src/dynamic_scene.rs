@@ -1,4 +1,4 @@
-use crate::{Scene, SceneSpawnError, serde::SceneSerializer};
+use crate::{serde::SceneSerializer, Scene, SceneSpawnError};
 use anyhow::Result;
 use bevy_ecs::core::{EntityMap, World};
 use bevy_reflect::{Reflect, ReflectComponent, ReflectMapEntities, TypeRegistryArc, TypeUuid};
@@ -62,11 +62,9 @@ impl DynamicScene {
         let registry = world.get_resource::<TypeRegistryArc>().unwrap().clone();
         let type_registry = registry.read();
         for scene_entity in self.entities.iter() {
-            let entity = *entity_map.entry(bevy_ecs::core::Entity::new(scene_entity.entity)).or_insert_with(|| {
-                let entity = world.entities().reserve_entity();
-                world.flush();
-                entity
-            });
+            let entity = *entity_map
+                .entry(bevy_ecs::core::Entity::new(scene_entity.entity))
+                .or_insert_with(|| world.spawn().id());
             for component in scene_entity.components.iter() {
                 let registration = type_registry
                     .get_with_name(component.type_name())
@@ -79,7 +77,10 @@ impl DynamicScene {
                             type_name: component.type_name().to_string(),
                         }
                     })?;
-                if world.entity(entity).contains_type_id(registration.type_id()) {
+                if world
+                    .entity(entity)
+                    .contains_type_id(registration.type_id())
+                {
                     reflect_component.apply_component(world, entity, &**component);
                 } else {
                     reflect_component.add_component(world, entity, &**component);

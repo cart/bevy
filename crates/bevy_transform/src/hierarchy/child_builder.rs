@@ -218,6 +218,7 @@ impl<'w> WorldChildBuilder<'w> {
             .insert_bundle(bundle)
             .insert_bundle((Parent(parent_entity), PreviousParent(parent_entity)))
             .id();
+        self.current_entity = Some(entity);
         if let Some(mut parent) = self.world.get_entity_mut(parent_entity) {
             if let Some(mut children) = parent.get_mut::<Children>() {
                 children.0.push(entity);
