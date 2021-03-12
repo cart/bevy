@@ -1,8 +1,9 @@
+mod relationship;
 mod type_info;
 
 pub use type_info::*;
 
-use crate::storage::SparseSetIndex;
+use crate::{component::relationship::{Relationship, RelationshipKind, RelationshipKindId, RelationshipTarget, Relationships}, storage::SparseSetIndex};
 use bitflags::bitflags;
 use std::{
     alloc::Layout,
@@ -120,6 +121,7 @@ pub struct ComponentDescriptor {
     // SAFETY: This must remain private. It must only be set to "true" if this component is
     // actually Send + Sync
     is_send_and_sync: bool,
+    relationship: Option<Relationship>,
     type_id: Option<TypeId>,
     layout: Layout,
     drop: unsafe fn(*mut u8),
@@ -131,6 +133,7 @@ impl ComponentDescriptor {
             name: std::any::type_name::<T>().to_string(),
             storage_type,
             is_send_and_sync: true,
+            relationship: None,
             type_id: Some(TypeId::of::<T>()),
             layout: Layout::new::<T>(),
             drop: TypeInfo::drop_ptr::<T>,
@@ -158,6 +161,7 @@ impl From<TypeInfo> for ComponentDescriptor {
         Self {
             name: type_info.type_name().to_string(),
             storage_type: StorageType::default(),
+            relationship: None,
             is_send_and_sync: type_info.is_send_and_sync(),
             type_id: Some(type_info.type_id()),
             drop: type_info.drop(),
@@ -169,6 +173,7 @@ impl From<TypeInfo> for ComponentDescriptor {
 #[derive(Debug, Default)]
 pub struct Components {
     components: Vec<ComponentInfo>,
+    relationships: Relationships,
     indices: std::collections::HashMap<TypeId, usize, fxhash::FxBuildHasher>,
     resource_indices: std::collections::HashMap<TypeId, usize, fxhash::FxBuildHasher>,
 }
@@ -196,6 +201,25 @@ impl Components {
             .push(ComponentInfo::new(ComponentId(index), descriptor));
 
         Ok(ComponentId(index))
+    }
+
+    pub(crate) fn add_relationship(
+        &mut self,
+        kind: RelationshipKindId,
+        target: RelationshipTarget,
+    ) -> Result<ComponentId, ComponentsError> {
+        self.relationships.register(kind, target);
+        let descriptor = ComponentDescriptor {
+            name: todo!("look up from Relatonships"),
+            storage_type: panic!("sort out how relationships are stored"),
+            is_send_and_sync: true,
+            relationship: Some(Relationship::new(kind, target)),
+            type_id: todo!("look up from Relationships"),
+            layout: todo!("look up from Relationships or fill with default value"),
+            drop: todo!("look up from Relationships or fill with default value"),
+        };
+
+        self.add(descriptor)
     }
 
     #[inline]
