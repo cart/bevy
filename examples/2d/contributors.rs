@@ -7,7 +7,7 @@ use std::{
 };
 
 fn main() {
-    App::build()
+    App::new()
         .add_plugins(DefaultPlugins)
         .add_startup_system(setup.system())
         .add_system(velocity_system.system())
