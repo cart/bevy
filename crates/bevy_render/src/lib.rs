@@ -11,6 +11,7 @@ pub mod renderer;
 pub mod shader;
 pub mod texture;
 pub mod wireframe;
+pub mod v2;
 
 use bevy_ecs::{
     schedule::{ParallelSystemDescriptorCoercion, SystemStage},
