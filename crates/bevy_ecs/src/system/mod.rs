@@ -2,6 +2,7 @@ mod commands;
 mod exclusive_system;
 mod into_system;
 mod query;
+mod param_state;
 #[allow(clippy::module_inception)]
 mod system;
 mod system_chaining;
@@ -10,6 +11,7 @@ mod system_param;
 pub use commands::*;
 pub use exclusive_system::*;
 pub use into_system::*;
+pub use param_state::*;
 pub use query::*;
 pub use system::*;
 pub use system_chaining::*;

@@ -1174,4 +1174,27 @@ mod tests {
         });
         assert_eq!(*world.get_resource::<i32>().unwrap(), 1);
     }
+
+    #[test]
+    fn clear_entities() {
+        let mut world = World::default();
+        world.register_component(ComponentDescriptor::new::<f32>(StorageType::SparseSet)).unwrap();
+        world.insert_resource::<i32>(0);
+        world.spawn().insert(1u32);
+        world.spawn().insert(1.0f32);
+
+        let mut q1 = world.query::<&u32>();
+        let mut q2 = world.query::<&f32>();
+
+        assert_eq!(q1.iter(&world).len(), 1);
+        assert_eq!(q2.iter(&world).len(), 1);
+        assert_eq!(world.entities().len(), 2);
+
+        world.clear_entities();
+
+        assert_eq!(q1.iter(&world).len(), 0, "world should not contain table components");
+        assert_eq!(q2.iter(&world).len(), 0, "world should not contain sparse set components");
+        assert_eq!(world.entities().len(), 0, "world should not have any entities");
+        assert_eq!(*world.get_resource::<i32>().unwrap(), 0, "world should still contain resources");
+    }
 }
