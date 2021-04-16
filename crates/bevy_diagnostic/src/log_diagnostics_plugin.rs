@@ -33,7 +33,7 @@ impl Default for LogDiagnosticsPlugin {
 pub(crate) const MAX_LOG_NAME_WIDTH: usize = 32;
 
 impl Plugin for LogDiagnosticsPlugin {
-    fn build(&self, app: &mut bevy_app::AppBuilder) {
+    fn build(&self, app: &mut App) {
         app.insert_resource(LogDiagnosticsState {
             timer: Timer::new(self.wait_duration, true),
             filter: self.filter.clone(),

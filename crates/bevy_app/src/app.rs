@@ -30,7 +30,7 @@ use std::hash::Hash;
 /// # use bevy_ecs::prelude::*;
 ///
 /// fn main() {
-///    App::build()
+///    App::new()
 ///        .add_system(hello_world_system.system())
 ///        .run();
 /// }
@@ -83,14 +83,15 @@ impl App {
         self.schedule.run(&mut self.world);
     }
 
-    pub fn run(mut self) {
+    pub fn run(&mut self) {
         #[cfg(feature = "trace")]
         let bevy_app_run_span = info_span!("bevy_app");
         #[cfg(feature = "trace")]
         let _bevy_app_run_guard = bevy_app_run_span.enter();
 
-        let runner = std::mem::replace(&mut self.runner, Box::new(run_once));
-        (runner)(self);
+        let mut app = std::mem::replace(self, App::empty());
+        let runner = std::mem::replace(&mut app.runner, Box::new(run_once));
+        (runner)(app);
     }
 
     pub fn add_stage<S: Stage>(&mut self, label: impl StageLabel, stage: S) -> &mut Self {
