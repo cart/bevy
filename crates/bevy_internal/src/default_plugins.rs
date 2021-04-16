@@ -53,3 +53,29 @@ impl PluginGroup for MinimalPlugins {
         group.add(bevy_app::ScheduleRunnerPlugin::default());
     }
 }
+
+pub struct PipelinedDefaultPlugins;
+
+impl PluginGroup for PipelinedDefaultPlugins {
+    fn build(&mut self, group: &mut PluginGroupBuilder) {
+        group.add(bevy_log::LogPlugin::default());
+        group.add(bevy_core::CorePlugin::default());
+        group.add(bevy_transform::TransformPlugin::default());
+        group.add(bevy_diagnostic::DiagnosticsPlugin::default());
+        group.add(bevy_input::InputPlugin::default());
+        group.add(bevy_window::WindowPlugin::default());
+        group.add(bevy_asset::AssetPlugin::default());
+
+        #[cfg(feature = "bevy_render")]
+        group.add(bevy_render::v2::PipelinedRenderPlugin::default());
+
+        #[cfg(feature = "bevy_sprite")]
+        group.add(bevy_sprite::v2::PipelinedSpritePlugin::default());
+
+        #[cfg(feature = "bevy_winit")]
+        group.add(bevy_winit::WinitPlugin::default());
+
+        #[cfg(feature = "bevy_wgpu")]
+        group.add(bevy_wgpu::v2::PipelinedWgpuPlugin::default());
+    }
+}

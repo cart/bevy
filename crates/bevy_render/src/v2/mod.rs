@@ -1,19 +1,29 @@
-pub mod render_graph;
 pub mod features;
+pub mod render_graph;
 
-use bevy_ecs::{prelude::{IntoSystem, System, World}, schedule::SystemDescriptor};
+use crate::camera::{self, Camera, OrthographicProjection};
+
 use self::render_graph::RenderGraph;
+use bevy_app::{App, CoreStage, Plugin};
+use bevy_ecs::prelude::*;
 
+#[derive(Default)]
+pub struct PipelinedRenderPlugin;
 
-pub struct RenderApp {
-    extract_systems: Vec<Box<dyn System<In = (), Out = ()>>>,
-    world: World,
-    graph: RenderGraph,
-}
-
-impl RenderApp {
-    pub fn add_extract_system<Params, I: IntoSystem<Params, S>, S: System<In = (), Out =()>>(&mut self, system: I) -> &mut Self {
-        self.extract_systems.push(Box::new(system.system()));
-        self
+impl Plugin for PipelinedRenderPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<Camera>()
+            .add_system_to_stage(
+                CoreStage::PostUpdate,
+                camera::active_cameras_system.system(),
+            )
+            .add_system_to_stage(
+                CoreStage::PostUpdate,
+                camera::camera_system::<OrthographicProjection>.system(),
+            );
+        let mut render_app = App::new();
+        render_app
+            .insert_resource(RenderGraph::default());
+        app.add_sub_app(render_app);
     }
 }

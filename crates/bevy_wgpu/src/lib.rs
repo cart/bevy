@@ -1,5 +1,6 @@
 pub mod diagnostic;
 pub mod renderer;
+pub mod v2;
 mod wgpu_render_pass;
 mod wgpu_renderer;
 mod wgpu_resources;

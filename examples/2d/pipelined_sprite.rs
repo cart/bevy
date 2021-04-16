@@ -1,8 +1,9 @@
 use bevy::prelude::*;
+use bevy::PipelinedDefaultPlugins;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(PipelinedDefaultPlugins)
         .add_startup_system(setup.system())
         .run();
 }
@@ -12,6 +13,7 @@ fn setup(
     asset_server: Res<AssetServer>,
     // mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    println!("setup");
     // let texture_handle = asset_server.load("branding/icon.png");
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(SpriteBundle {

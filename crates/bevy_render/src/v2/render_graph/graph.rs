@@ -1,5 +1,4 @@
 use super::{Edge, Node, NodeId, NodeLabel, NodeState, RenderGraphError, SlotLabel};
-use bevy_ecs::world::World;
 use bevy_utils::HashMap;
 use std::{borrow::Cow, fmt::Debug};
 

@@ -1,5 +1,6 @@
 pub mod collide_aabb;
 pub mod entity;
+pub mod v2;
 
 mod color_material;
 mod dynamic_texture_atlas_builder;

@@ -43,7 +43,7 @@ pub struct App {
     pub world: World,
     pub runner: Box<dyn Fn(App)>,
     pub schedule: Schedule,
-    pub sub_apps: Vec<App>,
+    sub_apps: Vec<App>,
 }
 
 impl Default for App {
@@ -356,6 +356,16 @@ impl App {
             registry.write().register::<T>();
         }
         self
+    }
+
+    pub fn add_sub_app(&mut self, app: App) -> &mut Self {
+        self.sub_apps.push(app);
+        self
+    }
+
+    // TODO: use labels instead of indices
+    pub fn sub_app_mut(&mut self, index: usize) -> &mut App {
+        &mut self.sub_apps[index]
     }
 }
 

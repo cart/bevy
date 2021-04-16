@@ -11,6 +11,7 @@ use bevy_utils::HashMap;
 pub struct ActiveCamera {
     pub name: String,
     pub entity: Option<Entity>,
+    // TODO: Remove
     pub bindings: RenderResourceBindings,
 }
 

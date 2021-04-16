@@ -81,6 +81,7 @@ pub struct SystemStage {
     uninitialized_parallel: Vec<usize>,
     /// Saves the value of the World change_tick during the last tick check
     last_tick_check: u32,
+    apply_buffers: bool,
 }
 
 impl SystemStage {
@@ -102,6 +103,7 @@ impl SystemStage {
             uninitialized_before_commands: vec![],
             uninitialized_at_end: vec![],
             last_tick_check: Default::default(),
+            apply_buffers: true,
         }
     }
 
@@ -139,6 +141,12 @@ impl SystemStage {
     pub fn add_system(&mut self, system: impl Into<SystemDescriptor>) -> &mut Self {
         self.add_system_inner(system, None);
         self
+    }
+
+    pub fn apply_buffers(&mut self, world: &mut World) {
+        for container in self.parallel.iter_mut() {
+            container.system_mut().apply_buffers(world);
+        }
     }
 
     fn add_system_inner(
@@ -829,9 +837,11 @@ impl Stage for SystemStage {
                 }
 
                 // Apply parallel systems' buffers.
-                for container in &mut self.parallel {
-                    if container.should_run {
-                        container.system_mut().apply_buffers(world);
+                if self.apply_buffers {
+                    for container in &mut self.parallel {
+                        if container.should_run {
+                            container.system_mut().apply_buffers(world);
+                        }
                     }
                 }
 
