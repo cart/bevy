@@ -1,7 +1,4 @@
-use crate::{
-    CoreStage, Events, Plugin, PluginGroup, PluginGroupBuilder,
-    StartupStage,
-};
+use crate::{CoreStage, Events, Plugin, PluginGroup, PluginGroupBuilder, StartupStage};
 use bevy_ecs::{
     component::{Component, ComponentDescriptor},
     prelude::{FromWorld, IntoExclusiveSystem, IntoSystem},
@@ -43,7 +40,12 @@ pub struct App {
     pub world: World,
     pub runner: Box<dyn Fn(App)>,
     pub schedule: Schedule,
-    sub_apps: Vec<App>,
+    sub_apps: Vec<SubApp>,
+}
+
+struct SubApp {
+    app: App,
+    runner: Box<dyn Fn(&mut World, &mut App)>,
 }
 
 impl Default for App {
@@ -81,6 +83,9 @@ impl App {
 
     pub fn update(&mut self) {
         self.schedule.run(&mut self.world);
+        for sub_app in self.sub_apps.iter_mut() {
+            (sub_app.runner)(&mut self.world, &mut sub_app.app);
+        }
     }
 
     pub fn run(&mut self) {
@@ -358,14 +363,17 @@ impl App {
         self
     }
 
-    pub fn add_sub_app(&mut self, app: App) -> &mut Self {
-        self.sub_apps.push(app);
+    pub fn add_sub_app(&mut self, app: App, f: impl Fn(&mut World, &mut App) + 'static) -> &mut Self {
+        self.sub_apps.push(SubApp {
+            app,
+            runner: Box::new(f),
+        });
         self
     }
 
     // TODO: use labels instead of indices
     pub fn sub_app_mut(&mut self, index: usize) -> &mut App {
-        &mut self.sub_apps[index]
+        &mut self.sub_apps[index].app
     }
 }
 

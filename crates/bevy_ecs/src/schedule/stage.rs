@@ -149,6 +149,10 @@ impl SystemStage {
         }
     }
 
+    pub fn set_apply_buffers(&mut self, apply_buffers: bool) {
+        self.apply_buffers = apply_buffers;
+    }
+
     fn add_system_inner(
         &mut self,
         system: impl Into<SystemDescriptor>,
