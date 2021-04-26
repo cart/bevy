@@ -235,14 +235,12 @@ where
                 TextureAttachment::Id(input.get(input_index).unwrap().get_texture().unwrap());
         }
 
-        let render_resource_bindings = world.get_resource::<RenderResourceBindings>().unwrap();
         let pipelines = world.get_resource::<Assets<PipelineDescriptor>>().unwrap();
 
         let mut draw_state = DrawState::default();
         let commands = &mut self.commands;
         render_context.begin_pass(
             &self.descriptor,
-            &render_resource_bindings,
             &mut |render_pass| {
             for render_command in commands.drain(..) {
                 match render_command {

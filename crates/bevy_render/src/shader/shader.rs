@@ -7,7 +7,7 @@ use super::ShaderLayout;
 use bevy_app::EventReader;
 use bevy_asset::{AssetEvent, AssetLoader, Assets, Handle, LoadContext, LoadedAsset};
 use bevy_ecs::system::{Res, ResMut};
-use bevy_reflect::TypeUuid;
+use bevy_reflect::{TypeUuid, Uuid};
 use bevy_utils::{tracing::error, BoxedFuture};
 use std::marker::Copy;
 use thiserror::Error;
@@ -132,6 +132,16 @@ impl ShaderSource {
     }
 }
 
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct ShaderId(Uuid);
+
+impl ShaderId {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        ShaderId(Uuid::new_v4())
+    }
+}
+
 /// A shader, as defined by its [ShaderSource] and [ShaderStage]
 #[derive(Clone, Debug, TypeUuid)]
 #[uuid = "d95bc916-6c55-4de3-9622-37e7b6969fda"]
@@ -209,6 +219,13 @@ impl Shader {
 pub struct ShaderStages {
     pub vertex: Handle<Shader>,
     pub fragment: Option<Handle<Shader>>,
+}
+
+/// All stages in a shader program
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ShaderStagesV2 {
+    pub vertex: ShaderId,
+    pub fragment: Option<ShaderId>,
 }
 
 pub struct ShaderStagesIterator<'a> {

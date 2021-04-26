@@ -3,12 +3,14 @@ mod graph;
 mod node;
 mod node_slot;
 mod schedule;
+mod nodes;
 
 pub use edge::*;
 pub use graph::*;
 pub use node::*;
 pub use node_slot::*;
 pub use schedule::*;
+pub use nodes::*;
 
 use thiserror::Error;
 

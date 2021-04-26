@@ -363,6 +363,13 @@ impl Mesh {
         self.attributes.insert(name.into(), values);
     }
 
+    pub fn remove_attribute(
+        &mut self,
+        name: impl Into<Cow<'static, str>>,
+    ) -> Option<VertexAttributeValues> {
+        self.attributes.remove(&name.into())
+    }
+
     /// Retrieve the data currently set behind a vertex attribute.
     pub fn attribute(&self, name: impl Into<Cow<'static, str>>) -> Option<&VertexAttributeValues> {
         self.attributes.get(&name.into())

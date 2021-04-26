@@ -400,6 +400,10 @@ path = "examples/shader/shader_defs.rs"
 name = "bevymark"
 path = "examples/tools/bevymark.rs"
 
+[[example]]
+name = "bevymark_pipelined"
+path = "examples/tools/bevymark_pipelined.rs"
+
 # UI (User Interface)
 [[example]]
 name = "button"

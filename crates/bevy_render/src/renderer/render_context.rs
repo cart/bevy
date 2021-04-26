@@ -52,7 +52,6 @@ pub trait RenderContext {
     fn begin_pass(
         &mut self,
         pass_descriptor: &PassDescriptor,
-        render_resource_bindings: &RenderResourceBindings,
         run_pass: &mut dyn FnMut(&mut dyn RenderPass),
     );
 }

@@ -6,6 +6,7 @@ use std::hash::Hash;
 #[derive(Clone, Debug, Default)]
 pub struct PipelineLayout {
     pub bind_groups: Vec<BindGroupDescriptor>,
+    // TODO: rename me
     pub vertex_buffer_descriptors: Vec<VertexBufferLayout>,
 }
 

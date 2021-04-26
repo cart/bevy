@@ -1,10 +1,6 @@
 use crate::{renderer::WgpuRenderContext, wgpu_type_converter::WgpuInto, WgpuResourceRefs};
 use bevy_asset::Handle;
-use bevy_render::{
-    pass::RenderPass,
-    pipeline::{BindGroupDescriptorId, IndexFormat, PipelineDescriptor},
-    renderer::{BindGroupId, BufferId, RenderContext},
-};
+use bevy_render::{pass::RenderPass, pipeline::{BindGroupDescriptorId, IndexFormat, PipelineDescriptor, PipelineId}, renderer::{BindGroupId, BufferId, RenderContext}};
 use bevy_utils::tracing::trace;
 use std::ops::Range;
 
@@ -97,6 +93,17 @@ impl<'a> RenderPass for WgpuRenderPass<'a> {
             .wgpu_resources
             .render_pipelines
             .get(pipeline_handle)
+            .expect(
+            "Attempted to use a pipeline that does not exist in this `RenderPass`'s `RenderContext`.",
+        );
+        self.render_pass.set_pipeline(pipeline);
+    }
+
+    fn set_pipeline_v2(&mut self, pipeline: PipelineId) {
+        let pipeline = self
+            .wgpu_resources
+            .render_pipelines_v2
+            .get(&pipeline)
             .expect(
             "Attempted to use a pipeline that does not exist in this `RenderPass`'s `RenderContext`.",
         );

@@ -10,6 +10,7 @@ use bevy_render::{
         VertexFormat,
     },
     renderer::BufferUsage,
+    swap_chain::SwapChainDescriptor,
     texture::{
         AddressMode, Extent3d, FilterMode, SamplerBorderColor, SamplerDescriptor,
         StorageTextureAccess, TextureDescriptor, TextureDimension, TextureFormat,
@@ -642,6 +643,22 @@ impl WgpuFrom<&Window> for wgpu::SwapChainDescriptor {
             width: window.physical_width(),
             height: window.physical_height(),
             present_mode: if window.vsync() {
+                wgpu::PresentMode::Fifo
+            } else {
+                wgpu::PresentMode::Immediate
+            },
+        }
+    }
+}
+
+impl WgpuFrom<&SwapChainDescriptor> for wgpu::SwapChainDescriptor {
+    fn from(descriptor: &SwapChainDescriptor) -> Self {
+        wgpu::SwapChainDescriptor {
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            format: TextureFormat::default().wgpu_into(),
+            width: descriptor.width,
+            height: descriptor.height,
+            present_mode: if descriptor.vsync {
                 wgpu::PresentMode::Fifo
             } else {
                 wgpu::PresentMode::Immediate

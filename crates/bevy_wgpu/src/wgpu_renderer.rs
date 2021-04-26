@@ -8,6 +8,7 @@ use bevy_ecs::world::{Mut, World};
 use bevy_render::{
     render_graph::{DependentNodeStager, RenderGraph, RenderGraphStager},
     renderer::RenderResourceContext,
+    v2::render_graph::ExtractedWindows,
 };
 use bevy_window::{WindowCreated, WindowResized, Windows};
 use std::{ops::Deref, sync::Arc};
@@ -119,6 +120,56 @@ impl WgpuRenderer {
     pub fn update(&mut self, world: &mut World) {
         self.handle_window_created_events(world);
         self.run_graph(world);
+
+        let render_resource_context = world
+            .get_resource::<Box<dyn RenderResourceContext>>()
+            .unwrap();
+        render_resource_context.drop_all_swap_chain_textures();
+        render_resource_context.remove_stale_bind_groups();
+    }
+
+    pub fn handle_new_windows(&mut self, world: &mut World) {
+        let world = world.cell();
+        let mut render_resource_context = world
+            .get_resource_mut::<Box<dyn RenderResourceContext>>()
+            .unwrap();
+        let render_resource_context = render_resource_context
+            .downcast_mut::<WgpuRenderResourceContext>()
+            .unwrap();
+        let extracted_windows = world.get_resource::<ExtractedWindows>().unwrap();
+        for (id, window) in extracted_windows.iter() {
+            if !render_resource_context.contains_window_surface(*id) {
+                let surface = unsafe { self.instance.create_surface(&window.handle) };
+                render_resource_context.set_window_surface(*id, surface);
+            }
+        }
+    }
+
+    pub fn run_graph_v2(&mut self, world: &mut World) {
+        world.resource_scope(
+            |world, mut render_graph: Mut<bevy_render::v2::render_graph::RenderGraph>| {
+                // stage nodes
+                let mut stager =
+                    bevy_render::v2::render_graph::DependentNodeStager::loose_grouping();
+                let stages = bevy_render::v2::render_graph::RenderGraphStager::get_stages(
+                    &mut stager,
+                    &render_graph,
+                )
+                .unwrap();
+                let mut borrowed = stages.borrow(&mut render_graph);
+
+                // execute stages
+                let graph_executor = crate::v2::WgpuRenderGraphExecutor {
+                    max_thread_count: 2,
+                };
+                graph_executor.execute(world, self.device.clone(), &mut self.queue, &mut borrowed);
+            },
+        )
+    }
+
+    pub fn update_v2(&mut self, world: &mut World) {
+        self.handle_new_windows(world);
+        self.run_graph_v2(world);
 
         let render_resource_context = world
             .get_resource::<Box<dyn RenderResourceContext>>()

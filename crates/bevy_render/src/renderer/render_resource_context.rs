@@ -1,18 +1,15 @@
-use crate::{
-    pipeline::{BindGroupDescriptorId, PipelineDescriptor, PipelineLayout},
-    renderer::{
+use crate::{pipeline::{BindGroupDescriptorId, PipelineDescriptor, PipelineDescriptorV2, PipelineId, PipelineLayout}, renderer::{
         BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceId, SamplerId, TextureId,
-    },
-    shader::{Shader, ShaderError, ShaderLayout, ShaderStages},
-    texture::{SamplerDescriptor, TextureDescriptor},
-};
+    }, shader::{Shader, ShaderError, ShaderId, ShaderLayout, ShaderStages}, swap_chain::SwapChainDescriptor, texture::{SamplerDescriptor, TextureDescriptor}};
 use bevy_asset::{Asset, Assets, Handle, HandleUntyped};
 use bevy_window::Window;
 use downcast_rs::{impl_downcast, Downcast};
 use std::ops::Range;
 
 pub trait RenderResourceContext: Downcast + Send + Sync + 'static {
+    // TODO: remove me
     fn create_swap_chain(&self, window: &Window);
+    fn next_swap_chain_texture_v2(&self, descriptor: &SwapChainDescriptor) -> TextureId;
     fn next_swap_chain_texture(&self, window: &Window) -> TextureId;
     fn drop_swap_chain_texture(&self, resource: TextureId);
     fn drop_all_swap_chain_textures(&self);
@@ -36,6 +33,7 @@ pub trait RenderResourceContext: Downcast + Send + Sync + 'static {
     fn unmap_buffer(&self, id: BufferId);
     fn create_buffer_with_data(&self, buffer_info: BufferInfo, data: &[u8]) -> BufferId;
     fn create_shader_module(&self, shader_handle: &Handle<Shader>, shaders: &Assets<Shader>);
+    fn create_shader_module_v2(&self, shader: &Shader) -> ShaderId;
     fn create_shader_module_from_source(&self, shader_handle: &Handle<Shader>, shader: &Shader);
     fn get_specialized_shader(
         &self,
@@ -66,6 +64,10 @@ pub trait RenderResourceContext: Downcast + Send + Sync + 'static {
         pipeline_descriptor: &PipelineDescriptor,
         shaders: &Assets<Shader>,
     );
+    fn create_render_pipeline_v2(
+        &self,
+        pipeline_descriptor: &PipelineDescriptorV2,
+    ) -> PipelineId;
     fn bind_group_descriptor_exists(&self, bind_group_descriptor_id: BindGroupDescriptorId)
         -> bool;
     fn create_bind_group(

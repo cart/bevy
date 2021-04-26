@@ -1,12 +1,7 @@
 use super::RenderResourceContext;
-use crate::{
-    pipeline::{BindGroupDescriptorId, PipelineDescriptor},
-    renderer::{
+use crate::{pipeline::{BindGroupDescriptorId, PipelineDescriptor, PipelineDescriptorV2, PipelineId}, renderer::{
         BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceId, SamplerId, TextureId,
-    },
-    shader::{Shader, ShaderError},
-    texture::{SamplerDescriptor, TextureDescriptor},
-};
+    }, shader::{Shader, ShaderError, ShaderId}, texture::{SamplerDescriptor, TextureDescriptor}};
 use bevy_asset::{Assets, Handle, HandleUntyped};
 use bevy_utils::HashMap;
 use bevy_window::Window;
@@ -91,6 +86,10 @@ impl RenderResourceContext for HeadlessRenderResourceContext {
 
     fn create_shader_module(&self, _shader_handle: &Handle<Shader>, _shaders: &Assets<Shader>) {}
 
+    fn create_shader_module_v2(&self, _shader: &Shader) -> ShaderId {
+        ShaderId::new()
+    }
+
     fn remove_buffer(&self, buffer: BufferId) {
         self.buffer_info.write().remove(&buffer);
     }
@@ -127,6 +126,14 @@ impl RenderResourceContext for HeadlessRenderResourceContext {
         _shaders: &Assets<Shader>,
     ) {
     }
+
+    fn create_render_pipeline_v2(
+        &self,
+        _pipeline_descriptor: &PipelineDescriptorV2,
+    ) -> PipelineId {
+        PipelineId::new()
+    }
+
 
     fn create_bind_group(
         &self,
@@ -171,4 +178,11 @@ impl RenderResourceContext for HeadlessRenderResourceContext {
     }
 
     fn remove_stale_bind_groups(&self) {}
+
+    fn next_swap_chain_texture_v2(
+        &self,
+        _descriptor: &crate::swap_chain::SwapChainDescriptor,
+    ) -> TextureId {
+        TextureId::new()
+    }
 }

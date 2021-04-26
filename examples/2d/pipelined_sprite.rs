@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, sprite::entity::PipelinedSpriteBundle};
 use bevy::PipelinedDefaultPlugins;
 
 fn main() {
@@ -13,11 +13,24 @@ fn setup(
     asset_server: Res<AssetServer>,
     // mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    println!("setup");
     // let texture_handle = asset_server.load("branding/icon.png");
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-    commands.spawn_bundle(SpriteBundle {
+    commands.spawn_bundle(PipelinedSpriteBundle {
         // material: materials.add(texture_handle.into()),
+        sprite: Sprite {
+            size: Vec2::new(50.0, 50.0),
+            ..Default::default()
+        },
+        transform: Transform::from_xyz(100.0, 0.0, 0.0),
+        ..Default::default()
+    });
+    commands.spawn_bundle(PipelinedSpriteBundle {
+        // material: materials.add(texture_handle.into()),
+        sprite: Sprite {
+            size: Vec2::new(50.0, 50.0),
+            ..Default::default()
+        },
+        transform: Transform::from_xyz(-100.0, 0.0, 0.0),
         ..Default::default()
     });
 }

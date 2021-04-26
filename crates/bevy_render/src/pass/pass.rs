@@ -4,7 +4,6 @@ use crate::{renderer::TextureId, Color};
 #[derive(Debug, Clone)]
 pub enum TextureAttachment {
     Id(TextureId),
-    Name(String),
     Input(String),
 }
 

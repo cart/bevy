@@ -46,6 +46,23 @@ impl Default for SpriteBundle {
     }
 }
 
+#[derive(Bundle, Clone)]
+pub struct PipelinedSpriteBundle {
+    pub sprite: Sprite,
+    pub transform: Transform,
+    pub global_transform: GlobalTransform,
+}
+
+impl Default for PipelinedSpriteBundle {
+    fn default() -> Self {
+        Self {
+            sprite: Default::default(),
+            transform: Default::default(),
+            global_transform: Default::default(),
+        }
+    }
+}
+
 /// A Bundle of components for drawing a single sprite from a sprite sheet (also referred
 /// to as a `TextureAtlas`)
 #[derive(Bundle, Clone)]

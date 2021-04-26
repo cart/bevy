@@ -2,17 +2,10 @@ use crate::{wgpu_type_converter::WgpuInto, WgpuBindGroupInfo, WgpuResources};
 
 use crate::wgpu_type_converter::OwnedWgpuVertexBufferLayout;
 use bevy_asset::{Assets, Handle, HandleUntyped};
-use bevy_render::{
-    pipeline::{
-        BindGroupDescriptor, BindGroupDescriptorId, BindingShaderStage, PipelineDescriptor,
-    },
-    renderer::{
+use bevy_render::{pipeline::{BindGroupDescriptor, BindGroupDescriptorId, BindingShaderStage, PipelineDescriptor, PipelineDescriptorV2, PipelineId}, renderer::{
         BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceBinding,
         RenderResourceContext, RenderResourceId, SamplerId, TextureId,
-    },
-    shader::{glsl_to_spirv, Shader, ShaderError, ShaderSource},
-    texture::{Extent3d, SamplerDescriptor, TextureDescriptor},
-};
+    }, shader::{Shader, ShaderError, ShaderId, ShaderSource, glsl_to_spirv}, swap_chain::SwapChainDescriptor, texture::{Extent3d, SamplerDescriptor, TextureDescriptor}};
 use bevy_utils::tracing::trace;
 use bevy_window::{Window, WindowId};
 use futures_lite::future;
@@ -41,6 +34,13 @@ impl WgpuRenderResourceContext {
     pub fn set_window_surface(&self, window_id: WindowId, surface: wgpu::Surface) {
         let mut window_surfaces = self.resources.window_surfaces.write();
         window_surfaces.insert(window_id, surface);
+    }
+
+    pub fn contains_window_surface(&self, window_id: WindowId) -> bool {
+        self.resources
+            .window_surfaces
+            .read()
+            .contains_key(&window_id)
     }
 
     pub fn copy_buffer_to_buffer(
@@ -229,7 +229,7 @@ impl WgpuRenderResourceContext {
         let mut window_swap_chains = self.resources.window_swap_chains.write();
         let mut swap_chain_outputs = self.resources.swap_chain_frames.write();
 
-        let window_swap_chain = window_swap_chains.get_mut(&window_id).unwrap();
+        let window_swap_chain = window_swap_chains.get_mut(&window_id)?;
         let next_texture = window_swap_chain.get_current_frame().ok()?;
         let id = TextureId::new();
         swap_chain_outputs.insert(id, next_texture);
@@ -353,6 +353,21 @@ impl RenderResourceContext for WgpuRenderResourceContext {
         self.create_shader_module_from_source(shader_handle, shader);
     }
 
+    fn create_shader_module_v2(&self, shader: &Shader) -> ShaderId {
+        let mut shader_modules = self.resources.shader_modules_v2.write();
+        let spirv: Cow<[u32]> = shader.get_spirv(None).unwrap().into();
+        let shader_module = self
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::SpirV(spirv),
+                flags: Default::default(),
+            });
+        let id = ShaderId::new();
+        shader_modules.insert(id, shader_module);
+        id
+    }
+
     fn create_swap_chain(&self, window: &Window) {
         let surfaces = self.resources.window_surfaces.read();
         let mut window_swap_chains = self.resources.window_swap_chains.write();
@@ -378,6 +393,28 @@ impl RenderResourceContext for WgpuRenderResourceContext {
                 .remove(&window.id());
             self.create_swap_chain(window);
             self.try_next_swap_chain_texture(window.id())
+                .expect("Failed to acquire next swap chain texture!")
+        }
+    }
+
+    fn next_swap_chain_texture_v2(&self, descriptor: &SwapChainDescriptor) -> TextureId {
+        if let Some(texture_id) = self.try_next_swap_chain_texture(descriptor.window_id) {
+            texture_id
+        } else {
+            {
+                let surfaces = self.resources.window_surfaces.read();
+                let swap_chain_descriptor: wgpu::SwapChainDescriptor = descriptor.wgpu_into();
+                let mut window_swap_chains = self.resources.window_swap_chains.write();
+                let surface = surfaces
+                    .get(&descriptor.window_id)
+                    .expect("No surface found for window.");
+                let swap_chain = self
+                    .device
+                    .create_swap_chain(surface, &swap_chain_descriptor);
+
+                window_swap_chains.insert(descriptor.window_id, swap_chain);
+            }
+            self.try_next_swap_chain_texture(descriptor.window_id)
                 .expect("Failed to acquire next swap chain texture!")
         }
     }
@@ -514,6 +551,90 @@ impl RenderResourceContext for WgpuRenderResourceContext {
             .create_render_pipeline(&render_pipeline_descriptor);
         let mut render_pipelines = self.resources.render_pipelines.write();
         render_pipelines.insert(pipeline_handle, render_pipeline);
+    }
+
+    fn create_render_pipeline_v2(
+        &self,
+        pipeline_descriptor: &PipelineDescriptorV2,
+    ) -> PipelineId {
+        let layout = &pipeline_descriptor.layout;
+        for bind_group_descriptor in layout.bind_groups.iter() {
+            self.create_bind_group_layout(&bind_group_descriptor);
+        }
+
+        let bind_group_layouts = self.resources.bind_group_layouts.read();
+        // setup and collect bind group layouts
+        let bind_group_layouts = layout
+            .bind_groups
+            .iter()
+            .map(|bind_group| bind_group_layouts.get(&bind_group.id).unwrap())
+            .collect::<Vec<&wgpu::BindGroupLayout>>();
+
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: bind_group_layouts.as_slice(),
+                push_constant_ranges: &[],
+            });
+
+        let owned_vertex_buffer_descriptors = layout
+            .vertex_buffer_descriptors
+            .iter()
+            .map(|v| v.wgpu_into())
+            .collect::<Vec<OwnedWgpuVertexBufferLayout>>();
+
+        let color_states = pipeline_descriptor
+            .color_target_states
+            .iter()
+            .map(|c| c.wgpu_into())
+            .collect::<Vec<wgpu::ColorTargetState>>();
+
+        let shader_modules = self.resources.shader_modules_v2.read();
+        let vertex_shader_module = shader_modules
+            .get(&pipeline_descriptor.shader_stages.vertex)
+            .unwrap();
+
+        let fragment_shader_module = pipeline_descriptor
+            .shader_stages
+            .fragment
+            .as_ref()
+            .map(|fragment_handle| shader_modules.get(fragment_handle).unwrap());
+        let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &vertex_shader_module,
+                entry_point: "main",
+                buffers: &owned_vertex_buffer_descriptors
+                    .iter()
+                    .map(|v| v.into())
+                    .collect::<Vec<wgpu::VertexBufferLayout>>(),
+            },
+            fragment: pipeline_descriptor
+                .shader_stages
+                .fragment
+                .as_ref()
+                .map(|_| wgpu::FragmentState {
+                    entry_point: "main",
+                    module: fragment_shader_module.as_ref().unwrap(),
+                    targets: color_states.as_slice(),
+                }),
+            primitive: pipeline_descriptor.primitive.clone().wgpu_into(),
+            depth_stencil: pipeline_descriptor
+                .depth_stencil
+                .clone()
+                .map(|depth_stencil| depth_stencil.wgpu_into()),
+            multisample: pipeline_descriptor.multisample.clone().wgpu_into(),
+        };
+
+        let render_pipeline = self
+            .device
+            .create_render_pipeline(&render_pipeline_descriptor);
+        let mut render_pipelines = self.resources.render_pipelines_v2.write();
+        let id = PipelineId::new();
+        render_pipelines.insert(id, render_pipeline);
+        id
     }
 
     fn bind_group_descriptor_exists(

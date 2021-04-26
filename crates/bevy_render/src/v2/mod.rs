@@ -1,9 +1,7 @@
-pub mod features;
 pub mod render_graph;
 
-use crate::camera::{self, ActiveCameras, Camera, OrthographicProjection};
-
 use self::render_graph::RenderGraph;
+use crate::camera::{self, ActiveCameras, Camera, OrthographicProjection};
 use bevy_app::{App, CoreStage, Plugin};
 use bevy_ecs::prelude::*;
 
@@ -20,8 +18,10 @@ pub enum RenderStage {
 
 impl Plugin for PipelinedRenderPlugin {
     fn build(&self, app: &mut App) {
+        let mut active_cameras = ActiveCameras::default();
+        active_cameras.add(crate::base::camera::CAMERA_2D);
         app.register_type::<Camera>()
-            .init_resource::<ActiveCameras>()
+            .insert_resource(active_cameras)
             .add_system_to_stage(
                 CoreStage::PostUpdate,
                 camera::active_cameras_system.system(),
@@ -41,7 +41,22 @@ impl Plugin for PipelinedRenderPlugin {
             .add_stage(RenderStage::Render, SystemStage::parallel());
         render_app.insert_resource(RenderGraph::default());
         app.add_sub_app(render_app, |app_world, render_app| {
+            // extract
             extract(app_world, render_app);
+
+            // prepare
+            let prepare = render_app
+                .schedule
+                .get_stage_mut::<SystemStage>(&RenderStage::Prepare)
+                .unwrap();
+            prepare.run(&mut render_app.world);
+
+            // render
+            let render = render_app
+                .schedule
+                .get_stage_mut::<SystemStage>(&RenderStage::Render)
+                .unwrap();
+            render.run(&mut render_app.world);
         });
     }
 }
