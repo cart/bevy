@@ -75,7 +75,10 @@ impl PluginGroup for PipelinedDefaultPlugins {
         #[cfg(feature = "bevy_wgpu")]
         group.add(bevy_wgpu::v2::PipelinedWgpuPlugin::default());
 
+        // #[cfg(feature = "bevy_sprite")]
+        // group.add(bevy_sprite::v2::PipelinedSpritePlugin::default());
+
         #[cfg(feature = "bevy_sprite")]
-        group.add(bevy_sprite::v2::PipelinedSpritePlugin::default());
+        group.add(bevy_sprite::v2::vertex_sprites::VertexSpritePlugin::default());
     }
 }

@@ -56,7 +56,7 @@ fn setup(
     mut counter: ResMut<BevyCounter>,
     asset_server: Res<AssetServer>,
 ) {
-    spawn_birds(&mut commands, &window, &mut counter, 10);
+    // spawn_birds(&mut commands, &window, &mut counter, 10);
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     // commands.spawn_bundle(UiCameraBundle::default());
     // commands.spawn_bundle(TextBundle {
