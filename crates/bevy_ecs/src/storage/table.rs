@@ -142,6 +142,11 @@ impl Column {
         self.get_ticks_mut_ptr().add(row)
     }
 
+    pub fn clear(&mut self) {
+        self.data.clear();
+        self.ticks.get_mut().clear();
+    }
+
     #[inline]
     pub(crate) fn check_change_ticks(&mut self, change_tick: u32) {
         let ticks = unsafe { (*self.ticks.get()).iter_mut() };
@@ -380,6 +385,12 @@ impl Table {
     pub fn iter(&self) -> impl Iterator<Item = &Column> {
         self.columns.values()
     }
+
+    pub fn clear(&mut self) {
+        for column in self.columns.values_mut() {
+            column.clear();
+        }
+    }
 }
 
 pub struct Tables {
@@ -457,6 +468,16 @@ impl Tables {
 
     pub fn iter(&self) -> std::slice::Iter<'_, Table> {
         self.tables.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Table> {
+        self.tables.iter_mut()
+    }
+
+    pub fn clear(&mut self) {
+        for table in self.tables.iter_mut() {
+            table.clear();
+        }
     }
 
     pub(crate) fn check_change_ticks(&mut self, change_tick: u32) {
