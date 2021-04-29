@@ -1,4 +1,5 @@
 mod camera_plugin;
+pub mod phase_draw_vec;
 pub mod vertex_sprites;
 
 pub use camera_plugin::*;

@@ -78,7 +78,10 @@ impl PluginGroup for PipelinedDefaultPlugins {
         // #[cfg(feature = "bevy_sprite")]
         // group.add(bevy_sprite::v2::PipelinedSpritePlugin::default());
 
+        // #[cfg(feature = "bevy_sprite")]
+        // group.add(bevy_sprite::v2::vertex_sprites::VertexSpritePlugin::default());
+
         #[cfg(feature = "bevy_sprite")]
-        group.add(bevy_sprite::v2::vertex_sprites::VertexSpritePlugin::default());
+        group.add(bevy_sprite::v2::phase_draw_vec::PhaseSpritePlugin::default());
     }
 }

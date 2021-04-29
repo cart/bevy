@@ -1,4 +1,5 @@
 pub mod render_graph;
+pub mod draw_state;
 
 use self::render_graph::RenderGraph;
 use crate::camera::{self, ActiveCameras, Camera, OrthographicProjection};
@@ -13,6 +14,7 @@ pub struct PipelinedRenderPlugin;
 pub enum RenderStage {
     Extract,
     Prepare,
+    Draw,
     Render,
 }
 
@@ -38,6 +40,7 @@ impl Plugin for PipelinedRenderPlugin {
         render_app
             .add_stage(RenderStage::Extract, extract_stage)
             .add_stage(RenderStage::Prepare, SystemStage::parallel())
+            .add_stage(RenderStage::Draw, SystemStage::parallel())
             .add_stage(RenderStage::Render, SystemStage::parallel());
         render_app.insert_resource(RenderGraph::default());
         app.add_sub_app(render_app, |app_world, render_app| {
@@ -50,6 +53,13 @@ impl Plugin for PipelinedRenderPlugin {
                 .get_stage_mut::<SystemStage>(&RenderStage::Prepare)
                 .unwrap();
             prepare.run(&mut render_app.world);
+
+            // prepare
+            let draw = render_app
+                .schedule
+                .get_stage_mut::<SystemStage>(&RenderStage::Draw)
+                .unwrap();
+            draw.run(&mut render_app.world);
 
             // render
             let render = render_app
