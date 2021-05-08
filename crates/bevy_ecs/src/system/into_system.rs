@@ -23,7 +23,7 @@ pub struct SystemState {
 }
 
 impl SystemState {
-    fn new<T>() -> Self {
+    pub fn new<T>() -> Self {
         Self {
             name: std::any::type_name::<T>().into(),
             archetype_component_access: Access::default(),
