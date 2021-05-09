@@ -9,19 +9,33 @@ use bevy_ecs::{
     system::{SystemParam, SystemParamFetch, SystemParamState, SystemState},
 };
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
-use bevy_render::{color::Color, mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues}, pass::{
+use bevy_render::{
+    color::Color,
+    mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues},
+    pass::{
         LoadOp, Operations, PassDescriptor, RenderPass, RenderPassColorAttachmentDescriptor,
         TextureAttachment,
-    }, pipeline::{
+    },
+    pipeline::{
         BindType, BlendFactor, BlendOperation, BlendState, ColorTargetState, ColorWrite,
         CompareFunction, CullMode, DepthBiasState, DepthStencilState, FrontFace, IndexFormat,
         InputStepMode, PipelineDescriptor, PipelineLayout, PolygonMode, PrimitiveState,
         PrimitiveTopology, StencilFaceState, StencilState, VertexAttribute, VertexBufferLayout,
         VertexFormat,
-    }, pipeline::{PipelineDescriptorV2, PipelineId}, renderer::{
+    },
+    pipeline::{PipelineDescriptorV2, PipelineId},
+    renderer::{
         BindGroup, BindGroupBuilder, BindGroupId, BufferId, BufferInfo, BufferMapMode, BufferUsage,
         RenderContext, RenderResourceContext, RenderResourceType,
-    }, shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2}, texture::TextureFormat, v2::{RenderStage, draw_state::{DrawState, TrackedRenderPass}, render_graph::{Node, RenderGraph, ResourceSlotInfo, ResourceSlots, WindowSwapChainNode}}};
+    },
+    shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2},
+    texture::TextureFormat,
+    v2::{
+        draw_state::{DrawState, TrackedRenderPass},
+        render_graph::{Node, RenderGraph, ResourceSlotInfo, ResourceSlots, WindowSwapChainNode},
+        RenderStage,
+    },
+};
 use bevy_transform::components::GlobalTransform;
 use bevy_window::WindowId;
 use parking_lot::Mutex;
@@ -415,7 +429,7 @@ impl Node for SpriteNode {
 }
 
 pub trait Draw: Send + Sync {
-    fn draw(&mut self, world: &World, context: &mut TrackedRenderPass, draw_key: usize);
+    fn draw(&mut self, world: &World, pass: &mut TrackedRenderPass, draw_key: usize);
 }
 
 pub struct ParamState<Param: SystemParam> {
@@ -463,6 +477,71 @@ impl DrawSprite {
     }
 }
 
+pub struct DrawSystemState<Param: SystemParam> {
+    draw_system: Box<dyn DrawSystem<Param = Param>>,
+    state: ParamState<Param>,
+}
+
+impl<Param: SystemParam> DrawSystemState<Param> {
+    pub fn new<D: DrawSystem<Param = Param> + 'static>(world: &mut World, draw_system: D) -> Self {
+        Self {
+            draw_system: Box::new(draw_system),
+            state: ParamState::new(world),
+        }
+    }
+}
+
+impl<Param: SystemParam> Draw for DrawSystemState<Param> {
+    fn draw(&mut self, world: &World, pass: &mut TrackedRenderPass, draw_key: usize) {
+        let param = self.state.get(world);
+        self.draw_system.draw(pass, draw_key, param);
+    }
+}
+
+pub trait DrawSystem: Send + Sync {
+    type Param: SystemParam;
+    fn draw(
+        &mut self,
+        pass: &mut TrackedRenderPass,
+        draw_key: usize,
+        param: <<Self::Param as SystemParam>::Fetch as SystemParamFetch>::Item,
+    );
+}
+
+struct DrawSpriteSystem;
+
+impl DrawSystem for DrawSpriteSystem {
+    type Param = (Res<'static, SpriteShaders>, Res<'static, SpriteBuffers>);
+
+    fn draw(
+        &mut self,
+        pass: &mut TrackedRenderPass,
+        draw_key: usize,
+        (sprite_shaders, sprite_buffers): <<Self::Param as SystemParam>::Fetch as SystemParamFetch>::Item,
+    ) {
+        const INDICES: usize = 6;
+        let layout = &sprite_shaders.pipeline_descriptor.layout;
+        pass.set_pipeline(sprite_shaders.pipeline);
+        pass.set_vertex_buffer(0, sprite_buffers.sprite_vertex_buffer.unwrap(), 0);
+        pass.set_index_buffer(
+            sprite_buffers.sprite_index_buffer.unwrap(),
+            0,
+            IndexFormat::Uint32,
+        );
+        pass.set_bind_group(
+            0,
+            layout.bind_groups[0].id,
+            sprite_buffers.bind_group.unwrap(),
+            None,
+        );
+
+        pass.draw_indexed(
+            (draw_key * INDICES) as u32..(draw_key * INDICES + INDICES) as u32,
+            0,
+            0..1,
+        );
+    }
+}
 
 
 impl Draw for DrawSprite {
@@ -551,7 +630,11 @@ impl Node for MainPassNode {
             let mut draw_functions = draw_functions.draw_function.lock();
             let mut tracked_pass = TrackedRenderPass::new(render_pass);
             for drawable in transparent_phase.drawn_things.iter() {
-                draw_functions[drawable.draw_function].draw(world, &mut tracked_pass, drawable.draw_key);
+                draw_functions[drawable.draw_function].draw(
+                    world,
+                    &mut tracked_pass,
+                    drawable.draw_key,
+                );
             }
         })
     }
