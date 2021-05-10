@@ -1,7 +1,17 @@
-use crate::{color::Color, pass::{
+use crate::{
+    color::Color,
+    pass::{
         LoadOp, Operations, PassDescriptor, RenderPass, RenderPassColorAttachmentDescriptor,
         TextureAttachment,
-    }, renderer::RenderResourceType, v2::{RenderStage, draw_state::TrackedRenderPass, features::CameraPlugin, render_graph::{RenderGraph, WindowSwapChainNode}}};
+    },
+    renderer::RenderResourceType,
+    v2::{
+        draw_state::TrackedRenderPass,
+        features::CameraPlugin,
+        render_graph::{RenderGraph, WindowSwapChainNode},
+        RenderStage,
+    },
+};
 use crate::{
     renderer::RenderContext,
     v2::features::draw::DrawFunctions,
@@ -51,7 +61,6 @@ fn clear_transparent_phase(mut transparent_phase: ResMut<RenderPhase>) {
     transparent_phase.drawn_things.clear();
 }
 
-
 pub struct Drawable {
     pub draw_function: usize,
     pub draw_key: usize,
@@ -67,6 +76,10 @@ impl RenderPhase {
     #[inline]
     pub fn add(&mut self, drawable: Drawable) {
         self.drawn_things.push(drawable);
+    }
+
+    pub fn sort(&mut self) {
+        self.drawn_things.sort_by_key(|d| d.sort_key);
     }
 }
 

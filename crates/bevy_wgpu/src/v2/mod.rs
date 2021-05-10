@@ -4,7 +4,7 @@ pub use wgpu_render_graph_executor::*;
 use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::{Commands, IntoExclusiveSystem, IntoSystem, Res, World};
 use bevy_render::{
-    renderer::RenderResourceContext,
+    renderer::RenderResources2,
     v2::{
         render_graph::{ExtractedWindow, ExtractedWindows, RawWindowHandleWrapper},
         RenderStage,
@@ -30,11 +30,11 @@ impl Plugin for PipelinedWgpuPlugin {
         let wgpu_renderer = future::block_on(WgpuRenderer::new(options));
         let resource_context = WgpuRenderResourceContext::new(wgpu_renderer.device.clone());
         app.world
-            .insert_resource::<Box<dyn RenderResourceContext>>(Box::new(resource_context));
+            .insert_resource(RenderResources2::new(Box::new(resource_context)));
         let resource_context = WgpuRenderResourceContext::new(wgpu_renderer.device.clone());
 
         let render_app = app.sub_app_mut(0);
-        render_app.insert_resource::<Box<dyn RenderResourceContext>>(Box::new(resource_context));
+        render_app.insert_resource(RenderResources2::new(Box::new(resource_context)));
 
         let render_system = get_wgpu_render_system(wgpu_renderer);
         render_app

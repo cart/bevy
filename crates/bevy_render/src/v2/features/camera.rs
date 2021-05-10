@@ -1,8 +1,6 @@
 use crate::{
     camera::{ActiveCameras, Camera},
-    renderer::{
-        BufferId, BufferInfo, BufferMapMode, BufferUsage, RenderContext, RenderResourceContext,
-    },
+    renderer::{BufferId, BufferInfo, BufferMapMode, BufferUsage, RenderContext, RenderResources2},
     v2::{
         render_graph::{Node, RenderGraph, ResourceSlots},
         RenderStage,
@@ -19,16 +17,15 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.sub_app_mut(0)
+        let render_app = app.sub_app_mut(0);
+        render_app
             .add_system_to_stage(RenderStage::Extract, extract_cameras.system())
             .add_system_to_stage(RenderStage::Prepare, prepare_cameras.system());
-        let render_world = app.sub_app_mut(0).world.cell();
-        let mut graph = render_world.get_resource_mut::<RenderGraph>().unwrap();
+        let mut graph = render_app.world.get_resource_mut::<RenderGraph>().unwrap();
         graph.add_node("camera", CameraNode);
     }
 }
 
-// TODO: this should live in bevy_render
 #[derive(Debug)]
 pub struct ExtractedCamera {
     pub projection: Mat4,
@@ -49,9 +46,7 @@ fn extract_cameras(
     query: Query<(&Camera, &GlobalTransform)>,
 ) {
     // TODO: move camera name?
-    if let Some(active_camera) =
-        active_cameras.get(crate::render_graph::base::camera::CAMERA_2D)
-    {
+    if let Some(active_camera) = active_cameras.get(crate::render_graph::base::camera::CAMERA_2D) {
         if let Some((camera, transform)) = active_camera.entity.and_then(|e| query.get(e).ok()) {
             commands.insert_resource(ExtractedCamera {
                 projection: camera.projection_matrix,
@@ -64,21 +59,20 @@ fn extract_cameras(
 const MATRIX_SIZE: usize = std::mem::size_of::<[[f32; 4]; 4]>();
 fn prepare_cameras(
     mut commands: Commands,
-    render_resource_context: Res<Box<dyn RenderResourceContext>>,
+    render_resources: Res<RenderResources2>,
     camera_buffers: Option<ResMut<CameraBuffers>>,
-    // TODO: remove this. cameras shouldn't be coupled to sprites
     extracted_camera: Res<ExtractedCamera>,
 ) {
     let staging = if let Some(camera_buffers) = camera_buffers {
-        render_resource_context.map_buffer(camera_buffers.staging, BufferMapMode::Write);
+        render_resources.map_buffer(camera_buffers.staging, BufferMapMode::Write);
         camera_buffers.staging
     } else {
-        let staging = render_resource_context.create_buffer(BufferInfo {
+        let staging = render_resources.create_buffer(BufferInfo {
             size: MATRIX_SIZE,
             buffer_usage: BufferUsage::COPY_SRC | BufferUsage::MAP_WRITE,
             mapped_at_creation: true,
         });
-        let view_proj = render_resource_context.create_buffer(BufferInfo {
+        let view_proj = render_resources.create_buffer(BufferInfo {
             size: MATRIX_SIZE,
             buffer_usage: BufferUsage::COPY_DST | BufferUsage::UNIFORM,
             mapped_at_creation: false,
@@ -88,14 +82,10 @@ fn prepare_cameras(
         staging
     };
     let view_proj = extracted_camera.projection * extracted_camera.transform.inverse();
-    render_resource_context.write_mapped_buffer(
-        staging,
-        0..MATRIX_SIZE as u64,
-        &mut |data, _renderer| {
-            data[0..MATRIX_SIZE].copy_from_slice(view_proj.to_cols_array_2d().as_bytes());
-        },
-    );
-    render_resource_context.unmap_buffer(staging);
+    render_resources.write_mapped_buffer(staging, 0..MATRIX_SIZE as u64, &mut |data, _renderer| {
+        data[0..MATRIX_SIZE].copy_from_slice(view_proj.to_cols_array_2d().as_bytes());
+    });
+    render_resources.unmap_buffer(staging);
 }
 
 pub struct CameraNode;

@@ -1,10 +1,40 @@
-use crate::{pipeline::{BindGroupDescriptorId, PipelineDescriptor, PipelineDescriptorV2, PipelineId, PipelineLayout}, renderer::{
+use crate::{
+    pipeline::{
+        BindGroupDescriptorId, PipelineDescriptor, PipelineDescriptorV2, PipelineId, PipelineLayout,
+    },
+    renderer::{
         BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceId, SamplerId, TextureId,
-    }, shader::{Shader, ShaderError, ShaderId, ShaderLayout, ShaderStages}, swap_chain::SwapChainDescriptor, texture::{SamplerDescriptor, TextureDescriptor}};
+    },
+    shader::{Shader, ShaderError, ShaderId, ShaderLayout, ShaderStages},
+    swap_chain::SwapChainDescriptor,
+    texture::{SamplerDescriptor, TextureDescriptor},
+};
 use bevy_asset::{Asset, Assets, Handle, HandleUntyped};
 use bevy_window::Window;
 use downcast_rs::{impl_downcast, Downcast};
-use std::ops::Range;
+use std::ops::{Deref, DerefMut, Range};
+
+pub struct RenderResources2(Box<dyn RenderResourceContext>);
+
+impl RenderResources2 {
+    pub fn new(context: Box<dyn RenderResourceContext>) -> Self {
+        Self(context)
+    }
+}
+
+impl Deref for RenderResources2 {
+    type Target = dyn RenderResourceContext;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl DerefMut for RenderResources2 {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.0
+    }
+}
 
 pub trait RenderResourceContext: Downcast + Send + Sync + 'static {
     // TODO: remove me
@@ -64,10 +94,7 @@ pub trait RenderResourceContext: Downcast + Send + Sync + 'static {
         pipeline_descriptor: &PipelineDescriptor,
         shaders: &Assets<Shader>,
     );
-    fn create_render_pipeline_v2(
-        &self,
-        pipeline_descriptor: &PipelineDescriptorV2,
-    ) -> PipelineId;
+    fn create_render_pipeline_v2(&self, pipeline_descriptor: &PipelineDescriptorV2) -> PipelineId;
     fn bind_group_descriptor_exists(&self, bind_group_descriptor_id: BindGroupDescriptorId)
         -> bool;
     fn create_bind_group(

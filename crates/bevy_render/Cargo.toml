@@ -41,6 +41,7 @@ hex = "0.4.2"
 hexasphere = "3.2"
 parking_lot = "0.11.0"
 raw-window-handle = "0.3.0"
+crevice = { path = "../crevice" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 spirv-reflect = "0.2.3"

@@ -13,15 +13,13 @@ use bevy_render::{
     pipeline::{PipelineDescriptorV2, PipelineId},
     renderer::{
         BindGroupBuilder, BindGroupId, BufferId, BufferInfo, BufferMapMode, BufferUsage,
-        RenderContext, RenderResourceContext,
+        RenderContext, RenderResources2,
     },
     shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2},
     texture::TextureFormat,
     v2::{
         draw_state::TrackedRenderPass,
-        features::{
-            CameraBuffers, Draw, DrawFunctions, Drawable, MainPassPlugin, RenderPhase,
-        },
+        features::{CameraBuffers, Draw, DrawFunctions, Drawable, MainPassPlugin, RenderPhase},
         render_graph::{Node, RenderGraph, ResourceSlots},
         RenderStage,
     },
@@ -65,9 +63,7 @@ pub struct SpriteShaders {
 
 impl FromWorld for SpriteShaders {
     fn from_world(world: &mut World) -> Self {
-        let render_resource_context = world
-            .get_resource::<Box<dyn RenderResourceContext>>()
-            .unwrap();
+        let render_resources = world.get_resource::<RenderResources2>().unwrap();
         let vertex_shader = Shader::from_glsl(ShaderStage::Vertex, include_str!("sprite.vert"))
             .get_spirv_shader(None)
             .unwrap();
@@ -81,8 +77,8 @@ impl FromWorld for SpriteShaders {
         let mut pipeline_layout =
             PipelineLayout::from_shader_layouts(&mut [vertex_layout, fragment_layout]);
 
-        let vertex = render_resource_context.create_shader_module_v2(&vertex_shader);
-        let fragment = render_resource_context.create_shader_module_v2(&fragment_shader);
+        let vertex = render_resources.create_shader_module_v2(&vertex_shader);
+        let fragment = render_resources.create_shader_module_v2(&fragment_shader);
 
         pipeline_layout.vertex_buffer_descriptors = vec![VertexBufferLayout {
             stride: 12,
@@ -128,7 +124,7 @@ impl FromWorld for SpriteShaders {
             )
         };
 
-        let pipeline = render_resource_context.create_render_pipeline_v2(&pipeline_descriptor);
+        let pipeline = render_resources.create_render_pipeline_v2(&pipeline_descriptor);
 
         SpriteShaders {
             _vertex: vertex,
@@ -203,7 +199,7 @@ impl Default for SpriteBuffers {
 }
 
 fn prepare_sprites(
-    render_resource_context: Res<Box<dyn RenderResourceContext>>,
+    render_resources: Res<RenderResources2>,
     mut sprite_buffers: ResMut<SpriteBuffers>,
     mut transparent_phase: ResMut<RenderPhase>,
     extracted_sprites: Res<ExtractedSprites>,
@@ -238,15 +234,15 @@ fn prepare_sprites(
 
     if extracted_sprites.sprites.len() > sprite_buffers.capacity {
         if let Some(staging) = sprite_buffers.staging.take() {
-            render_resource_context.remove_buffer(staging);
+            render_resources.remove_buffer(staging);
         }
 
         if let Some(vertices) = sprite_buffers.sprite_vertex_buffer.take() {
-            render_resource_context.remove_buffer(vertices);
+            render_resources.remove_buffer(vertices);
         }
 
         if let Some(indices) = sprite_buffers.sprite_index_buffer.take() {
-            render_resource_context.remove_buffer(indices);
+            render_resources.remove_buffer(indices);
         }
     }
 
@@ -256,24 +252,24 @@ fn prepare_sprites(
     }
 
     let staging_buffer = if let Some(staging_buffer) = sprite_buffers.staging {
-        render_resource_context.map_buffer(staging_buffer, BufferMapMode::Write);
+        render_resources.map_buffer(staging_buffer, BufferMapMode::Write);
         staging_buffer
     } else {
-        let staging_buffer = render_resource_context.create_buffer(BufferInfo {
+        let staging_buffer = render_resources.create_buffer(BufferInfo {
             size: sprite_vertex_array_size + sprite_index_array_size,
             buffer_usage: BufferUsage::COPY_SRC | BufferUsage::MAP_WRITE,
             mapped_at_creation: true,
         });
         sprite_buffers.staging = Some(staging_buffer);
 
-        let vertex_buffer = render_resource_context.create_buffer(BufferInfo {
+        let vertex_buffer = render_resources.create_buffer(BufferInfo {
             size: sprite_vertex_array_size,
             buffer_usage: BufferUsage::COPY_DST | BufferUsage::VERTEX,
             mapped_at_creation: false,
         });
         sprite_buffers.sprite_vertex_buffer = Some(vertex_buffer);
 
-        let index_buffer = render_resource_context.create_buffer(BufferInfo {
+        let index_buffer = render_resources.create_buffer(BufferInfo {
             size: sprite_index_array_size,
             buffer_usage: BufferUsage::COPY_DST | BufferUsage::INDEX,
             mapped_at_creation: false,
@@ -313,14 +309,14 @@ fn prepare_sprites(
                 .push((i * quad_vertex_positions.len()) as u32 + *index);
         }
     }
-    render_resource_context.write_mapped_buffer(
+    render_resources.write_mapped_buffer(
         staging_buffer,
         0..sprite_vertex_array_size as u64,
         &mut |data, _context| {
             data[0..sprite_vertex_array_size].copy_from_slice(sprite_buffers.vertices.as_bytes());
         },
     );
-    render_resource_context.write_mapped_buffer(
+    render_resources.write_mapped_buffer(
         staging_buffer,
         sprite_vertex_array_size as u64
             ..(sprite_vertex_array_size + sprite_index_array_size) as u64,
@@ -328,12 +324,13 @@ fn prepare_sprites(
             data[0..sprite_index_array_size].copy_from_slice(sprite_buffers.indices.as_bytes());
         },
     );
-    render_resource_context.unmap_buffer(staging_buffer);
+    render_resources.unmap_buffer(staging_buffer);
+    transparent_phase.sort();
 }
 
 // TODO: sort out the best place for this
 fn sprite_bind_group_system(
-    render_resource_context: Res<Box<dyn RenderResourceContext>>,
+    render_resources: Res<RenderResources2>,
     mut sprite_buffers: ResMut<SpriteBuffers>,
     sprite_shaders: Res<SpriteShaders>,
     camera_buffers: Res<CameraBuffers>,
@@ -353,7 +350,7 @@ fn sprite_bind_group_system(
     let layout = &sprite_shaders.pipeline_descriptor.layout;
 
     // TODO: this will only create the bind group if it isn't already created. this is a bit nasty
-    render_resource_context.create_bind_group(layout.bind_groups[0].id, &bind_group);
+    render_resources.create_bind_group(layout.bind_groups[0].id, &bind_group);
     sprite_buffers.bind_group = Some(bind_group.id);
 }
 

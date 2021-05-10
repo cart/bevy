@@ -2,7 +2,7 @@ use super::WgpuRenderResourceContext;
 use crate::renderer::WgpuRenderContext;
 use bevy_ecs::world::World;
 use bevy_render::{
-    renderer::RenderResourceContext,
+    renderer::RenderResources2,
     v2::render_graph::{Edge, NodeId, ResourceSlots, StageBorrow},
 };
 use bevy_utils::HashMap;
@@ -23,9 +23,7 @@ impl WgpuRenderGraphExecutor {
         stages: &mut [StageBorrow],
     ) {
         let render_resource_context = {
-            let context = world
-                .get_resource::<Box<dyn RenderResourceContext>>()
-                .unwrap();
+            let context = world.get_resource::<RenderResources2>().unwrap();
             context
                 .downcast_ref::<WgpuRenderResourceContext>()
                 .unwrap()

@@ -1,6 +1,7 @@
 pub mod render_graph;
 pub mod draw_state;
 pub mod features;
+pub mod uniform_array;
 
 use self::render_graph::RenderGraph;
 use crate::camera::{self, ActiveCameras, Camera, OrthographicProjection};

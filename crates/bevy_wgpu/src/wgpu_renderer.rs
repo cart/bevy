@@ -7,7 +7,7 @@ use bevy_app::{Events, ManualEventReader};
 use bevy_ecs::world::{Mut, World};
 use bevy_render::{
     render_graph::{DependentNodeStager, RenderGraph, RenderGraphStager},
-    renderer::RenderResourceContext,
+    renderer::{RenderResourceContext, RenderResources2},
     v2::render_graph::ExtractedWindows,
 };
 use bevy_window::{WindowCreated, WindowResized, Windows};
@@ -130,10 +130,8 @@ impl WgpuRenderer {
 
     pub fn handle_new_windows(&mut self, world: &mut World) {
         let world = world.cell();
-        let mut render_resource_context = world
-            .get_resource_mut::<Box<dyn RenderResourceContext>>()
-            .unwrap();
-        let render_resource_context = render_resource_context
+        let mut render_resources = world.get_resource_mut::<RenderResources2>().unwrap();
+        let render_resource_context = render_resources
             .downcast_mut::<WgpuRenderResourceContext>()
             .unwrap();
         let extracted_windows = world.get_resource::<ExtractedWindows>().unwrap();
@@ -171,10 +169,8 @@ impl WgpuRenderer {
         self.handle_new_windows(world);
         self.run_graph_v2(world);
 
-        let render_resource_context = world
-            .get_resource::<Box<dyn RenderResourceContext>>()
-            .unwrap();
-        render_resource_context.drop_all_swap_chain_textures();
-        render_resource_context.remove_stale_bind_groups();
+        let render_resources = world.get_resource::<RenderResources2>().unwrap();
+        render_resources.drop_all_swap_chain_textures();
+        render_resources.remove_stale_bind_groups();
     }
 }
