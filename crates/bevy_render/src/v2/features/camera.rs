@@ -1,9 +1,4 @@
-use crate::Sprite;
-use bevy_app::{App, Plugin};
-use bevy_core::AsBytes;
-use bevy_ecs::prelude::*;
-use bevy_math::Mat4;
-use bevy_render::{
+use crate::{
     camera::{ActiveCameras, Camera},
     renderer::{
         BufferId, BufferInfo, BufferMapMode, BufferUsage, RenderContext, RenderResourceContext,
@@ -13,14 +8,17 @@ use bevy_render::{
         RenderStage,
     },
 };
+use bevy_app::{App, Plugin};
+use bevy_core::AsBytes;
+use bevy_ecs::prelude::*;
+use bevy_math::Mat4;
 use bevy_transform::components::GlobalTransform;
 
 #[derive(Default)]
-pub struct PipelinedCameraPlugin;
+pub struct CameraPlugin;
 
-impl Plugin for PipelinedCameraPlugin {
+impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Sprite>();
         app.sub_app_mut(0)
             .add_system_to_stage(RenderStage::Extract, extract_cameras.system())
             .add_system_to_stage(RenderStage::Prepare, prepare_cameras.system());
@@ -52,7 +50,7 @@ fn extract_cameras(
 ) {
     // TODO: move camera name?
     if let Some(active_camera) =
-        active_cameras.get(bevy_render::render_graph::base::camera::CAMERA_2D)
+        active_cameras.get(crate::render_graph::base::camera::CAMERA_2D)
     {
         if let Some((camera, transform)) = active_camera.entity.and_then(|e| query.get(e).ok()) {
             commands.insert_resource(ExtractedCamera {

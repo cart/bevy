@@ -1,62 +1,73 @@
-mod camera_plugin;
-pub mod phase_draw_vec;
-pub mod draw_functions;
-pub mod vertex_sprites;
-
-pub use camera_plugin::*;
-
-use crate::{v2::camera_plugin::PipelinedCameraPlugin, Sprite};
+use crate::Sprite;
 use bevy_app::{App, Plugin};
 use bevy_core::{AsBytes, Byteable};
-use bevy_ecs::prelude::*;
-use bevy_math::{Mat4, Vec2};
+use bevy_ecs::{
+    prelude::*,
+    system::{ParamState, SystemParam, SystemParamFetch},
+};
+use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
 use bevy_render::{
     color::Color,
-    mesh::{shape::Quad, Indices, Mesh},
+    mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues},
     pass::{
         LoadOp, Operations, PassDescriptor, RenderPass, RenderPassColorAttachmentDescriptor,
         TextureAttachment,
     },
     pipeline::{
-        BindType, BlendFactor, BlendOperation, BlendState, ColorTargetState, ColorWrite,
-        CompareFunction, CullMode, DepthBiasState, DepthStencilState, FrontFace, IndexFormat,
-        InputStepMode, PipelineDescriptor, PipelineLayout, PolygonMode, PrimitiveState,
-        PrimitiveTopology, StencilFaceState, StencilState, VertexAttribute, VertexBufferLayout,
-        VertexFormat,
+        BlendFactor, BlendOperation, BlendState, ColorTargetState, ColorWrite, CullMode, FrontFace,
+        IndexFormat, InputStepMode, PipelineLayout, PolygonMode, PrimitiveState, PrimitiveTopology,
+        VertexAttribute, VertexBufferLayout, VertexFormat,
     },
     pipeline::{PipelineDescriptorV2, PipelineId},
     renderer::{
-        BindGroup, BindGroupBuilder, BindGroupId, BufferId, BufferInfo, BufferMapMode, BufferUsage,
+        BindGroupBuilder, BindGroupId, BufferId, BufferInfo, BufferMapMode, BufferUsage,
         RenderContext, RenderResourceContext, RenderResourceType,
     },
     shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2},
     texture::TextureFormat,
     v2::{
+        draw_state::TrackedRenderPass,
+        features::{CameraBuffers, CameraPlugin},
         render_graph::{Node, RenderGraph, ResourceSlotInfo, ResourceSlots, WindowSwapChainNode},
         RenderStage,
     },
 };
 use bevy_transform::components::GlobalTransform;
 use bevy_window::WindowId;
+use parking_lot::Mutex;
 use std::borrow::Cow;
 
 #[derive(Default)]
-pub struct PipelinedSpritePlugin;
+pub struct SpritePlugin;
 
-impl Plugin for PipelinedSpritePlugin {
+impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
+        let draw_functions = DrawFunctions::default();
+        draw_functions
+            .draw_function
+            .lock()
+            .push(Box::new(DrawSprite::new(&mut app.sub_app_mut(0).world)));
         app.register_type::<Sprite>();
-        app.add_plugin(PipelinedCameraPlugin);
+        app.add_plugin(CameraPlugin);
         app.sub_app_mut(0)
             .add_system_to_stage(RenderStage::Extract, extract_sprites.system())
+            .add_system_to_stage(
+                RenderStage::Prepare,
+                clear_transparent_phase.exclusive_system().at_start(),
+            )
             .add_system_to_stage(RenderStage::Prepare, prepare_sprites.system())
+            // TODO: remove this ugly thing
+            .add_system_to_stage(RenderStage::Draw, sprite_bind_group_system.system())
+            .init_resource::<TransparentPhase>()
+            .insert_resource(draw_functions)
             .init_resource::<SpriteShaders>()
-            .init_resource::<SpriteBuffers>()
-            .init_resource::<QuadMesh>();
+            .init_resource::<SpriteBuffers>();
         let render_world = app.sub_app_mut(0).world.cell();
         let mut graph = render_world.get_resource_mut::<RenderGraph>().unwrap();
+        graph.add_node("main_pass", MainPassNode);
         graph.add_node("sprite", SpriteNode);
-        graph.add_node_edge("camera", "sprite").unwrap();
+        graph.add_node_edge("camera", "main_pass").unwrap();
+        graph.add_node_edge("sprite", "main_pass").unwrap();
         graph.add_node(
             "primary_swap_chain",
             WindowSwapChainNode::new(WindowId::primary()),
@@ -65,51 +76,10 @@ impl Plugin for PipelinedSpritePlugin {
             .add_slot_edge(
                 "primary_swap_chain",
                 WindowSwapChainNode::OUT_TEXTURE,
-                "sprite",
-                SpriteNode::IN_COLOR_ATTACHMENT,
+                "main_pass",
+                MainPassNode::IN_COLOR_ATTACHMENT,
             )
             .unwrap();
-    }
-}
-
-pub struct QuadMesh {
-    vertex_buffer: BufferId,
-    index_buffer: BufferId,
-    mesh: Mesh,
-}
-
-impl FromWorld for QuadMesh {
-    fn from_world(world: &mut World) -> Self {
-        let mut mesh = Mesh::from(Quad::new(Vec2::new(1.0, 1.0)));
-        // TODO: support arbitrary attributes
-        mesh.remove_attribute(Mesh::ATTRIBUTE_NORMAL).unwrap();
-        mesh.remove_attribute(Mesh::ATTRIBUTE_UV_0).unwrap();
-        let render_resource_context = world
-            .get_resource::<Box<dyn RenderResourceContext>>()
-            .unwrap();
-        let vertex_bytes = mesh.get_vertex_buffer_data();
-        let vertex_buffer = render_resource_context.create_buffer_with_data(
-            BufferInfo {
-                buffer_usage: BufferUsage::VERTEX,
-                ..Default::default()
-            },
-            &vertex_bytes,
-        );
-
-        let index_bytes = mesh.get_index_buffer_bytes().unwrap();
-        let index_buffer = render_resource_context.create_buffer_with_data(
-            BufferInfo {
-                buffer_usage: BufferUsage::INDEX,
-                ..Default::default()
-            },
-            &index_bytes,
-        );
-
-        QuadMesh {
-            vertex_buffer,
-            index_buffer,
-            mesh,
-        }
     }
 }
 
@@ -137,13 +107,6 @@ impl FromWorld for SpriteShaders {
 
         let mut pipeline_layout =
             PipelineLayout::from_shader_layouts(&mut [vertex_layout, fragment_layout]);
-        if let BindType::Uniform {
-            ref mut has_dynamic_offset,
-            ..
-        } = pipeline_layout.bind_groups[1].bindings[0].bind_type
-        {
-            *has_dynamic_offset = true;
-        }
 
         let vertex = render_resource_context.create_shader_module_v2(&vertex_shader);
         let fragment = render_resource_context.create_shader_module_v2(&fragment_shader);
@@ -152,14 +115,12 @@ impl FromWorld for SpriteShaders {
             stride: 12,
             name: "Vertex_Position".into(),
             step_mode: InputStepMode::Vertex,
-            attributes: vec![
-                VertexAttribute {
-                    name: "Vertex_Position".into(),
-                    format: VertexFormat::Float3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-            ],
+            attributes: vec![VertexAttribute {
+                name: "Vertex_Position".into(),
+                format: VertexFormat::Float3,
+                offset: 0,
+                shader_location: 0,
+            }],
         }];
 
         let pipeline_descriptor = PipelineDescriptorV2 {
@@ -230,39 +191,89 @@ fn extract_sprites(mut commands: Commands, query: Query<(&Sprite, &GlobalTransfo
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct SpriteUniform {
-    pub transform: [[f32; 4]; 4],
-    pub size: [f32; 2],
-    pub padding: [[f32; 10]; 4],
-    pub padding_0: [f32; 6],
+struct SpriteVertex {
+    pub position: [f32; 3],
 }
 
-unsafe impl Byteable for SpriteUniform {}
+unsafe impl Byteable for SpriteVertex {}
 
-#[derive(Default)]
 struct SpriteBuffers {
-    sprites: Option<BufferId>,
+    sprite_vertex_buffer: Option<BufferId>,
+    sprite_index_buffer: Option<BufferId>,
     staging: Option<BufferId>,
-    sprite_uniforms: Vec<SpriteUniform>,
-    sprite_bind_group: Option<BindGroupId>,
+    capacity: usize,
+    sprite_count: usize,
+    vertices: Vec<SpriteVertex>,
+    indices: Vec<u32>,
+    quad: Mesh,
+    bind_group: Option<BindGroupId>,
+}
+
+impl Default for SpriteBuffers {
+    fn default() -> Self {
+        Self {
+            sprite_vertex_buffer: None,
+            sprite_index_buffer: None,
+            staging: None,
+            capacity: 0,
+            sprite_count: 0,
+            vertices: Vec::new(),
+            indices: Vec::new(),
+            bind_group: None,
+            quad: Quad {
+                size: Vec2::new(1.0, 1.0),
+                ..Default::default()
+            }
+            .into(),
+        }
+    }
 }
 
 fn prepare_sprites(
     render_resource_context: Res<Box<dyn RenderResourceContext>>,
     mut sprite_buffers: ResMut<SpriteBuffers>,
-    sprite_shaders: Res<SpriteShaders>,
+    mut transparent_phase: ResMut<TransparentPhase>,
     extracted_sprites: Res<ExtractedSprites>,
 ) {
-    let sprite_uniform_size = std::mem::size_of::<SpriteUniform>();
-    let sprite_uniform_array_size = sprite_uniform_size * extracted_sprites.sprites.len();
+    let quad_vertex_positions = if let VertexAttributeValues::Float3(vertex_positions) =
+        sprite_buffers
+            .quad
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .clone()
+    {
+        vertex_positions
+    } else {
+        panic!("expected vec3");
+    };
 
-    if extracted_sprites.sprites.len() != sprite_buffers.sprite_uniforms.len() {
+    let quad_indices = if let Indices::U32(indices) = sprite_buffers.quad.indices().unwrap() {
+        indices.clone()
+    } else {
+        panic!("expectd u32 indices");
+    };
+
+    let sprite_vertex_size = std::mem::size_of::<SpriteVertex>();
+    let sprite_vertex_array_len = quad_vertex_positions.len() * extracted_sprites.sprites.len();
+    let sprite_vertex_array_size = sprite_vertex_size * sprite_vertex_array_len;
+
+    let sprite_index_size = std::mem::size_of::<u32>();
+    let sprite_index_array_len = quad_indices.len() * extracted_sprites.sprites.len();
+    let sprite_index_array_size = sprite_index_size * sprite_index_array_len;
+
+    sprite_buffers.sprite_count = extracted_sprites.sprites.len();
+
+    if extracted_sprites.sprites.len() > sprite_buffers.capacity {
         if let Some(staging) = sprite_buffers.staging.take() {
             render_resource_context.remove_buffer(staging);
         }
 
-        if let Some(sprites) = sprite_buffers.sprites.take() {
-            render_resource_context.remove_buffer(sprites);
+        if let Some(vertices) = sprite_buffers.sprite_vertex_buffer.take() {
+            render_resource_context.remove_buffer(vertices);
+        }
+
+        if let Some(indices) = sprite_buffers.sprite_index_buffer.take() {
+            render_resource_context.remove_buffer(indices);
         }
     }
 
@@ -276,73 +287,277 @@ fn prepare_sprites(
         staging_buffer
     } else {
         let staging_buffer = render_resource_context.create_buffer(BufferInfo {
-            size: sprite_uniform_array_size,
+            size: sprite_vertex_array_size + sprite_index_array_size,
             buffer_usage: BufferUsage::COPY_SRC | BufferUsage::MAP_WRITE,
             mapped_at_creation: true,
         });
         sprite_buffers.staging = Some(staging_buffer);
 
-        let buffer = render_resource_context.create_buffer(BufferInfo {
-            size: sprite_uniform_array_size,
-            buffer_usage: BufferUsage::COPY_DST | BufferUsage::UNIFORM,
+        let vertex_buffer = render_resource_context.create_buffer(BufferInfo {
+            size: sprite_vertex_array_size,
+            buffer_usage: BufferUsage::COPY_DST | BufferUsage::VERTEX,
             mapped_at_creation: false,
         });
-        sprite_buffers.sprites = Some(buffer);
+        sprite_buffers.sprite_vertex_buffer = Some(vertex_buffer);
 
-        let bind_group = BindGroupBuilder::default()
-            .add_binding(
-                0,
-                bevy_render::renderer::RenderResourceBinding::Buffer {
-                    buffer,
-                    // TODO: make this less magic (derive from actual size of sprite)
-                    range: 0..72 as u64,
-                    dynamic_index: None,
-                },
-            )
-            .finish();
+        let index_buffer = render_resource_context.create_buffer(BufferInfo {
+            size: sprite_index_array_size,
+            buffer_usage: BufferUsage::COPY_DST | BufferUsage::INDEX,
+            mapped_at_creation: false,
+        });
+        sprite_buffers.sprite_index_buffer = Some(index_buffer);
 
-        render_resource_context.create_bind_group(
-            sprite_shaders.pipeline_descriptor.layout.bind_groups[1].id,
-            &bind_group,
-        );
-        sprite_buffers.sprite_bind_group = Some(bind_group.id);
+        sprite_buffers.capacity = extracted_sprites.sprites.len();
 
         staging_buffer
     };
 
-    sprite_buffers.sprite_uniforms.clear();
-    sprite_buffers
-        .sprite_uniforms
-        .reserve(extracted_sprites.sprites.len());
-    for extracted_sprite in extracted_sprites.sprites.iter() {
-        sprite_buffers.sprite_uniforms.push(SpriteUniform {
-            transform: extracted_sprite.transform.to_cols_array_2d(),
-            size: extracted_sprite.size.into(),
-            padding: Default::default(),
-            padding_0: Default::default(),
+    sprite_buffers.vertices.clear();
+    sprite_buffers.vertices.reserve(sprite_vertex_array_len);
+
+    sprite_buffers.indices.clear();
+    sprite_buffers.indices.reserve(sprite_index_array_len);
+
+    for (i, extracted_sprite) in extracted_sprites.sprites.iter().enumerate() {
+        for vertex_position in quad_vertex_positions.iter() {
+            let mut final_position =
+                Vec3::from(*vertex_position) * extracted_sprite.size.extend(1.0);
+            final_position = (extracted_sprite.transform * final_position.extend(1.0)).xyz();
+            sprite_buffers.vertices.push(SpriteVertex {
+                position: final_position.into(),
+            });
+        }
+
+        transparent_phase.drawn_things.push(Drawable {
+            draw_function: 0,
+            draw_key: i,
+            sort_key: 0,
         });
+
+        for index in quad_indices.iter() {
+            sprite_buffers
+                .indices
+                .push((i * quad_vertex_positions.len()) as u32 + *index);
+        }
     }
     render_resource_context.write_mapped_buffer(
         staging_buffer,
-        0..sprite_uniform_array_size as u64,
+        0..sprite_vertex_array_size as u64,
         &mut |data, _context| {
-            data[0..sprite_uniform_array_size]
-                .copy_from_slice(sprite_buffers.sprite_uniforms.as_bytes());
+            data[0..sprite_vertex_array_size].copy_from_slice(sprite_buffers.vertices.as_bytes());
+        },
+    );
+    render_resource_context.write_mapped_buffer(
+        staging_buffer,
+        sprite_vertex_array_size as u64
+            ..(sprite_vertex_array_size + sprite_index_array_size) as u64,
+        &mut |data, _context| {
+            data[0..sprite_index_array_size].copy_from_slice(sprite_buffers.indices.as_bytes());
         },
     );
     render_resource_context.unmap_buffer(staging_buffer);
 }
 
+// TODO: sort out the best place for this
+fn sprite_bind_group_system(
+    render_resource_context: Res<Box<dyn RenderResourceContext>>,
+    mut sprite_buffers: ResMut<SpriteBuffers>,
+    sprite_shaders: Res<SpriteShaders>,
+    camera_buffers: Res<CameraBuffers>,
+) {
+    const MATRIX_SIZE: usize = std::mem::size_of::<[[f32; 4]; 4]>();
+    let bind_group = BindGroupBuilder::default()
+        .add_binding(
+            0,
+            bevy_render::renderer::RenderResourceBinding::Buffer {
+                buffer: camera_buffers.view_proj,
+                range: 0..MATRIX_SIZE as u64,
+                dynamic_index: None,
+            },
+        )
+        .finish();
+
+    let layout = &sprite_shaders.pipeline_descriptor.layout;
+
+    // TODO: this will only create the bind group if it isn't already created. this is a bit nasty
+    render_resource_context.create_bind_group(layout.bind_groups[0].id, &bind_group);
+    sprite_buffers.bind_group = Some(bind_group.id);
+}
+
+// TODO: sort out the best place for this
+fn clear_transparent_phase(mut transparent_phase: ResMut<TransparentPhase>) {
+    // TODO: TRANSPARENT PHASE SHOULD NOT BE CLEARED HERE!
+    transparent_phase.drawn_things.clear();
+}
+
 pub struct SpriteNode;
 
-impl SpriteNode {
+impl Node for SpriteNode {
+    fn update(
+        &mut self,
+        world: &World,
+        render_context: &mut dyn RenderContext,
+        _input: &ResourceSlots,
+        _output: &mut ResourceSlots,
+    ) {
+        let sprite_buffers = world.get_resource::<SpriteBuffers>().unwrap();
+        let sprite_vertex_size = std::mem::size_of::<SpriteVertex>();
+        let sprite_index_size = std::mem::size_of::<u32>();
+        let sprite_vertex_array_size = (sprite_buffers.vertices.len() * sprite_vertex_size) as u64;
+        if sprite_buffers.sprite_count != 0 {
+            render_context.copy_buffer_to_buffer(
+                sprite_buffers.staging.unwrap(),
+                0,
+                sprite_buffers.sprite_vertex_buffer.unwrap(),
+                0,
+                sprite_vertex_array_size,
+            );
+            render_context.copy_buffer_to_buffer(
+                sprite_buffers.staging.unwrap(),
+                sprite_vertex_array_size,
+                sprite_buffers.sprite_index_buffer.unwrap(),
+                0,
+                (sprite_buffers.indices.len() * sprite_index_size) as u64,
+            );
+        }
+    }
+}
+
+pub trait Draw: Send + Sync {
+    fn draw(&mut self, world: &World, pass: &mut TrackedRenderPass, draw_key: usize);
+}
+
+pub struct DrawSprite {
+    param_state: ParamState<(Res<'static, SpriteShaders>, Res<'static, SpriteBuffers>)>,
+}
+
+impl DrawSprite {
+    fn new(world: &mut World) -> Self {
+        Self {
+            param_state: ParamState::new(world),
+        }
+    }
+}
+
+pub struct DrawSystemState<Param: SystemParam> {
+    draw_system: Box<dyn DrawSystem<Param = Param>>,
+    state: ParamState<Param>,
+}
+
+impl<Param: SystemParam> DrawSystemState<Param> {
+    pub fn new<D: DrawSystem<Param = Param> + 'static>(world: &mut World, draw_system: D) -> Self {
+        Self {
+            draw_system: Box::new(draw_system),
+            state: ParamState::new(world),
+        }
+    }
+}
+
+impl<Param: SystemParam> Draw for DrawSystemState<Param> {
+    fn draw(&mut self, world: &World, pass: &mut TrackedRenderPass, draw_key: usize) {
+        let param = self.state.get(world);
+        self.draw_system.draw(pass, draw_key, param);
+    }
+}
+
+pub trait DrawSystem: Send + Sync {
+    type Param: SystemParam;
+    fn draw(
+        &mut self,
+        pass: &mut TrackedRenderPass,
+        draw_key: usize,
+        param: <<Self::Param as SystemParam>::Fetch as SystemParamFetch>::Item,
+    );
+}
+
+struct DrawSpriteSystem;
+
+impl DrawSystem for DrawSpriteSystem {
+    type Param = (Res<'static, SpriteShaders>, Res<'static, SpriteBuffers>);
+
+    fn draw(
+        &mut self,
+        pass: &mut TrackedRenderPass,
+        draw_key: usize,
+        (sprite_shaders, sprite_buffers): <<Self::Param as SystemParam>::Fetch as SystemParamFetch>::Item,
+    ) {
+        const INDICES: usize = 6;
+        let layout = &sprite_shaders.pipeline_descriptor.layout;
+        pass.set_pipeline(sprite_shaders.pipeline);
+        pass.set_vertex_buffer(0, sprite_buffers.sprite_vertex_buffer.unwrap(), 0);
+        pass.set_index_buffer(
+            sprite_buffers.sprite_index_buffer.unwrap(),
+            0,
+            IndexFormat::Uint32,
+        );
+        pass.set_bind_group(
+            0,
+            layout.bind_groups[0].id,
+            sprite_buffers.bind_group.unwrap(),
+            None,
+        );
+
+        pass.draw_indexed(
+            (draw_key * INDICES) as u32..(draw_key * INDICES + INDICES) as u32,
+            0,
+            0..1,
+        );
+    }
+}
+
+impl Draw for DrawSprite {
+    fn draw(&mut self, world: &World, pass: &mut TrackedRenderPass, draw_key: usize) {
+        const INDICES: usize = 6;
+        let (sprite_shaders, sprite_buffers) = self.param_state.get(world);
+        let layout = &sprite_shaders.pipeline_descriptor.layout;
+        pass.set_pipeline(sprite_shaders.pipeline);
+        pass.set_vertex_buffer(0, sprite_buffers.sprite_vertex_buffer.unwrap(), 0);
+        pass.set_index_buffer(
+            sprite_buffers.sprite_index_buffer.unwrap(),
+            0,
+            IndexFormat::Uint32,
+        );
+        pass.set_bind_group(
+            0,
+            layout.bind_groups[0].id,
+            sprite_buffers.bind_group.unwrap(),
+            None,
+        );
+
+        pass.draw_indexed(
+            (draw_key * INDICES) as u32..(draw_key * INDICES + INDICES) as u32,
+            0,
+            0..1,
+        );
+    }
+}
+
+#[derive(Default)]
+pub struct DrawFunctions {
+    pub draw_function: Mutex<Vec<Box<dyn Draw>>>,
+}
+
+pub struct Drawable {
+    pub draw_function: usize,
+    pub draw_key: usize,
+    pub sort_key: usize,
+}
+
+#[derive(Default)]
+pub struct TransparentPhase {
+    drawn_things: Vec<Drawable>,
+}
+
+pub struct MainPassNode;
+
+impl MainPassNode {
     pub const IN_COLOR_ATTACHMENT: &'static str = "color_attachment";
 }
 
-impl Node for SpriteNode {
+impl Node for MainPassNode {
     fn input(&self) -> &[ResourceSlotInfo] {
         static INPUT: &[ResourceSlotInfo] = &[ResourceSlotInfo {
-            name: Cow::Borrowed(SpriteNode::IN_COLOR_ATTACHMENT),
+            name: Cow::Borrowed(MainPassNode::IN_COLOR_ATTACHMENT),
             resource_type: RenderResourceType::Texture,
         }];
         INPUT
@@ -352,7 +567,7 @@ impl Node for SpriteNode {
         world: &World,
         render_context: &mut dyn RenderContext,
         input: &ResourceSlots,
-        output: &mut ResourceSlots,
+        _output: &mut ResourceSlots,
     ) {
         // TODO: consider adding shorthand like `get_texture(0)`
         let color_attachment_texture = input.get(0).unwrap().get_texture().unwrap();
@@ -369,64 +584,18 @@ impl Node for SpriteNode {
             sample_count: 1,
         };
 
-        let sprite_shaders = world.get_resource::<SpriteShaders>().unwrap();
-        let camera_buffers = world.get_resource::<CameraBuffers>().unwrap();
-        let sprite_buffers = world.get_resource::<SpriteBuffers>().unwrap();
-        let quad_mesh = world.get_resource::<QuadMesh>().unwrap();
-        let layout = &sprite_shaders.pipeline_descriptor.layout;
-
-        let index_range = match quad_mesh.mesh.indices() {
-            Some(Indices::U32(indices)) => 0..indices.len() as u32,
-            Some(Indices::U16(indices)) => 0..indices.len() as u32,
-            None => panic!(),
-        };
-
-        let sprite_uniform_size = std::mem::size_of::<SpriteUniform>();
-        let sprite_uniform_array_size = sprite_uniform_size * sprite_buffers.sprite_uniforms.len();
-        if sprite_buffers.sprite_uniforms.len() != 0 {
-            render_context.copy_buffer_to_buffer(
-                sprite_buffers.staging.unwrap(),
-                0,
-                sprite_buffers.sprites.unwrap(),
-                0,
-                sprite_uniform_array_size as u64,
-            );
-        }
-
-        const MATRIX_SIZE: usize = std::mem::size_of::<[[f32; 4]; 4]>();
-        let bind_group = BindGroupBuilder::default()
-            .add_binding(
-                0,
-                bevy_render::renderer::RenderResourceBinding::Buffer {
-                    buffer: camera_buffers.view_proj,
-                    range: 0..MATRIX_SIZE as u64,
-                    dynamic_index: None,
-                },
-            )
-            .finish();
-
-        // TODO: this will only create the bind group if it isn't already created. this is a bit nasty
-        render_context
-            .resources()
-            .create_bind_group(layout.bind_groups[0].id, &bind_group);
+        let transparent_phase = world.get_resource::<TransparentPhase>().unwrap();
+        let draw_functions = world.get_resource::<DrawFunctions>().unwrap();
 
         render_context.begin_pass(&pass_descriptor, &mut |render_pass: &mut dyn RenderPass| {
-            if sprite_buffers.sprite_uniforms.len() == 0 {
-                return;
-            }
-            render_pass.set_pipeline_v2(sprite_shaders.pipeline);
-            render_pass.set_vertex_buffer(0, quad_mesh.vertex_buffer, 0);
-            render_pass.set_index_buffer(quad_mesh.index_buffer, 0, IndexFormat::Uint32);
-            render_pass.set_bind_group(0, layout.bind_groups[0].id, bind_group.id, None);
-
-            for i in 0..sprite_buffers.sprite_uniforms.len() {
-                render_pass.set_bind_group(
-                    1,
-                    layout.bind_groups[1].id,
-                    sprite_buffers.sprite_bind_group.unwrap(),
-                    Some(&[(i * sprite_uniform_size) as u32]),
+            let mut draw_functions = draw_functions.draw_function.lock();
+            let mut tracked_pass = TrackedRenderPass::new(render_pass);
+            for drawable in transparent_phase.drawn_things.iter() {
+                draw_functions[drawable.draw_function].draw(
+                    world,
+                    &mut tracked_pass,
+                    drawable.draw_key,
                 );
-                render_pass.draw_indexed(index_range.clone(), 0, 0..1);
             }
         })
     }
