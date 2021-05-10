@@ -6,10 +6,7 @@ use bevy_render::{
         PassDescriptor, RenderPass, RenderPassColorAttachmentDescriptor,
         RenderPassDepthStencilAttachmentDescriptor, TextureAttachment,
     },
-    renderer::{
-        BufferId, RenderContext, RenderResourceBinding, RenderResourceBindings,
-        RenderResourceContext, TextureId,
-    },
+    renderer::{BufferId, RenderContext, RenderResourceContext, TextureId},
     texture::Extent3d,
 };
 
@@ -179,11 +176,7 @@ impl RenderContext for WgpuRenderContext {
         let refs = resource_lock.refs();
         let mut encoder = self.command_encoder.take().unwrap();
         {
-            let render_pass = create_render_pass(
-                pass_descriptor,
-                &refs,
-                &mut encoder,
-            );
+            let render_pass = create_render_pass(pass_descriptor, &refs, &mut encoder);
             let mut wgpu_render_pass = WgpuRenderPass {
                 render_pass,
                 render_context: self,
@@ -208,16 +201,12 @@ pub fn create_render_pass<'a, 'b>(
         color_attachments: &pass_descriptor
             .color_attachments
             .iter()
-            .map(|c| {
-                create_wgpu_color_attachment_descriptor(refs, c)
-            })
+            .map(|c| create_wgpu_color_attachment_descriptor(refs, c))
             .collect::<Vec<wgpu::RenderPassColorAttachmentDescriptor>>(),
-        depth_stencil_attachment: pass_descriptor.depth_stencil_attachment.as_ref().map(|d| {
-            create_wgpu_depth_stencil_attachment_descriptor(
-                refs,
-                d,
-            )
-        }),
+        depth_stencil_attachment: pass_descriptor
+            .depth_stencil_attachment
+            .as_ref()
+            .map(|d| create_wgpu_depth_stencil_attachment_descriptor(refs, d)),
     })
 }
 
@@ -235,10 +224,7 @@ fn create_wgpu_color_attachment_descriptor<'a>(
     refs: &WgpuResourceRefs<'a>,
     color_attachment_descriptor: &RenderPassColorAttachmentDescriptor,
 ) -> wgpu::RenderPassColorAttachmentDescriptor<'a> {
-    let attachment = get_texture_view(
-        refs,
-        &color_attachment_descriptor.attachment,
-    );
+    let attachment = get_texture_view(refs, &color_attachment_descriptor.attachment);
 
     let resolve_target = color_attachment_descriptor
         .resolve_target
@@ -256,10 +242,7 @@ fn create_wgpu_depth_stencil_attachment_descriptor<'a>(
     refs: &WgpuResourceRefs<'a>,
     depth_stencil_attachment_descriptor: &RenderPassDepthStencilAttachmentDescriptor,
 ) -> wgpu::RenderPassDepthStencilAttachmentDescriptor<'a> {
-    let attachment = get_texture_view(
-        refs,
-        &depth_stencil_attachment_descriptor.attachment,
-    );
+    let attachment = get_texture_view(refs, &depth_stencil_attachment_descriptor.attachment);
 
     wgpu::RenderPassDepthStencilAttachmentDescriptor {
         attachment,

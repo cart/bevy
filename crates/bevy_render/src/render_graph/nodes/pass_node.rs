@@ -5,10 +5,7 @@ use crate::{
     pipeline::{IndexFormat, PipelineDescriptor},
     prelude::Visible,
     render_graph::{Node, ResourceSlotInfo, ResourceSlots},
-    renderer::{
-        BindGroupId, BufferId, RenderContext, RenderResourceBindings, RenderResourceContext,
-        RenderResourceType,
-    },
+    renderer::{BindGroupId, BufferId, RenderContext, RenderResourceContext, RenderResourceType},
 };
 use bevy_asset::{Assets, Handle};
 use bevy_ecs::{

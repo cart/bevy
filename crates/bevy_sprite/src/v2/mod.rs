@@ -4,12 +4,7 @@ use bevy_core::{AsBytes, Byteable};
 use bevy_ecs::{prelude::*, system::ParamState};
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
 use bevy_render::{
-    color::Color,
     mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues},
-    pass::{
-        LoadOp, Operations, PassDescriptor, RenderPass, RenderPassColorAttachmentDescriptor,
-        TextureAttachment,
-    },
     pipeline::{
         BlendFactor, BlendOperation, BlendState, ColorTargetState, ColorWrite, CullMode, FrontFace,
         IndexFormat, InputStepMode, PipelineLayout, PolygonMode, PrimitiveState, PrimitiveTopology,
@@ -18,71 +13,52 @@ use bevy_render::{
     pipeline::{PipelineDescriptorV2, PipelineId},
     renderer::{
         BindGroupBuilder, BindGroupId, BufferId, BufferInfo, BufferMapMode, BufferUsage,
-        RenderContext, RenderResourceContext, RenderResourceType,
+        RenderContext, RenderResourceContext,
     },
     shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2},
     texture::TextureFormat,
     v2::{
         draw_state::TrackedRenderPass,
-        features::{CameraBuffers, CameraPlugin},
-        render_graph::{Node, RenderGraph, ResourceSlotInfo, ResourceSlots, WindowSwapChainNode},
+        features::{
+            CameraBuffers, Draw, DrawFunctions, Drawable, MainPassPlugin, RenderPhase,
+        },
+        render_graph::{Node, RenderGraph, ResourceSlots},
         RenderStage,
     },
 };
 use bevy_transform::components::GlobalTransform;
-use bevy_window::WindowId;
-use parking_lot::Mutex;
-use std::borrow::Cow;
 
 #[derive(Default)]
 pub struct SpritePlugin;
 
 impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
-        let draw_functions = DrawFunctions::default();
-        draw_functions
-            .draw_function
-            .lock()
-            .push(Box::new(DrawSprite::new(&mut app.sub_app_mut(0).world)));
         app.register_type::<Sprite>();
-        app.add_plugin(CameraPlugin);
-        app.sub_app_mut(0)
+        app.add_plugin(MainPassPlugin);
+        let render_app = app.sub_app_mut(0);
+        render_app
             .add_system_to_stage(RenderStage::Extract, extract_sprites.system())
-            .add_system_to_stage(
-                RenderStage::Prepare,
-                clear_transparent_phase.exclusive_system().at_start(),
-            )
             .add_system_to_stage(RenderStage::Prepare, prepare_sprites.system())
             // TODO: remove this ugly thing
             .add_system_to_stage(RenderStage::Draw, sprite_bind_group_system.system())
-            .init_resource::<TransparentPhase>()
-            .insert_resource(draw_functions)
             .init_resource::<SpriteShaders>()
             .init_resource::<SpriteBuffers>();
+        let draw_sprite = DrawSprite::new(&mut render_app.world);
+        render_app
+            .world
+            .get_resource::<DrawFunctions>()
+            .unwrap()
+            .add(draw_sprite);
         let render_world = app.sub_app_mut(0).world.cell();
         let mut graph = render_world.get_resource_mut::<RenderGraph>().unwrap();
-        graph.add_node("main_pass", MainPassNode);
         graph.add_node("sprite", SpriteNode);
-        graph.add_node_edge("camera", "main_pass").unwrap();
         graph.add_node_edge("sprite", "main_pass").unwrap();
-        graph.add_node(
-            "primary_swap_chain",
-            WindowSwapChainNode::new(WindowId::primary()),
-        );
-        graph
-            .add_slot_edge(
-                "primary_swap_chain",
-                WindowSwapChainNode::OUT_TEXTURE,
-                "main_pass",
-                MainPassNode::IN_COLOR_ATTACHMENT,
-            )
-            .unwrap();
     }
 }
 
 pub struct SpriteShaders {
-    vertex: ShaderId,
-    fragment: ShaderId,
+    _vertex: ShaderId,
+    _fragment: ShaderId,
     pipeline: PipelineId,
     pipeline_descriptor: PipelineDescriptorV2,
 }
@@ -155,8 +131,8 @@ impl FromWorld for SpriteShaders {
         let pipeline = render_resource_context.create_render_pipeline_v2(&pipeline_descriptor);
 
         SpriteShaders {
-            vertex,
-            fragment,
+            _vertex: vertex,
+            _fragment: fragment,
             pipeline,
             pipeline_descriptor,
         }
@@ -229,7 +205,7 @@ impl Default for SpriteBuffers {
 fn prepare_sprites(
     render_resource_context: Res<Box<dyn RenderResourceContext>>,
     mut sprite_buffers: ResMut<SpriteBuffers>,
-    mut transparent_phase: ResMut<TransparentPhase>,
+    mut transparent_phase: ResMut<RenderPhase>,
     extracted_sprites: Res<ExtractedSprites>,
 ) {
     let quad_vertex_positions = if let VertexAttributeValues::Float3(vertex_positions) =
@@ -325,7 +301,7 @@ fn prepare_sprites(
             });
         }
 
-        transparent_phase.drawn_things.push(Drawable {
+        transparent_phase.add(Drawable {
             draw_function: 0,
             draw_key: i,
             sort_key: 0,
@@ -381,12 +357,6 @@ fn sprite_bind_group_system(
     sprite_buffers.bind_group = Some(bind_group.id);
 }
 
-// TODO: sort out the best place for this
-fn clear_transparent_phase(mut transparent_phase: ResMut<TransparentPhase>) {
-    // TODO: TRANSPARENT PHASE SHOULD NOT BE CLEARED HERE!
-    transparent_phase.drawn_things.clear();
-}
-
 pub struct SpriteNode;
 
 impl Node for SpriteNode {
@@ -418,10 +388,6 @@ impl Node for SpriteNode {
             );
         }
     }
-}
-
-pub trait Draw: Send + Sync {
-    fn draw(&mut self, world: &World, pass: &mut TrackedRenderPass, draw_key: usize);
 }
 
 pub struct DrawSprite {
@@ -460,74 +426,5 @@ impl Draw for DrawSprite {
             0,
             0..1,
         );
-    }
-}
-
-#[derive(Default)]
-pub struct DrawFunctions {
-    pub draw_function: Mutex<Vec<Box<dyn Draw>>>,
-}
-
-pub struct Drawable {
-    pub draw_function: usize,
-    pub draw_key: usize,
-    pub sort_key: usize,
-}
-
-#[derive(Default)]
-pub struct TransparentPhase {
-    drawn_things: Vec<Drawable>,
-}
-
-pub struct MainPassNode;
-
-impl MainPassNode {
-    pub const IN_COLOR_ATTACHMENT: &'static str = "color_attachment";
-}
-
-impl Node for MainPassNode {
-    fn input(&self) -> &[ResourceSlotInfo] {
-        static INPUT: &[ResourceSlotInfo] = &[ResourceSlotInfo {
-            name: Cow::Borrowed(MainPassNode::IN_COLOR_ATTACHMENT),
-            resource_type: RenderResourceType::Texture,
-        }];
-        INPUT
-    }
-    fn update(
-        &mut self,
-        world: &World,
-        render_context: &mut dyn RenderContext,
-        input: &ResourceSlots,
-        _output: &mut ResourceSlots,
-    ) {
-        // TODO: consider adding shorthand like `get_texture(0)`
-        let color_attachment_texture = input.get(0).unwrap().get_texture().unwrap();
-        let pass_descriptor = PassDescriptor {
-            color_attachments: vec![RenderPassColorAttachmentDescriptor {
-                attachment: TextureAttachment::Id(color_attachment_texture),
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Clear(Color::rgb(1.0, 0.1, 0.1)),
-                    store: true,
-                },
-            }],
-            depth_stencil_attachment: None,
-            sample_count: 1,
-        };
-
-        let transparent_phase = world.get_resource::<TransparentPhase>().unwrap();
-        let draw_functions = world.get_resource::<DrawFunctions>().unwrap();
-
-        render_context.begin_pass(&pass_descriptor, &mut |render_pass: &mut dyn RenderPass| {
-            let mut draw_functions = draw_functions.draw_function.lock();
-            let mut tracked_pass = TrackedRenderPass::new(render_pass);
-            for drawable in transparent_phase.drawn_things.iter() {
-                draw_functions[drawable.draw_function].draw(
-                    world,
-                    &mut tracked_pass,
-                    drawable.draw_key,
-                );
-            }
-        })
     }
 }

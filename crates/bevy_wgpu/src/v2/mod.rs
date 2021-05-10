@@ -1,7 +1,7 @@
 mod wgpu_render_graph_executor;
 pub use wgpu_render_graph_executor::*;
 
-use bevy_app::{App, EventReader, Events, Plugin};
+use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::{Commands, IntoExclusiveSystem, IntoSystem, Res, World};
 use bevy_render::{
     renderer::RenderResourceContext,
@@ -10,10 +10,10 @@ use bevy_render::{
         RenderStage,
     },
 };
-use bevy_window::{WindowCreated, WindowId, Windows};
+use bevy_window::Windows;
 use bevy_winit::WinitWindows;
 use futures_lite::future;
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::HasRawWindowHandle;
 
 use crate::{renderer::WgpuRenderResourceContext, WgpuOptions, WgpuRenderer};
 
