@@ -387,6 +387,7 @@ impl Table {
     }
 
     pub fn clear(&mut self) {
+        self.entities.clear();
         for column in self.columns.values_mut() {
             column.clear();
         }
