@@ -76,8 +76,7 @@ fn prepare_cameras(
         let camera_uniforms = CameraUniforms {
             view_proj: cameras
                 .view_proj_uniforms
-                .push(camera.projection * camera.transform.inverse())
-                .unwrap(),
+                .push(camera.projection * camera.transform.inverse()),
         };
         commands.entity(entity).insert(camera_uniforms);
         if let Some(name) = camera.name.as_ref() {

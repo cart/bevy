@@ -1,6 +1,6 @@
 use crate::Sprite;
 use bevy_app::{App, Plugin};
-use bevy_core::{AsBytes, Byteable};
+use bevy_core::Byteable;
 use bevy_ecs::{prelude::*, system::ParamState};
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
 use bevy_render::{
@@ -12,12 +12,13 @@ use bevy_render::{
     },
     pipeline::{PipelineDescriptorV2, PipelineId},
     renderer::{
-        BindGroupBuilder, BindGroupId, BufferId, BufferInfo, BufferMapMode, BufferUsage,
-        RenderContext, RenderResourceBinding, RenderResources2,
+        BindGroupBuilder, BindGroupId, BufferUsage, RenderContext, RenderResourceBinding,
+        RenderResources2,
     },
     shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2},
     texture::TextureFormat,
     v2::{
+        buffer_vec::BufferVec,
         draw_state::TrackedRenderPass,
         features::{
             CameraUniforms, Cameras, Draw, DrawFunctions, Drawable, MainPassPlugin, RenderPhase,
@@ -39,8 +40,7 @@ impl Plugin for SpritePlugin {
         render_app
             .add_system_to_stage(RenderStage::Extract, extract_sprites.system())
             .add_system_to_stage(RenderStage::Prepare, prepare_sprites.system())
-            // TODO: remove this ugly thing
-            .add_system_to_stage(RenderStage::Draw, sprite_bind_group_system.system())
+            .add_system_to_stage(RenderStage::Queue, queue_sprites.system())
             .init_resource::<SpriteShaders>()
             .init_resource::<SpriteBuffers>();
         let draw_sprite = DrawSprite::new(&mut render_app.world);
@@ -171,13 +171,8 @@ struct SpriteVertex {
 unsafe impl Byteable for SpriteVertex {}
 
 struct SpriteBuffers {
-    sprite_vertex_buffer: Option<BufferId>,
-    sprite_index_buffer: Option<BufferId>,
-    staging: Option<BufferId>,
-    capacity: usize,
-    sprite_count: usize,
-    vertices: Vec<SpriteVertex>,
-    indices: Vec<u32>,
+    vertices: BufferVec<SpriteVertex>,
+    indices: BufferVec<u32>,
     quad: Mesh,
     bind_group: Option<BindGroupId>,
     dynamic_uniforms: Vec<u32>,
@@ -186,13 +181,8 @@ struct SpriteBuffers {
 impl Default for SpriteBuffers {
     fn default() -> Self {
         Self {
-            sprite_vertex_buffer: None,
-            sprite_index_buffer: None,
-            staging: None,
-            capacity: 0,
-            sprite_count: 0,
-            vertices: Vec::new(),
-            indices: Vec::new(),
+            vertices: BufferVec::new(BufferUsage::VERTEX),
+            indices: BufferVec::new(BufferUsage::INDEX),
             bind_group: None,
             dynamic_uniforms: Vec::new(),
             quad: Quad {
@@ -207,9 +197,13 @@ impl Default for SpriteBuffers {
 fn prepare_sprites(
     render_resources: Res<RenderResources2>,
     mut sprite_buffers: ResMut<SpriteBuffers>,
-    mut transparent_phase: ResMut<RenderPhase>,
     extracted_sprites: Res<ExtractedSprites>,
 ) {
+    // dont create buffers when there are no sprites
+    if extracted_sprites.sprites.len() == 0 {
+        return;
+    }
+
     let quad_vertex_positions = if let VertexAttributeValues::Float3(vertex_positions) =
         sprite_buffers
             .quad
@@ -225,73 +219,17 @@ fn prepare_sprites(
     let quad_indices = if let Indices::U32(indices) = sprite_buffers.quad.indices().unwrap() {
         indices.clone()
     } else {
-        panic!("expectd u32 indices");
+        panic!("expected u32 indices");
     };
 
-    let sprite_vertex_size = std::mem::size_of::<SpriteVertex>();
-    let sprite_vertex_array_len = quad_vertex_positions.len() * extracted_sprites.sprites.len();
-    let sprite_vertex_array_size = sprite_vertex_size * sprite_vertex_array_len;
-
-    let sprite_index_size = std::mem::size_of::<u32>();
-    let sprite_index_array_len = quad_indices.len() * extracted_sprites.sprites.len();
-    let sprite_index_array_size = sprite_index_size * sprite_index_array_len;
-
-    sprite_buffers.sprite_count = extracted_sprites.sprites.len();
-
-    if extracted_sprites.sprites.len() > sprite_buffers.capacity {
-        if let Some(staging) = sprite_buffers.staging.take() {
-            render_resources.remove_buffer(staging);
-        }
-
-        if let Some(vertices) = sprite_buffers.sprite_vertex_buffer.take() {
-            render_resources.remove_buffer(vertices);
-        }
-
-        if let Some(indices) = sprite_buffers.sprite_index_buffer.take() {
-            render_resources.remove_buffer(indices);
-        }
-    }
-
-    // dont create buffers when there are no sprites
-    if extracted_sprites.sprites.len() == 0 {
-        return;
-    }
-
-    let staging_buffer = if let Some(staging_buffer) = sprite_buffers.staging {
-        render_resources.map_buffer(staging_buffer, BufferMapMode::Write);
-        staging_buffer
-    } else {
-        let staging_buffer = render_resources.create_buffer(BufferInfo {
-            size: sprite_vertex_array_size + sprite_index_array_size,
-            buffer_usage: BufferUsage::COPY_SRC | BufferUsage::MAP_WRITE,
-            mapped_at_creation: true,
-        });
-        sprite_buffers.staging = Some(staging_buffer);
-
-        let vertex_buffer = render_resources.create_buffer(BufferInfo {
-            size: sprite_vertex_array_size,
-            buffer_usage: BufferUsage::COPY_DST | BufferUsage::VERTEX,
-            mapped_at_creation: false,
-        });
-        sprite_buffers.sprite_vertex_buffer = Some(vertex_buffer);
-
-        let index_buffer = render_resources.create_buffer(BufferInfo {
-            size: sprite_index_array_size,
-            buffer_usage: BufferUsage::COPY_DST | BufferUsage::INDEX,
-            mapped_at_creation: false,
-        });
-        sprite_buffers.sprite_index_buffer = Some(index_buffer);
-
-        sprite_buffers.capacity = extracted_sprites.sprites.len();
-
-        staging_buffer
-    };
-
-    sprite_buffers.vertices.clear();
-    sprite_buffers.vertices.reserve(sprite_vertex_array_len);
-
-    sprite_buffers.indices.clear();
-    sprite_buffers.indices.reserve(sprite_index_array_len);
+    sprite_buffers.vertices.reserve_and_clear(
+        extracted_sprites.sprites.len() * quad_vertex_positions.len(),
+        &render_resources,
+    );
+    sprite_buffers.indices.reserve_and_clear(
+        extracted_sprites.sprites.len() * quad_indices.len(),
+        &render_resources,
+    );
 
     for (i, extracted_sprite) in extracted_sprites.sprites.iter().enumerate() {
         for vertex_position in quad_vertex_positions.iter() {
@@ -303,42 +241,27 @@ fn prepare_sprites(
             });
         }
 
-        transparent_phase.add(Drawable {
-            draw_function: 0,
-            draw_key: i,
-            sort_key: 0,
-        });
-
         for index in quad_indices.iter() {
             sprite_buffers
                 .indices
                 .push((i * quad_vertex_positions.len()) as u32 + *index);
         }
     }
-    render_resources.write_mapped_buffer(
-        staging_buffer,
-        0..sprite_vertex_array_size as u64,
-        &mut |data, _context| {
-            data[0..sprite_vertex_array_size].copy_from_slice(sprite_buffers.vertices.as_bytes());
-        },
-    );
-    render_resources.write_mapped_buffer(
-        staging_buffer,
-        sprite_vertex_array_size as u64
-            ..(sprite_vertex_array_size + sprite_index_array_size) as u64,
-        &mut |data, _context| {
-            data[0..sprite_index_array_size].copy_from_slice(sprite_buffers.indices.as_bytes());
-        },
-    );
-    render_resources.unmap_buffer(staging_buffer);
-    transparent_phase.sort();
+
+    sprite_buffers
+        .vertices
+        .write_to_staging_buffer(&render_resources);
+    sprite_buffers
+        .indices
+        .write_to_staging_buffer(&render_resources);
 }
 
-// TODO: sort out the best place for this
-fn sprite_bind_group_system(
+fn queue_sprites(
     render_resources: Res<RenderResources2>,
     mut sprite_buffers: ResMut<SpriteBuffers>,
     sprite_shaders: Res<SpriteShaders>,
+    mut transparent_phase: ResMut<RenderPhase>,
+    extracted_sprites: Res<ExtractedSprites>,
     extracted_cameras: Res<Cameras>,
     camera_uniforms: Query<&CameraUniforms>,
 ) {
@@ -370,6 +293,17 @@ fn sprite_bind_group_system(
             sprite_buffers.dynamic_uniforms.push(index);
         }
     }
+
+    for i in 0..extracted_sprites.sprites.iter().len() {
+        transparent_phase.add(Drawable {
+            draw_function: 0,
+            draw_key: i,
+            sort_key: 0,
+        });
+    }
+
+    // TODO: this shouldn't happen here
+    transparent_phase.sort();
 }
 
 pub struct SpriteNode;
@@ -383,25 +317,12 @@ impl Node for SpriteNode {
         _output: &mut ResourceSlots,
     ) {
         let sprite_buffers = world.get_resource::<SpriteBuffers>().unwrap();
-        let sprite_vertex_size = std::mem::size_of::<SpriteVertex>();
-        let sprite_index_size = std::mem::size_of::<u32>();
-        let sprite_vertex_array_size = (sprite_buffers.vertices.len() * sprite_vertex_size) as u64;
-        if sprite_buffers.sprite_count != 0 {
-            render_context.copy_buffer_to_buffer(
-                sprite_buffers.staging.unwrap(),
-                0,
-                sprite_buffers.sprite_vertex_buffer.unwrap(),
-                0,
-                sprite_vertex_array_size,
-            );
-            render_context.copy_buffer_to_buffer(
-                sprite_buffers.staging.unwrap(),
-                sprite_vertex_array_size,
-                sprite_buffers.sprite_index_buffer.unwrap(),
-                0,
-                (sprite_buffers.indices.len() * sprite_index_size) as u64,
-            );
-        }
+        sprite_buffers
+            .vertices
+            .write_to_uniform_buffer(render_context);
+        sprite_buffers
+            .indices
+            .write_to_uniform_buffer(render_context);
     }
 }
 
@@ -423,9 +344,9 @@ impl Draw for DrawSprite {
         let (sprite_shaders, sprite_buffers) = self.param_state.get(world);
         let layout = &sprite_shaders.pipeline_descriptor.layout;
         pass.set_pipeline(sprite_shaders.pipeline);
-        pass.set_vertex_buffer(0, sprite_buffers.sprite_vertex_buffer.unwrap(), 0);
+        pass.set_vertex_buffer(0, sprite_buffers.vertices.buffer().unwrap(), 0);
         pass.set_index_buffer(
-            sprite_buffers.sprite_index_buffer.unwrap(),
+            sprite_buffers.indices.buffer().unwrap(),
             0,
             IndexFormat::Uint32,
         );

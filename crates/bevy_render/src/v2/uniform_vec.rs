@@ -42,7 +42,7 @@ impl<T: AsStd140> UniformVec<T> {
         self.capacity
     }
 
-    pub fn push(&mut self, value: T) -> Option<RenderResourceBinding> {
+    pub fn push(&mut self, value: T) -> RenderResourceBinding {
         if self.values.len() < self.capacity {
             let binding = RenderResourceBinding::Buffer {
                 buffer: self.uniform_buffer.unwrap(),
@@ -50,9 +50,12 @@ impl<T: AsStd140> UniformVec<T> {
                 range: 0..self.item_size as u64,
             };
             self.values.push(value);
-            Some(binding)
+            binding
         } else {
-            None
+            panic!(
+                "Cannot push value because capacity of {} has been reached",
+                self.capacity
+            );
         }
     }
 
@@ -149,7 +152,7 @@ impl<T: AsStd140> DynamicUniformVec<T> {
     }
 
     #[inline]
-    pub fn push(&mut self, value: T) -> Option<RenderResourceBinding> {
+    pub fn push(&mut self, value: T) -> RenderResourceBinding {
         self.uniform_vec.push(DynamicUniform(value))
     }
 
