@@ -2,7 +2,7 @@ use crate::renderer::WgpuRenderResourceContext;
 use bevy_app::prelude::*;
 use bevy_diagnostic::{Diagnostic, DiagnosticId, Diagnostics};
 use bevy_ecs::system::{IntoSystem, Res, ResMut};
-use bevy_render::renderer::RenderResourceContext;
+use bevy_render::renderer::RenderResources2;
 
 #[derive(Default)]
 pub struct WgpuResourceDiagnosticsPlugin;
@@ -83,7 +83,7 @@ impl WgpuResourceDiagnosticsPlugin {
 
     pub fn diagnostic_system(
         mut diagnostics: ResMut<Diagnostics>,
-        render_resource_context: Res<Box<dyn RenderResourceContext>>,
+        render_resource_context: Res<RenderResources2>,
     ) {
         let render_resource_context = render_resource_context
             .downcast_ref::<WgpuRenderResourceContext>()

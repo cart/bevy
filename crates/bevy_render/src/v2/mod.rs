@@ -1,7 +1,7 @@
 pub mod render_graph;
 pub mod draw_state;
 pub mod features;
-pub mod uniform_array;
+pub mod uniform_vec;
 
 use self::render_graph::RenderGraph;
 use crate::camera::{self, ActiveCameras, Camera, OrthographicProjection};
@@ -69,6 +69,8 @@ impl Plugin for PipelinedRenderPlugin {
                 .get_stage_mut::<SystemStage>(&RenderStage::Render)
                 .unwrap();
             render.run(&mut render_app.world);
+
+            render_app.world.clear_entities();
         });
     }
 }

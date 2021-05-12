@@ -19,6 +19,12 @@ pub struct BindingDescriptor {
     pub shader_stage: BindingShaderStage,
 }
 
+impl BindingDescriptor {
+    pub fn set_dynamic(&mut self, is_dynamic: bool) -> bool {
+        self.bind_type.set_dynamic(is_dynamic)
+    }
+}
+
 #[derive(Hash, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum BindType {
     Uniform {
@@ -59,6 +65,18 @@ impl BindType {
         match self {
             BindType::Uniform { property, .. } => Some(property.get_size()),
             _ => None,
+        }
+    }
+
+    pub fn set_dynamic(&mut self, is_dynamic: bool) -> bool {
+        match self {
+            BindType::Uniform {
+                has_dynamic_offset, ..
+            } => {
+                *has_dynamic_offset = is_dynamic;
+                true
+            }
+            _ => false,
         }
     }
 }

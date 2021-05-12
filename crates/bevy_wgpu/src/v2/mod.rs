@@ -30,9 +30,7 @@ impl Plugin for PipelinedWgpuPlugin {
         let wgpu_renderer = future::block_on(WgpuRenderer::new(options));
         let resource_context = WgpuRenderResourceContext::new(wgpu_renderer.device.clone());
         app.world
-            .insert_resource(RenderResources2::new(Box::new(resource_context)));
-        let resource_context = WgpuRenderResourceContext::new(wgpu_renderer.device.clone());
-
+            .insert_resource(RenderResources2::new(Box::new(resource_context.clone())));
         let render_app = app.sub_app_mut(0);
         render_app.insert_resource(RenderResources2::new(Box::new(resource_context)));
 

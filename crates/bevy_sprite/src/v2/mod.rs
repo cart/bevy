@@ -13,13 +13,15 @@ use bevy_render::{
     pipeline::{PipelineDescriptorV2, PipelineId},
     renderer::{
         BindGroupBuilder, BindGroupId, BufferId, BufferInfo, BufferMapMode, BufferUsage,
-        RenderContext, RenderResources2,
+        RenderContext, RenderResourceBinding, RenderResources2,
     },
     shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2},
     texture::TextureFormat,
     v2::{
         draw_state::TrackedRenderPass,
-        features::{CameraBuffers, Draw, DrawFunctions, Drawable, MainPassPlugin, RenderPhase},
+        features::{
+            CameraUniforms, Cameras, Draw, DrawFunctions, Drawable, MainPassPlugin, RenderPhase,
+        },
         render_graph::{Node, RenderGraph, ResourceSlots},
         RenderStage,
     },
@@ -91,6 +93,8 @@ impl FromWorld for SpriteShaders {
                 shader_location: 0,
             }],
         }];
+
+        pipeline_layout.bind_groups[0].bindings[0].set_dynamic(true);
 
         let pipeline_descriptor = PipelineDescriptorV2 {
             depth_stencil: None,
@@ -176,6 +180,7 @@ struct SpriteBuffers {
     indices: Vec<u32>,
     quad: Mesh,
     bind_group: Option<BindGroupId>,
+    dynamic_uniforms: Vec<u32>,
 }
 
 impl Default for SpriteBuffers {
@@ -189,6 +194,7 @@ impl Default for SpriteBuffers {
             vertices: Vec::new(),
             indices: Vec::new(),
             bind_group: None,
+            dynamic_uniforms: Vec::new(),
             quad: Quad {
                 size: Vec2::new(1.0, 1.0),
                 ..Default::default()
@@ -333,25 +339,37 @@ fn sprite_bind_group_system(
     render_resources: Res<RenderResources2>,
     mut sprite_buffers: ResMut<SpriteBuffers>,
     sprite_shaders: Res<SpriteShaders>,
-    camera_buffers: Res<CameraBuffers>,
+    extracted_cameras: Res<Cameras>,
+    camera_uniforms: Query<&CameraUniforms>,
 ) {
-    const MATRIX_SIZE: usize = std::mem::size_of::<[[f32; 4]; 4]>();
-    let bind_group = BindGroupBuilder::default()
-        .add_binding(
-            0,
-            bevy_render::renderer::RenderResourceBinding::Buffer {
-                buffer: camera_buffers.view_proj,
-                range: 0..MATRIX_SIZE as u64,
-                dynamic_index: None,
-            },
-        )
-        .finish();
+    let camera_2d = if let Some(camera_2d) = extracted_cameras
+        .entities
+        .get(bevy_render::render_graph::base::camera::CAMERA_2D)
+    {
+        *camera_2d
+    } else {
+        return;
+    };
 
-    let layout = &sprite_shaders.pipeline_descriptor.layout;
+    if let Ok(camera_uniforms) = camera_uniforms.get(camera_2d) {
+        let bind_group = BindGroupBuilder::default()
+            .add_binding(0, camera_uniforms.view_proj.clone())
+            .finish();
 
-    // TODO: this will only create the bind group if it isn't already created. this is a bit nasty
-    render_resources.create_bind_group(layout.bind_groups[0].id, &bind_group);
-    sprite_buffers.bind_group = Some(bind_group.id);
+        let layout = &sprite_shaders.pipeline_descriptor.layout;
+
+        // TODO: this will only create the bind group if it isn't already created. this is a bit nasty
+        render_resources.create_bind_group(layout.bind_groups[0].id, &bind_group);
+        sprite_buffers.bind_group = Some(bind_group.id);
+        sprite_buffers.dynamic_uniforms.clear();
+        if let RenderResourceBinding::Buffer {
+            dynamic_index: Some(index),
+            ..
+        } = camera_uniforms.view_proj
+        {
+            sprite_buffers.dynamic_uniforms.push(index);
+        }
+    }
 }
 
 pub struct SpriteNode;
@@ -415,7 +433,7 @@ impl Draw for DrawSprite {
             0,
             layout.bind_groups[0].id,
             sprite_buffers.bind_group.unwrap(),
-            None,
+            Some(&sprite_buffers.dynamic_uniforms),
         );
 
         pass.draw_indexed(

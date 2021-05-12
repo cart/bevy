@@ -1,16 +1,17 @@
 use crate::{
     camera::{ActiveCameras, Camera},
-    renderer::{BufferId, BufferInfo, BufferMapMode, BufferUsage, RenderContext, RenderResources2},
+    renderer::{RenderContext, RenderResourceBinding, RenderResources2},
     v2::{
         render_graph::{Node, RenderGraph, ResourceSlots},
+        uniform_vec::DynamicUniformVec,
         RenderStage,
     },
 };
 use bevy_app::{App, Plugin};
-use bevy_core::AsBytes;
 use bevy_ecs::prelude::*;
 use bevy_math::Mat4;
 use bevy_transform::components::GlobalTransform;
+use bevy_utils::HashMap;
 
 #[derive(Default)]
 pub struct CameraPlugin;
@@ -19,6 +20,7 @@ impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         let render_app = app.sub_app_mut(0);
         render_app
+            .init_resource::<Cameras>()
             .add_system_to_stage(RenderStage::Extract, extract_cameras.system())
             .add_system_to_stage(RenderStage::Prepare, prepare_cameras.system());
         let mut graph = render_app.world.get_resource_mut::<RenderGraph>().unwrap();
@@ -26,18 +28,21 @@ impl Plugin for CameraPlugin {
     }
 }
 
+#[derive(Default)]
+pub struct Cameras {
+    pub view_proj_uniforms: DynamicUniformVec<Mat4>,
+    pub entities: HashMap<String, Entity>,
+}
+
 #[derive(Debug)]
 pub struct ExtractedCamera {
     pub projection: Mat4,
     pub transform: Mat4,
+    pub name: Option<String>,
 }
 
-// TODO: somehow make FromWorld impl work so these don't need to be options?
-// This could also use the Option<ResMut<CameraBuffers>>> pattern + commands.insert_resource to avoid options
-#[derive(Debug)]
-pub struct CameraBuffers {
-    pub view_proj: BufferId,
-    pub staging: BufferId,
+pub struct CameraUniforms {
+    pub view_proj: RenderResourceBinding,
 }
 
 fn extract_cameras(
@@ -45,47 +50,44 @@ fn extract_cameras(
     active_cameras: Res<ActiveCameras>,
     query: Query<(&Camera, &GlobalTransform)>,
 ) {
-    // TODO: move camera name?
-    if let Some(active_camera) = active_cameras.get(crate::render_graph::base::camera::CAMERA_2D) {
-        if let Some((camera, transform)) = active_camera.entity.and_then(|e| query.get(e).ok()) {
-            commands.insert_resource(ExtractedCamera {
+    for camera in active_cameras.iter() {
+        if let Some((camera, transform)) = camera.entity.and_then(|e| query.get(e).ok()) {
+            // TODO: remove "spawn_and_forget" hack in favor of more intelligent multiple world handling
+            commands.spawn_and_forget((ExtractedCamera {
                 projection: camera.projection_matrix,
                 transform: transform.compute_matrix(),
-            })
+                name: camera.name.clone(),
+            },));
         }
     }
 }
 
-const MATRIX_SIZE: usize = std::mem::size_of::<[[f32; 4]; 4]>();
 fn prepare_cameras(
     mut commands: Commands,
     render_resources: Res<RenderResources2>,
-    camera_buffers: Option<ResMut<CameraBuffers>>,
-    extracted_camera: Res<ExtractedCamera>,
+    mut cameras: ResMut<Cameras>,
+    mut extracted_cameras: Query<(Entity, &ExtractedCamera)>,
 ) {
-    let staging = if let Some(camera_buffers) = camera_buffers {
-        render_resources.map_buffer(camera_buffers.staging, BufferMapMode::Write);
-        camera_buffers.staging
-    } else {
-        let staging = render_resources.create_buffer(BufferInfo {
-            size: MATRIX_SIZE,
-            buffer_usage: BufferUsage::COPY_SRC | BufferUsage::MAP_WRITE,
-            mapped_at_creation: true,
-        });
-        let view_proj = render_resources.create_buffer(BufferInfo {
-            size: MATRIX_SIZE,
-            buffer_usage: BufferUsage::COPY_DST | BufferUsage::UNIFORM,
-            mapped_at_creation: false,
-        });
+    cameras.entities.clear();
+    cameras
+        .view_proj_uniforms
+        .reserve_and_clear(extracted_cameras.iter_mut().len(), &render_resources);
+    for (entity, camera) in extracted_cameras.iter() {
+        let camera_uniforms = CameraUniforms {
+            view_proj: cameras
+                .view_proj_uniforms
+                .push(camera.projection * camera.transform.inverse())
+                .unwrap(),
+        };
+        commands.entity(entity).insert(camera_uniforms);
+        if let Some(name) = camera.name.as_ref() {
+            cameras.entities.insert(name.to_string(), entity);
+        }
+    }
 
-        commands.insert_resource(CameraBuffers { staging, view_proj });
-        staging
-    };
-    let view_proj = extracted_camera.projection * extracted_camera.transform.inverse();
-    render_resources.write_mapped_buffer(staging, 0..MATRIX_SIZE as u64, &mut |data, _renderer| {
-        data[0..MATRIX_SIZE].copy_from_slice(view_proj.to_cols_array_2d().as_bytes());
-    });
-    render_resources.unmap_buffer(staging);
+    cameras
+        .view_proj_uniforms
+        .write_to_staging_buffer(&render_resources);
 }
 
 pub struct CameraNode;
@@ -98,13 +100,9 @@ impl Node for CameraNode {
         _input: &ResourceSlots,
         _output: &mut ResourceSlots,
     ) {
-        let camera_buffers = world.get_resource::<CameraBuffers>().unwrap();
-        render_context.copy_buffer_to_buffer(
-            camera_buffers.staging,
-            0,
-            camera_buffers.view_proj,
-            0,
-            MATRIX_SIZE as u64,
-        );
+        let camera_uniforms = world.get_resource::<Cameras>().unwrap();
+        camera_uniforms
+            .view_proj_uniforms
+            .write_to_uniform_buffer(render_context);
     }
 }

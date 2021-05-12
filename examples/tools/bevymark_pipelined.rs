@@ -1,4 +1,9 @@
-use bevy::{PipelinedDefaultPlugins, diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin}, prelude::*, sprite::entity::PipelinedSpriteBundle};
+use bevy::{
+    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    prelude::*,
+    sprite::entity::PipelinedSpriteBundle,
+    PipelinedDefaultPlugins,
+};
 use rand::Rng;
 
 const BIRDS_PER_SECOND: u32 = 10000;

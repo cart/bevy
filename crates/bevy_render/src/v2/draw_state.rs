@@ -9,22 +9,40 @@ use std::ops::Range;
 #[derive(Debug, Default)]
 pub struct DrawState {
     pipeline: Option<PipelineId>,
-    bind_groups: Vec<Option<BindGroupId>>,
+    bind_groups: Vec<(Option<BindGroupId>, Vec<u32>)>,
     vertex_buffers: Vec<Option<(BufferId, u64)>>,
     index_buffer: Option<(BufferId, u64, IndexFormat)>,
 }
 
 impl DrawState {
-    pub fn set_bind_group(&mut self, index: usize, bind_group: BindGroupId) {
+    pub fn set_bind_group(
+        &mut self,
+        index: usize,
+        bind_group: BindGroupId,
+        dynamic_indices: Option<&[u32]>,
+    ) {
         if index >= self.bind_groups.len() {
-            self.bind_groups.resize(index + 1, None);
+            self.bind_groups.resize(index + 1, (None, Vec::new()));
         }
-        self.bind_groups[index] = Some(bind_group);
+        self.bind_groups[index].0 = Some(bind_group);
+        self.bind_groups[index].1.clear();
+        if let Some(indices) = dynamic_indices {
+            self.bind_groups[index].1.extend(indices);
+        }
     }
 
-    pub fn is_bind_group_set(&self, index: usize, bind_group: BindGroupId) -> bool {
+    pub fn is_bind_group_set(
+        &self,
+        index: usize,
+        bind_group: BindGroupId,
+        dynamic_indices: Option<&[u32]>,
+    ) -> bool {
         if let Some(current_bind_group) = self.bind_groups.get(index) {
-            *current_bind_group == Some(bind_group)
+            if let Some(dynamic_indices) = dynamic_indices {
+                current_bind_group.0 == Some(bind_group) && dynamic_indices == current_bind_group.1
+            } else {
+                current_bind_group.0 == Some(bind_group)
+            }
         } else {
             false
         }
@@ -56,15 +74,6 @@ impl DrawState {
         index_format: IndexFormat,
     ) -> bool {
         self.index_buffer == Some((buffer, offset, index_format))
-    }
-
-    pub fn can_draw(&self) -> bool {
-        self.bind_groups.iter().all(|b| b.is_some())
-            && self.vertex_buffers.iter().all(|v| v.is_some())
-    }
-
-    pub fn can_draw_indexed(&self) -> bool {
-        self.can_draw() && self.index_buffer.is_some()
     }
 
     pub fn is_pipeline_set(&self, pipeline: PipelineId) -> bool {
@@ -105,10 +114,11 @@ impl<'a> TrackedRenderPass<'a> {
         index: usize,
         bind_group_descriptor: BindGroupDescriptorId,
         bind_group: BindGroupId,
-        dynamic_uniform_indices: Option<Vec<u32>>,
+        dynamic_uniform_indices: Option<&[u32]>,
     ) {
-        if dynamic_uniform_indices.is_none()
-            && self.state.is_bind_group_set(index as usize, bind_group)
+        if self
+            .state
+            .is_bind_group_set(index as usize, bind_group, dynamic_uniform_indices)
         {
             return;
         }
@@ -116,9 +126,10 @@ impl<'a> TrackedRenderPass<'a> {
             index as u32,
             bind_group_descriptor,
             bind_group,
-            dynamic_uniform_indices.as_deref(),
+            dynamic_uniform_indices,
         );
-        self.state.set_bind_group(index as usize, bind_group);
+        self.state
+            .set_bind_group(index as usize, bind_group, dynamic_uniform_indices);
     }
 
     pub fn set_vertex_buffer(&mut self, index: usize, buffer: BufferId, offset: u64) {
