@@ -1,12 +1,17 @@
+pub mod buffer_vec;
 pub mod draw_state;
 pub mod features;
 pub mod render_graph;
 pub mod uniform_vec;
-pub mod buffer_vec;
 
 use self::render_graph::RenderGraph;
-use crate::camera::{self, ActiveCameras, Camera, OrthographicProjection};
+use crate::{
+    camera::{self, ActiveCameras, Camera, OrthographicProjection},
+    prelude::Texture,
+    texture::ImageTextureLoader,
+};
 use bevy_app::{App, CoreStage, Plugin};
+use bevy_asset::AddAsset;
 use bevy_ecs::prelude::*;
 
 #[derive(Default)]
@@ -32,9 +37,15 @@ pub enum RenderStage {
 
 impl Plugin for PipelinedRenderPlugin {
     fn build(&self, app: &mut App) {
+        #[cfg(feature = "png")]
+        {
+            app.init_asset_loader::<ImageTextureLoader>();
+        }
         let mut active_cameras = ActiveCameras::default();
         active_cameras.add(crate::base::camera::CAMERA_2D);
-        app.register_type::<Camera>()
+        app
+            // cameras
+            .register_type::<Camera>()
             .insert_resource(active_cameras)
             .add_system_to_stage(
                 CoreStage::PostUpdate,
@@ -43,7 +54,9 @@ impl Plugin for PipelinedRenderPlugin {
             .add_system_to_stage(
                 CoreStage::PostUpdate,
                 camera::camera_system::<OrthographicProjection>.system(),
-            );
+            )
+            // textures
+            .add_asset::<Texture>();
         let mut render_app = App::empty();
         let mut extract_stage = SystemStage::parallel();
         // don't apply buffers when the stage finishes running

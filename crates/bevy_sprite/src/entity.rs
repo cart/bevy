@@ -4,12 +4,7 @@ use crate::{
 };
 use bevy_asset::Handle;
 use bevy_ecs::bundle::Bundle;
-use bevy_render::{
-    mesh::Mesh,
-    pipeline::{RenderPipeline, RenderPipelines},
-    prelude::{Draw, Visible},
-    render_graph::base::MainPass,
-};
+use bevy_render::{mesh::Mesh, pipeline::{RenderPipeline, RenderPipelines}, prelude::{Draw, Texture, Visible}, render_graph::base::MainPass};
 use bevy_transform::prelude::{GlobalTransform, Transform};
 
 #[derive(Bundle, Clone)]
@@ -51,6 +46,7 @@ pub struct PipelinedSpriteBundle {
     pub sprite: Sprite,
     pub transform: Transform,
     pub global_transform: GlobalTransform,
+    pub texture: Handle<Texture>,
 }
 
 impl Default for PipelinedSpriteBundle {
@@ -59,6 +55,7 @@ impl Default for PipelinedSpriteBundle {
             sprite: Default::default(),
             transform: Default::default(),
             global_transform: Default::default(),
+            texture: Default::default(),
         }
     }
 }

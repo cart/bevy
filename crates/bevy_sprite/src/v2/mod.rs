@@ -1,5 +1,6 @@
 use crate::Sprite;
 use bevy_app::{App, Plugin};
+use bevy_asset::{Assets, Handle};
 use bevy_core::Byteable;
 use bevy_ecs::{prelude::*, system::ParamState};
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
@@ -11,6 +12,7 @@ use bevy_render::{
         VertexAttribute, VertexBufferLayout, VertexFormat,
     },
     pipeline::{PipelineDescriptorV2, PipelineId},
+    prelude::Texture,
     renderer::{
         BindGroupBuilder, BindGroupId, BufferUsage, RenderContext, RenderResourceBinding,
         RenderResources2,
@@ -28,6 +30,7 @@ use bevy_render::{
     },
 };
 use bevy_transform::components::GlobalTransform;
+use bevy_utils::HashMap;
 
 #[derive(Default)]
 pub struct SpritePlugin;
@@ -142,24 +145,38 @@ impl FromWorld for SpriteShaders {
 struct ExtractedSprite {
     transform: Mat4,
     size: Vec2,
+    texture: Handle<Texture>,
 }
 
 struct ExtractedSprites {
     sprites: Vec<ExtractedSprite>,
 }
 
-fn extract_sprites(mut commands: Commands, query: Query<(&Sprite, &GlobalTransform)>) {
+fn extract_sprites(
+    mut commands: Commands,
+    textures: Res<Assets<Texture>>,
+    query: Query<(&Sprite, &GlobalTransform, &Handle<Texture>)>,
+) {
     let mut extracted_sprites = Vec::new();
-    for (sprite, transform) in query.iter() {
-        extracted_sprites.push(ExtractedSprite {
-            transform: transform.compute_matrix(),
-            size: sprite.size,
-        })
+    let mut extracted_textures = HashMap::default();
+    for (sprite, transform, handle) in query.iter() {
+        if let Some(texture) = textures.get(handle) {
+            extracted_textures
+                .entry(handle.clone_weak())
+                .or_insert_with(|| texture.clone());
+            extracted_sprites.push(ExtractedSprite {
+                transform: transform.compute_matrix(),
+                size: sprite.size,
+                texture: handle.clone_weak(),
+            })
+        }
     }
 
     commands.insert_resource(ExtractedSprites {
         sprites: extracted_sprites,
-    })
+    });
+
+    commands.insert_resource(extracted_textures);
 }
 
 #[repr(C)]

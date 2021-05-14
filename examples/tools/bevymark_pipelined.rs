@@ -55,11 +55,14 @@ fn main() {
         .run();
 }
 
+struct BirdTexture(Handle<Texture>);
+
 fn setup(
     mut commands: Commands,
     window: Res<WindowDescriptor>,
     mut counter: ResMut<BevyCounter>,
     asset_server: Res<AssetServer>,
+    
 ) {
     // spawn_birds(&mut commands, &window, &mut counter, 10);
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
@@ -113,6 +116,8 @@ fn setup(
     //     },
     //     ..Default::default()
     // });
+
+    commands.insert_resource(BirdTexture(asset_server.load("branding/icon.png")));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -122,6 +127,7 @@ fn mouse_handler(
     time: Res<Time>,
     mouse_button_input: Res<Input<MouseButton>>,
     window: Res<WindowDescriptor>,
+    bird_texture: Res<BirdTexture>,
     // mut bird_material: ResMut<BirdMaterial>,
     mut counter: ResMut<BevyCounter>,
     // mut materials: ResMut<Assets<ColorMaterial>>,
@@ -140,7 +146,7 @@ fn mouse_handler(
 
     if mouse_button_input.pressed(MouseButton::Left) {
         let spawn_count = (BIRDS_PER_SECOND as f64 * time.delta_seconds_f64()) as u128;
-        spawn_birds(&mut commands, &window, &mut counter, spawn_count);
+        spawn_birds(&mut commands, &window, &mut counter, spawn_count, bird_texture.0.clone());
     }
 }
 
@@ -149,6 +155,7 @@ fn spawn_birds(
     window: &WindowDescriptor,
     counter: &mut BevyCounter,
     spawn_count: u128,
+    texture: Handle<Texture>,
 ) {
     let bird_x = (window.width / -2.) + HALF_BIRD_SIZE;
     let bird_y = (window.height / 2.) - HALF_BIRD_SIZE;
@@ -157,6 +164,7 @@ fn spawn_birds(
         commands
             .spawn_bundle(PipelinedSpriteBundle {
                 // material: bird_material.0.clone(),
+                texture: texture.clone(),
                 sprite: Sprite {
                     size: Vec2::new(50.0, 50.0),
                     ..Default::default()
