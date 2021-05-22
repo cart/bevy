@@ -13,7 +13,7 @@ use bevy_render2::{
         TextureId,
     },
     renderer::{RenderContext, RenderResources},
-    shader::{Shader, ShaderId, ShaderStage, ShaderStagesV2},
+    shader::{Shader, ShaderId, ShaderStage, ShaderStages},
     texture::{Texture, TextureFormat},
 };
 use bevy_transform::components::GlobalTransform;
@@ -24,7 +24,7 @@ pub struct SpriteShaders {
     _vertex: ShaderId,
     _fragment: ShaderId,
     pipeline: PipelineId,
-    pipeline_descriptor: PipelineDescriptorV2,
+    pipeline_descriptor: PipelineDescriptor,
 }
 
 impl FromWorld for SpriteShaders {
@@ -43,8 +43,8 @@ impl FromWorld for SpriteShaders {
         let mut pipeline_layout =
             PipelineLayout::from_shader_layouts(&mut [vertex_layout, fragment_layout]);
 
-        let vertex = render_resources.create_shader_module_v2(&vertex_shader);
-        let fragment = render_resources.create_shader_module_v2(&fragment_shader);
+        let vertex = render_resources.create_shader_module(&vertex_shader);
+        let fragment = render_resources.create_shader_module(&fragment_shader);
 
         pipeline_layout.vertex_buffer_descriptors = vec![VertexBufferLayout {
             stride: 20,
@@ -68,7 +68,7 @@ impl FromWorld for SpriteShaders {
 
         pipeline_layout.bind_groups[0].bindings[0].set_dynamic(true);
 
-        let pipeline_descriptor = PipelineDescriptorV2 {
+        let pipeline_descriptor = PipelineDescriptor {
             depth_stencil: None,
             color_target_states: vec![ColorTargetState {
                 format: TextureFormat::default(),
@@ -95,8 +95,8 @@ impl FromWorld for SpriteShaders {
                 clamp_depth: false,
                 conservative: false,
             },
-            ..PipelineDescriptorV2::new(
-                ShaderStagesV2 {
+            ..PipelineDescriptor::new(
+                ShaderStages {
                     vertex,
                     fragment: Some(fragment),
                 },
@@ -104,7 +104,7 @@ impl FromWorld for SpriteShaders {
             )
         };
 
-        let pipeline = render_resources.create_render_pipeline_v2(&pipeline_descriptor);
+        let pipeline = render_resources.create_render_pipeline(&pipeline_descriptor);
 
         SpriteShaders {
             _vertex: vertex,

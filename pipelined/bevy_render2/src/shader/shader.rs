@@ -1,5 +1,5 @@
 use super::ShaderLayout;
-use bevy_asset::{AssetLoader, Handle, LoadContext, LoadedAsset};
+use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
 use bevy_reflect::{TypeUuid, Uuid};
 use bevy_utils::{tracing::error, BoxedFuture};
 use std::marker::Copy;
@@ -249,59 +249,8 @@ impl Shader {
 /// All stages in a shader program
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ShaderStages {
-    pub vertex: Handle<Shader>,
-    pub fragment: Option<Handle<Shader>>,
-}
-
-/// All stages in a shader program
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ShaderStagesV2 {
     pub vertex: ShaderId,
     pub fragment: Option<ShaderId>,
-}
-
-pub struct ShaderStagesIterator<'a> {
-    shader_stages: &'a ShaderStages,
-    state: u32,
-}
-
-impl<'a> Iterator for ShaderStagesIterator<'a> {
-    type Item = Handle<Shader>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let ret = match self.state {
-            0 => Some(self.shader_stages.vertex.clone_weak()),
-            1 => self.shader_stages.fragment.as_ref().map(|h| h.clone_weak()),
-            _ => None,
-        };
-        self.state += 1;
-        ret
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.shader_stages.fragment.is_some() {
-            return (2, Some(2));
-        }
-        (1, Some(1))
-    }
-}
-
-impl<'a> ExactSizeIterator for ShaderStagesIterator<'a> {}
-
-impl ShaderStages {
-    pub fn new(vertex_shader: Handle<Shader>) -> Self {
-        ShaderStages {
-            vertex: vertex_shader,
-            fragment: None,
-        }
-    }
-
-    pub fn iter(&self) -> ShaderStagesIterator {
-        ShaderStagesIterator {
-            shader_stages: &self,
-            state: 0,
-        }
-    }
 }
 
 #[derive(Default)]

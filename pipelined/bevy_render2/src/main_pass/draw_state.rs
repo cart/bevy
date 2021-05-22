@@ -105,7 +105,7 @@ impl<'a> TrackedRenderPass<'a> {
         if self.state.is_pipeline_set(pipeline) {
             return;
         }
-        self.pass.set_pipeline_v2(pipeline);
+        self.pass.set_pipeline(pipeline);
         self.state.set_pipeline(pipeline);
     }
 

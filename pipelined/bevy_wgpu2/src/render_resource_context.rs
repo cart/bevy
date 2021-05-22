@@ -2,18 +2,17 @@ use crate::{
     resources::{WgpuBindGroupInfo, WgpuResources},
     type_converter::{OwnedWgpuVertexBufferLayout, WgpuInto},
 };
-use bevy_asset::{Assets, Handle, HandleUntyped};
 use bevy_render2::{
     pipeline::{
         BindGroupDescriptor, BindGroupDescriptorId, BindingShaderStage, PipelineDescriptor,
-        PipelineDescriptorV2, PipelineId,
+        PipelineId,
     },
     render_resource::{
-        BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceBinding, RenderResourceId,
-        SamplerId, SwapChainDescriptor, TextureId,
+        BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceBinding, SamplerId,
+        SwapChainDescriptor, TextureId,
     },
     renderer::RenderResourceContext,
-    shader::{glsl_to_spirv, Shader, ShaderError, ShaderId, ShaderSource},
+    shader::{Shader, ShaderId},
     texture::{Extent3d, SamplerDescriptor, TextureDescriptor},
 };
 use bevy_utils::tracing::trace;
@@ -341,35 +340,8 @@ impl RenderResourceContext for WgpuRenderResourceContext {
         samplers.remove(&sampler);
     }
 
-    fn create_shader_module_from_source(&self, shader_handle: &Handle<Shader>, shader: &Shader) {
+    fn create_shader_module(&self, shader: &Shader) -> ShaderId {
         let mut shader_modules = self.resources.shader_modules.write();
-        let spirv: Cow<[u32]> = shader.get_spirv(None).unwrap().into();
-        let shader_module = self
-            .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::SpirV(spirv),
-                flags: Default::default(),
-            });
-        shader_modules.insert(shader_handle.clone_weak(), shader_module);
-    }
-
-    fn create_shader_module(&self, shader_handle: &Handle<Shader>, shaders: &Assets<Shader>) {
-        if self
-            .resources
-            .shader_modules
-            .read()
-            .get(&shader_handle)
-            .is_some()
-        {
-            return;
-        }
-        let shader = shaders.get(shader_handle).unwrap();
-        self.create_shader_module_from_source(shader_handle, shader);
-    }
-
-    fn create_shader_module_v2(&self, shader: &Shader) -> ShaderId {
-        let mut shader_modules = self.resources.shader_modules_v2.write();
         let spirv: Cow<[u32]> = shader.get_spirv(None).unwrap().into();
         let shader_module = self
             .device
@@ -398,21 +370,7 @@ impl RenderResourceContext for WgpuRenderResourceContext {
         window_swap_chains.insert(window.id(), swap_chain);
     }
 
-    fn next_swap_chain_texture(&self, window: &bevy_window::Window) -> TextureId {
-        if let Some(texture_id) = self.try_next_swap_chain_texture(window.id()) {
-            texture_id
-        } else {
-            self.resources
-                .window_swap_chains
-                .write()
-                .remove(&window.id());
-            self.create_swap_chain(window);
-            self.try_next_swap_chain_texture(window.id())
-                .expect("Failed to acquire next swap chain texture!")
-        }
-    }
-
-    fn next_swap_chain_texture_v2(&self, descriptor: &SwapChainDescriptor) -> TextureId {
+    fn next_swap_chain_texture(&self, descriptor: &SwapChainDescriptor) -> TextureId {
         if let Some(texture_id) = self.try_next_swap_chain_texture(descriptor.window_id) {
             texture_id
         } else {
@@ -444,47 +402,8 @@ impl RenderResourceContext for WgpuRenderResourceContext {
         swap_chain_outputs.clear();
     }
 
-    fn set_asset_resource_untyped(
-        &self,
-        handle: HandleUntyped,
-        render_resource: RenderResourceId,
-        index: u64,
-    ) {
-        let mut asset_resources = self.resources.asset_resources.write();
-        asset_resources.insert((handle, index), render_resource);
-    }
-
-    fn get_asset_resource_untyped(
-        &self,
-        handle: HandleUntyped,
-        index: u64,
-    ) -> Option<RenderResourceId> {
-        let asset_resources = self.resources.asset_resources.read();
-        asset_resources.get(&(handle, index)).cloned()
-    }
-
-    fn remove_asset_resource_untyped(&self, handle: HandleUntyped, index: u64) {
-        let mut asset_resources = self.resources.asset_resources.write();
-        asset_resources.remove(&(handle, index));
-    }
-
-    fn create_render_pipeline(
-        &self,
-        pipeline_handle: Handle<PipelineDescriptor>,
-        pipeline_descriptor: &PipelineDescriptor,
-        shaders: &Assets<Shader>,
-    ) {
-        if self
-            .resources
-            .render_pipelines
-            .read()
-            .get(&pipeline_handle)
-            .is_some()
-        {
-            return;
-        }
-
-        let layout = pipeline_descriptor.get_layout().unwrap();
+    fn create_render_pipeline(&self, pipeline_descriptor: &PipelineDescriptor) -> PipelineId {
+        let layout = &pipeline_descriptor.layout;
         for bind_group_descriptor in layout.bind_groups.iter() {
             self.create_bind_group_layout(&bind_group_descriptor);
         }
@@ -516,12 +435,6 @@ impl RenderResourceContext for WgpuRenderResourceContext {
             .iter()
             .map(|c| c.wgpu_into())
             .collect::<Vec<wgpu::ColorTargetState>>();
-
-        self.create_shader_module(&pipeline_descriptor.shader_stages.vertex, shaders);
-
-        if let Some(ref fragment_handle) = pipeline_descriptor.shader_stages.fragment {
-            self.create_shader_module(fragment_handle, shaders);
-        }
 
         let shader_modules = self.resources.shader_modules.read();
         let vertex_shader_module = shader_modules
@@ -565,85 +478,6 @@ impl RenderResourceContext for WgpuRenderResourceContext {
             .device
             .create_render_pipeline(&render_pipeline_descriptor);
         let mut render_pipelines = self.resources.render_pipelines.write();
-        render_pipelines.insert(pipeline_handle, render_pipeline);
-    }
-
-    fn create_render_pipeline_v2(&self, pipeline_descriptor: &PipelineDescriptorV2) -> PipelineId {
-        let layout = &pipeline_descriptor.layout;
-        for bind_group_descriptor in layout.bind_groups.iter() {
-            self.create_bind_group_layout(&bind_group_descriptor);
-        }
-
-        let bind_group_layouts = self.resources.bind_group_layouts.read();
-        // setup and collect bind group layouts
-        let bind_group_layouts = layout
-            .bind_groups
-            .iter()
-            .map(|bind_group| bind_group_layouts.get(&bind_group.id).unwrap())
-            .collect::<Vec<&wgpu::BindGroupLayout>>();
-
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: bind_group_layouts.as_slice(),
-                push_constant_ranges: &[],
-            });
-
-        let owned_vertex_buffer_descriptors = layout
-            .vertex_buffer_descriptors
-            .iter()
-            .map(|v| v.wgpu_into())
-            .collect::<Vec<OwnedWgpuVertexBufferLayout>>();
-
-        let color_states = pipeline_descriptor
-            .color_target_states
-            .iter()
-            .map(|c| c.wgpu_into())
-            .collect::<Vec<wgpu::ColorTargetState>>();
-
-        let shader_modules = self.resources.shader_modules_v2.read();
-        let vertex_shader_module = shader_modules
-            .get(&pipeline_descriptor.shader_stages.vertex)
-            .unwrap();
-
-        let fragment_shader_module = pipeline_descriptor
-            .shader_stages
-            .fragment
-            .as_ref()
-            .map(|fragment_handle| shader_modules.get(fragment_handle).unwrap());
-        let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &vertex_shader_module,
-                entry_point: "main",
-                buffers: &owned_vertex_buffer_descriptors
-                    .iter()
-                    .map(|v| v.into())
-                    .collect::<Vec<wgpu::VertexBufferLayout>>(),
-            },
-            fragment: pipeline_descriptor
-                .shader_stages
-                .fragment
-                .as_ref()
-                .map(|_| wgpu::FragmentState {
-                    entry_point: "main",
-                    module: fragment_shader_module.as_ref().unwrap(),
-                    targets: color_states.as_slice(),
-                }),
-            primitive: pipeline_descriptor.primitive.clone().wgpu_into(),
-            depth_stencil: pipeline_descriptor
-                .depth_stencil
-                .clone()
-                .map(|depth_stencil| depth_stencil.wgpu_into()),
-            multisample: pipeline_descriptor.multisample.clone().wgpu_into(),
-        };
-
-        let render_pipeline = self
-            .device
-            .create_render_pipeline(&render_pipeline_descriptor);
-        let mut render_pipelines = self.resources.render_pipelines_v2.write();
         let id = PipelineId::new();
         render_pipelines.insert(id, render_pipeline);
         id
@@ -803,20 +637,5 @@ impl RenderResourceContext for WgpuRenderResourceContext {
         } else {
             size
         }
-    }
-
-    fn get_specialized_shader(
-        &self,
-        shader: &Shader,
-        macros: Option<&[String]>,
-    ) -> Result<Shader, ShaderError> {
-        let spirv_data = match shader.source {
-            ShaderSource::Spirv(ref bytes) => bytes.clone(),
-            ShaderSource::Glsl(ref source) => glsl_to_spirv(&source, shader.stage, macros)?,
-        };
-        Ok(Shader {
-            source: ShaderSource::Spirv(spirv_data),
-            ..*shader
-        })
     }
 }

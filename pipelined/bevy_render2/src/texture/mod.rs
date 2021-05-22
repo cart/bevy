@@ -19,7 +19,7 @@ pub use texture_dimension::*;
 
 use crate::{
     render_command::RenderCommandQueue,
-    render_resource::{BufferInfo, BufferUsage, RenderResourceId},
+    render_resource::{BufferInfo, BufferUsage},
     renderer::{RenderResourceContext, RenderResources},
 };
 use bevy_app::{App, CoreStage, Plugin};
@@ -57,10 +57,10 @@ pub fn texture_resource_system(
             }
             AssetEvent::Modified { handle } => {
                 changed_textures.insert(handle);
-                remove_current_texture_resources(render_resource_context, handle);
+                remove_current_texture_resources(render_resource_context, handle, &mut textures);
             }
             AssetEvent::Removed { handle } => {
-                remove_current_texture_resources(render_resource_context, handle);
+                remove_current_texture_resources(render_resource_context, handle, &mut textures);
                 // if texture was modified and removed in the same update, ignore the
                 // modification events are ordered so future modification
                 // events are ok
@@ -131,17 +131,10 @@ pub fn texture_resource_system(
 fn remove_current_texture_resources(
     render_resource_context: &dyn RenderResourceContext,
     handle: &Handle<Texture>,
+    textures: &mut Assets<Texture>,
 ) {
-    if let Some(RenderResourceId::Texture(resource)) =
-        render_resource_context.get_asset_resource(handle, TEXTURE_ASSET_INDEX)
-    {
-        render_resource_context.remove_texture(resource);
-        render_resource_context.remove_asset_resource(handle, TEXTURE_ASSET_INDEX);
-    }
-    if let Some(RenderResourceId::Sampler(resource)) =
-        render_resource_context.get_asset_resource(handle, SAMPLER_ASSET_INDEX)
-    {
-        render_resource_context.remove_sampler(resource);
-        render_resource_context.remove_asset_resource(handle, SAMPLER_ASSET_INDEX);
+    if let Some(gpu_data) = textures.get_mut(handle).and_then(|t| t.gpu_data.take()) {
+        render_resource_context.remove_texture(gpu_data.texture_id);
+        render_resource_context.remove_sampler(gpu_data.sampler_id);
     }
 }

@@ -1,14 +1,12 @@
 use super::RenderResourceContext;
 use crate::{
-    pipeline::{BindGroupDescriptorId, PipelineDescriptor, PipelineDescriptorV2, PipelineId},
+    pipeline::{BindGroupDescriptorId, PipelineDescriptor, PipelineId},
     render_resource::{
-        BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceId, SamplerId,
-        SwapChainDescriptor, TextureId,
+        BindGroup, BufferId, BufferInfo, BufferMapMode, SamplerId, SwapChainDescriptor, TextureId,
     },
-    shader::{Shader, ShaderError, ShaderId},
+    shader::{Shader, ShaderId},
     texture::{SamplerDescriptor, TextureDescriptor},
 };
-use bevy_asset::{Assets, Handle, HandleUntyped};
 use bevy_utils::HashMap;
 use bevy_window::Window;
 use parking_lot::RwLock;
@@ -18,7 +16,6 @@ use std::{ops::Range, sync::Arc};
 pub struct HeadlessRenderResourceContext {
     buffer_info: Arc<RwLock<HashMap<BufferId, BufferInfo>>>,
     texture_descriptors: Arc<RwLock<HashMap<TextureId, TextureDescriptor>>>,
-    pub asset_resources: Arc<RwLock<HashMap<(HandleUntyped, u64), RenderResourceId>>>,
 }
 
 impl HeadlessRenderResourceContext {
@@ -33,10 +30,6 @@ impl HeadlessRenderResourceContext {
 
 impl RenderResourceContext for HeadlessRenderResourceContext {
     fn create_swap_chain(&self, _window: &Window) {}
-
-    fn next_swap_chain_texture(&self, _window: &Window) -> TextureId {
-        TextureId::new()
-    }
 
     fn drop_swap_chain_texture(&self, _render_resource: TextureId) {}
 
@@ -90,9 +83,7 @@ impl RenderResourceContext for HeadlessRenderResourceContext {
         buffer
     }
 
-    fn create_shader_module(&self, _shader_handle: &Handle<Shader>, _shaders: &Assets<Shader>) {}
-
-    fn create_shader_module_v2(&self, _shader: &Shader) -> ShaderId {
+    fn create_shader_module(&self, _shader: &Shader) -> ShaderId {
         ShaderId::new()
     }
 
@@ -106,34 +97,7 @@ impl RenderResourceContext for HeadlessRenderResourceContext {
 
     fn remove_sampler(&self, _sampler: SamplerId) {}
 
-    fn set_asset_resource_untyped(
-        &self,
-        handle: HandleUntyped,
-        render_resource: RenderResourceId,
-        index: u64,
-    ) {
-        self.asset_resources
-            .write()
-            .insert((handle, index), render_resource);
-    }
-
-    fn get_asset_resource_untyped(
-        &self,
-        handle: HandleUntyped,
-        index: u64,
-    ) -> Option<RenderResourceId> {
-        self.asset_resources.write().get(&(handle, index)).cloned()
-    }
-
-    fn create_render_pipeline(
-        &self,
-        _pipeline_handle: Handle<PipelineDescriptor>,
-        _pipeline_descriptor: &PipelineDescriptor,
-        _shaders: &Assets<Shader>,
-    ) {
-    }
-
-    fn create_render_pipeline_v2(&self, _pipeline_descriptor: &PipelineDescriptorV2) -> PipelineId {
+    fn create_render_pipeline(&self, _pipeline_descriptor: &PipelineDescriptor) -> PipelineId {
         PipelineId::new()
     }
 
@@ -142,12 +106,6 @@ impl RenderResourceContext for HeadlessRenderResourceContext {
         _bind_group_descriptor_id: BindGroupDescriptorId,
         _bind_group: &BindGroup,
     ) {
-    }
-
-    fn create_shader_module_from_source(&self, _shader_handle: &Handle<Shader>, _shader: &Shader) {}
-
-    fn remove_asset_resource_untyped(&self, handle: HandleUntyped, index: u64) {
-        self.asset_resources.write().remove(&(handle, index));
     }
 
     fn clear_bind_groups(&self) {}
@@ -171,17 +129,9 @@ impl RenderResourceContext for HeadlessRenderResourceContext {
         size
     }
 
-    fn get_specialized_shader(
-        &self,
-        shader: &Shader,
-        _macros: Option<&[String]>,
-    ) -> Result<Shader, ShaderError> {
-        Ok(shader.clone())
-    }
-
     fn remove_stale_bind_groups(&self) {}
 
-    fn next_swap_chain_texture_v2(&self, _descriptor: &SwapChainDescriptor) -> TextureId {
+    fn next_swap_chain_texture(&self, _descriptor: &SwapChainDescriptor) -> TextureId {
         TextureId::new()
     }
 }

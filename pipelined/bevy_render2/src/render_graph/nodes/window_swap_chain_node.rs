@@ -93,7 +93,7 @@ impl Node for WindowSwapChainNode {
         };
 
         let swap_chain_texture =
-            render_resource_context.next_swap_chain_texture_v2(&swap_chain_descriptor);
+            render_resource_context.next_swap_chain_texture(&swap_chain_descriptor);
         output.set(0, RenderResourceId::Texture(swap_chain_texture));
     }
 }
