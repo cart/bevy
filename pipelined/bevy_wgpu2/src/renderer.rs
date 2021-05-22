@@ -42,7 +42,12 @@ impl WgpuRenderer {
             .expect("Unable to find a GPU! Make sure you have installed required drivers!");
 
         #[cfg(feature = "trace")]
-        let trace_path = Some(std::path::Path::new("wgpu_trace"));
+        let trace_path = {
+            let path = std::path::Path::new("wgpu_trace");
+            // ignore potential error, wgpu will log it
+            let _ = std::fs::create_dir(path);
+            Some(path)
+        };
         #[cfg(not(feature = "trace"))]
         let trace_path = None;
 
@@ -85,7 +90,7 @@ impl WgpuRenderer {
         world.resource_scope(|world, mut render_graph: Mut<RenderGraph>| {
             // stage nodes
             let mut stager = DependentNodeStager::loose_grouping();
-            let stages = RenderGraphStager::get_stages(&mut stager, &render_graph).unwrap();
+            let stages = stager.get_stages(&render_graph).unwrap();
             let mut borrowed = stages.borrow(&mut render_graph);
 
             // execute stages

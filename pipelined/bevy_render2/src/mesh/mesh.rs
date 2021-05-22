@@ -1,5 +1,4 @@
 use crate::pipeline::{IndexFormat, PrimitiveTopology, VertexFormat};
-use bevy_core::AsBytes;
 use bevy_math::*;
 use bevy_reflect::TypeUuid;
 use std::{borrow::Cow, collections::BTreeMap};
