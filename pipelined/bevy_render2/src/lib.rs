@@ -1,9 +1,9 @@
 pub mod camera;
 pub mod color;
+pub mod main_pass;
 pub mod mesh;
 pub mod pass;
 pub mod pipeline;
-pub mod main_pass;
 pub mod render_command;
 pub mod render_graph;
 pub mod render_resource;
@@ -14,10 +14,12 @@ pub mod texture;
 pub use once_cell;
 
 use crate::{
-    render_command::RenderCommandPlugin, render_graph::RenderGraph, texture::TexturePlugin,
+    render_command::RenderCommandPlugin, render_graph::RenderGraph, renderer::RenderResources,
+    texture::TexturePlugin,
 };
-use bevy_app::{App, Plugin};
+use bevy_app::{App, Plugin, StartupStage};
 use bevy_ecs::prelude::*;
+use bevy_utils::tracing::warn;
 
 #[derive(Default)]
 pub struct RenderPlugin;
@@ -42,6 +44,10 @@ pub enum RenderStage {
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
+        app.add_startup_system_to_stage(
+            StartupStage::PreStartup,
+            check_for_render_resource_context.system(),
+        );
         let mut render_app = App::empty();
         let mut extract_stage = SystemStage::parallel();
         // don't apply buffers when the stage finishes running
@@ -93,4 +99,12 @@ fn extract(app_world: &mut World, render_app: &mut App) {
         .unwrap();
     extract.run(app_world);
     extract.apply_buffers(&mut render_app.world);
+}
+
+fn check_for_render_resource_context(context: Option<Res<RenderResources>>) {
+    if context.is_none() {
+        warn!(
+            "bevy_render couldn't find a render backend. Perhaps try adding the bevy_wgpu feature/plugin!"
+        );
+    }
 }

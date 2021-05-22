@@ -1,5 +1,5 @@
+use crate::Sprite;
 use bevy_asset::{Assets, Handle};
-use bevy_core::Byteable;
 use bevy_ecs::{prelude::*, system::ParamState};
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
 use bevy_render2::{
@@ -18,8 +18,7 @@ use bevy_render2::{
 };
 use bevy_transform::components::GlobalTransform;
 use bevy_utils::HashMap;
-
-use crate::Sprite;
+use bytemuck::{Pod, Zeroable};
 
 pub struct SpriteShaders {
     _vertex: ShaderId,
@@ -54,13 +53,13 @@ impl FromWorld for SpriteShaders {
             attributes: vec![
                 VertexAttribute {
                     name: "Vertex_Position".into(),
-                    format: VertexFormat::Float3,
+                    format: VertexFormat::Float32x3,
                     offset: 0,
                     shader_location: 0,
                 },
                 VertexAttribute {
                     name: "Vertex_Uv".into(),
-                    format: VertexFormat::Float2,
+                    format: VertexFormat::Float32x2,
                     offset: 12,
                     shader_location: 1,
                 },
@@ -73,24 +72,28 @@ impl FromWorld for SpriteShaders {
             depth_stencil: None,
             color_target_states: vec![ColorTargetState {
                 format: TextureFormat::default(),
-                color_blend: BlendState {
-                    src_factor: BlendFactor::SrcAlpha,
-                    dst_factor: BlendFactor::OneMinusSrcAlpha,
-                    operation: BlendOperation::Add,
-                },
-                alpha_blend: BlendState {
-                    src_factor: BlendFactor::One,
-                    dst_factor: BlendFactor::One,
-                    operation: BlendOperation::Add,
-                },
+                blend: Some(BlendState {
+                    color: BlendComponent {
+                        src_factor: BlendFactor::SrcAlpha,
+                        dst_factor: BlendFactor::OneMinusSrcAlpha,
+                        operation: BlendOperation::Add,
+                    },
+                    alpha: BlendComponent {
+                        src_factor: BlendFactor::One,
+                        dst_factor: BlendFactor::One,
+                        operation: BlendOperation::Add,
+                    },
+                }),
                 write_mask: ColorWrite::ALL,
             }],
             primitive: PrimitiveState {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: CullMode::None,
+                cull_mode: None,
                 polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
             },
             ..PipelineDescriptorV2::new(
                 ShaderStagesV2 {
@@ -148,13 +151,11 @@ pub fn extract_sprites(
 }
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 struct SpriteVertex {
     pub position: [f32; 3],
     pub uv: [f32; 2],
 }
-
-unsafe impl Byteable for SpriteVertex {}
 
 pub struct SpriteBuffers {
     vertices: BufferVec<SpriteVertex>,
@@ -192,7 +193,7 @@ pub fn prepare_sprites(
         return;
     }
 
-    let quad_vertex_positions = if let VertexAttributeValues::Float3(vertex_positions) =
+    let quad_vertex_positions = if let VertexAttributeValues::Float32x3(vertex_positions) =
         sprite_buffers
             .quad
             .attribute(Mesh::ATTRIBUTE_POSITION)
@@ -204,7 +205,7 @@ pub fn prepare_sprites(
         panic!("expected vec3");
     };
 
-    let quad_vertex_uvs = if let VertexAttributeValues::Float2(vertex_uvs) = sprite_buffers
+    let quad_vertex_uvs = if let VertexAttributeValues::Float32x2(vertex_uvs) = sprite_buffers
         .quad
         .attribute(Mesh::ATTRIBUTE_UV_0)
         .unwrap()

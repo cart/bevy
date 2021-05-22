@@ -19,7 +19,12 @@ use bevy_render2::{
 use bevy_utils::tracing::trace;
 use bevy_window::{Window, WindowId};
 use futures_lite::future;
-use std::{borrow::Cow, num::NonZeroU64, ops::Range, sync::Arc};
+use std::{
+    borrow::Cow,
+    num::{NonZeroU32, NonZeroU64},
+    ops::Range,
+    sync::Arc,
+};
 use wgpu::util::DeviceExt;
 
 #[derive(Clone, Debug)]

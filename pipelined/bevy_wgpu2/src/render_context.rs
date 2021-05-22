@@ -3,8 +3,8 @@ use crate::{WgpuRenderPass, resources::WgpuResourceRefs, type_converter::WgpuInt
 
 use bevy_render2::{
     pass::{
-        PassDescriptor, RenderPass, RenderPassColorAttachmentDescriptor,
-        RenderPassDepthStencilAttachmentDescriptor, TextureAttachment,
+        PassDescriptor, RenderPass, RenderPassColorAttachment,
+        RenderPassDepthStencilAttachment, TextureAttachment,
     },
     render_resource::{BufferId, TextureId},
     renderer::{RenderContext, RenderResourceContext},
@@ -202,12 +202,12 @@ pub fn create_render_pass<'a, 'b>(
         color_attachments: &pass_descriptor
             .color_attachments
             .iter()
-            .map(|c| create_wgpu_color_attachment_descriptor(refs, c))
-            .collect::<Vec<wgpu::RenderPassColorAttachmentDescriptor>>(),
+            .map(|c| create_wgpu_color_attachment(refs, c))
+            .collect::<Vec<wgpu::RenderPassColorAttachment>>(),
         depth_stencil_attachment: pass_descriptor
             .depth_stencil_attachment
             .as_ref()
-            .map(|d| create_wgpu_depth_stencil_attachment_descriptor(refs, d)),
+            .map(|d| create_wgpu_depth_stencil_attachment(refs, d)),
     })
 }
 

@@ -92,7 +92,7 @@ pub fn texture_resource_system(
                 format_size
                     * aligned_width
                     * texture.size.height as usize
-                    * texture.size.depth as usize
+                    * texture.size.depth_or_array_layers as usize
             ];
             texture
                 .data

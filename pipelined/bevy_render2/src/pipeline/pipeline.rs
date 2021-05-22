@@ -1,14 +1,18 @@
 use super::{
     state_descriptors::{
-        BlendFactor, BlendOperation, ColorWrite, CompareFunction, CullMode, FrontFace,
+        BlendFactor, BlendOperation, ColorWrite, CompareFunction, Face, FrontFace,
         PrimitiveTopology,
     },
     PipelineLayout,
 };
-use crate::{pipeline::{
-        BlendState, ColorTargetState, DepthBiasState, DepthStencilState, MultisampleState,
-        PolygonMode, PrimitiveState, StencilFaceState, StencilState,
-    }, shader::{ShaderStages, ShaderStagesV2}, texture::TextureFormat};
+use crate::{
+    pipeline::{
+        BlendComponent, BlendState, ColorTargetState, DepthBiasState, DepthStencilState,
+        MultisampleState, PolygonMode, PrimitiveState, StencilFaceState, StencilState,
+    },
+    shader::{ShaderStages, ShaderStagesV2},
+    texture::TextureFormat,
+};
 use bevy_reflect::{TypeUuid, Uuid};
 
 #[derive(Clone, Debug, TypeUuid)]
@@ -37,8 +41,10 @@ impl PipelineDescriptor {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: CullMode::Back,
+                cull_mode: Some(Face::Back),
                 polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
             },
             multisample: MultisampleState {
                 count: 1,
@@ -55,8 +61,10 @@ impl PipelineDescriptor {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: CullMode::Back,
+                cull_mode: Some(Face::Back),
                 polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
             },
             layout: None,
             depth_stencil: Some(DepthStencilState {
@@ -74,20 +82,21 @@ impl PipelineDescriptor {
                     slope_scale: 0.0,
                     clamp: 0.0,
                 },
-                clamp_depth: false,
             }),
             color_target_states: vec![ColorTargetState {
                 format: TextureFormat::default(),
-                color_blend: BlendState {
-                    src_factor: BlendFactor::SrcAlpha,
-                    dst_factor: BlendFactor::OneMinusSrcAlpha,
-                    operation: BlendOperation::Add,
-                },
-                alpha_blend: BlendState {
-                    src_factor: BlendFactor::One,
-                    dst_factor: BlendFactor::One,
-                    operation: BlendOperation::Add,
-                },
+                blend: Some(BlendState {
+                    color: BlendComponent {
+                        src_factor: BlendFactor::SrcAlpha,
+                        dst_factor: BlendFactor::OneMinusSrcAlpha,
+                        operation: BlendOperation::Add,
+                    },
+                    alpha: BlendComponent {
+                        src_factor: BlendFactor::One,
+                        dst_factor: BlendFactor::One,
+                        operation: BlendOperation::Add,
+                    },
+                }),
                 write_mask: ColorWrite::ALL,
             }],
             multisample: MultisampleState {
@@ -107,7 +116,6 @@ impl PipelineDescriptor {
         self.layout.as_mut()
     }
 }
-
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct PipelineId(Uuid);
 
@@ -144,8 +152,10 @@ impl PipelineDescriptorV2 {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: CullMode::Back,
+                cull_mode: Some(Face::Back),
                 polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
             },
             multisample: MultisampleState {
                 count: 1,
@@ -162,8 +172,10 @@ impl PipelineDescriptorV2 {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: CullMode::Back,
+                cull_mode: Some(Face::Back),
                 polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
             },
             layout,
             depth_stencil: Some(DepthStencilState {
@@ -181,20 +193,21 @@ impl PipelineDescriptorV2 {
                     slope_scale: 0.0,
                     clamp: 0.0,
                 },
-                clamp_depth: false,
             }),
             color_target_states: vec![ColorTargetState {
                 format: TextureFormat::default(),
-                color_blend: BlendState {
-                    src_factor: BlendFactor::SrcAlpha,
-                    dst_factor: BlendFactor::OneMinusSrcAlpha,
-                    operation: BlendOperation::Add,
-                },
-                alpha_blend: BlendState {
-                    src_factor: BlendFactor::One,
-                    dst_factor: BlendFactor::One,
-                    operation: BlendOperation::Add,
-                },
+                blend: Some(BlendState {
+                    color: BlendComponent {
+                        src_factor: BlendFactor::SrcAlpha,
+                        dst_factor: BlendFactor::OneMinusSrcAlpha,
+                        operation: BlendOperation::Add,
+                    },
+                    alpha: BlendComponent {
+                        src_factor: BlendFactor::One,
+                        dst_factor: BlendFactor::One,
+                        operation: BlendOperation::Add,
+                    },
+                }),
                 write_mask: ColorWrite::ALL,
             }],
             multisample: MultisampleState {

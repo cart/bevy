@@ -4,12 +4,12 @@ mod draw;
 pub use draw_state::*;
 pub use draw::*;
 
-use crate::{RenderStage, renderer::RenderContext};
+use crate::{RenderStage, pass::RenderPassColorAttachment, renderer::RenderContext};
 use crate::{
     camera::CameraPlugin,
     color::Color,
     pass::{
-        LoadOp, Operations, PassDescriptor, RenderPass, RenderPassColorAttachmentDescriptor,
+        LoadOp, Operations, PassDescriptor, RenderPass,
         TextureAttachment,
     },
     render_graph::{Node, RenderGraph, ResourceSlotInfo, ResourceSlots, WindowSwapChainNode},
@@ -105,7 +105,7 @@ impl Node for MainPassNode {
         // TODO: consider adding shorthand like `get_texture(0)`
         let color_attachment_texture = input.get(0).unwrap().get_texture().unwrap();
         let pass_descriptor = PassDescriptor {
-            color_attachments: vec![RenderPassColorAttachmentDescriptor {
+            color_attachments: vec![RenderPassColorAttachment {
                 attachment: TextureAttachment::Id(color_attachment_texture),
                 resolve_target: None,
                 ops: Operations {

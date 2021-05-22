@@ -2,10 +2,9 @@ use crate::{
     render_resource::{BufferId, BufferInfo, BufferMapMode, BufferUsage},
     renderer::{RenderContext, RenderResources},
 };
-use bevy_core::{Byteable, Bytes};
+use bevy_core::{Pod, cast_slice};
 
-// TODO: replace with Pod / Zeroable
-pub struct BufferVec<T: Byteable> {
+pub struct BufferVec<T: Pod> {
     values: Vec<T>,
     staging_buffer: Option<BufferId>,
     buffer: Option<BufferId>,
@@ -14,7 +13,7 @@ pub struct BufferVec<T: Byteable> {
     buffer_usage: BufferUsage,
 }
 
-impl<T: Byteable> Default for BufferVec<T> {
+impl<T: Pod> Default for BufferVec<T> {
     fn default() -> Self {
         Self {
             values: Vec::new(),
@@ -27,7 +26,7 @@ impl<T: Byteable> Default for BufferVec<T> {
     }
 }
 
-impl<T: Byteable> BufferVec<T> {
+impl<T: Pod> BufferVec<T> {
     pub fn new(buffer_usage: BufferUsage) -> Self {
         Self {
             buffer_usage,
@@ -100,7 +99,8 @@ impl<T: Byteable> BufferVec<T> {
                 staging_buffer,
                 0..size as u64,
                 &mut |data, _renderer| {
-                    self.values.write_bytes(data);
+                    let bytes: &[u8] = cast_slice(&self.values);
+                    data.copy_from_slice(bytes);
                 },
             );
             render_resources.unmap_buffer(staging_buffer);

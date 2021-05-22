@@ -1,6 +1,14 @@
-use crate::{pipeline::{
+use crate::{
+    pipeline::{
         BindGroupDescriptorId, PipelineDescriptor, PipelineDescriptorV2, PipelineId, PipelineLayout,
-    }, render_resource::{BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceId, SamplerId, SwapChainDescriptor, TextureId}, shader::{Shader, ShaderError, ShaderId, ShaderLayout, ShaderStages}, texture::{SamplerDescriptor, TextureDescriptor}};
+    },
+    render_resource::{
+        BindGroup, BufferId, BufferInfo, BufferMapMode, RenderResourceId, SamplerId,
+        SwapChainDescriptor, TextureId,
+    },
+    shader::{Shader, ShaderError, ShaderId, ShaderLayout, ShaderStages},
+    texture::{SamplerDescriptor, TextureDescriptor},
+};
 use bevy_asset::{Asset, Assets, Handle, HandleUntyped};
 use bevy_window::Window;
 use downcast_rs::{impl_downcast, Downcast};

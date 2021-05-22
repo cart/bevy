@@ -18,7 +18,7 @@ crevice-derive = "0.6.0"
 
 bytemuck = "1.4.1"
 mint = { version = "0.5.5", optional = true }
-glam = "0.13.0"
+glam = "0.15.1"
 
 [dev-dependencies]
 cgmath = { version = "0.17.0", features = ["mint"] }

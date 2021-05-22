@@ -1,5 +1,4 @@
 use super::Camera;
-use crate::render_resource::RenderResourceBindings;
 use bevy_ecs::{
     entity::Entity,
     system::{Query, ResMut},
@@ -10,8 +9,6 @@ use bevy_utils::HashMap;
 pub struct ActiveCamera {
     pub name: String,
     pub entity: Option<Entity>,
-    // TODO: Remove
-    pub bindings: RenderResourceBindings,
 }
 
 #[derive(Debug, Default)]
