@@ -30,12 +30,8 @@ pub struct SpriteShaders {
 impl FromWorld for SpriteShaders {
     fn from_world(world: &mut World) -> Self {
         let render_resources = world.get_resource::<RenderResources>().unwrap();
-        let vertex_shader = Shader::from_glsl(ShaderStage::Vertex, include_str!("sprite.vert"))
-            .get_spirv_shader(None)
-            .unwrap();
-        let fragment_shader = Shader::from_glsl(ShaderStage::Fragment, include_str!("sprite.frag"))
-            .get_spirv_shader(None)
-            .unwrap();
+        let vertex_shader = Shader::from_spirv(include_bytes!("sprite.vert.spv")).unwrap();
+        let fragment_shader = Shader::from_spirv(include_bytes!("sprite.frag.spv")).unwrap();
 
         let vertex_layout = vertex_shader.reflect_layout(true).unwrap();
         let fragment_layout = fragment_shader.reflect_layout(true).unwrap();

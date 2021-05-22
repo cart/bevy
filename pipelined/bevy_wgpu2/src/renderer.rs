@@ -18,7 +18,9 @@ pub struct WgpuRenderer {
 
 impl WgpuRenderer {
     pub async fn new(options: WgpuOptions) -> Self {
+        bevy_log::info!("new renderer");
         let backend = match options.backend {
+            WgpuBackend::All => wgpu::BackendBit::all(),
             WgpuBackend::Auto => wgpu::BackendBit::PRIMARY,
             WgpuBackend::Vulkan => wgpu::BackendBit::VULKAN,
             WgpuBackend::Metal => wgpu::BackendBit::METAL,
@@ -27,6 +29,7 @@ impl WgpuRenderer {
             WgpuBackend::Gl => wgpu::BackendBit::GL,
             WgpuBackend::BrowserWgpu => wgpu::BackendBit::BROWSER_WEBGPU,
         };
+
         let instance = wgpu::Instance::new(backend);
 
         let adapter = instance

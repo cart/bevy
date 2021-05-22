@@ -1,7 +1,5 @@
 #[allow(clippy::module_inception)]
 mod shader;
-
-#[cfg(not(target_arch = "wasm32"))]
 mod shader_reflect;
 
 pub use shader::*;

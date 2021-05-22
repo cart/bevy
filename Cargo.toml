@@ -1,19 +1,19 @@
 [package]
-name = "bevy"
-version = "0.5.0"
-edition = "2018"
 authors = [
   "Bevy Contributors <bevyengine@gmail.com>",
   "Carter Anderson <mcanders1@gmail.com>",
 ]
 categories = ["game-engines", "graphics", "gui", "rendering"]
 description = "A refreshingly simple data-driven game engine and app framework"
+edition = "2018"
 exclude = ["assets/**/*", "tools/**/*", ".github/**/*", "crates/**/*"]
 homepage = "https://bevyengine.org"
 keywords = ["game", "engine", "gamedev", "graphics", "bevy"]
 license = "MIT"
+name = "bevy"
 readme = "README.md"
 repository = "https://github.com/bevyengine/bevy"
+version = "0.5.0"
 
 [workspace]
 exclude = ["benches"]
@@ -37,6 +37,14 @@ default = [
   "x11",
 ]
 
+render2 = [
+  "bevy_wgpu2",
+  "bevy_sprite2",
+  "bevy_render2",
+  "bevy_winit",
+  "png",
+]
+
 # Force dynamic linking, which improves iterative compile times
 dynamic = ["bevy_dylib"]
 
@@ -51,21 +59,21 @@ bevy_gltf = ["bevy_internal/bevy_gltf"]
 bevy_wgpu = ["bevy_internal/bevy_wgpu"]
 bevy_winit = ["bevy_internal/bevy_winit"]
 
-bevy_wgpu2 = ["bevy_internal/bevy_wgpu2"]
 bevy_render2 = ["bevy_internal/bevy_render2"]
 bevy_sprite2 = ["bevy_internal/bevy_sprite2"]
+bevy_wgpu2 = ["bevy_internal/bevy_wgpu2"]
 
-trace_chrome = ["bevy_internal/trace_chrome"]
 trace = ["bevy_internal/trace"]
+trace_chrome = ["bevy_internal/trace_chrome"]
 wgpu_trace = ["bevy_internal/wgpu_trace"]
 
 # Image format support for texture loading (PNG and HDR are enabled by default)
-hdr = ["bevy_internal/hdr"]
-png = ["bevy_internal/png"]
-dds = ["bevy_internal/dds"]
-tga = ["bevy_internal/tga"]
-jpeg = ["bevy_internal/jpeg"]
 bmp = ["bevy_internal/bmp"]
+dds = ["bevy_internal/dds"]
+hdr = ["bevy_internal/hdr"]
+jpeg = ["bevy_internal/jpeg"]
+png = ["bevy_internal/png"]
+tga = ["bevy_internal/tga"]
 
 # Audio format support (MP3 is enabled by default)
 flac = ["bevy_internal/flac"]
@@ -488,8 +496,8 @@ path = "examples/android/android.rs"
 [package.metadata.android]
 apk_label = "Bevy Example"
 assets = "assets"
-res = "assets/android-res"
-icon = "@mipmap/ic_launcher"
 build_targets = ["aarch64-linux-android", "armv7-linux-androideabi"]
+icon = "@mipmap/ic_launcher"
 min_sdk_version = 16
+res = "assets/android-res"
 target_sdk_version = 29

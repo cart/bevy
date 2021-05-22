@@ -1,27 +1,37 @@
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <style>
-      body {
-        background: linear-gradient(
-          135deg,
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      background: linear-gradient(135deg,
           white 0%,
           white 49%,
           black 49%,
           black 51%,
           white 51%,
-          white 100%
-        );
-        background-repeat: repeat;
-        background-size: 20px 20px;
-      }
-      canvas {
-        background-color: white;
-      }
-    </style>
-  </head>
+          white 100%);
+      background-repeat: repeat;
+      background-size: 20px 20px;
+    }
+
+    canvas {
+      background-color: white;
+    }
+  </style>
+</head>
+<body>
+  <script src="./spirv_cross_wrapper_glsl.js"></script>
   <script type="module">
-    import init from './target/headless_wasm.js'
-    init()
+    import init from './target/bevymark_pipelined.js'
+    window.addEventListener("load", () => {
+      const module = window.sc_internal_wrapper().then(module => {
+        window.sc_internal = module;
+        init();
+      });
+    });
   </script>
+</body>
+
 </html>

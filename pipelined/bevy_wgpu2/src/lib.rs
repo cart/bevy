@@ -169,6 +169,7 @@ pub struct WgpuOptions {
 #[derive(Clone)]
 pub enum WgpuBackend {
     Auto,
+    All,
     Vulkan,
     Metal,
     Dx12,
@@ -189,6 +190,9 @@ impl WgpuBackend {
                 "webgpu" => WgpuBackend::BrowserWgpu,
                 other => panic!("Unknown backend: {}", other),
             }
+        } else if cfg!(target_arch = "wasm32") {
+            // WebGL requires the all backend to be set 
+            WgpuBackend::All
         } else {
             WgpuBackend::Auto
         }

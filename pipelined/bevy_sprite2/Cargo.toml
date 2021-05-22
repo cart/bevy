@@ -32,4 +32,4 @@ thiserror = "1.0"
 guillotiere = "0.6.0"
 serde = { version = "1", features = ["derive"] }
 parking_lot= "0.11.0"
-bytemuck = "1.5"
+bytemuck = {version = "1.5", features = ["derive"] }

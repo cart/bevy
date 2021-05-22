@@ -88,6 +88,15 @@ pub fn glsl_to_spirv(
         .map_err(ShaderError::Compilation)
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn glsl_to_spirv(
+    glsl_source: &str,
+    stage: ShaderStage,
+    shader_defs: Option<&[String]>,
+) -> Result<Vec<u32>, ShaderError> {
+    panic!("Bevy cannot currently compile GLSL to SpirV on WASM");
+}
+
 #[cfg(not(any(
     target_arch = "wasm32",
     all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"),
@@ -187,15 +196,21 @@ impl Shader {
         Shader { source, stage }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_spirv(spirv: &[u8]) -> Result<Shader, ShaderError> {
-        use spirv_reflect::{types::ReflectShaderStageFlags, ShaderModule};
+        let module = naga::front::spv::parse_u8_slice(spirv, &Default::default())
+            .map_err(|e| ShaderError::Compilation(format!("{:?}", e)))?;
 
-        let module = ShaderModule::load_u8_data(spirv)
-            .map_err(|msg| ShaderError::Compilation(msg.to_string()))?;
-        let stage = match module.get_shader_stage() {
-            ReflectShaderStageFlags::VERTEX => ShaderStage::Vertex,
-            ReflectShaderStageFlags::FRAGMENT => ShaderStage::Fragment,
+        let stage = if module.entry_points.len() == 1 {
+            module.entry_points[0].stage
+        } else {
+            return Err(ShaderError::Compilation(
+                "multiple entry points in shader".to_string(),
+            ));
+        };
+
+        let stage = match stage {
+            naga::ShaderStage::Vertex => ShaderStage::Vertex,
+            naga::ShaderStage::Fragment => ShaderStage::Fragment,
             other => panic!("cannot load {:?} shader", other),
         };
 
@@ -212,7 +227,6 @@ impl Shader {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_spirv(&self, macros: Option<&[String]>) -> Result<Vec<u32>, ShaderError> {
         match self.source {
             ShaderSource::Spirv(ref bytes) => Ok(bytes.clone()),
@@ -220,7 +234,6 @@ impl Shader {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_spirv_shader(&self, macros: Option<&[String]>) -> Result<Shader, ShaderError> {
         Ok(Shader {
             source: ShaderSource::Spirv(self.get_spirv(macros)?),
@@ -228,7 +241,6 @@ impl Shader {
         })
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn reflect_layout(&self, enforce_bevy_conventions: bool) -> Option<ShaderLayout> {
         if let ShaderSource::Spirv(ref spirv) = self.source {
             Some(ShaderLayout::from_spirv(
@@ -238,11 +250,6 @@ impl Shader {
         } else {
             panic!("Cannot reflect layout of non-SpirV shader. Try compiling this shader to SpirV first using self.get_spirv_shader().");
         }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn reflect_layout(&self, _enforce_bevy_conventions: bool) -> Option<ShaderLayout> {
-        panic!("Cannot reflect layout on wasm32.");
     }
 }
 
@@ -268,10 +275,7 @@ impl AssetLoader for ShaderLoader {
             let shader = match ext {
                 "vert" => Shader::from_glsl(ShaderStage::Vertex, std::str::from_utf8(bytes)?),
                 "frag" => Shader::from_glsl(ShaderStage::Fragment, std::str::from_utf8(bytes)?),
-                #[cfg(not(target_arch = "wasm32"))]
                 "spv" => Shader::from_spirv(bytes)?,
-                #[cfg(target_arch = "wasm32")]
-                "spv" => panic!("cannot load .spv file on wasm"),
                 _ => panic!("unhandled extension: {}", ext),
             };
 

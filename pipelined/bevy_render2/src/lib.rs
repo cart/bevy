@@ -1,3 +1,7 @@
+// without this line, the are a lot of linker errors from bevy-glsl-to-spirv
+#[cfg(not(target_arch = "wasm32"))]
+extern crate spirv_reflect;
+
 pub mod camera;
 pub mod color;
 pub mod main_pass;
