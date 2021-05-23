@@ -17,7 +17,6 @@ impl WinitWindows {
         window_id: WindowId,
         window_descriptor: &WindowDescriptor,
     ) -> Window {
-        bevy_log::info!("created window");
         #[cfg(target_os = "windows")]
         let mut winit_window_builder = {
             use winit::platform::windows::WindowBuilderExtWindows;

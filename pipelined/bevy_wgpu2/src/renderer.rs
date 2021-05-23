@@ -18,7 +18,6 @@ pub struct WgpuRenderer {
 
 impl WgpuRenderer {
     pub async fn new(options: WgpuOptions) -> Self {
-        bevy_log::info!("new renderer");
         let backend = match options.backend {
             WgpuBackend::All => wgpu::BackendBit::all(),
             WgpuBackend::Auto => wgpu::BackendBit::PRIMARY,
