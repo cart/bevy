@@ -7,6 +7,9 @@ use bevy_render2::{
     render_graph::{DependentNodeStager, ExtractedWindows, RenderGraph, RenderGraphStager},
     renderer::RenderResources,
 };
+use bevy_window::{WindowId, Windows};
+use bevy_winit::WinitWindows;
+use raw_window_handle::HasRawWindowHandle;
 use std::sync::Arc;
 
 pub struct WgpuRenderer {
@@ -17,7 +20,8 @@ pub struct WgpuRenderer {
 }
 
 impl WgpuRenderer {
-    pub async fn new(options: WgpuOptions) -> Self {
+    // TODO: remove this multiple return
+    pub async fn new(options: WgpuOptions, world: &World) -> (Self, WgpuRenderResourceContext) {
         let backend = match options.backend {
             WgpuBackend::All => wgpu::BackendBit::all(),
             WgpuBackend::Auto => wgpu::BackendBit::PRIMARY,
@@ -31,6 +35,8 @@ impl WgpuRenderer {
 
         let instance = wgpu::Instance::new(backend);
 
+        let surface = Self::get_primary_window_surface(&instance, world);
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: match options.power_pref {
@@ -38,7 +44,7 @@ impl WgpuRenderer {
                     WgpuPowerOptions::Adaptive => wgpu::PowerPreference::LowPower,
                     WgpuPowerOptions::LowPower => wgpu::PowerPreference::LowPower,
                 },
-                compatible_surface: None,
+                compatible_surface: Some(&surface),
             })
             .await
             .expect("Unable to find a GPU! Make sure you have installed required drivers!");
@@ -65,22 +71,37 @@ impl WgpuRenderer {
             .await
             .unwrap();
         let device = Arc::new(device);
-        WgpuRenderer {
-            instance,
-            device,
-            queue,
-            initialized: false,
-        }
+
+        let render_resource_context = WgpuRenderResourceContext::new(device.clone());
+        render_resource_context.set_window_surface(WindowId::primary(), surface);
+        (
+            WgpuRenderer {
+                instance,
+                device,
+                queue,
+                initialized: false,
+            },
+            render_resource_context,
+        )
+    }
+
+    fn get_primary_window_surface(instance: &wgpu::Instance, world: &World) -> wgpu::Surface {
+        let winit_windows = world.get_resource::<WinitWindows>().unwrap();
+        let winit_window = winit_windows.get_window(WindowId::primary()).unwrap();
+        unsafe { instance.create_surface(winit_window) }
     }
 
     pub fn handle_new_windows(&mut self, world: &mut World) {
         let world = world.cell();
-        let mut render_resources = world.get_resource_mut::<RenderResources>().unwrap();
+        let render_resources = world.get_resource::<RenderResources>().unwrap();
         let render_resource_context = render_resources
-            .downcast_mut::<WgpuRenderResourceContext>()
+            .downcast_ref::<WgpuRenderResourceContext>()
             .unwrap();
         let extracted_windows = world.get_resource::<ExtractedWindows>().unwrap();
         for (id, window) in extracted_windows.iter() {
+            if *id == WindowId::primary() {
+                continue;
+            }
             if !render_resource_context.contains_window_surface(*id) {
                 let surface = unsafe { self.instance.create_surface(&window.handle) };
                 render_resource_context.set_window_surface(*id, surface);
