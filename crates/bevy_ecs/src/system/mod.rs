@@ -1,8 +1,8 @@
 mod commands;
 mod exclusive_system;
 mod into_system;
-mod query;
 mod param_state;
+mod query;
 #[allow(clippy::module_inception)]
 mod system;
 mod system_chaining;

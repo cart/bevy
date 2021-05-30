@@ -568,7 +568,11 @@ impl App {
         self
     }
 
-    pub fn add_sub_app(&mut self, app: App, f: impl Fn(&mut World, &mut App) + 'static) -> &mut Self {
+    pub fn add_sub_app(
+        &mut self,
+        app: App,
+        f: impl Fn(&mut World, &mut App) + 'static,
+    ) -> &mut Self {
         self.sub_apps.push(SubApp {
             app,
             runner: Box::new(f),
