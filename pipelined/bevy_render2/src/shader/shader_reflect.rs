@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::num::NonZeroU32;
+
 use crate::{
     pipeline::{
         BindGroupDescriptor, BindType, BindingDescriptor, BindingShaderStage, InputStepMode,
@@ -15,8 +18,25 @@ use spirv_reflect::{
     ShaderModule,
 };
 
+/// Options to control shader layout reflection.
+#[derive(Debug, Clone)]
+pub struct ShaderReflectOptions {
+    pub bevy_conventions: bool,
+    /// Map from shader binding name to size of array.
+    pub array_sizes: HashMap<String, NonZeroU32>,
+}
+
+impl Default for ShaderReflectOptions {
+    fn default() -> Self {
+        ShaderReflectOptions {
+            bevy_conventions: true,
+            array_sizes: HashMap::default(),
+        }
+    }
+}
+
 impl ShaderLayout {
-    pub fn from_spirv(spirv_data: &[u32], bevy_conventions: bool) -> ShaderLayout {
+    pub fn from_spirv(spirv_data: &[u32], options: &ShaderReflectOptions) -> ShaderLayout {
         match ShaderModule::load_u8_data(cast_slice(spirv_data)) {
             Ok(ref mut module) => {
                 // init
@@ -24,7 +44,7 @@ impl ShaderLayout {
                 let shader_stage = module.get_shader_stage();
                 let mut bind_groups = Vec::new();
                 for descriptor_set in module.enumerate_descriptor_sets(None).unwrap() {
-                    let bind_group = reflect_bind_group(&descriptor_set, shader_stage);
+                    let bind_group = reflect_bind_group(&descriptor_set, shader_stage, options);
                     bind_groups.push(bind_group);
                 }
 
@@ -55,7 +75,7 @@ impl ShaderLayout {
                     let mut instance = false;
                     // obtain buffer name and instancing flag
                     let current_buffer_name = {
-                        if bevy_conventions {
+                        if options.bevy_conventions {
                             if vertex_attribute.name == GL_VERTEX_INDEX {
                                 GL_VERTEX_INDEX.to_string()
                             } else {
@@ -94,17 +114,20 @@ impl ShaderLayout {
 fn reflect_bind_group(
     descriptor_set: &ReflectDescriptorSet,
     shader_stage: ReflectShaderStageFlags,
+    options: &ShaderReflectOptions,
 ) -> BindGroupDescriptor {
     let mut bindings = Vec::new();
     for descriptor_binding in descriptor_set.bindings.iter() {
-        let binding = reflect_binding(descriptor_binding, shader_stage);
+        let binding = reflect_binding(descriptor_binding, shader_stage, options);
         bindings.push(binding);
     }
 
     BindGroupDescriptor::new(descriptor_set.set, bindings)
 }
 
-fn reflect_dimension(type_description: &ReflectTypeDescription) -> TextureViewDimension {
+fn reflect_dimension(
+    type_description: &ReflectTypeDescription,
+) -> TextureViewDimension {
     let arrayed = type_description.traits.image.arrayed > 0;
     match type_description.traits.image.dim {
         ReflectDimension::Type1d => TextureViewDimension::D1,
@@ -130,8 +153,11 @@ fn reflect_dimension(type_description: &ReflectTypeDescription) -> TextureViewDi
 fn reflect_binding(
     binding: &ReflectDescriptorBinding,
     shader_stage: ReflectShaderStageFlags,
+    options: &ShaderReflectOptions,
 ) -> BindingDescriptor {
     let type_description = binding.type_description.as_ref().unwrap();
+    let array_size = options.array_sizes.get(&binding.name).copied();
+
     let (name, bind_type) = match binding.descriptor_type {
         ReflectDescriptorType::UniformBuffer => (
             &type_description.type_name,
@@ -140,14 +166,16 @@ fn reflect_binding(
                 property: reflect_uniform(type_description),
             },
         ),
-        ReflectDescriptorType::SampledImage => (
-            &binding.name,
-            BindType::Texture {
-                view_dimension: reflect_dimension(type_description),
-                sample_type: TextureSampleType::Float { filterable: true },
-                multisampled: false,
-            },
-        ),
+        ReflectDescriptorType::SampledImage => {
+            (
+                &binding.name,
+                BindType::Texture {
+                    view_dimension: reflect_dimension(type_description),
+                    sample_type: TextureSampleType::Float { filterable: true },
+                    multisampled: false,
+                },
+            )
+        }
         ReflectDescriptorType::StorageBuffer => (
             &type_description.type_name,
             BindType::StorageBuffer {
@@ -179,6 +207,7 @@ fn reflect_binding(
         bind_type,
         name: name.to_string(),
         shader_stage,
+        count: array_size,
     }
 }
 
@@ -313,6 +342,8 @@ fn reflect_vertex_format(type_description: &ReflectTypeDescription) -> VertexFor
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
+
     use super::*;
     use crate::shader::{Shader, ShaderStage};
 
@@ -337,6 +368,7 @@ mod tests {
                 mat4 ViewProj;
             };
             layout(set = 1, binding = 0) uniform texture2D Texture;
+            layout(set = 1, binding = 1) uniform texture2D[] TextureArr;
 
             void main() {
                 v_Position = Vertex_Position;
@@ -347,7 +379,14 @@ mod tests {
         .get_spirv_shader(None)
         .unwrap();
 
-        let layout = vertex_shader.reflect_layout(true).unwrap();
+        let options = ShaderReflectOptions {
+            bevy_conventions: true,
+            array_sizes: vec![("TextureArr".into(), 4u32.try_into().unwrap())]
+                .into_iter()
+                .collect(),
+        };
+
+        let layout = vertex_shader.reflect_layout(&options).unwrap();
         assert_eq!(
             layout,
             ShaderLayout {
@@ -395,20 +434,35 @@ mod tests {
                                 property: UniformProperty::Struct(vec![UniformProperty::Mat4]),
                             },
                             shader_stage: BindingShaderStage::VERTEX,
+                            count: None,
                         }]
                     ),
                     BindGroupDescriptor::new(
                         1,
-                        vec![BindingDescriptor {
-                            index: 0,
-                            name: "Texture".into(),
-                            bind_type: BindType::Texture {
-                                multisampled: false,
-                                view_dimension: TextureViewDimension::D2,
-                                sample_type: TextureSampleType::Float { filterable: true }
+                        vec![
+                            BindingDescriptor {
+                                index: 0,
+                                name: "Texture".into(),
+                                bind_type: BindType::Texture {
+                                    multisampled: false,
+                                    view_dimension: TextureViewDimension::D2,
+                                    sample_type: TextureSampleType::Float { filterable: true }
+                                },
+                                shader_stage: BindingShaderStage::VERTEX,
+                                count: None,
                             },
-                            shader_stage: BindingShaderStage::VERTEX,
-                        }]
+                            BindingDescriptor {
+                                index: 1,
+                                name: "TextureArr".into(),
+                                bind_type: BindType::Texture {
+                                    multisampled: false,
+                                    view_dimension: TextureViewDimension::D2,
+                                    sample_type: TextureSampleType::Float { filterable: true }
+                                },
+                                shader_stage: BindingShaderStage::VERTEX,
+                                count: Some(4u32.try_into().unwrap())
+                            }
+                        ]
                     ),
                 ]
             }

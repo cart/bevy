@@ -220,6 +220,8 @@ impl WgpuRenderResourceContext {
                     wgpu::ShaderStage::VERTEX
                 } else if binding.shader_stage == BindingShaderStage::FRAGMENT {
                     wgpu::ShaderStage::FRAGMENT
+                } else if binding.shader_stage == BindingShaderStage::COMPUTE {
+                    wgpu::ShaderStage::COMPUTE
                 } else {
                     panic!("Invalid binding shader stage.")
                 };
@@ -227,7 +229,7 @@ impl WgpuRenderResourceContext {
                     binding: binding.index,
                     visibility: shader_stage,
                     ty: (&binding.bind_type).wgpu_into(),
-                    count: None,
+                    count: binding.count,
                 }
             })
             .collect::<Vec<wgpu::BindGroupLayoutEntry>>();
@@ -559,6 +561,26 @@ impl RenderResourceContext for WgpuRenderResourceContext {
             let bind_group_layouts = self.resources.bind_group_layouts.read();
             let mut bind_groups = self.resources.bind_groups.write();
 
+            let mut texture_arrays = Vec::new();
+
+            for indexed_binding in &*bind_group.indexed_bindings {
+                match &indexed_binding.entry {
+                    RenderResourceBinding::TextureArrayView(resources) => {
+                        let texture_views: Vec<_> = resources
+                            .iter()
+                            .map(|resource| {
+                                texture_views
+                                    .get(&resource)
+                                    .unwrap_or_else(|| panic!("{:?}", resource))
+                            })
+                            .collect();
+                        texture_arrays.push(texture_views);
+                    }
+                    _ => {}
+                }
+            }
+
+            let mut texture_array_ix = 0;
             let entries = bind_group
                 .indexed_bindings
                 .iter()
@@ -569,6 +591,11 @@ impl RenderResourceContext for WgpuRenderResourceContext {
                                 .get(&resource)
                                 .unwrap_or_else(|| panic!("{:?}", resource));
                             wgpu::BindingResource::TextureView(texture_view)
+                        }
+                        RenderResourceBinding::TextureArrayView(_) => {
+                            let texture_array = texture_arrays[texture_array_ix].as_slice();
+                            texture_array_ix += 1;
+                            wgpu::BindingResource::TextureViewArray(texture_array)
                         }
                         RenderResourceBinding::Sampler(resource) => {
                             let sampler = samplers.get(&resource).unwrap();

@@ -1,3 +1,5 @@
+use std::num::NonZeroU32;
+
 use super::UniformProperty;
 use crate::texture::{
     StorageTextureAccess, TextureFormat, TextureSampleType, TextureViewDimension,
@@ -17,6 +19,7 @@ pub struct BindingDescriptor {
     pub index: u32,
     pub bind_type: BindType,
     pub shader_stage: BindingShaderStage,
+    pub count: Option<NonZeroU32>,
 }
 
 impl BindingDescriptor {

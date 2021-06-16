@@ -1,4 +1,4 @@
-use super::ShaderLayout;
+use super::{ShaderLayout, ShaderReflectOptions};
 use bevy_asset::{AssetLoader, LoadContext, LoadedAsset};
 use bevy_reflect::{TypeUuid, Uuid};
 use bevy_utils::{tracing::error, BoxedFuture};
@@ -229,11 +229,11 @@ impl Shader {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn reflect_layout(&self, enforce_bevy_conventions: bool) -> Option<ShaderLayout> {
+    pub fn reflect_layout(&self, options: &ShaderReflectOptions) -> Option<ShaderLayout> {
         if let ShaderSource::Spirv(ref spirv) = self.source {
             Some(ShaderLayout::from_spirv(
                 spirv.as_slice(),
-                enforce_bevy_conventions,
+                options,
             ))
         } else {
             panic!("Cannot reflect layout of non-SpirV shader. Try compiling this shader to SpirV first using self.get_spirv_shader().");

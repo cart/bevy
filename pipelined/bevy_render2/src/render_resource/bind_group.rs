@@ -85,6 +85,11 @@ impl BindGroupBuilder {
             RenderResourceBinding::TextureView(texture) => {
                 RenderResourceId::TextureView(*texture).hash(&mut self.hasher);
             }
+            RenderResourceBinding::TextureArrayView(textures) => {
+                for texture in textures {
+                    RenderResourceId::TextureView(*texture).hash(&mut self.hasher);
+                }
+            }
             RenderResourceBinding::Sampler(sampler) => {
                 RenderResourceId::Sampler(*sampler).hash(&mut self.hasher);
             }

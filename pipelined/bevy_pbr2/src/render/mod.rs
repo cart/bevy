@@ -35,8 +35,8 @@ impl FromWorld for PbrShaders {
             .get_spirv_shader(None)
             .unwrap();
 
-        let vertex_layout = vertex_shader.reflect_layout(true).unwrap();
-        let fragment_layout = fragment_shader.reflect_layout(true).unwrap();
+        let vertex_layout = vertex_shader.reflect_layout(&Default::default()).unwrap();
+        let fragment_layout = fragment_shader.reflect_layout(&Default::default()).unwrap();
 
         let mut pipeline_layout =
             PipelineLayout::from_shader_layouts(&mut [vertex_layout, fragment_layout]);

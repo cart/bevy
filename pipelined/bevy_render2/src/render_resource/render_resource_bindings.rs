@@ -8,6 +8,7 @@ pub enum RenderResourceBinding {
         range: Range<u64>,
     },
     TextureView(TextureViewId),
+    TextureArrayView(Vec<TextureViewId>),
     Sampler(SamplerId),
 }
 

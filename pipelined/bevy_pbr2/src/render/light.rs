@@ -65,7 +65,7 @@ impl FromWorld for ShadowShaders {
         let vertex_shader = Shader::from_glsl(ShaderStage::Vertex, include_str!("pbr.vert"))
             .get_spirv_shader(None)
             .unwrap();
-        let vertex_layout = vertex_shader.reflect_layout(true).unwrap();
+        let vertex_layout = vertex_shader.reflect_layout(&Default::default()).unwrap();
 
         let mut pipeline_layout = PipelineLayout::from_shader_layouts(&mut [vertex_layout]);
 
