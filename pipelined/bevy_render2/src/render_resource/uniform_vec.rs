@@ -1,6 +1,6 @@
 use crate::{render_resource::Buffer, renderer::RenderDevice};
 use crevice::std140::{self, AsStd140, DynamicUniform, Std140};
-use std::{num::NonZeroU64, ops::DerefMut};
+use std::{num::NonZeroU64, ops::{Deref, DerefMut}};
 use wgpu::{BindingResource, BufferBinding, BufferDescriptor, BufferUsage, CommandEncoder};
 
 pub struct UniformVec<T: AsStd140> {
@@ -20,6 +20,46 @@ impl<T: AsStd140> Default for UniformVec<T> {
             capacity: 0,
             item_size: (T::std140_size_static() + <T as AsStd140>::Std140Type::ALIGNMENT - 1)
                 & !(<T as AsStd140>::Std140Type::ALIGNMENT - 1),
+        }
+    }
+}
+
+impl<T: AsStd140> Deref for UniformVec<T> {
+    type Target = [T];
+    fn deref(&self) -> &Self::Target {
+        self.values.deref()
+    }
+}
+
+impl<T: AsStd140> DerefMut for UniformVec<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.values.deref_mut()
+    }
+}
+
+impl<'a, T: AsStd140 + Clone> Extend<&'a T> for UniformVec<T> {
+    fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
+        self.values
+            .extend(iter.into_iter().map(|item| item.clone()));
+        if self.values.len() >= self.capacity {
+            self.values.truncate(self.capacity);
+            panic!(
+                "Cannot push values because capacity of {} has been reached",
+                self.capacity
+            );
+        }
+    }
+}
+
+impl<T: AsStd140> Extend<T> for UniformVec<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.values.extend(iter);
+        if self.values.len() >= self.capacity {
+            self.values.truncate(self.capacity);
+            panic!(
+                "Cannot push values because capacity of {} has been reached",
+                self.capacity
+            );
         }
     }
 }
@@ -62,6 +102,10 @@ impl<T: AsStd140> UniformVec<T> {
         }
     }
 
+    pub fn pop(&mut self) -> Option<T> {
+        self.values.pop()
+    }
+
     pub fn reserve(&mut self, capacity: usize, device: &RenderDevice) {
         if capacity > self.capacity {
             self.capacity = capacity;
@@ -84,6 +128,14 @@ impl<T: AsStd140> UniformVec<T> {
     pub fn reserve_and_clear(&mut self, capacity: usize, device: &RenderDevice) {
         self.clear();
         self.reserve(capacity, device);
+    }
+
+    pub fn swap_remove(&mut self, index: usize) {
+        self.values.swap_remove(index);
+    }
+
+    pub fn truncate(&mut self, length: usize) {
+        self.values.truncate(length);
     }
 
     pub fn write_to_staging_buffer(&self, device: &RenderDevice) {
@@ -129,6 +181,33 @@ impl<T: AsStd140> Default for DynamicUniformVec<T> {
     }
 }
 
+impl<T: AsStd140> Deref for DynamicUniformVec<T> {
+    type Target = [DynamicUniform<T>];
+    fn deref(&self) -> &Self::Target {
+        self.uniform_vec.deref()
+    }
+}
+
+impl<T: AsStd140> DerefMut for DynamicUniformVec<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.uniform_vec.deref_mut()
+    }
+}
+
+impl<'a, T: AsStd140 + Clone> Extend<&'a T> for DynamicUniformVec<T> {
+    fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
+        self.uniform_vec
+            .extend(iter.into_iter().map(|item| DynamicUniform(item.clone())));
+    }
+}
+
+impl<T: AsStd140> Extend<T> for DynamicUniformVec<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.uniform_vec
+            .extend(iter.into_iter().map(|item| DynamicUniform(item)));
+    }
+}
+
 impl<T: AsStd140> DynamicUniformVec<T> {
     #[inline]
     pub fn staging_buffer(&self) -> Option<&Buffer> {
@@ -156,6 +235,11 @@ impl<T: AsStd140> DynamicUniformVec<T> {
     }
 
     #[inline]
+    pub fn pop(&mut self) -> Option<T> {
+        self.uniform_vec.pop().map(|item| item.0)
+    }
+
+    #[inline]
     pub fn reserve(&mut self, capacity: usize, device: &RenderDevice) {
         self.uniform_vec.reserve(capacity, device);
     }
@@ -163,6 +247,16 @@ impl<T: AsStd140> DynamicUniformVec<T> {
     #[inline]
     pub fn reserve_and_clear(&mut self, capacity: usize, device: &RenderDevice) {
         self.uniform_vec.reserve_and_clear(capacity, device);
+    }
+
+    #[inline]
+    pub fn swap_remove(&mut self, index: usize) {
+        self.uniform_vec.swap_remove(index);
+    }
+
+    #[inline]
+    pub fn truncate(&mut self, length: usize) {
+        self.uniform_vec.truncate(length);
     }
 
     #[inline]

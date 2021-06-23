@@ -1,6 +1,7 @@
 use crate::{render_resource::Buffer, renderer::RenderDevice};
 use bevy_core::{cast_slice, Pod};
 use wgpu::BufferUsage;
+use std::ops::{Deref, DerefMut};
 
 pub struct BufferVec<T: Pod> {
     values: Vec<T>,
@@ -18,8 +19,47 @@ impl<T: Pod> Default for BufferVec<T> {
             staging_buffer: None,
             buffer: None,
             capacity: 0,
-            buffer_usage: BufferUsage::all(),
             item_size: std::mem::size_of::<T>(),
+            buffer_usage: BufferUsage::all(),
+        }
+    }
+}
+
+impl<T: Pod> Deref for BufferVec<T> {
+    type Target = [T];
+    fn deref(&self) -> &Self::Target {
+        self.values.deref()
+    }
+}
+
+impl<T: Pod> DerefMut for BufferVec<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.values.deref_mut()
+    }
+}
+
+impl<'a, T: Pod> Extend<&'a T> for BufferVec<T> {
+    fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
+        self.values.extend(iter);
+        if self.values.len() >= self.capacity {
+            self.values.truncate(self.capacity);
+            panic!(
+                "Cannot push values because capacity of {} has been reached",
+                self.capacity
+            );
+        }
+    }
+}
+
+impl<T: Pod> Extend<T> for BufferVec<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        self.values.extend(iter);
+        if self.values.len() >= self.capacity {
+            self.values.truncate(self.capacity);
+            panic!(
+                "Cannot push values because capacity of {} has been reached",
+                self.capacity
+            );
         }
     }
 }
@@ -31,6 +71,7 @@ impl<T: Pod> BufferVec<T> {
             ..Default::default()
         }
     }
+
     #[inline]
     pub fn staging_buffer(&self) -> Option<&Buffer> {
         self.staging_buffer.as_ref()
@@ -59,6 +100,10 @@ impl<T: Pod> BufferVec<T> {
         }
     }
 
+    pub fn pop(&mut self) -> Option<T> {
+        self.values.pop()
+    }
+
     pub fn reserve(&mut self, capacity: usize, device: &RenderDevice) {
         if capacity > self.capacity {
             self.capacity = capacity;
@@ -81,6 +126,14 @@ impl<T: Pod> BufferVec<T> {
     pub fn reserve_and_clear(&mut self, capacity: usize, device: &RenderDevice) {
         self.clear();
         self.reserve(capacity, device);
+    }
+
+    pub fn swap_remove(&mut self, index: usize) {
+        self.values.swap_remove(index);
+    }
+
+    pub fn truncate(&mut self, length: usize) {
+        self.values.truncate(length);
     }
 
     pub fn write_to_staging_buffer(&self, render_device: &RenderDevice) {
