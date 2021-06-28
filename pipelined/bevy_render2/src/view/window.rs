@@ -108,19 +108,26 @@ pub fn prepare_windows(
             .entry(window.id)
             .or_insert_with(|| render_device.create_swap_chain(surface, &swap_chain_descriptor));
 
-        let frame = if let Ok(swap_chain_frame) = swap_chain.get_current_frame() {
-            swap_chain_frame
-        } else {
-            let swap_chain = window_surfaces
-                .swap_chains
-                .entry(window.id)
-                .or_insert_with(|| {
-                    render_device.create_swap_chain(surface, &swap_chain_descriptor)
-                });
+        let frame = match swap_chain.get_current_frame() {
+            Ok(swap_chain_frame) => {
+                swap_chain_frame
+            },
+            Err(wgpu::SwapChainError::Outdated) => {
+                let new_swap_chain = render_device.create_swap_chain(surface, &swap_chain_descriptor);
 
-            swap_chain
-                .get_current_frame()
-                .expect("Failed to acquire next swap chain texture!")
+                window_surfaces.swap_chains.insert(
+                    window.id, 
+                    new_swap_chain
+                );
+                window_surfaces.swap_chains
+                    .get(&window.id)
+                    .unwrap()
+                    .get_current_frame()
+                    .expect("Error recreating swap chain")
+            },
+            _ => {
+                panic!("Unknown swapchain error")
+            }
         };
 
         window.swap_chain_frame = Some(TextureView::from(frame));
