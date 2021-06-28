@@ -436,7 +436,8 @@ struct MeshDrawInfo {
 pub struct MeshMeta {
     transform_uniforms: DynamicUniformVec<Mat4>,
     material_bind_groups: FrameSlabMap<BufferId, BindGroup>,
-    mesh_transform_bind_group: Option<BindGroup>,
+    mesh_transform_bind_group: FrameSlabMap<BufferId, BindGroup>,
+    mesh_transform_bind_group_key: Option<FrameSlabMapKey<BufferId, BindGroup>>,
     mesh_draw_info: Vec<MeshDrawInfo>,
 }
 
@@ -473,7 +474,9 @@ fn image_handle_to_view_sampler<'a>(
             &pbr_shaders.dummy_white_gpu_image.sampler,
         ),
         |image_handle| {
-        let gpu_image = gpu_images.get(image_handle).expect("only materials with valid textures should be drawn");
+            let gpu_image = gpu_images
+                .get(image_handle)
+                .expect("only materials with valid textures should be drawn");
             (&gpu_image.texture_view, &gpu_image.sampler)
         },
     )
@@ -516,16 +519,21 @@ pub fn queue_meshes(
     }
 
     let transform_uniforms = &mesh_meta.transform_uniforms;
-    mesh_meta.mesh_transform_bind_group.get_or_insert_with(|| {
-        render_device.create_bind_group(&BindGroupDescriptor {
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: transform_uniforms.binding(),
-            }],
-            label: None,
-            layout: &pbr_shaders.mesh_layout,
-        })
-    });
+    mesh_meta.mesh_transform_bind_group.next_frame();
+    mesh_meta.mesh_transform_bind_group_key =
+        Some(mesh_meta.mesh_transform_bind_group.get_or_insert_with(
+            transform_uniforms.uniform_buffer().unwrap().id(),
+            || {
+                render_device.create_bind_group(&BindGroupDescriptor {
+                    entries: &[BindGroupEntry {
+                        binding: 0,
+                        resource: transform_uniforms.binding(),
+                    }],
+                    label: None,
+                    layout: &pbr_shaders.mesh_layout,
+                })
+            },
+        ));
     for (entity, view, view_lights, mut transparent_phase) in views.iter_mut() {
         // TODO: cache this?
         let view_bind_group = render_device.create_bind_group(&BindGroupDescriptor {
@@ -750,7 +758,10 @@ impl Draw for DrawPbr {
         );
         pass.set_bind_group(
             1,
-            mesh_meta.mesh_transform_bind_group.as_ref().unwrap(),
+            mesh_meta
+                .mesh_transform_bind_group
+                .get_value(mesh_meta.mesh_transform_bind_group_key.unwrap())
+                .unwrap(),
             &[extracted_mesh.transform_binding_offset],
         );
         let mesh_draw_info = &mesh_meta.mesh_draw_info[draw_key];
