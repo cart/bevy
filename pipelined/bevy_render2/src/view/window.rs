@@ -125,8 +125,8 @@ pub fn prepare_windows(
                     .get_current_frame()
                     .expect("Error recreating swap chain")
             },
-            _ => {
-                panic!("Unknown swapchain error")
+            err => {
+                err.expect("Failed to acquire next swap chain texture!")
             }
         };
 
