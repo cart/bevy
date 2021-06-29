@@ -11,8 +11,9 @@ use bevy_window::{RawWindowHandleWrapper, WindowId, Windows};
 use std::ops::{Deref, DerefMut};
 use wgpu::TextureFormat;
 
+// Token to ensure a system runs on the main thread.
 #[derive(Default)]
-struct NonSendToken;
+pub struct NonSendToken;
 
 pub struct WindowRenderPlugin;
 
@@ -81,6 +82,8 @@ pub struct WindowSurfaces {
 }
 
 pub fn prepare_windows(
+    // By accessing a NonSend resource, we tell the scheduler to put this system on the main thread,
+    // which is necessary for some OS s
     _token: NonSend<NonSendToken>,
     mut windows: ResMut<ExtractedWindows>,
     mut window_surfaces: ResMut<WindowSurfaces>,
