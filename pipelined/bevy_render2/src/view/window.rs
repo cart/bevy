@@ -114,16 +114,12 @@ pub fn prepare_windows(
             },
             Err(wgpu::SwapChainError::Outdated) => {
                 let new_swap_chain = render_device.create_swap_chain(surface, &swap_chain_descriptor);
-
+                let frame = new_swap_chain.get_current_frame().expect("Error recreating swap chain");
                 window_surfaces.swap_chains.insert(
                     window.id, 
                     new_swap_chain
                 );
-                window_surfaces.swap_chains
-                    .get(&window.id)
-                    .unwrap()
-                    .get_current_frame()
-                    .expect("Error recreating swap chain")
+                frame
             },
             err => {
                 err.expect("Failed to acquire next swap chain texture!")
