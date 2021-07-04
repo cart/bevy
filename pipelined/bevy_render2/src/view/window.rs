@@ -1,5 +1,3 @@
-use std::ops::{Deref, DerefMut};
-
 use crate::{
     render_resource::TextureView,
     renderer::{RenderDevice, RenderInstance},
@@ -10,7 +8,12 @@ use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::*;
 use bevy_utils::HashMap;
 use bevy_window::{RawWindowHandleWrapper, WindowId, Windows};
-use wgpu::{SwapChainFrame, TextureFormat};
+use std::ops::{Deref, DerefMut};
+use wgpu::TextureFormat;
+
+// Token to ensure a system runs on the main thread.
+#[derive(Default)]
+pub struct NonSendMarker;
 
 pub struct WindowRenderPlugin;
 
@@ -19,6 +22,7 @@ impl Plugin for WindowRenderPlugin {
         let render_app = app.sub_app_mut(0);
         render_app
             .init_resource::<WindowSurfaces>()
+            .init_resource::<NonSendMarker>()
             .add_system_to_stage(RenderStage::Extract, extract_windows.system())
             .add_system_to_stage(RenderStage::Prepare, prepare_windows.system());
     }
@@ -77,11 +81,10 @@ pub struct WindowSurfaces {
     swap_chains: HashMap<WindowId, wgpu::SwapChain>,
 }
 
-pub struct WindowSwapChain {
-    value: TextureView,
-}
-
 pub fn prepare_windows(
+    // By accessing a NonSend resource, we tell the scheduler to put this system on the main thread,
+    // which is necessary for some OS s
+    _marker: NonSend<NonSendMarker>,
     mut windows: ResMut<ExtractedWindows>,
     mut window_surfaces: ResMut<WindowSurfaces>,
     render_device: Res<RenderDevice>,
@@ -93,6 +96,7 @@ pub fn prepare_windows(
             .surfaces
             .entry(window.id)
             .or_insert_with(|| unsafe {
+                // NOTE: On some OSes this MUST be called from the main thread.
                 render_instance.create_surface(&window.handle.get_handle())
             });
 
@@ -113,19 +117,20 @@ pub fn prepare_windows(
             .entry(window.id)
             .or_insert_with(|| render_device.create_swap_chain(surface, &swap_chain_descriptor));
 
-        let frame = if let Ok(swap_chain_frame) = swap_chain.get_current_frame() {
-            swap_chain_frame
-        } else {
-            let swap_chain = window_surfaces
-                .swap_chains
-                .entry(window.id)
-                .or_insert_with(|| {
-                    render_device.create_swap_chain(surface, &swap_chain_descriptor)
-                });
-
-            swap_chain
-                .get_current_frame()
-                .expect("Failed to acquire next swap chain texture!")
+        let frame = match swap_chain.get_current_frame() {
+            Ok(swap_chain_frame) => swap_chain_frame,
+            Err(wgpu::SwapChainError::Outdated) => {
+                let new_swap_chain =
+                    render_device.create_swap_chain(surface, &swap_chain_descriptor);
+                let frame = new_swap_chain
+                    .get_current_frame()
+                    .expect("Error recreating swap chain");
+                window_surfaces
+                    .swap_chains
+                    .insert(window.id, new_swap_chain);
+                frame
+            }
+            err => err.expect("Failed to acquire next swap chain texture!"),
         };
 
         window.swap_chain_frame = Some(TextureView::from(frame));

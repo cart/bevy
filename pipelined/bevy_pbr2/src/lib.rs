@@ -19,7 +19,7 @@ use bevy_render2::{
 
 pub mod draw_3d_graph {
     pub mod node {
-        pub const SHADOW_PASS: &'static str = "shadow_pass";
+        pub const SHADOW_PASS: &str = "shadow_pass";
     }
 }
 
@@ -28,7 +28,8 @@ pub struct PbrPlugin;
 
 impl Plugin for PbrPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(StandardMaterialPlugin);
+        app.add_plugin(StandardMaterialPlugin)
+            .init_resource::<AmbientLight>();
 
         let render_app = app.sub_app_mut(0);
         render_app
@@ -46,9 +47,10 @@ impl Plugin for PbrPlugin {
                 RenderStage::PhaseSort,
                 sort_phase_system::<ShadowPhase>.system(),
             )
+            // FIXME: Hack to ensure RenderCommandQueue is initialized when PbrShaders is being initialized
+            // .init_resource::<RenderCommandQueue>()
             .init_resource::<PbrShaders>()
             .init_resource::<ShadowShaders>()
-            .init_resource::<MaterialMeta>()
             .init_resource::<MeshMeta>()
             .init_resource::<LightMeta>();
 

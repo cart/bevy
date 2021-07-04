@@ -5,13 +5,12 @@ mod main_pass_driver;
 pub use main_pass_2d::*;
 pub use main_pass_3d::*;
 pub use main_pass_driver::*;
-use wgpu::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsage};
 
 use crate::{
     camera::{ActiveCameras, CameraPlugin},
     render_graph::{EmptyNode, RenderGraph, SlotInfo, SlotType},
     render_phase::{sort_phase_system, RenderPhase},
-    render_resource::{Texture, TextureId, TextureView, TextureViewId},
+    render_resource::{Texture, TextureView},
     renderer::RenderDevice,
     texture::TextureCache,
     view::{ExtractedView, ViewPlugin},
@@ -19,6 +18,7 @@ use crate::{
 };
 use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::*;
+use wgpu::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsage};
 
 // Plugins that contribute to the RenderGraph should use the following label conventions:
 // 1. Graph modules should have a NAME, input module, and node module (where relevant)
@@ -26,31 +26,31 @@ use bevy_ecs::prelude::*;
 // 3. "sub graph" modules should be nested beneath their parent graph module
 
 pub mod node {
-    pub const MAIN_PASS_DEPENDENCIES: &'static str = "main_pass_dependencies";
-    pub const MAIN_PASS_DRIVER: &'static str = "main_pass_driver";
-    pub const VIEW: &'static str = "view";
+    pub const MAIN_PASS_DEPENDENCIES: &str = "main_pass_dependencies";
+    pub const MAIN_PASS_DRIVER: &str = "main_pass_driver";
+    pub const VIEW: &str = "view";
 }
 
 pub mod draw_2d_graph {
-    pub const NAME: &'static str = "draw_2d";
+    pub const NAME: &str = "draw_2d";
     pub mod input {
-        pub const VIEW_ENTITY: &'static str = "view_entity";
-        pub const RENDER_TARGET: &'static str = "render_target";
+        pub const VIEW_ENTITY: &str = "view_entity";
+        pub const RENDER_TARGET: &str = "render_target";
     }
     pub mod node {
-        pub const MAIN_PASS: &'static str = "main_pass";
+        pub const MAIN_PASS: &str = "main_pass";
     }
 }
 
 pub mod draw_3d_graph {
-    pub const NAME: &'static str = "draw_3d";
+    pub const NAME: &str = "draw_3d";
     pub mod input {
-        pub const VIEW_ENTITY: &'static str = "view_entity";
-        pub const RENDER_TARGET: &'static str = "render_target";
-        pub const DEPTH: &'static str = "depth";
+        pub const VIEW_ENTITY: &str = "view_entity";
+        pub const RENDER_TARGET: &str = "render_target";
+        pub const DEPTH: &str = "depth";
     }
     pub mod node {
-        pub const MAIN_PASS: &'static str = "main_pass";
+        pub const MAIN_PASS: &str = "main_pass";
     }
 }
 

@@ -85,6 +85,16 @@ impl<T: AsStd140> UniformVec<T> {
     }
 
     #[inline]
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
@@ -222,6 +232,16 @@ impl<T: AsStd140> DynamicUniformVec<T> {
     #[inline]
     pub fn binding(&self) -> BindingResource {
         self.uniform_vec.binding()
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.uniform_vec.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.uniform_vec.is_empty()
     }
 
     #[inline]
