@@ -1,5 +1,5 @@
 use crate::{render_resource::Buffer, renderer::RenderDevice};
-use crevice::std140::{self, AsStd140, DynamicUniform, Std140};
+use crevice::std140::{self, AsStd140, DynamicUniform};
 use std::{num::NonZeroU64, ops::DerefMut};
 use wgpu::{BindingResource, BufferBinding, BufferDescriptor, BufferUsage, CommandEncoder};
 
@@ -18,8 +18,7 @@ impl<T: AsStd140> Default for UniformVec<T> {
             staging_buffer: None,
             uniform_buffer: None,
             capacity: 0,
-            item_size: (T::std140_size_static() + <T as AsStd140>::Std140Type::ALIGNMENT - 1)
-                & !(<T as AsStd140>::Std140Type::ALIGNMENT - 1),
+            item_size: T::std140_padded_size_static(),
         }
     }
 }
