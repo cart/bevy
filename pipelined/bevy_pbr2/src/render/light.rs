@@ -29,8 +29,8 @@ pub struct ExtractedPointLight {
     range: f32,
     radius: f32,
     transform: GlobalTransform,
-    shadow_bias_min: f32,
-    shadow_bias_max: f32,
+    shadow_depth_bias: f32,
+    shadow_normal_bias: f32,
 }
 
 pub struct ExtractedDirectionalLight {
@@ -38,8 +38,8 @@ pub struct ExtractedDirectionalLight {
     illuminance: f32,
     direction: Vec3,
     projection: Mat4,
-    shadow_bias_min: f32,
-    shadow_bias_max: f32,
+    shadow_depth_bias: f32,
+    shadow_normal_bias: f32,
 }
 
 #[repr(C)]
@@ -52,8 +52,8 @@ pub struct GpuPointLight {
     radius: f32,
     near: f32,
     far: f32,
-    shadow_bias_min: f32,
-    shadow_bias_max: f32,
+    shadow_depth_bias: f32,
+    shadow_normal_bias: f32,
 }
 
 #[repr(C)]
@@ -62,8 +62,8 @@ pub struct GpuDirectionalLight {
     view_projection: Mat4,
     color: Vec4,
     dir_to_light: Vec3,
-    shadow_bias_min: f32,
-    shadow_bias_max: f32,
+    shadow_depth_bias: f32,
+    shadow_normal_bias: f32,
 }
 
 #[repr(C)]
@@ -164,7 +164,7 @@ impl FromWorld for ShadowShaders {
             depth_stencil: Some(DepthStencilState {
                 format: SHADOW_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: CompareFunction::LessEqual,
+                depth_compare: CompareFunction::GreaterEqual,
                 stencil: StencilState {
                     front: StencilFaceState::IGNORE,
                     back: StencilFaceState::IGNORE,
@@ -200,7 +200,7 @@ impl FromWorld for ShadowShaders {
                 mag_filter: FilterMode::Linear,
                 min_filter: FilterMode::Linear,
                 mipmap_filter: FilterMode::Nearest,
-                compare: Some(CompareFunction::LessEqual),
+                compare: Some(CompareFunction::GreaterEqual),
                 ..Default::default()
             }),
             directional_light_sampler: render_device.create_sampler(&SamplerDescriptor {
@@ -210,7 +210,7 @@ impl FromWorld for ShadowShaders {
                 mag_filter: FilterMode::Linear,
                 min_filter: FilterMode::Linear,
                 mipmap_filter: FilterMode::Nearest,
-                compare: Some(CompareFunction::LessEqual),
+                compare: Some(CompareFunction::GreaterEqual),
                 ..Default::default()
             }),
         }
@@ -235,8 +235,8 @@ pub fn extract_lights(
             range: point_light.range,
             radius: point_light.radius,
             transform: *transform,
-            shadow_bias_min: point_light.shadow_bias_min,
-            shadow_bias_max: point_light.shadow_bias_max,
+            shadow_depth_bias: point_light.shadow_depth_bias,
+            shadow_normal_bias: point_light.shadow_normal_bias,
         });
     }
     for (entity, directional_light, transform) in directional_lights.iter() {
@@ -247,8 +247,8 @@ pub fn extract_lights(
                 illuminance: directional_light.illuminance,
                 direction: transform.forward(),
                 projection: directional_light.shadow_projection.get_projection_matrix(),
-                shadow_bias_min: directional_light.shadow_bias_min,
-                shadow_bias_max: directional_light.shadow_bias_max,
+                shadow_depth_bias: directional_light.shadow_depth_bias,
+                shadow_normal_bias: directional_light.shadow_normal_bias,
             });
     }
 }
@@ -385,7 +385,7 @@ pub fn prepare_lights(
         // TODO: this should select lights based on relevance to the view instead of the first ones that show up in a query
         for (light_index, light) in point_lights.iter().enumerate().take(MAX_POINT_LIGHTS) {
             let projection =
-                Mat4::perspective_rh(std::f32::consts::FRAC_PI_2, 1.0, 0.1, light.range);
+                Mat4::perspective_infinite_reverse_rh(std::f32::consts::FRAC_PI_2, 1.0, 0.1);
 
             // ignore scale because we don't want to effectively scale light radius and range
             // by applying those as a view transform to shadow map rendering of objects
@@ -443,8 +443,8 @@ pub fn prepare_lights(
                 near: 0.1,
                 far: light.range,
                 // proj: projection,
-                shadow_bias_min: light.shadow_bias_min,
-                shadow_bias_max: light.shadow_bias_max,
+                shadow_depth_bias: light.shadow_depth_bias,
+                shadow_normal_bias: light.shadow_normal_bias,
             };
         }
 
@@ -482,8 +482,8 @@ pub fn prepare_lights(
                 dir_to_light,
                 // NOTE: * view is correct, it should not be view.inverse() here
                 view_projection: projection * view,
-                shadow_bias_min: light.shadow_bias_min,
-                shadow_bias_max: light.shadow_bias_max,
+                shadow_depth_bias: light.shadow_depth_bias,
+                shadow_normal_bias: light.shadow_normal_bias,
             };
 
             let depth_texture_view =
@@ -606,7 +606,7 @@ impl Node for ShadowPassNode {
                     depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                         view: &view_light.depth_texture_view,
                         depth_ops: Some(Operations {
-                            load: LoadOp::Clear(1.0),
+                            load: LoadOp::Clear(0.0),
                             store: true,
                         }),
                         stencil_ops: None,
