@@ -2,6 +2,7 @@ pub mod camera;
 pub mod color;
 pub mod mesh;
 pub mod render_asset;
+pub mod render_component;
 pub mod render_graph;
 pub mod render_phase;
 pub mod render_resource;
@@ -10,22 +11,22 @@ pub mod shader;
 pub mod texture;
 pub mod view;
 
-use std::ops::{Deref, DerefMut};
-
 pub use once_cell;
-use wgpu::BackendBit;
 
 use crate::{
     camera::CameraPlugin,
     mesh::MeshPlugin,
     render_graph::RenderGraph,
-    render_phase::DrawFunctions,
     renderer::render_system,
+    shader::ShaderPlugin,
     texture::ImagePlugin,
     view::{ViewPlugin, WindowRenderPlugin},
 };
 use bevy_app::{App, Plugin};
+use bevy_asset::AssetServer;
 use bevy_ecs::prelude::*;
+use std::ops::{Deref, DerefMut};
+use wgpu::BackendBit;
 
 #[derive(Default)]
 pub struct RenderPlugin;
@@ -92,6 +93,7 @@ impl Plugin for RenderPlugin {
         app.insert_resource(device.clone())
             .insert_resource(queue.clone())
             .init_resource::<ScratchRenderWorld>();
+        let asset_server = app.world.get_resource::<AssetServer>().unwrap().clone();
 
         let mut render_app = App::empty();
         let mut extract_stage = SystemStage::parallel();
@@ -111,8 +113,8 @@ impl Plugin for RenderPlugin {
             .insert_resource(instance)
             .insert_resource(device)
             .insert_resource(queue)
-            .init_resource::<RenderGraph>()
-            .init_resource::<DrawFunctions>();
+            .insert_resource(asset_server)
+            .init_resource::<RenderGraph>();
 
         app.add_sub_app(render_app, move |app_world, render_app| {
             // reserve all existing app entities for use in render_app
@@ -169,7 +171,8 @@ impl Plugin for RenderPlugin {
             render_app.world.clear_entities();
         });
 
-        app.add_plugin(WindowRenderPlugin)
+        app.add_plugin(ShaderPlugin)
+            .add_plugin(WindowRenderPlugin)
             .add_plugin(CameraPlugin)
             .add_plugin(ViewPlugin)
             .add_plugin(MeshPlugin)

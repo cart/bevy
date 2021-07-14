@@ -1,12 +1,13 @@
 use bevy_app::{App, Plugin};
 use bevy_asset::{AddAsset, Handle};
+use bevy_ecs::system::{lifetimeless::SRes, SystemParamItem};
 use bevy_math::Vec4;
 use bevy_reflect::TypeUuid;
 use bevy_render2::{
     color::Color,
-    render_asset::{RenderAsset, RenderAssetPlugin},
+    render_asset::{PrepareAssetError, RenderAsset, RenderAssetPlugin},
     render_resource::{Buffer, BufferInitDescriptor, BufferUsage},
-    renderer::{RenderDevice, RenderQueue},
+    renderer::RenderDevice,
     texture::Image,
 };
 use crevice::std140::{AsStd140, Std140};
@@ -144,6 +145,7 @@ pub struct GpuStandardMaterial {
 impl RenderAsset for StandardMaterial {
     type ExtractedAsset = StandardMaterial;
     type PreparedAsset = GpuStandardMaterial;
+    type Param = SRes<RenderDevice>;
 
     fn extract_asset(&self) -> Self::ExtractedAsset {
         self.clone()
@@ -151,9 +153,8 @@ impl RenderAsset for StandardMaterial {
 
     fn prepare_asset(
         material: Self::ExtractedAsset,
-        render_device: &RenderDevice,
-        _render_queue: &RenderQueue,
-    ) -> Self::PreparedAsset {
+        render_device: &mut SystemParamItem<Self::Param>,
+    ) -> Result<Self::PreparedAsset, PrepareAssetError<Self::ExtractedAsset>> {
         let mut flags = StandardMaterialFlags::NONE;
         if material.base_color_texture.is_some() {
             flags |= StandardMaterialFlags::BASE_COLOR_TEXTURE;
@@ -188,12 +189,13 @@ impl RenderAsset for StandardMaterial {
             usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
             contents: value_std140.as_bytes(),
         });
-        GpuStandardMaterial {
+
+        Ok(GpuStandardMaterial {
             buffer,
             base_color_texture: material.base_color_texture,
             emissive_texture: material.emissive_texture,
             metallic_roughness_texture: material.metallic_roughness_texture,
             occlusion_texture: material.occlusion_texture,
-        }
+        })
     }
 }

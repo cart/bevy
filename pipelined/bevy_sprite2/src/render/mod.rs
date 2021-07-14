@@ -3,14 +3,15 @@ use crate::{
     Rect, Sprite,
 };
 use bevy_asset::{Assets, Handle};
-use bevy_core_pipeline::Transparent2dPhase;
+use bevy_core_pipeline::Transparent2d;
+use bevy_ecs::system::lifetimeless::*;
 use bevy_ecs::{prelude::*, system::SystemState};
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
 use bevy_render2::{
     mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues},
     render_asset::RenderAssets,
     render_graph::{Node, NodeRunError, RenderGraphContext},
-    render_phase::{Draw, DrawFunctions, Drawable, RenderPhase, TrackedRenderPass},
+    render_phase::{Draw, DrawFunctions, RenderPhase, TrackedRenderPass},
     render_resource::*,
     renderer::{RenderContext, RenderDevice},
     shader::Shader,
@@ -32,7 +33,9 @@ pub struct SpriteShaders {
 impl FromWorld for SpriteShaders {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.get_resource::<RenderDevice>().unwrap();
-        let shader = Shader::from_wgsl(include_str!("sprite.wgsl"));
+        let shader = Shader::from_wgsl(include_str!("sprite.wgsl"))
+            .process(&[])
+            .unwrap();
         let shader_module = render_device.create_shader_module(&shader);
 
         let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -316,14 +319,14 @@ pub fn prepare_sprites(
 
 #[allow(clippy::too_many_arguments)]
 pub fn queue_sprites(
-    draw_functions: Res<DrawFunctions>,
+    draw_functions: Res<DrawFunctions<Transparent2d>>,
     render_device: Res<RenderDevice>,
     mut sprite_meta: ResMut<SpriteMeta>,
     view_meta: Res<ViewMeta>,
     sprite_shaders: Res<SpriteShaders>,
     mut extracted_sprites: ResMut<ExtractedSprites>,
     gpu_images: Res<RenderAssets<Image>>,
-    mut views: Query<&mut RenderPhase<Transparent2dPhase>>,
+    mut views: Query<&mut RenderPhase<Transparent2d>>,
 ) {
     if view_meta.uniforms.is_empty() {
         return;
@@ -370,9 +373,9 @@ pub fn queue_sprites(
                 .texture_bind_group_keys
                 .push(texture_bind_group_key);
 
-            transparent_phase.add(Drawable {
+            transparent_phase.add(Transparent2d {
                 draw_function: draw_sprite_function,
-                draw_key: i,
+                key: i,
                 sort_key: texture_bind_group_key.index(),
             });
         }
@@ -402,13 +405,12 @@ impl Node for SpriteNode {
     }
 }
 
-type DrawSpriteQuery<'s, 'w> = (
-    Res<'w, SpriteShaders>,
-    Res<'w, SpriteMeta>,
-    Query<'w, 's, &'w ViewUniformOffset>,
-);
 pub struct DrawSprite {
-    params: SystemState<DrawSpriteQuery<'static, 'static>>,
+    params: SystemState<(
+        SRes<SpriteShaders>,
+        SRes<SpriteMeta>,
+        SQuery<Read<ViewUniformOffset>>,
+    )>,
 }
 
 impl DrawSprite {
@@ -419,14 +421,13 @@ impl DrawSprite {
     }
 }
 
-impl Draw for DrawSprite {
+impl Draw<Transparent2d> for DrawSprite {
     fn draw<'w>(
         &mut self,
         world: &'w World,
         pass: &mut TrackedRenderPass<'w>,
         view: Entity,
-        draw_key: usize,
-        _sort_key: usize,
+        item: &Transparent2d,
     ) {
         const INDICES: usize = 6;
         let (sprite_shaders, sprite_meta, views) = self.params.get(world);
@@ -446,12 +447,12 @@ impl Draw for DrawSprite {
         );
         pass.set_bind_group(
             1,
-            &sprite_meta.texture_bind_groups[sprite_meta.texture_bind_group_keys[draw_key]],
+            &sprite_meta.texture_bind_groups[sprite_meta.texture_bind_group_keys[item.key]],
             &[],
         );
 
         pass.draw_indexed(
-            (draw_key * INDICES) as u32..(draw_key * INDICES + INDICES) as u32,
+            (item.key * INDICES) as u32..(item.key * INDICES + INDICES) as u32,
             0,
             0..1,
         );

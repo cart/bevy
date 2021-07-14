@@ -1,5 +1,8 @@
-use crate::{AmbientLight, DirectionalLight, ExtractedMeshes, MeshMeta, PbrShaders, PointLight};
-use bevy_core_pipeline::Transparent3dPhase;
+use crate::{AmbientLight, DirectionalLight, MeshMeta, PbrPipeline, PointLight};
+use bevy_asset::Handle;
+use bevy_core::FloatOrd;
+use bevy_core_pipeline::Transparent3d;
+use bevy_ecs::system::lifetimeless::*;
 use bevy_ecs::{prelude::*, system::SystemState};
 use bevy_math::{const_vec3, Mat4, Vec3, Vec4};
 use bevy_render2::{
@@ -7,12 +10,15 @@ use bevy_render2::{
     color::Color,
     mesh::Mesh,
     render_asset::RenderAssets,
+    render_component::DynamicUniformIndex,
     render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
-    render_phase::{Draw, DrawFunctions, RenderPhase, TrackedRenderPass},
+    render_phase::{
+        Draw, DrawFunctionId, DrawFunctions, PhaseItem, RenderPhase, TrackedRenderPass,
+    },
     render_resource::*,
-    renderer::{RenderContext, RenderDevice},
+    renderer::{RenderContext, RenderDevice, RenderQueue},
     texture::*,
-    view::{ExtractedView, ViewUniformOffset},
+    view::{ExtractedView, ViewMeta, ViewUniformOffset},
 };
 use bevy_transform::components::GlobalTransform;
 use crevice::std140::AsStd140;
@@ -92,7 +98,7 @@ pub const DIRECTIONAL_SHADOW_SIZE: Extent3d = Extent3d {
 };
 pub const SHADOW_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
-pub struct ShadowShaders {
+pub struct ShadowPipeline {
     pub pipeline: RenderPipeline,
     pub view_layout: BindGroupLayout,
     pub point_light_sampler: Sampler,
@@ -100,10 +106,10 @@ pub struct ShadowShaders {
 }
 
 // TODO: this pattern for initializing the shaders / pipeline isn't ideal. this should be handled by the asset system
-impl FromWorld for ShadowShaders {
+impl FromWorld for ShadowPipeline {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.get_resource::<RenderDevice>().unwrap();
-        let pbr_shaders = world.get_resource::<PbrShaders>().unwrap();
+        let pbr_shaders = world.get_resource::<PbrPipeline>().unwrap();
 
         let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             entries: &[
@@ -190,7 +196,7 @@ impl FromWorld for ShadowShaders {
             },
         });
 
-        ShadowShaders {
+        ShadowPipeline {
             pipeline,
             view_layout,
             point_light_sampler: render_device.create_sampler(&SamplerDescriptor {
@@ -359,8 +365,9 @@ pub fn prepare_lights(
     mut commands: Commands,
     mut texture_cache: ResMut<TextureCache>,
     render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
     mut light_meta: ResMut<LightMeta>,
-    views: Query<Entity, With<RenderPhase<Transparent3dPhase>>>,
+    views: Query<Entity, With<RenderPhase<Transparent3d>>>,
     ambient_light: Res<ExtractedAmbientLight>,
     point_lights: Query<&ExtractedPointLight>,
     directional_lights: Query<&ExtractedDirectionalLight>,
@@ -452,7 +459,7 @@ pub fn prepare_lights(
                             transform: view_translation * view_rotation,
                             projection,
                         },
-                        RenderPhase::<ShadowPhase>::default(),
+                        RenderPhase::<Shadow>::default(),
                     ))
                     .id();
                 view_lights.push(view_light_entity);
@@ -538,7 +545,7 @@ pub fn prepare_lights(
                         transform: GlobalTransform::from_matrix(view.inverse()),
                         projection,
                     },
-                    RenderPhase::<ShadowPhase>::default(),
+                    RenderPhase::<Shadow>::default(),
                 ))
                 .id();
             view_lights.push(view_light_entity);
@@ -579,16 +586,74 @@ pub fn prepare_lights(
         });
     }
 
-    light_meta
-        .view_gpu_lights
-        .write_to_staging_buffer(&render_device);
+    light_meta.view_gpu_lights.write_buffer(&render_queue);
 }
 
-pub struct ShadowPhase;
+pub fn queue_shadows(
+    shadow_draw_functions: Res<DrawFunctions<Shadow>>,
+    render_device: Res<RenderDevice>,
+    shadow_pipeline: Res<ShadowPipeline>,
+    mut light_meta: ResMut<LightMeta>,
+    view_meta: Res<ViewMeta>,
+    meshes: Query<Entity, With<Handle<Mesh>>>,
+    mut view_lights: Query<&ViewLights>,
+    mut view_light_shadow_phases: Query<&mut RenderPhase<Shadow>>,
+) {
+    light_meta.shadow_view_bind_group.get_or_insert_with(|| {
+        render_device.create_bind_group(&BindGroupDescriptor {
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: view_meta.uniforms.binding(),
+            }],
+            label: None,
+            layout: &shadow_pipeline.view_layout,
+        })
+    });
+
+    for view_lights in view_lights.iter_mut() {
+        // ultimately lights should check meshes for relevancy (ex: light views can "see" different meshes than the main view can)
+        let draw_shadow_mesh = shadow_draw_functions
+            .read()
+            .get_id::<DrawShadowMesh>()
+            .unwrap();
+        for view_light_entity in view_lights.lights.iter().copied() {
+            let mut shadow_phase = view_light_shadow_phases.get_mut(view_light_entity).unwrap();
+            // TODO: this should only queue up meshes that are actually visible by each "light view"
+            for entity in meshes.iter() {
+                shadow_phase.add(Shadow {
+                    draw_function: draw_shadow_mesh,
+                    entity,
+                    distance: 0.0, // TODO: sort back-to-front
+                })
+            }
+        }
+    }
+}
+
+pub struct Shadow {
+    pub distance: f32,
+    pub entity: Entity,
+    pub draw_function: DrawFunctionId,
+}
+
+impl PhaseItem for Shadow {
+    type Key = Entity;
+    type SortKey = FloatOrd;
+
+    #[inline]
+    fn sort_key(&self) -> Self::SortKey {
+        FloatOrd(self.distance)
+    }
+
+    #[inline]
+    fn draw_function(&self) -> DrawFunctionId {
+        self.draw_function
+    }
+}
 
 pub struct ShadowPassNode {
     main_view_query: QueryState<&'static ViewLights>,
-    view_light_query: QueryState<(&'static ViewLight, &'static RenderPhase<ShadowPhase>)>,
+    view_light_query: QueryState<(&'static ViewLight, &'static RenderPhase<Shadow>)>,
 }
 
 impl ShadowPassNode {
@@ -638,22 +703,16 @@ impl Node for ShadowPassNode {
                     }),
                 };
 
-                let draw_functions = world.get_resource::<DrawFunctions>().unwrap();
+                let draw_functions = world.get_resource::<DrawFunctions<Shadow>>().unwrap();
 
                 let render_pass = render_context
                     .command_encoder
                     .begin_render_pass(&pass_descriptor);
                 let mut draw_functions = draw_functions.write();
                 let mut tracked_pass = TrackedRenderPass::new(render_pass);
-                for drawable in shadow_phase.drawn_things.iter() {
-                    let draw_function = draw_functions.get_mut(drawable.draw_function).unwrap();
-                    draw_function.draw(
-                        world,
-                        &mut tracked_pass,
-                        view_light_entity,
-                        drawable.draw_key,
-                        drawable.sort_key,
-                    );
+                for item in shadow_phase.items.iter() {
+                    let draw_function = draw_functions.get_mut(item.draw_function).unwrap();
+                    draw_function.draw(world, &mut tracked_pass, view_light_entity, item);
                 }
             }
         }
@@ -662,16 +721,18 @@ impl Node for ShadowPassNode {
     }
 }
 
-type DrawShadowMeshParams<'s, 'w> = (
-    Res<'w, ShadowShaders>,
-    Res<'w, ExtractedMeshes>,
-    Res<'w, LightMeta>,
-    Res<'w, MeshMeta>,
-    Res<'w, RenderAssets<Mesh>>,
-    Query<'w, 's, &'w ViewUniformOffset>,
-);
 pub struct DrawShadowMesh {
-    params: SystemState<DrawShadowMeshParams<'static, 'static>>,
+    params: SystemState<(
+        SRes<ShadowPipeline>,
+        SRes<LightMeta>,
+        SRes<MeshMeta>,
+        SRes<RenderAssets<Mesh>>,
+        SQuery<(
+            Read<DynamicUniformIndex<GlobalTransform>>,
+            Read<Handle<Mesh>>,
+        )>,
+        SQuery<Read<ViewUniformOffset>>,
+    )>,
 }
 
 impl DrawShadowMesh {
@@ -682,21 +743,18 @@ impl DrawShadowMesh {
     }
 }
 
-impl Draw for DrawShadowMesh {
+impl Draw<Shadow> for DrawShadowMesh {
     fn draw<'w>(
         &mut self,
         world: &'w World,
         pass: &mut TrackedRenderPass<'w>,
         view: Entity,
-        draw_key: usize,
-        _sort_key: usize,
+        item: &Shadow,
     ) {
-        let (shadow_shaders, extracted_meshes, light_meta, mesh_meta, meshes, views) =
-            self.params.get(world);
+        let (shadow_pipeline, light_meta, mesh_meta, meshes, items, views) = self.params.get(world);
+        let (transform_index, mesh_handle) = items.get(item.entity).unwrap();
         let view_uniform_offset = views.get(view).unwrap();
-        let extracted_mesh = &extracted_meshes.into_inner().meshes[draw_key];
-        let shadow_shaders = shadow_shaders.into_inner();
-        pass.set_render_pipeline(&shadow_shaders.pipeline);
+        pass.set_render_pipeline(&shadow_pipeline.into_inner().pipeline);
         pass.set_bind_group(
             0,
             light_meta
@@ -715,10 +773,10 @@ impl Draw for DrawShadowMesh {
                 .mesh_transform_bind_group
                 .get_value(transform_bindgroup_key)
                 .unwrap(),
-            &[extracted_mesh.transform_binding_offset],
+            &[transform_index.index()],
         );
 
-        let gpu_mesh = meshes.into_inner().get(&extracted_mesh.mesh).unwrap();
+        let gpu_mesh = meshes.into_inner().get(mesh_handle).unwrap();
         pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
         if let Some(index_info) = &gpu_mesh.index_info {
             pass.set_index_buffer(index_info.buffer.slice(..), 0, IndexFormat::Uint32);

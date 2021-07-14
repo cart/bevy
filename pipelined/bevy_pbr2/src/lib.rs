@@ -9,12 +9,17 @@ pub use material::*;
 pub use render::*;
 
 use bevy_app::prelude::*;
+use bevy_asset::Handle;
+use bevy_core_pipeline::Transparent3d;
 use bevy_ecs::prelude::*;
 use bevy_render2::{
+    mesh::Mesh,
+    render_component::{RenderComponentPlugin, UniformComponentPlugin},
     render_graph::RenderGraph,
-    render_phase::{sort_phase_system, DrawFunctions},
+    render_phase::{sort_phase_system, AddDrawCommand, DrawFunctions},
     RenderStage,
 };
+use bevy_transform::components::GlobalTransform;
 
 pub mod draw_3d_graph {
     pub mod node {
@@ -28,13 +33,15 @@ pub struct PbrPlugin;
 impl Plugin for PbrPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(StandardMaterialPlugin)
+            .add_plugin(RenderComponentPlugin::<Handle<Mesh>>::default())
+            .add_plugin(RenderComponentPlugin::<Handle<StandardMaterial>>::default())
+            .add_plugin(RenderComponentPlugin::<GlobalTransform>::default())
+            .add_plugin(UniformComponentPlugin::<GlobalTransform>::default())
             .init_resource::<AmbientLight>();
 
         let render_app = app.sub_app_mut(0);
         render_app
-            .add_system_to_stage(RenderStage::Extract, render::extract_meshes)
             .add_system_to_stage(RenderStage::Extract, render::extract_lights)
-            .add_system_to_stage(RenderStage::Prepare, render::prepare_meshes)
             .add_system_to_stage(
                 RenderStage::Prepare,
                 // this is added as an exclusive system because it contributes new views. it must run (and have Commands applied)
@@ -42,27 +49,24 @@ impl Plugin for PbrPlugin {
                 render::prepare_lights.exclusive_system(),
             )
             .add_system_to_stage(RenderStage::Queue, render::queue_meshes)
-            .add_system_to_stage(RenderStage::PhaseSort, sort_phase_system::<ShadowPhase>)
-            // FIXME: Hack to ensure RenderCommandQueue is initialized when PbrShaders is being initialized
-            // .init_resource::<RenderCommandQueue>()
-            .init_resource::<PbrShaders>()
-            .init_resource::<ShadowShaders>()
+            .add_system_to_stage(RenderStage::Queue, render::queue_shadows)
+            .add_system_to_stage(RenderStage::Queue, render::queue_transform_bind_group)
+            .add_system_to_stage(RenderStage::PhaseSort, sort_phase_system::<Shadow>)
+            .init_resource::<PbrPipeline>()
+            .init_resource::<ShadowPipeline>()
+            .init_resource::<DrawFunctions<Shadow>>()
             .init_resource::<MeshMeta>()
             .init_resource::<LightMeta>();
 
-        let draw_pbr = DrawPbr::new(&mut render_app.world);
         let draw_shadow_mesh = DrawShadowMesh::new(&mut render_app.world);
         let shadow_pass_node = ShadowPassNode::new(&mut render_app.world);
+        render_app.add_draw_command::<Transparent3d, DrawPbr, DrawPbr>();
         let render_world = render_app.world.cell();
-        let draw_functions = render_world.get_resource::<DrawFunctions>().unwrap();
-        draw_functions.write().add(draw_pbr);
+        let draw_functions = render_world
+            .get_resource::<DrawFunctions<Shadow>>()
+            .unwrap();
         draw_functions.write().add(draw_shadow_mesh);
         let mut graph = render_world.get_resource_mut::<RenderGraph>().unwrap();
-        graph.add_node("pbr", PbrNode);
-        graph
-            .add_node_edge("pbr", bevy_core_pipeline::node::MAIN_PASS_DEPENDENCIES)
-            .unwrap();
-
         let draw_3d_graph = graph
             .get_sub_graph_mut(bevy_core_pipeline::draw_3d_graph::NAME)
             .unwrap();

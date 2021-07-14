@@ -1,18 +1,21 @@
 mod light;
+
 pub use light::*;
 
 use crate::{StandardMaterial, StandardMaterialUniformData};
-use bevy_asset::{Assets, Handle};
-use bevy_core_pipeline::Transparent3dPhase;
-use bevy_ecs::{prelude::*, system::SystemState};
+use bevy_asset::Handle;
+use bevy_core_pipeline::Transparent3d;
+use bevy_ecs::prelude::*;
+use bevy_ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy_math::Mat4;
+use bevy_render2::render_phase::DrawCommand;
 use bevy_render2::{
     mesh::Mesh,
     render_asset::RenderAssets,
-    render_graph::{Node, NodeRunError, RenderGraphContext},
-    render_phase::{Draw, DrawFunctions, Drawable, RenderPhase, TrackedRenderPass},
+    render_component::{ComponentUniforms, DynamicUniformIndex},
+    render_phase::{DrawFunctions, RenderPhase, TrackedRenderPass},
     render_resource::*,
-    renderer::{RenderContext, RenderDevice, RenderQueue},
+    renderer::{RenderDevice, RenderQueue},
     shader::Shader,
     texture::{BevyDefault, GpuImage, Image, TextureFormatPixelInfo},
     view::{ExtractedView, ViewMeta, ViewUniformOffset},
@@ -25,21 +28,23 @@ use wgpu::{
     TextureViewDescriptor,
 };
 
-pub struct PbrShaders {
-    pipeline: RenderPipeline,
-    shader_module: ShaderModule,
-    view_layout: BindGroupLayout,
-    material_layout: BindGroupLayout,
-    mesh_layout: BindGroupLayout,
+pub struct PbrPipeline {
+    pub pipeline: RenderPipeline,
+    pub shader_module: ShaderModule,
+    pub view_layout: BindGroupLayout,
+    pub material_layout: BindGroupLayout,
+    pub mesh_layout: BindGroupLayout,
     // This dummy white texture is to be used in place of optional StandardMaterial textures
     dummy_white_gpu_image: GpuImage,
 }
 
 // TODO: this pattern for initializing the shaders / pipeline isn't ideal. this should be handled by the asset system
-impl FromWorld for PbrShaders {
+impl FromWorld for PbrPipeline {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.get_resource::<RenderDevice>().unwrap();
-        let shader = Shader::from_wgsl(include_str!("pbr.wgsl"));
+        let shader = Shader::from_wgsl(include_str!("pbr.wgsl"))
+            .process(&[])
+            .unwrap();
         let shader_module = render_device.create_shader_module(&shader);
 
         // TODO: move this into ViewMeta?
@@ -358,7 +363,7 @@ impl FromWorld for PbrShaders {
                 sampler,
             }
         };
-        PbrShaders {
+        PbrPipeline {
             pipeline,
             shader_module,
             view_layout,
@@ -369,112 +374,31 @@ impl FromWorld for PbrShaders {
     }
 }
 
-struct ExtractedMesh {
-    transform: Mat4,
-    mesh: Handle<Mesh>,
-    transform_binding_offset: u32,
-    material_handle: Handle<StandardMaterial>,
-}
-
-pub struct ExtractedMeshes {
-    meshes: Vec<ExtractedMesh>,
-}
-
-pub fn extract_meshes(
-    mut commands: Commands,
-    meshes: Res<Assets<Mesh>>,
-    materials: Res<Assets<StandardMaterial>>,
-    images: Res<Assets<Image>>,
-    query: Query<(&GlobalTransform, &Handle<Mesh>, &Handle<StandardMaterial>)>,
-) {
-    let mut extracted_meshes = Vec::new();
-    for (transform, mesh_handle, material_handle) in query.iter() {
-        if !meshes.contains(mesh_handle) {
-            continue;
-        }
-
-        if let Some(material) = materials.get(material_handle) {
-            if let Some(ref image) = material.base_color_texture {
-                if !images.contains(image) {
-                    continue;
-                }
-            }
-            if let Some(ref image) = material.emissive_texture {
-                if !images.contains(image) {
-                    continue;
-                }
-            }
-            if let Some(ref image) = material.metallic_roughness_texture {
-                if !images.contains(image) {
-                    continue;
-                }
-            }
-            if let Some(ref image) = material.occlusion_texture {
-                if !images.contains(image) {
-                    continue;
-                }
-            }
-            extracted_meshes.push(ExtractedMesh {
-                transform: transform.compute_matrix(),
-                mesh: mesh_handle.clone_weak(),
-                transform_binding_offset: 0,
-                material_handle: material_handle.clone_weak(),
-            });
-        } else {
-            continue;
-        }
-    }
-
-    commands.insert_resource(ExtractedMeshes {
-        meshes: extracted_meshes,
-    });
-}
-
-struct MeshDrawInfo {
+pub struct StandardMaterialBindGroup {
     // TODO: compare cost of doing this vs cloning the BindGroup?
-    material_bind_group_key: FrameSlabMapKey<BufferId, BindGroup>,
+    key: FrameSlabMapKey<BufferId, BindGroup>,
 }
 
 #[derive(Default)]
 pub struct MeshMeta {
-    transform_uniforms: DynamicUniformVec<Mat4>,
-    material_bind_groups: FrameSlabMap<BufferId, BindGroup>,
-    mesh_transform_bind_group: FrameSlabMap<BufferId, BindGroup>,
-    mesh_transform_bind_group_key: Option<FrameSlabMapKey<BufferId, BindGroup>>,
-    mesh_draw_info: Vec<MeshDrawInfo>,
+    pub material_bind_groups: FrameSlabMap<BufferId, BindGroup>,
+    pub mesh_transform_bind_group: FrameSlabMap<BufferId, BindGroup>,
+    pub mesh_transform_bind_group_key: Option<FrameSlabMapKey<BufferId, BindGroup>>,
 }
 
-pub fn prepare_meshes(
-    render_device: Res<RenderDevice>,
-    mut mesh_meta: ResMut<MeshMeta>,
-    mut extracted_meshes: ResMut<ExtractedMeshes>,
-) {
-    mesh_meta
-        .transform_uniforms
-        .reserve_and_clear(extracted_meshes.meshes.len(), &render_device);
-    for extracted_mesh in extracted_meshes.meshes.iter_mut() {
-        extracted_mesh.transform_binding_offset =
-            mesh_meta.transform_uniforms.push(extracted_mesh.transform);
-    }
-
-    mesh_meta
-        .transform_uniforms
-        .write_to_staging_buffer(&render_device);
-}
-
-pub struct MeshViewBindGroups {
-    view: BindGroup,
+pub struct PbrViewBindGroup {
+    pub view: BindGroup,
 }
 
 fn image_handle_to_view_sampler<'a>(
-    pbr_shaders: &'a PbrShaders,
+    pbr_pipeline: &'a PbrPipeline,
     gpu_images: &'a RenderAssets<Image>,
     image_option: &Option<Handle<Image>>,
 ) -> (&'a TextureView, &'a Sampler) {
     image_option.as_ref().map_or(
         (
-            &pbr_shaders.dummy_white_gpu_image.texture_view,
-            &pbr_shaders.dummy_white_gpu_image.sampler,
+            &pbr_pipeline.dummy_white_gpu_image.texture_view,
+            &pbr_pipeline.dummy_white_gpu_image.sampler,
         ),
         |image_handle| {
             let gpu_image = gpu_images
@@ -485,63 +409,55 @@ fn image_handle_to_view_sampler<'a>(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn queue_meshes(
-    mut commands: Commands,
-    draw_functions: Res<DrawFunctions>,
+pub fn queue_transform_bind_group(
+    pbr_pipeline: Res<PbrPipeline>,
     render_device: Res<RenderDevice>,
-    pbr_shaders: Res<PbrShaders>,
-    shadow_shaders: Res<ShadowShaders>,
-    mesh_meta: ResMut<MeshMeta>,
-    mut light_meta: ResMut<LightMeta>,
-    view_meta: Res<ViewMeta>,
-    mut extracted_meshes: ResMut<ExtractedMeshes>,
-    gpu_images: Res<RenderAssets<Image>>,
-    render_materials: Res<RenderAssets<StandardMaterial>>,
-    mut views: Query<(
-        Entity,
-        &ExtractedView,
-        &ViewLights,
-        &mut RenderPhase<Transparent3dPhase>,
-    )>,
-    mut view_light_shadow_phases: Query<&mut RenderPhase<ShadowPhase>>,
+    mut mesh_meta: ResMut<MeshMeta>,
+    transform_uniforms: Res<ComponentUniforms<GlobalTransform>>,
 ) {
-    let mesh_meta = mesh_meta.into_inner();
-
-    if view_meta.uniforms.is_empty() {
-        return;
-    }
-
-    light_meta.shadow_view_bind_group.get_or_insert_with(|| {
-        render_device.create_bind_group(&BindGroupDescriptor {
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: view_meta.uniforms.binding(),
-            }],
-            label: None,
-            layout: &shadow_shaders.view_layout,
-        })
-    });
-    if extracted_meshes.meshes.is_empty() {
-        return;
-    }
-
-    let transform_uniforms = &mesh_meta.transform_uniforms;
     mesh_meta.mesh_transform_bind_group.next_frame();
     mesh_meta.mesh_transform_bind_group_key =
         Some(mesh_meta.mesh_transform_bind_group.get_or_insert_with(
-            transform_uniforms.uniform_buffer().unwrap().id(),
+            transform_uniforms.uniforms().uniform_buffer().unwrap().id(),
             || {
                 render_device.create_bind_group(&BindGroupDescriptor {
                     entries: &[BindGroupEntry {
                         binding: 0,
-                        resource: transform_uniforms.binding(),
+                        resource: transform_uniforms.uniforms().binding(),
                     }],
                     label: None,
-                    layout: &pbr_shaders.mesh_layout,
+                    // TODO: store this layout elsewhere
+                    layout: &pbr_pipeline.mesh_layout,
                 })
             },
         ));
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn queue_meshes(
+    mut commands: Commands,
+    transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
+    render_device: Res<RenderDevice>,
+    pbr_pipeline: Res<PbrPipeline>,
+    shadow_pipeline: Res<ShadowPipeline>,
+    mesh_meta: ResMut<MeshMeta>,
+    light_meta: Res<LightMeta>,
+    view_meta: Res<ViewMeta>,
+    gpu_images: Res<RenderAssets<Image>>,
+    render_materials: Res<RenderAssets<StandardMaterial>>,
+    standard_material_meshes: Query<(Entity, &Handle<StandardMaterial>, &Mat4), With<Handle<Mesh>>>,
+    mut views: Query<(
+        Entity,
+        &ExtractedView,
+        &ViewLights,
+        &mut RenderPhase<Transparent3d>,
+    )>,
+) {
+    if view_meta.uniforms.is_empty() {
+        return;
+    }
+
+    let mesh_meta = mesh_meta.into_inner();
     for (entity, view, view_lights, mut transparent_phase) in views.iter_mut() {
         // TODO: cache this?
         let view_bind_group = render_device.create_bind_group(&BindGroupDescriptor {
@@ -562,7 +478,7 @@ pub fn queue_meshes(
                 },
                 BindGroupEntry {
                     binding: 3,
-                    resource: BindingResource::Sampler(&shadow_shaders.point_light_sampler),
+                    resource: BindingResource::Sampler(&shadow_pipeline.point_light_sampler),
                 },
                 BindGroupEntry {
                     binding: 4,
@@ -572,26 +488,32 @@ pub fn queue_meshes(
                 },
                 BindGroupEntry {
                     binding: 5,
-                    resource: BindingResource::Sampler(&shadow_shaders.directional_light_sampler),
+                    resource: BindingResource::Sampler(&shadow_pipeline.directional_light_sampler),
                 },
             ],
             label: None,
-            layout: &pbr_shaders.view_layout,
+            layout: &pbr_pipeline.view_layout,
         });
 
-        commands.entity(entity).insert(MeshViewBindGroups {
+        commands.entity(entity).insert(PbrViewBindGroup {
             view: view_bind_group,
         });
 
-        let draw_pbr = draw_functions.read().get_id::<DrawPbr>().unwrap();
-        mesh_meta.mesh_draw_info.clear();
+        let draw_pbr = transparent_3d_draw_functions
+            .read()
+            .get_id::<DrawPbr>()
+            .unwrap();
         mesh_meta.material_bind_groups.next_frame();
 
         let view_matrix = view.transform.compute_matrix();
         let view_row_2 = view_matrix.row(2);
-        for (i, mesh) in extracted_meshes.meshes.iter_mut().enumerate() {
+
+        if standard_material_meshes.is_empty() {
+            return;
+        }
+        for (entity, material_handle, transform) in standard_material_meshes.iter() {
             let gpu_material = &render_materials
-                .get(&mesh.material_handle)
+                .get(material_handle)
                 .expect("Failed to get StandardMaterial PreparedAsset");
             let material_bind_group_key =
                 mesh_meta
@@ -599,27 +521,27 @@ pub fn queue_meshes(
                     .get_or_insert_with(gpu_material.buffer.id(), || {
                         let (base_color_texture_view, base_color_sampler) =
                             image_handle_to_view_sampler(
-                                &pbr_shaders,
+                                &pbr_pipeline,
                                 &gpu_images,
                                 &gpu_material.base_color_texture,
                             );
 
                         let (emissive_texture_view, emissive_sampler) =
                             image_handle_to_view_sampler(
-                                &pbr_shaders,
+                                &pbr_pipeline,
                                 &gpu_images,
                                 &gpu_material.emissive_texture,
                             );
 
                         let (metallic_roughness_texture_view, metallic_roughness_sampler) =
                             image_handle_to_view_sampler(
-                                &pbr_shaders,
+                                &pbr_pipeline,
                                 &gpu_images,
                                 &gpu_material.metallic_roughness_texture,
                             );
                         let (occlusion_texture_view, occlusion_sampler) =
                             image_handle_to_view_sampler(
-                                &pbr_shaders,
+                                &pbr_pipeline,
                                 &gpu_images,
                                 &gpu_material.occlusion_texture,
                             );
@@ -665,132 +587,127 @@ pub fn queue_meshes(
                                 },
                             ],
                             label: None,
-                            layout: &pbr_shaders.material_layout,
+                            layout: &pbr_pipeline.material_layout,
                         })
                     });
 
-            mesh_meta.mesh_draw_info.push(MeshDrawInfo {
-                material_bind_group_key,
+            commands.entity(entity).insert(StandardMaterialBindGroup {
+                key: material_bind_group_key,
             });
 
             // NOTE: row 2 of the view matrix dotted with column 3 of the model matrix
             //       gives the z component of translation of the mesh in view space
-            let mesh_z = view_row_2.dot(mesh.transform.col(3));
-            // FIXME: Switch from usize to u64 for portability and use sort key encoding
-            //        similar to https://realtimecollisiondetection.net/blog/?p=86 as appropriate
-            // FIXME: What is the best way to map from view space z to a number of bits of unsigned integer?
-            let sort_key = (((mesh_z * 1000.0) as usize) << 10)
-                | (material_bind_group_key.index() & ((1 << 10) - 1));
+            let mesh_z = view_row_2.dot(transform.col(3));
             // TODO: currently there is only "transparent phase". this should pick transparent vs opaque according to the mesh material
-            transparent_phase.add(Drawable {
+            transparent_phase.add(Transparent3d {
+                entity,
                 draw_function: draw_pbr,
-                draw_key: i,
-                sort_key,
+                distance: mesh_z,
             });
         }
-
-        // ultimately lights should check meshes for relevancy (ex: light views can "see" different meshes than the main view can)
-        let draw_shadow_mesh = draw_functions.read().get_id::<DrawShadowMesh>().unwrap();
-        for view_light_entity in view_lights.lights.iter().copied() {
-            let mut shadow_phase = view_light_shadow_phases.get_mut(view_light_entity).unwrap();
-            // TODO: this should only queue up meshes that are actually visible by each "light view"
-            for i in 0..extracted_meshes.meshes.len() {
-                shadow_phase.add(Drawable {
-                    draw_function: draw_shadow_mesh,
-                    draw_key: i,
-                    sort_key: 0, // TODO: sort back-to-front
-                })
-            }
-        }
     }
 }
 
-// TODO: this logic can be moved to prepare_meshes once wgpu::Queue is exposed directly
-pub struct PbrNode;
-
-impl Node for PbrNode {
-    fn run(
-        &self,
-        _graph: &mut RenderGraphContext,
-        render_context: &mut RenderContext,
-        world: &World,
-    ) -> Result<(), NodeRunError> {
-        let mesh_meta = world.get_resource::<MeshMeta>().unwrap();
-        let light_meta = world.get_resource::<LightMeta>().unwrap();
-        mesh_meta
-            .transform_uniforms
-            .write_to_uniform_buffer(&mut render_context.command_encoder);
-        light_meta
-            .view_gpu_lights
-            .write_to_uniform_buffer(&mut render_context.command_encoder);
-        Ok(())
-    }
-}
-
-type DrawPbrParams<'s, 'w> = (
-    Res<'w, PbrShaders>,
-    Res<'w, MeshMeta>,
-    Res<'w, ExtractedMeshes>,
-    Res<'w, RenderAssets<Mesh>>,
-    Query<
-        'w,
-        's,
-        (
-            &'w ViewUniformOffset,
-            &'w ViewLights,
-            &'w MeshViewBindGroups,
-        ),
-    >,
+pub type DrawPbr = (
+    SetPbrPipeline,
+    SetMeshViewBindGroup,
+    SetTransformBindGroup,
+    SetStandardMaterialBindGroup,
+    DrawMesh,
 );
 
-pub struct DrawPbr {
-    params: SystemState<DrawPbrParams<'static, 'static>>,
-}
-
-impl DrawPbr {
-    pub fn new(world: &mut World) -> Self {
-        Self {
-            params: SystemState::new(world),
-        }
+pub struct SetPbrPipeline;
+impl DrawCommand<Transparent3d> for SetPbrPipeline {
+    type Param = SRes<PbrPipeline>;
+    #[inline]
+    fn draw<'w>(
+        _view: Entity,
+        _item: &Transparent3d,
+        pbr_pipeline: SystemParamItem<'_, 'w, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) {
+        pass.set_render_pipeline(&pbr_pipeline.into_inner().pipeline);
     }
 }
 
-impl Draw for DrawPbr {
-    fn draw<'w, 's>(
-        &'s mut self,
-        world: &'w World,
-        pass: &mut TrackedRenderPass<'w>,
+pub struct SetMeshViewBindGroup;
+impl DrawCommand<Transparent3d> for SetMeshViewBindGroup {
+    type Param = SQuery<(
+        Read<ViewUniformOffset>,
+        Read<ViewLights>,
+        Read<PbrViewBindGroup>,
+    )>;
+    #[inline]
+    fn draw<'w>(
         view: Entity,
-        draw_key: usize,
-        _sort_key: usize,
+        _item: &Transparent3d,
+        view_query: SystemParamItem<'_, 'w, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
     ) {
-        let (pbr_shaders, mesh_meta, extracted_meshes, meshes, views) = self.params.get(world);
-        let (view_uniforms, view_lights, mesh_view_bind_groups) = views.get(view).unwrap();
-        let extracted_mesh = &extracted_meshes.into_inner().meshes[draw_key];
-        let mesh_meta = mesh_meta.into_inner();
-        pass.set_render_pipeline(&pbr_shaders.into_inner().pipeline);
+        let (view_uniform, view_lights, pbr_view_bind_group) = view_query.get(view).unwrap();
         pass.set_bind_group(
             0,
-            &mesh_view_bind_groups.view,
-            &[view_uniforms.offset, view_lights.gpu_light_binding_index],
+            &pbr_view_bind_group.view,
+            &[view_uniform.offset, view_lights.gpu_light_binding_index],
         );
+    }
+}
+
+pub struct SetTransformBindGroup;
+impl DrawCommand<Transparent3d> for SetTransformBindGroup {
+    type Param = (
+        SRes<MeshMeta>,
+        SQuery<Read<DynamicUniformIndex<GlobalTransform>>>,
+    );
+    #[inline]
+    fn draw<'w>(
+        _view: Entity,
+        item: &Transparent3d,
+        (mesh_meta, mesh_query): SystemParamItem<'_, 'w, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) {
+        let transform_index = mesh_query.get(item.entity).unwrap();
+        let mesh_meta = mesh_meta.into_inner();
         pass.set_bind_group(
             1,
             mesh_meta
                 .mesh_transform_bind_group
                 .get_value(mesh_meta.mesh_transform_bind_group_key.unwrap())
                 .unwrap(),
-            &[extracted_mesh.transform_binding_offset],
+            &[transform_index.index()],
         );
-        let mesh_draw_info = &mesh_meta.mesh_draw_info[draw_key];
-        pass.set_bind_group(
-            2,
-            // &mesh_meta.material_bind_groups[sort_key & ((1 << 10) - 1)],
-            &mesh_meta.material_bind_groups[mesh_draw_info.material_bind_group_key],
-            &[],
-        );
+    }
+}
 
-        let gpu_mesh = meshes.into_inner().get(&extracted_mesh.mesh).unwrap();
+pub struct SetStandardMaterialBindGroup;
+impl DrawCommand<Transparent3d> for SetStandardMaterialBindGroup {
+    type Param = (SRes<MeshMeta>, SQuery<Read<StandardMaterialBindGroup>>);
+    #[inline]
+    fn draw<'w>(
+        _view: Entity,
+        item: &Transparent3d,
+        (mesh_meta, mesh_query): SystemParamItem<'_, 'w, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) {
+        let material = mesh_query.get(item.entity).unwrap();
+        let mesh_meta = mesh_meta.into_inner();
+
+        pass.set_bind_group(2, &mesh_meta.material_bind_groups[material.key], &[]);
+    }
+}
+
+pub struct DrawMesh;
+impl DrawCommand<Transparent3d> for DrawMesh {
+    type Param = (SRes<RenderAssets<Mesh>>, SQuery<Read<Handle<Mesh>>>);
+    #[inline]
+    fn draw<'w>(
+        _view: Entity,
+        item: &Transparent3d,
+        (meshes, mesh_query): SystemParamItem<'_, 'w, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) {
+        let mesh_handle = mesh_query.get(item.entity).unwrap();
+        let gpu_mesh = meshes.into_inner().get(mesh_handle).unwrap();
         pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
         if let Some(index_info) = &gpu_mesh.index_info {
             pass.set_index_buffer(index_info.buffer.slice(..), 0, IndexFormat::Uint32);
