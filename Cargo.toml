@@ -24,7 +24,7 @@ default = [
   "bevy_audio",
   "bevy_dynamic_plugin",
   "bevy_gilrs",
-  "bevy_gltf",
+  "bevy_gltf2",
   "bevy_wgpu",
   "bevy_sprite2",
   "bevy_render2",
@@ -54,6 +54,7 @@ bevy_winit = ["bevy_internal/bevy_winit"]
 bevy_render2 = ["bevy_internal/bevy_render2"]
 bevy_sprite2 = ["bevy_internal/bevy_sprite2"]
 bevy_pbr2 = ["bevy_internal/bevy_pbr2"]
+bevy_gltf2 = ["bevy_internal/bevy_gltf2"]
 
 trace_chrome = ["bevy_internal/trace_chrome"]
 trace = ["bevy_internal/trace"]
@@ -150,6 +151,10 @@ path = "examples/3d/cornell_box_pipelined.rs"
 [[example]]
 name = "load_gltf"
 path = "examples/3d/load_gltf.rs"
+
+[[example]]
+name = "load_gltf_pipelined"
+path = "examples/3d/load_gltf_pipelined.rs"
 
 [[example]]
 name = "msaa"

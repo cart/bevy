@@ -117,6 +117,7 @@ impl PluginGroup for PipelinedDefaultPlugins {
         group.add(bevy_input::InputPlugin::default());
         group.add(bevy_window::WindowPlugin::default());
         group.add(bevy_asset::AssetPlugin::default());
+        group.add(bevy_scene::ScenePlugin::default());
 
         #[cfg(feature = "bevy_render2")]
         {
@@ -132,5 +133,8 @@ impl PluginGroup for PipelinedDefaultPlugins {
 
         #[cfg(feature = "bevy_pbr2")]
         group.add(bevy_pbr2::PbrPlugin::default());
+
+        #[cfg(feature = "bevy_gltf2")]
+        group.add(bevy_gltf2::GltfPlugin::default());
     }
 }
