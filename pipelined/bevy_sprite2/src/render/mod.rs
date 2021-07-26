@@ -40,7 +40,7 @@ impl FromWorld for SpriteShaders {
         let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             entries: &[BindGroupLayoutEntry {
                 binding: 0,
-                visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
+                visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
@@ -57,7 +57,7 @@ impl FromWorld for SpriteShaders {
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStage::FRAGMENT,
+                    visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Texture {
                         multisampled: false,
                         sample_type: TextureSampleType::Float { filterable: false },
@@ -67,7 +67,7 @@ impl FromWorld for SpriteShaders {
                 },
                 BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: ShaderStage::FRAGMENT,
+                    visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Sampler {
                         comparison: false,
                         filtering: true,
@@ -90,7 +90,7 @@ impl FromWorld for SpriteShaders {
             vertex: VertexState {
                 buffers: &[VertexBufferLayout {
                     array_stride: 20,
-                    step_mode: InputStepMode::Vertex,
+                    step_mode: VertexStepMode::Vertex,
                     attributes: &[
                         VertexAttribute {
                             format: VertexFormat::Float32x3,
@@ -124,7 +124,7 @@ impl FromWorld for SpriteShaders {
                             operation: BlendOperation::Add,
                         },
                     }),
-                    write_mask: ColorWrite::ALL,
+                    write_mask: ColorWrites::ALL,
                 }],
             }),
             layout: Some(&pipeline_layout),
@@ -232,8 +232,8 @@ pub struct SpriteMeta {
 impl Default for SpriteMeta {
     fn default() -> Self {
         Self {
-            vertices: BufferVec::new(BufferUsage::VERTEX),
-            indices: BufferVec::new(BufferUsage::INDEX),
+            vertices: BufferVec::new(BufferUsages::VERTEX),
+            indices: BufferVec::new(BufferUsages::INDEX),
             view_bind_group: None,
             quad: Quad {
                 size: Vec2::new(1.0, 1.0),
