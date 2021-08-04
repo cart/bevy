@@ -131,11 +131,11 @@ impl PluginGroup for PipelinedDefaultPlugins {
             #[cfg(feature = "bevy_sprite2")]
             group.add(bevy_sprite2::SpritePlugin::default());
 
-            #[cfg(feature = "bevy_pbr2")]
-            group.add(bevy_pbr2::PbrPlugin::default());
+            // #[cfg(feature = "bevy_pbr2")]
+            // group.add(bevy_pbr2::PbrPlugin::default());
 
-            #[cfg(feature = "bevy_gltf2")]
-            group.add(bevy_gltf2::GltfPlugin::default());
+            // #[cfg(feature = "bevy_gltf2")]
+            // group.add(bevy_gltf2::GltfPlugin::default());
         }
 
         #[cfg(feature = "bevy_winit")]

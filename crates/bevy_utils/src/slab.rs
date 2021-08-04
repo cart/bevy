@@ -11,6 +11,15 @@ pub struct SlabKey<V> {
     marker: PhantomData<V>,
 }
 
+impl<V> SlabKey<V> {
+    pub fn new(index: usize) -> Self {
+        Self {
+            index,
+            marker: PhantomData,
+        }
+    }
+}
+
 impl<V> Copy for SlabKey<V> {}
 
 impl<V> Clone for SlabKey<V> {

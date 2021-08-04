@@ -17,7 +17,6 @@ use bevy_render2::{
     shader::Shader,
     texture::{BevyDefault, Image},
     view::{ViewMeta, ViewUniform, ViewUniformOffset},
-    RenderWorld,
 };
 use bevy_transform::components::GlobalTransform;
 use bevy_utils::slab::{FrameSlabMap, FrameSlabMapKey};
@@ -147,57 +146,53 @@ impl FromWorld for SpriteShaders {
     }
 }
 
-struct ExtractedSprite {
+pub struct ExtractedSprite {
     transform: Mat4,
     rect: Rect,
     handle: Handle<Image>,
     atlas_size: Option<Vec2>,
-}
-
-#[derive(Default)]
-pub struct ExtractedSprites {
-    sprites: Vec<ExtractedSprite>,
+    vertex_index: usize,
 }
 
 pub fn extract_atlases(
+    mut commands: Commands,
     texture_atlases: Res<Assets<TextureAtlas>>,
-    atlas_query: Query<(&TextureAtlasSprite, &GlobalTransform, &Handle<TextureAtlas>)>,
-    mut render_world: ResMut<RenderWorld>,
+    atlas_query: Query<(
+        Entity,
+        &TextureAtlasSprite,
+        &GlobalTransform,
+        &Handle<TextureAtlas>,
+    )>,
 ) {
-    let mut extracted_sprites = Vec::new();
-    for (atlas_sprite, transform, texture_atlas_handle) in atlas_query.iter() {
+    for (entity, atlas_sprite, transform, texture_atlas_handle) in atlas_query.iter() {
         if !texture_atlases.contains(texture_atlas_handle) {
             continue;
         }
 
         if let Some(texture_atlas) = texture_atlases.get(texture_atlas_handle) {
             let rect = texture_atlas.textures[atlas_sprite.index as usize];
-            extracted_sprites.push(ExtractedSprite {
+            commands.get_or_spawn(entity).insert(ExtractedSprite {
                 atlas_size: Some(texture_atlas.size),
                 transform: transform.compute_matrix(),
                 rect,
                 handle: texture_atlas.texture.clone_weak(),
+                vertex_index: 0,
             });
         }
-    }
-
-    if let Some(mut extracted_sprites_res) = render_world.get_resource_mut::<ExtractedSprites>() {
-        extracted_sprites_res.sprites.extend(extracted_sprites);
     }
 }
 
 pub fn extract_sprites(
+    mut commands: Commands,
     images: Res<Assets<Image>>,
-    sprite_query: Query<(&Sprite, &GlobalTransform, &Handle<Image>)>,
-    mut render_world: ResMut<RenderWorld>,
+    sprite_query: Query<(Entity, &Sprite, &GlobalTransform, &Handle<Image>)>,
 ) {
-    let mut extracted_sprites = Vec::new();
-    for (sprite, transform, handle) in sprite_query.iter() {
+    for (entity, sprite, transform, handle) in sprite_query.iter() {
         if !images.contains(handle) {
             continue;
         }
 
-        extracted_sprites.push(ExtractedSprite {
+        commands.get_or_spawn(entity).insert(ExtractedSprite {
             atlas_size: None,
             transform: transform.compute_matrix(),
             rect: Rect {
@@ -205,11 +200,8 @@ pub fn extract_sprites(
                 max: sprite.size,
             },
             handle: handle.clone_weak(),
+            vertex_index: 0,
         });
-    }
-
-    if let Some(mut extracted_sprites_res) = render_world.get_resource_mut::<ExtractedSprites>() {
-        extracted_sprites_res.sprites.extend(extracted_sprites);
     }
 }
 
@@ -220,12 +212,15 @@ struct SpriteVertex {
     pub uv: [f32; 2],
 }
 
+struct SpriteBindGroup {
+    bind_group: FrameSlabMapKey<Handle<Image>, BindGroup>,
+}
+
 pub struct SpriteMeta {
     vertices: BufferVec<SpriteVertex>,
     indices: BufferVec<u32>,
     quad: Mesh,
     view_bind_group: Option<BindGroup>,
-    texture_bind_group_keys: Vec<FrameSlabMapKey<Handle<Image>, BindGroup>>,
     texture_bind_groups: FrameSlabMap<Handle<Image>, BindGroup>,
 }
 
@@ -235,7 +230,6 @@ impl Default for SpriteMeta {
             vertices: BufferVec::new(BufferUsage::VERTEX),
             indices: BufferVec::new(BufferUsage::INDEX),
             texture_bind_groups: Default::default(),
-            texture_bind_group_keys: Default::default(),
             view_bind_group: None,
             quad: Quad {
                 size: Vec2::new(1.0, 1.0),
@@ -249,10 +243,11 @@ impl Default for SpriteMeta {
 pub fn prepare_sprites(
     render_device: Res<RenderDevice>,
     mut sprite_meta: ResMut<SpriteMeta>,
-    extracted_sprites: Res<ExtractedSprites>,
+    mut extracted_sprites: Query<&mut ExtractedSprite>,
 ) {
+    let extracted_sprite_len = extracted_sprites.iter_mut().len();
     // dont create buffers when there are no sprites
-    if extracted_sprites.sprites.is_empty() {
+    if extracted_sprite_len == 0 {
         return;
     }
 
@@ -275,15 +270,14 @@ pub fn prepare_sprites(
     };
 
     sprite_meta.vertices.reserve_and_clear(
-        extracted_sprites.sprites.len() * quad_vertex_positions.len(),
+        extracted_sprite_len * quad_vertex_positions.len(),
         &render_device,
     );
-    sprite_meta.indices.reserve_and_clear(
-        extracted_sprites.sprites.len() * quad_indices.len(),
-        &render_device,
-    );
+    sprite_meta
+        .indices
+        .reserve_and_clear(extracted_sprite_len * quad_indices.len(), &render_device);
 
-    for (i, extracted_sprite) in extracted_sprites.sprites.iter().enumerate() {
+    for (i, mut extracted_sprite) in extracted_sprites.iter_mut().enumerate() {
         let sprite_rect = extracted_sprite.rect;
 
         // Specify the corners of the sprite
@@ -294,6 +288,7 @@ pub fn prepare_sprites(
 
         let atlas_positions: [Vec2; 4] = [bottom_left, top_left, top_right, bottom_right];
 
+        extracted_sprite.vertex_index = i;
         for (index, vertex_position) in quad_vertex_positions.iter().enumerate() {
             let mut final_position =
                 Vec3::from(*vertex_position) * extracted_sprite.rect.size().extend(1.0);
@@ -319,13 +314,14 @@ pub fn prepare_sprites(
 
 #[allow(clippy::too_many_arguments)]
 pub fn queue_sprites(
+    mut commands: Commands,
     draw_functions: Res<DrawFunctions<Transparent2d>>,
     render_device: Res<RenderDevice>,
     mut sprite_meta: ResMut<SpriteMeta>,
     view_meta: Res<ViewMeta>,
     sprite_shaders: Res<SpriteShaders>,
-    mut extracted_sprites: ResMut<ExtractedSprites>,
     gpu_images: Res<RenderAssets<Image>>,
+    extracted_sprites: Query<(Entity, &ExtractedSprite)>,
     mut views: Query<&mut RenderPhase<Transparent2d>>,
 ) {
     if view_meta.uniforms.is_empty() {
@@ -346,9 +342,8 @@ pub fn queue_sprites(
     let sprite_meta = &mut *sprite_meta;
     let draw_sprite_function = draw_functions.read().get_id::<DrawSprite>().unwrap();
     sprite_meta.texture_bind_groups.next_frame();
-    sprite_meta.texture_bind_group_keys.clear();
     for mut transparent_phase in views.iter_mut() {
-        for (i, sprite) in extracted_sprites.sprites.iter().enumerate() {
+        for (entity, sprite) in extracted_sprites.iter() {
             let texture_bind_group_key = sprite_meta.texture_bind_groups.get_or_insert_with(
                 sprite.handle.clone_weak(),
                 || {
@@ -369,19 +364,18 @@ pub fn queue_sprites(
                     })
                 },
             );
-            sprite_meta
-                .texture_bind_group_keys
-                .push(texture_bind_group_key);
+
+            commands.get_or_spawn(entity).insert(SpriteBindGroup {
+                bind_group: texture_bind_group_key,
+            });
 
             transparent_phase.add(Transparent2d {
                 draw_function: draw_sprite_function,
-                key: i,
+                entity,
                 sort_key: texture_bind_group_key.index(),
             });
         }
     }
-
-    extracted_sprites.sprites.clear();
 }
 
 // TODO: this logic can be moved to prepare_sprites once wgpu::Queue is exposed directly
@@ -410,6 +404,7 @@ pub struct DrawSprite {
         SRes<SpriteShaders>,
         SRes<SpriteMeta>,
         SQuery<Read<ViewUniformOffset>>,
+        SQuery<(Read<ExtractedSprite>, Read<SpriteBindGroup>)>,
     )>,
 }
 
@@ -430,9 +425,10 @@ impl Draw<Transparent2d> for DrawSprite {
         item: &Transparent2d,
     ) {
         const INDICES: usize = 6;
-        let (sprite_shaders, sprite_meta, views) = self.params.get(world);
+        let (sprite_shaders, sprite_meta, views, sprites) = self.params.get(world);
         let view_uniform = views.get(view).unwrap();
         let sprite_meta = sprite_meta.into_inner();
+        let (extracted_sprite, sprite_bind_group) = sprites.get(item.entity).unwrap();
         pass.set_render_pipeline(&sprite_shaders.into_inner().pipeline);
         pass.set_vertex_buffer(0, sprite_meta.vertices.buffer().unwrap().slice(..));
         pass.set_index_buffer(
@@ -447,12 +443,13 @@ impl Draw<Transparent2d> for DrawSprite {
         );
         pass.set_bind_group(
             1,
-            &sprite_meta.texture_bind_groups[sprite_meta.texture_bind_group_keys[item.key]],
+            &sprite_meta.texture_bind_groups[sprite_bind_group.bind_group],
             &[],
         );
 
         pass.draw_indexed(
-            (item.key * INDICES) as u32..(item.key * INDICES + INDICES) as u32,
+            (extracted_sprite.vertex_index * INDICES) as u32
+                ..(extracted_sprite.vertex_index * INDICES + INDICES) as u32,
             0,
             0..1,
         );

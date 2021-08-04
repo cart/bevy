@@ -139,7 +139,7 @@ impl Plugin for CorePipelinePlugin {
 
 pub struct Transparent2d {
     pub sort_key: usize,
-    pub key: usize,
+    pub entity: Entity,
     pub draw_function: DrawFunctionId,
 }
 
