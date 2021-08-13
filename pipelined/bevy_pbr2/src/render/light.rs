@@ -1,4 +1,4 @@
-use crate::{AmbientLight, DirectionalLight, MeshMeta, PbrPipeline, PointLight};
+use crate::{AmbientLight, DirectionalLight, MeshMeta, MeshTransform, PbrPipeline, PointLight};
 use bevy_asset::Handle;
 use bevy_core::FloatOrd;
 use bevy_core_pipeline::Transparent3d;
@@ -728,7 +728,7 @@ pub struct DrawShadowMesh {
         SRes<MeshMeta>,
         SRes<RenderAssets<Mesh>>,
         SQuery<(
-            Read<DynamicUniformIndex<GlobalTransform>>,
+            Read<DynamicUniformIndex<MeshTransform>>,
             Read<Handle<Mesh>>,
         )>,
         SQuery<Read<ViewUniformOffset>>,

@@ -1,5 +1,8 @@
 mod light;
 
+use std::ops::Deref;
+
+use bevy_render2::render_component::RenderComponent;
 pub use light::*;
 
 use crate::{StandardMaterial, StandardMaterialUniformData};
@@ -27,6 +30,30 @@ use wgpu::{
     Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d, TextureDimension, TextureFormat,
     TextureViewDescriptor,
 };
+
+#[derive(AsStd140, Clone)]
+pub struct MeshTransform {
+    transform: Mat4,
+}
+
+impl Deref for MeshTransform {
+    type Target = Mat4;
+
+    fn deref(&self) -> &Self::Target {
+        &self.transform
+    }
+}
+
+impl RenderComponent for MeshTransform {
+    type SourceComponent = GlobalTransform;
+
+    #[inline]
+    fn extract_component(source: &Self::SourceComponent) -> Self {
+        MeshTransform {
+            transform: source.compute_matrix(),
+        }
+    }
+}
 
 pub struct PbrPipeline {
     pub pipeline: RenderPipeline,
@@ -413,24 +440,26 @@ pub fn queue_transform_bind_group(
     pbr_pipeline: Res<PbrPipeline>,
     render_device: Res<RenderDevice>,
     mut mesh_meta: ResMut<MeshMeta>,
-    transform_uniforms: Res<ComponentUniforms<GlobalTransform>>,
+    transform_uniforms: Res<ComponentUniforms<MeshTransform>>,
 ) {
-    mesh_meta.mesh_transform_bind_group.next_frame();
-    mesh_meta.mesh_transform_bind_group_key =
-        Some(mesh_meta.mesh_transform_bind_group.get_or_insert_with(
-            transform_uniforms.uniforms().uniform_buffer().unwrap().id(),
-            || {
-                render_device.create_bind_group(&BindGroupDescriptor {
-                    entries: &[BindGroupEntry {
-                        binding: 0,
-                        resource: transform_uniforms.uniforms().binding(),
-                    }],
-                    label: None,
-                    // TODO: store this layout elsewhere
-                    layout: &pbr_pipeline.mesh_layout,
-                })
-            },
-        ));
+    if let Some(buffer) = transform_uniforms.uniforms().uniform_buffer() {
+        mesh_meta.mesh_transform_bind_group.next_frame();
+        mesh_meta.mesh_transform_bind_group_key =
+            Some(mesh_meta.mesh_transform_bind_group.get_or_insert_with(
+                buffer.id(),
+                || {
+                    render_device.create_bind_group(&BindGroupDescriptor {
+                        entries: &[BindGroupEntry {
+                            binding: 0,
+                            resource: transform_uniforms.uniforms().binding(),
+                        }],
+                        label: None,
+                        // TODO: store this layout elsewhere
+                        layout: &pbr_pipeline.mesh_layout,
+                    })
+                },
+            ));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -445,7 +474,10 @@ pub fn queue_meshes(
     view_meta: Res<ViewMeta>,
     gpu_images: Res<RenderAssets<Image>>,
     render_materials: Res<RenderAssets<StandardMaterial>>,
-    standard_material_meshes: Query<(Entity, &Handle<StandardMaterial>, &Mat4), With<Handle<Mesh>>>,
+    standard_material_meshes: Query<
+        (Entity, &Handle<StandardMaterial>, &MeshTransform),
+        With<Handle<Mesh>>,
+    >,
     mut views: Query<(
         Entity,
         &ExtractedView,
@@ -657,7 +689,7 @@ pub struct SetTransformBindGroup;
 impl DrawCommand<Transparent3d> for SetTransformBindGroup {
     type Param = (
         SRes<MeshMeta>,
-        SQuery<Read<DynamicUniformIndex<GlobalTransform>>>,
+        SQuery<Read<DynamicUniformIndex<MeshTransform>>>,
     );
     #[inline]
     fn draw<'w>(

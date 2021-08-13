@@ -19,7 +19,6 @@ use bevy_render2::{
     render_phase::{sort_phase_system, AddDrawCommand, DrawFunctions},
     RenderStage,
 };
-use bevy_transform::components::GlobalTransform;
 
 pub mod draw_3d_graph {
     pub mod node {
@@ -35,8 +34,8 @@ impl Plugin for PbrPlugin {
         app.add_plugin(StandardMaterialPlugin)
             .add_plugin(RenderComponentPlugin::<Handle<Mesh>>::default())
             .add_plugin(RenderComponentPlugin::<Handle<StandardMaterial>>::default())
-            .add_plugin(RenderComponentPlugin::<GlobalTransform>::default())
-            .add_plugin(UniformComponentPlugin::<GlobalTransform>::default())
+            .add_plugin(RenderComponentPlugin::<MeshTransform, With<Handle<Mesh>>>::default())
+            .add_plugin(UniformComponentPlugin::<MeshTransform>::default())
             .init_resource::<AmbientLight>();
 
         let render_app = app.sub_app_mut(0);

@@ -5,9 +5,7 @@ use crate::{
 };
 use bevy_app::{App, Plugin};
 use bevy_asset::{Asset, Handle};
-use bevy_ecs::{component::Component, prelude::*};
-use bevy_math::Mat4;
-use bevy_transform::components::GlobalTransform;
+use bevy_ecs::{component::Component, prelude::*, query::{Fetch, FilterFetch, WorldQuery}};
 use crevice::std140::AsStd140;
 use std::{marker::PhantomData, ops::Deref};
 
@@ -24,8 +22,8 @@ impl<C: RenderComponent> DynamicUniformIndex<C> {
 }
 
 pub trait RenderComponent: Component {
-    type ExtractedComponent: Component;
-    fn extract_component(&self) -> Self::ExtractedComponent;
+    type SourceComponent: Component;
+    fn extract_component(source: &Self::SourceComponent) -> Self;
 }
 
 /// Extracts assets into gpu-usable data
@@ -37,10 +35,7 @@ impl<C> Default for UniformComponentPlugin<C> {
     }
 }
 
-impl<C: RenderComponent> Plugin for UniformComponentPlugin<C>
-where
-    C::ExtractedComponent: AsStd140 + Clone,
-{
+impl<C: RenderComponent + AsStd140 + Clone> Plugin for UniformComponentPlugin<C> {
     fn build(&self, app: &mut App) {
         let render_app = app.sub_app_mut(0);
         render_app
@@ -52,18 +47,14 @@ where
     }
 }
 
-pub struct ComponentUniforms<C: RenderComponent>
-where
-    C::ExtractedComponent: AsStd140,
+pub struct ComponentUniforms<C: RenderComponent + AsStd140>
 {
-    uniforms: DynamicUniformVec<C::ExtractedComponent>,
+    uniforms: DynamicUniformVec<C>,
 }
 
-impl<C: RenderComponent> Deref for ComponentUniforms<C>
-where
-    C::ExtractedComponent: AsStd140,
+impl<C: RenderComponent + AsStd140> Deref for ComponentUniforms<C>
 {
-    type Target = DynamicUniformVec<C::ExtractedComponent>;
+    type Target = DynamicUniformVec<C>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -71,19 +62,15 @@ where
     }
 }
 
-impl<C: RenderComponent> ComponentUniforms<C>
-where
-    C::ExtractedComponent: AsStd140,
+impl<C: RenderComponent + AsStd140> ComponentUniforms<C>
 {
     #[inline]
-    pub fn uniforms(&self) -> &DynamicUniformVec<C::ExtractedComponent> {
+    pub fn uniforms(&self) -> &DynamicUniformVec<C> {
         &self.uniforms
     }
 }
 
-impl<C: RenderComponent> Default for ComponentUniforms<C>
-where
-    C::ExtractedComponent: AsStd140,
+impl<C: RenderComponent + AsStd140> Default for ComponentUniforms<C>
 {
     fn default() -> Self {
         Self {
@@ -97,21 +84,21 @@ fn prepare_uniform_components<C: RenderComponent>(
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     mut component_uniforms: ResMut<ComponentUniforms<C>>,
-    extracted_components: Query<(Entity, &C::ExtractedComponent)>,
+    components: Query<(Entity, &C)>,
 ) where
-    C::ExtractedComponent: AsStd140 + Clone,
+    C: AsStd140 + Clone,
 {
-    let len = extracted_components.iter().len();
+    let len = components.iter().len();
     component_uniforms
         .uniforms
         .reserve_and_clear(len, &render_device);
-    for (entity, extracted_component) in extracted_components.iter() {
+    for (entity, component) in components.iter() {
         commands
             .get_or_spawn(entity)
             .insert(DynamicUniformIndex::<C> {
                 index: component_uniforms
                     .uniforms
-                    .push(extracted_component.clone()),
+                    .push(component.clone()),
                 marker: PhantomData,
             });
     }
@@ -119,49 +106,40 @@ fn prepare_uniform_components<C: RenderComponent>(
     component_uniforms.uniforms.write_buffer(&render_queue);
 }
 
-pub struct RenderComponentPlugin<C>(PhantomData<fn() -> C>);
+pub struct RenderComponentPlugin<C, F = ()>(PhantomData<fn() -> (C, F)>);
 
-impl<C> Default for RenderComponentPlugin<C> {
+impl<C, F> Default for RenderComponentPlugin<C, F> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<C: RenderComponent> Plugin for RenderComponentPlugin<C> {
+impl<C: RenderComponent, F: WorldQuery + 'static> Plugin for RenderComponentPlugin<C, F> where F::Fetch: FilterFetch  {
     fn build(&self, app: &mut App) {
         let render_app = app.sub_app_mut(0);
         render_app.add_system_to_stage(
             RenderStage::Extract,
-            extract_render_components::<C>.system(),
+            extract_render_components::<C, F>.system(),
         );
     }
 }
 
-fn extract_render_components<C: RenderComponent>(
+fn extract_render_components<C: RenderComponent, F: WorldQuery>(
     mut commands: Commands,
-    components: Query<(Entity, &C)>,
-) {
+    components: Query<(Entity, &C::SourceComponent), F>,
+) where F::Fetch: FilterFetch {
     for (entity, component) in components.iter() {
         commands
             .get_or_spawn(entity)
-            .insert(component.extract_component());
-    }
-}
-
-impl RenderComponent for GlobalTransform {
-    type ExtractedComponent = Mat4;
-
-    #[inline]
-    fn extract_component(&self) -> Self::ExtractedComponent {
-        self.compute_matrix()
+            .insert(C::extract_component(component));
     }
 }
 
 impl<T: Asset> RenderComponent for Handle<T> {
-    type ExtractedComponent = Handle<T>;
+    type SourceComponent = Handle<T>;
 
     #[inline]
-    fn extract_component(&self) -> Self::ExtractedComponent {
-        self.clone_weak()
+    fn extract_component(source: &Self::SourceComponent) -> Self {
+        source.clone_weak()
     }
 }
