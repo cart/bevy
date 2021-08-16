@@ -27,12 +27,15 @@ impl Plugin for SpritePlugin {
         app.add_asset::<TextureAtlas>().register_type::<Sprite>();
         let render_app = app.sub_app_mut(0);
         render_app
+            .init_resource::<ImageBindGroups>()
+            .init_resource::<SpriteShaders>()
+            .init_resource::<SpriteMeta>()
             .add_system_to_stage(RenderStage::Extract, render::extract_atlases)
             .add_system_to_stage(RenderStage::Extract, render::extract_sprites)
             .add_system_to_stage(RenderStage::Prepare, render::prepare_sprites)
-            .add_system_to_stage(RenderStage::Queue, queue_sprites)
-            .init_resource::<SpriteShaders>()
-            .init_resource::<SpriteMeta>();
+            .add_system_to_stage(RenderStage::Queue, render::queue_image_bind_groups)
+            .add_system_to_stage(RenderStage::Queue, queue_sprites);
+
         let draw_sprite = DrawSprite::new(&mut render_app.world);
         render_app
             .world

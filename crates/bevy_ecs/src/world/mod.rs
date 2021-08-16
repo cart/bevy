@@ -699,6 +699,78 @@ impl World {
         self.get_non_send_unchecked_mut_with_id(component_id)
     }
 
+    pub fn spawn_at_batch<I, B>(&mut self, iter: I)
+    where
+        I: IntoIterator,
+        I::IntoIter: Iterator<Item = (Entity, B)>,
+        B: Bundle,
+    {
+        let iter = iter.into_iter();
+        // Ensure all entity allocations are accounted for so `self.entities` can realloc if
+        // necessary
+        self.flush();
+
+        let (lower, upper) = iter.size_hint();
+
+        let bundle_info = self.bundles.init_info::<B>(&mut self.components);
+
+        let length = upper.unwrap_or(lower);
+        // SAFE: empty archetype exists and bundle components were initialized above
+        let archetype_id = unsafe {
+            add_bundle_to_archetype(
+                &mut self.archetypes,
+                &mut self.storages,
+                &mut self.components,
+                ArchetypeId::empty(),
+                bundle_info,
+            )
+        };
+        let (empty_archetype, archetype) = self
+            .archetypes
+            .get_2_mut(ArchetypeId::empty(), archetype_id);
+        let table = &mut self.storages.tables[archetype.table_id()];
+        archetype.reserve(length);
+        table.reserve(length);
+        let edge = empty_archetype
+            .edges()
+            .get_add_bundle(bundle_info.id())
+            .unwrap();
+
+        let change_tick = *self.change_tick.get_mut();
+
+        for (entity, bundle) in iter {
+            match self.entities.alloc_at_without_replacement(entity) {
+                AllocAtWithoutReplacement::Exists(location) => {
+                    // insert at dynamically-computed archetype
+                    panic!("already exists!");
+                }
+                AllocAtWithoutReplacement::DidNotExist => {
+                    // insert at pre-computed archetype
+
+                    // SAFE: component values are immediately written to relevant storages (which have been
+                    // allocated)
+                    unsafe {
+                        let table_row = table.allocate(entity);
+                        let location = archetype.allocate(entity, table_row);
+                        bundle_info.write_components(
+                            &mut self.storages.sparse_sets,
+                            entity,
+                            table,
+                            table_row,
+                            &edge.bundle_status,
+                            bundle,
+                            change_tick,
+                        );
+                        self.entities.meta[entity.id as usize].location = location;
+                    }
+                }
+                AllocAtWithoutReplacement::ExistsWithWrongGeneration => {
+                    todo!("This should probably return an error!")
+                }
+            }
+        }
+    }
+
     /// Temporarily removes the requested resource from this [World], then re-adds it before
     /// returning. This enables safe mutable access to a resource while still providing mutable
     /// world access
