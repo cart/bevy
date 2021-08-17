@@ -10,7 +10,7 @@ pub use world_cell::*;
 
 use crate::{
     archetype::{ArchetypeComponentId, ArchetypeComponentInfo, ArchetypeId, Archetypes},
-    bundle::{Bundle, Bundles},
+    bundle::{Bundle, BundleInserter, BundleSpawner, Bundles},
     change_detection::Ticks,
     component::{
         Component, ComponentDescriptor, ComponentId, ComponentTicks, Components, ComponentsError,
@@ -699,70 +699,88 @@ impl World {
         self.get_non_send_unchecked_mut_with_id(component_id)
     }
 
-    pub fn spawn_at_batch<I, B>(&mut self, iter: I)
+    pub fn insert_or_spawn_batch<I, B>(&mut self, iter: I)
     where
         I: IntoIterator,
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle,
     {
-        let iter = iter.into_iter();
         // Ensure all entity allocations are accounted for so `self.entities` can realloc if
         // necessary
         self.flush();
 
-        let (lower, upper) = iter.size_hint();
-
-        let bundle_info = self.bundles.init_info::<B>(&mut self.components);
-
-        let length = upper.unwrap_or(lower);
-        // SAFE: empty archetype exists and bundle components were initialized above
-        let archetype_id = unsafe {
-            add_bundle_to_archetype(
-                &mut self.archetypes,
-                &mut self.storages,
-                &mut self.components,
-                ArchetypeId::empty(),
-                bundle_info,
-            )
-        };
-        let (empty_archetype, archetype) = self
-            .archetypes
-            .get_2_mut(ArchetypeId::empty(), archetype_id);
-        let table = &mut self.storages.tables[archetype.table_id()];
-        archetype.reserve(length);
-        table.reserve(length);
-        let edge = empty_archetype
-            .edges()
-            .get_add_bundle(bundle_info.id())
-            .unwrap();
-
+        let iter = iter.into_iter();
         let change_tick = *self.change_tick.get_mut();
 
+        let bundle_info = self.bundles.init_info::<B>(&mut self.components);
+        enum SpawnOrInsert<'a, 'b> {
+            Spawn(BundleSpawner<'a, 'b>),
+            Insert(BundleInserter<'a, 'b>, ArchetypeId),
+        }
+
+        impl<'a, 'b> SpawnOrInsert<'a, 'b> {
+            fn entities(&mut self) -> &mut Entities {
+                match self {
+                    SpawnOrInsert::Spawn(spawner) => spawner.entities,
+                    SpawnOrInsert::Insert(inserter, _) => inserter.entities,
+                }
+            }
+        }
+        let mut spawn_or_insert = SpawnOrInsert::Spawn(bundle_info.get_bundle_spawner(
+            &mut self.entities,
+            &mut self.archetypes,
+            &mut self.components,
+            &mut self.storages,
+            change_tick,
+        ));
         for (entity, bundle) in iter {
-            match self.entities.alloc_at_without_replacement(entity) {
+            match spawn_or_insert
+                .entities()
+                .alloc_at_without_replacement(entity)
+            {
                 AllocAtWithoutReplacement::Exists(location) => {
-                    // insert at dynamically-computed archetype
-                    panic!("already exists!");
+                    match spawn_or_insert {
+                        SpawnOrInsert::Insert(ref mut inserter, archetype)
+                            if location.archetype_id == archetype =>
+                        {
+                            // SAFE: `entity` is valid, `location` matches entity, bundle matches inserter
+                            unsafe { inserter.insert(entity, location.index, bundle) };
+                        }
+                        _ => {
+                            let mut inserter = bundle_info.get_bundle_inserter(
+                                &mut self.entities,
+                                &mut self.archetypes,
+                                &mut self.components,
+                                &mut self.storages,
+                                location.archetype_id,
+                                change_tick,
+                            );
+                            // SAFE: `entity` is valid, `location` matches entity, bundle matches inserter
+                            unsafe { inserter.insert(entity, location.index, bundle) };
+                            spawn_or_insert =
+                                SpawnOrInsert::Insert(inserter, location.archetype_id);
+                        }
+                    };
                 }
                 AllocAtWithoutReplacement::DidNotExist => {
-                    // insert at pre-computed archetype
-
-                    // SAFE: component values are immediately written to relevant storages (which have been
-                    // allocated)
-                    unsafe {
-                        let table_row = table.allocate(entity);
-                        let location = archetype.allocate(entity, table_row);
-                        bundle_info.write_components(
-                            &mut self.storages.sparse_sets,
-                            entity,
-                            table,
-                            table_row,
-                            &edge.bundle_status,
-                            bundle,
-                            change_tick,
-                        );
-                        self.entities.meta[entity.id as usize].location = location;
-                    }
+                    match spawn_or_insert {
+                        SpawnOrInsert::Spawn(ref mut spawner) => {
+                            // SAFE: `entity` is allocated (but non existent), bundle matches inserter
+                            unsafe { spawner.spawn_non_existent(entity, bundle) };
+                        }
+                        _ => {
+                            let mut spawner = bundle_info.get_bundle_spawner(
+                                &mut self.entities,
+                                &mut self.archetypes,
+                                &mut self.components,
+                                &mut self.storages,
+                                change_tick,
+                            );
+                            // SAFE: `entity` is valid, `location` matches entity, bundle matches inserter
+                            unsafe { spawner.spawn_non_existent(entity, bundle) };
+                            spawn_or_insert = SpawnOrInsert::Spawn(spawner);
+                        }
+                    };
                 }
                 AllocAtWithoutReplacement::ExistsWithWrongGeneration => {
                     todo!("This should probably return an error!")

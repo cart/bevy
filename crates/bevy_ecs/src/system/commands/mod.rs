@@ -155,15 +155,15 @@ impl<'s, 'w> Commands<'s, 'w> {
         self.queue.push(SpawnBatch { bundles_iter });
     }
 
-    /// Equivalent to iterating `bundles_iter` and calling [`Self::spawn`] on each bundle, but
-    /// slightly more performant.
-    pub fn spawn_at_batch<I, B>(&mut self, bundles_iter: I)
+    /// For an iterator of (Entity, Bundle) pairs, inserts the Bundle into the Entity,
+    /// if the entity exists, and spawns the entity with the Bundle if it does not exist.
+    pub fn insert_or_spawn_batch<I, B>(&mut self, bundles_iter: I)
     where
         I: IntoIterator + Send + Sync + 'static,
         I::IntoIter: Iterator<Item = (Entity, B)>,
         B: Bundle,
     {
-        self.queue.push(SpawnAtBatch { bundles_iter });
+        self.queue.push(InsertOrSpawnBatch { bundles_iter });
     }
 
     /// See [`World::insert_resource`].
@@ -325,7 +325,7 @@ where
     }
 }
 
-pub struct SpawnAtBatch<I, B>
+pub struct InsertOrSpawnBatch<I, B>
 where
     I: IntoIterator + Send + Sync + 'static,
     B: Bundle,
@@ -334,17 +334,16 @@ where
     pub bundles_iter: I,
 }
 
-impl<I, B> Command for SpawnAtBatch<I, B>
+impl<I, B> Command for InsertOrSpawnBatch<I, B>
 where
     I: IntoIterator + Send + Sync + 'static,
     B: Bundle,
     I::IntoIter: Iterator<Item = (Entity, B)>,
 {
     fn write(self, world: &mut World) {
-        world.spawn_at_batch(self.bundles_iter);
+        world.insert_or_spawn_batch(self.bundles_iter);
     }
 }
-
 
 #[derive(Debug)]
 pub struct Despawn {
