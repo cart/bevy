@@ -209,7 +209,7 @@ pub fn extract_sprites(
             },),
         ));
     }
-    commands.spawn_at_batch(sprites);
+    commands.insert_or_spawn_batch(sprites);
 }
 
 #[repr(C)]
