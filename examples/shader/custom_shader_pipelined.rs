@@ -292,8 +292,8 @@ pub fn queue_custom(
 
 type DrawCustom = (
     SetCustomMaterialPipeline,
-    SetMeshViewBindGroup,
-    SetTransformBindGroup,
+    SetMeshViewBindGroup<0>,
+    SetTransformBindGroup<1>,
     DrawMesh,
 );
 

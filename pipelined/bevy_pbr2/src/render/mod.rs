@@ -444,10 +444,10 @@ pub fn queue_transform_bind_group(
 ) {
     if let Some(buffer) = transform_uniforms.uniforms().uniform_buffer() {
         mesh_meta.mesh_transform_bind_group.next_frame();
-        mesh_meta.mesh_transform_bind_group_key =
-            Some(mesh_meta.mesh_transform_bind_group.get_or_insert_with(
-                buffer.id(),
-                || {
+        mesh_meta.mesh_transform_bind_group_key = Some(
+            mesh_meta
+                .mesh_transform_bind_group
+                .get_or_insert_with(buffer.id(), || {
                     render_device.create_bind_group(&BindGroupDescriptor {
                         entries: &[BindGroupEntry {
                             binding: 0,
@@ -457,8 +457,8 @@ pub fn queue_transform_bind_group(
                         // TODO: store this layout elsewhere
                         layout: &pbr_pipeline.mesh_layout,
                     })
-                },
-            ));
+                }),
+        );
     }
 }
 
@@ -642,9 +642,9 @@ pub fn queue_meshes(
 
 pub type DrawPbr = (
     SetPbrPipeline,
-    SetMeshViewBindGroup,
-    SetTransformBindGroup,
-    SetStandardMaterialBindGroup,
+    SetMeshViewBindGroup<0>,
+    SetTransformBindGroup<1>,
+    SetStandardMaterialBindGroup<2>,
     DrawMesh,
 );
 
@@ -662,8 +662,8 @@ impl DrawCommand<Transparent3d> for SetPbrPipeline {
     }
 }
 
-pub struct SetMeshViewBindGroup;
-impl DrawCommand<Transparent3d> for SetMeshViewBindGroup {
+pub struct SetMeshViewBindGroup<const I: usize>;
+impl<const I: usize> DrawCommand<Transparent3d> for SetMeshViewBindGroup<I> {
     type Param = SQuery<(
         Read<ViewUniformOffset>,
         Read<ViewLights>,
@@ -678,15 +678,15 @@ impl DrawCommand<Transparent3d> for SetMeshViewBindGroup {
     ) {
         let (view_uniform, view_lights, pbr_view_bind_group) = view_query.get(view).unwrap();
         pass.set_bind_group(
-            0,
+            I,
             &pbr_view_bind_group.view,
             &[view_uniform.offset, view_lights.gpu_light_binding_index],
         );
     }
 }
 
-pub struct SetTransformBindGroup;
-impl DrawCommand<Transparent3d> for SetTransformBindGroup {
+pub struct SetTransformBindGroup<const I: usize>;
+impl<const I: usize> DrawCommand<Transparent3d> for SetTransformBindGroup<I> {
     type Param = (
         SRes<MeshMeta>,
         SQuery<Read<DynamicUniformIndex<MeshTransform>>>,
@@ -701,7 +701,7 @@ impl DrawCommand<Transparent3d> for SetTransformBindGroup {
         let transform_index = mesh_query.get(item.entity).unwrap();
         let mesh_meta = mesh_meta.into_inner();
         pass.set_bind_group(
-            1,
+            I,
             mesh_meta
                 .mesh_transform_bind_group
                 .get_value(mesh_meta.mesh_transform_bind_group_key.unwrap())
@@ -711,8 +711,8 @@ impl DrawCommand<Transparent3d> for SetTransformBindGroup {
     }
 }
 
-pub struct SetStandardMaterialBindGroup;
-impl DrawCommand<Transparent3d> for SetStandardMaterialBindGroup {
+pub struct SetStandardMaterialBindGroup<const I: usize>;
+impl<const I: usize> DrawCommand<Transparent3d> for SetStandardMaterialBindGroup<I> {
     type Param = (SRes<MeshMeta>, SQuery<Read<StandardMaterialBindGroup>>);
     #[inline]
     fn draw<'w>(
@@ -724,7 +724,7 @@ impl DrawCommand<Transparent3d> for SetStandardMaterialBindGroup {
         let material = mesh_query.get(item.entity).unwrap();
         let mesh_meta = mesh_meta.into_inner();
 
-        pass.set_bind_group(2, &mesh_meta.material_bind_groups[material.key], &[]);
+        pass.set_bind_group(I, &mesh_meta.material_bind_groups[material.key], &[]);
     }
 }
 
