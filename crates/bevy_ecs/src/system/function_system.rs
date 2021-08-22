@@ -1,12 +1,11 @@
 use crate::{
-    archetype::{Archetype, ArchetypeComponentId, ArchetypeGeneration, ArchetypeId},
+    archetype::{Archetype, ArchetypeComponentId},
     component::ComponentId,
     query::{Access, FilteredAccessSet},
     system::{
-        check_system_change_tick, ReadOnlySystemParamFetch, System, SystemId, SystemParam,
-        SystemParamFetch, SystemParamState,
+        check_system_change_tick, System, SystemId, SystemParam, SystemParamFetch, SystemParamState,
     },
-    world::{World, WorldId},
+    world::World,
 };
 use bevy_ecs_macros::all_tuples;
 use std::{borrow::Cow, marker::PhantomData};

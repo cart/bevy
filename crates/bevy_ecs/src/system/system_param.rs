@@ -48,8 +48,7 @@ pub trait SystemParam: Sized {
     type Fetch: for<'s, 'w> SystemParamFetch<'s, 'w>;
 }
 
-pub type SystemParamItem<'s, 'w, P: SystemParam> =
-    <<P as SystemParam>::Fetch as SystemParamFetch<'s, 'w>>::Item;
+pub type SystemParamItem<'s, 'w, P> = <<P as SystemParam>::Fetch as SystemParamFetch<'s, 'w>>::Item;
 
 /// The state of a [`SystemParam`].
 ///

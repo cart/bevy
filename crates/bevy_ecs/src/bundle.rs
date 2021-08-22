@@ -526,11 +526,9 @@ impl<'a, 'b> BundleInserter<'a, 'b> {
                         &mut *new_archetype
                     } else {
                         // SAFE: the only two borrowed archetypes are above and we just did collision checks
-                        unsafe {
-                            &mut *self
-                                .archetypes_ptr
-                                .add(swapped_location.archetype_id.index())
-                        }
+                        &mut *self
+                            .archetypes_ptr
+                            .add(swapped_location.archetype_id.index())
                     };
 
                     swapped_archetype
