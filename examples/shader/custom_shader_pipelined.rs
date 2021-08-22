@@ -1,5 +1,6 @@
+use bevy::core_pipeline::Transparent3d;
 use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
-use bevy::pbr2::{DrawMesh, SetMeshViewBindGroup, SetTransformBindGroup};
+use bevy::pbr2::{DrawMesh, MeshTransform, SetMeshViewBindGroup, SetTransformBindGroup};
 use bevy::prelude::AssetServer;
 use bevy::render2::render_asset::PrepareAssetError;
 use bevy::render2::render_phase::{AddDrawCommand, DrawCommand};
@@ -9,14 +10,13 @@ use bevy::render2::shader::{
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     ecs::prelude::*,
-    math::{Mat4, Vec3, Vec4},
+    math::{Vec3, Vec4},
     pbr2::PbrPipeline,
     prelude::{AddAsset, App, Assets, GlobalTransform, Handle, Plugin, Transform},
     reflect::TypeUuid,
     render2::{
         camera::PerspectiveCameraBundle,
         color::Color,
-        core_pipeline::Transparent3d,
         mesh::{shape, Mesh},
         render_asset::{RenderAsset, RenderAssetPlugin, RenderAssets},
         render_component::RenderComponentPlugin,
@@ -155,7 +155,7 @@ impl Plugin for CustomMaterialPlugin {
         render_app.add_draw_command::<Transparent3d, DrawCustom, DrawCustom>();
         render_app
             .init_resource::<CustomPipeline>()
-            .add_system_to_stage(RenderStage::Queue, queue_custom.system());
+            .add_system_to_stage(RenderStage::Queue, queue_custom);
     }
 }
 
@@ -268,7 +268,7 @@ impl FromWorld for CustomPipeline {
 pub fn queue_custom(
     transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
     materials: Res<RenderAssets<CustomMaterial>>,
-    material_meshes: Query<(Entity, &Handle<CustomMaterial>, &Mat4), With<Handle<Mesh>>>,
+    material_meshes: Query<(Entity, &Handle<CustomMaterial>, &MeshTransform), With<Handle<Mesh>>>,
     mut views: Query<(&ExtractedView, &mut RenderPhase<Transparent3d>)>,
 ) {
     let draw_custom = transparent_3d_draw_functions
