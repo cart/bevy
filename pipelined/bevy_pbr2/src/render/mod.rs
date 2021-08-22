@@ -1,8 +1,5 @@
 mod light;
 
-use std::ops::Deref;
-
-use bevy_render2::render_component::RenderComponent;
 pub use light::*;
 
 use crate::{StandardMaterial, StandardMaterialUniformData};
@@ -11,6 +8,7 @@ use bevy_core_pipeline::Transparent3d;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy_math::Mat4;
+use bevy_render2::render_component::RenderComponent;
 use bevy_render2::render_phase::DrawCommand;
 use bevy_render2::{
     mesh::Mesh,
@@ -26,6 +24,7 @@ use bevy_render2::{
 use bevy_transform::components::GlobalTransform;
 use bevy_utils::slab::{FrameSlabMap, FrameSlabMapKey};
 use crevice::std140::AsStd140;
+use std::ops::Deref;
 use wgpu::{
     Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d, TextureDimension, TextureFormat,
     TextureViewDescriptor,
@@ -62,7 +61,7 @@ pub struct PbrPipeline {
     pub material_layout: BindGroupLayout,
     pub mesh_layout: BindGroupLayout,
     // This dummy white texture is to be used in place of optional StandardMaterial textures
-    dummy_white_gpu_image: GpuImage,
+    pub dummy_white_gpu_image: GpuImage,
 }
 
 // TODO: this pattern for initializing the shaders / pipeline isn't ideal. this should be handled by the asset system
@@ -401,39 +400,14 @@ impl FromWorld for PbrPipeline {
     }
 }
 
-pub struct StandardMaterialBindGroup {
-    // TODO: compare cost of doing this vs cloning the BindGroup?
-    key: FrameSlabMapKey<BufferId, BindGroup>,
-}
-
 #[derive(Default)]
 pub struct MeshMeta {
-    pub material_bind_groups: FrameSlabMap<BufferId, BindGroup>,
     pub mesh_transform_bind_group: FrameSlabMap<BufferId, BindGroup>,
     pub mesh_transform_bind_group_key: Option<FrameSlabMapKey<BufferId, BindGroup>>,
 }
 
 pub struct PbrViewBindGroup {
     pub view: BindGroup,
-}
-
-fn image_handle_to_view_sampler<'a>(
-    pbr_pipeline: &'a PbrPipeline,
-    gpu_images: &'a RenderAssets<Image>,
-    image_option: &Option<Handle<Image>>,
-) -> (&'a TextureView, &'a Sampler) {
-    image_option.as_ref().map_or(
-        (
-            &pbr_pipeline.dummy_white_gpu_image.texture_view,
-            &pbr_pipeline.dummy_white_gpu_image.sampler,
-        ),
-        |image_handle| {
-            let gpu_image = gpu_images
-                .get(image_handle)
-                .expect("only materials with valid textures should be drawn");
-            (&gpu_image.texture_view, &gpu_image.sampler)
-        },
-    )
 }
 
 pub fn queue_transform_bind_group(
@@ -469,10 +443,8 @@ pub fn queue_meshes(
     render_device: Res<RenderDevice>,
     pbr_pipeline: Res<PbrPipeline>,
     shadow_pipeline: Res<ShadowPipeline>,
-    mesh_meta: ResMut<MeshMeta>,
     light_meta: Res<LightMeta>,
     view_meta: Res<ViewMeta>,
-    gpu_images: Res<RenderAssets<Image>>,
     render_materials: Res<RenderAssets<StandardMaterial>>,
     standard_material_meshes: Query<
         (Entity, &Handle<StandardMaterial>, &MeshTransform),
@@ -489,7 +461,6 @@ pub fn queue_meshes(
         return;
     }
 
-    let mesh_meta = mesh_meta.into_inner();
     for (entity, view, view_lights, mut transparent_phase) in views.iter_mut() {
         // TODO: cache this?
         let view_bind_group = render_device.create_bind_group(&BindGroupDescriptor {
@@ -535,98 +506,14 @@ pub fn queue_meshes(
             .read()
             .get_id::<DrawPbr>()
             .unwrap();
-        mesh_meta.material_bind_groups.next_frame();
 
         let view_matrix = view.transform.compute_matrix();
         let view_row_2 = view_matrix.row(2);
 
-        if standard_material_meshes.is_empty() {
-            return;
-        }
         for (entity, material_handle, transform) in standard_material_meshes.iter() {
-            let gpu_material = &render_materials
-                .get(material_handle)
-                .expect("Failed to get StandardMaterial PreparedAsset");
-            let material_bind_group_key =
-                mesh_meta
-                    .material_bind_groups
-                    .get_or_insert_with(gpu_material.buffer.id(), || {
-                        let (base_color_texture_view, base_color_sampler) =
-                            image_handle_to_view_sampler(
-                                &pbr_pipeline,
-                                &gpu_images,
-                                &gpu_material.base_color_texture,
-                            );
-
-                        let (emissive_texture_view, emissive_sampler) =
-                            image_handle_to_view_sampler(
-                                &pbr_pipeline,
-                                &gpu_images,
-                                &gpu_material.emissive_texture,
-                            );
-
-                        let (metallic_roughness_texture_view, metallic_roughness_sampler) =
-                            image_handle_to_view_sampler(
-                                &pbr_pipeline,
-                                &gpu_images,
-                                &gpu_material.metallic_roughness_texture,
-                            );
-                        let (occlusion_texture_view, occlusion_sampler) =
-                            image_handle_to_view_sampler(
-                                &pbr_pipeline,
-                                &gpu_images,
-                                &gpu_material.occlusion_texture,
-                            );
-                        render_device.create_bind_group(&BindGroupDescriptor {
-                            entries: &[
-                                BindGroupEntry {
-                                    binding: 0,
-                                    resource: gpu_material.buffer.as_entire_binding(),
-                                },
-                                BindGroupEntry {
-                                    binding: 1,
-                                    resource: BindingResource::TextureView(base_color_texture_view),
-                                },
-                                BindGroupEntry {
-                                    binding: 2,
-                                    resource: BindingResource::Sampler(base_color_sampler),
-                                },
-                                BindGroupEntry {
-                                    binding: 3,
-                                    resource: BindingResource::TextureView(emissive_texture_view),
-                                },
-                                BindGroupEntry {
-                                    binding: 4,
-                                    resource: BindingResource::Sampler(emissive_sampler),
-                                },
-                                BindGroupEntry {
-                                    binding: 5,
-                                    resource: BindingResource::TextureView(
-                                        metallic_roughness_texture_view,
-                                    ),
-                                },
-                                BindGroupEntry {
-                                    binding: 6,
-                                    resource: BindingResource::Sampler(metallic_roughness_sampler),
-                                },
-                                BindGroupEntry {
-                                    binding: 7,
-                                    resource: BindingResource::TextureView(occlusion_texture_view),
-                                },
-                                BindGroupEntry {
-                                    binding: 8,
-                                    resource: BindingResource::Sampler(occlusion_sampler),
-                                },
-                            ],
-                            label: None,
-                            layout: &pbr_pipeline.material_layout,
-                        })
-                    });
-
-            commands.entity(entity).insert(StandardMaterialBindGroup {
-                key: material_bind_group_key,
-            });
-
+            if !render_materials.contains_key(material_handle) {
+                continue;
+            }
             // NOTE: row 2 of the view matrix dotted with column 3 of the model matrix
             //       gives the z component of translation of the mesh in view space
             let mesh_z = view_row_2.dot(transform.col(3));
@@ -713,18 +600,22 @@ impl<const I: usize> DrawCommand<Transparent3d> for SetTransformBindGroup<I> {
 
 pub struct SetStandardMaterialBindGroup<const I: usize>;
 impl<const I: usize> DrawCommand<Transparent3d> for SetStandardMaterialBindGroup<I> {
-    type Param = (SRes<MeshMeta>, SQuery<Read<StandardMaterialBindGroup>>);
+    type Param = (
+        SRes<RenderAssets<StandardMaterial>>,
+        SQuery<Read<Handle<StandardMaterial>>>,
+    );
     #[inline]
     fn draw<'w>(
         _view: Entity,
         item: &Transparent3d,
-        (mesh_meta, mesh_query): SystemParamItem<'_, 'w, Self::Param>,
+        (materials, handle_query): SystemParamItem<'_, 'w, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) {
-        let material = mesh_query.get(item.entity).unwrap();
-        let mesh_meta = mesh_meta.into_inner();
+        let handle = handle_query.get(item.entity).unwrap();
+        let materials = materials.into_inner();
+        let material = materials.get(handle).unwrap();
 
-        pass.set_bind_group(I, &mesh_meta.material_bind_groups[material.key], &[]);
+        pass.set_bind_group(I, &material.bind_group, &[]);
     }
 }
 
