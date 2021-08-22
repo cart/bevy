@@ -126,13 +126,15 @@ impl<C: RenderComponent, F: WorldQuery + 'static> Plugin for RenderComponentPlug
 
 fn extract_render_components<C: RenderComponent, F: WorldQuery>(
     mut commands: Commands,
+    mut previous_len: Local<usize>,
     components: Query<(Entity, &C::SourceComponent), F>,
 ) where F::Fetch: FilterFetch {
+    let mut values = Vec::with_capacity(*previous_len);
     for (entity, component) in components.iter() {
-        commands
-            .get_or_spawn(entity)
-            .insert(C::extract_component(component));
+        values.push((entity, (C::extract_component(component),)));
     }
+    *previous_len = values.len();
+    commands.insert_or_spawn_batch(values);
 }
 
 impl<T: Asset> RenderComponent for Handle<T> {
