@@ -1,16 +1,20 @@
-use crate::{AmbientLight, DirectionalLight, ExtractedMeshes, MeshMeta, PbrShaders, PointLight};
+use crate::{
+    AmbientLight, DirectionalLight, DirectionalLightShadowMap, ExtractedMeshes, MeshMeta,
+    PbrShaders, PointLight, PointLightShadowMap,
+};
+use bevy_core_pipeline::Transparent3dPhase;
 use bevy_ecs::{prelude::*, system::SystemState};
 use bevy_math::{const_vec3, Mat4, Vec3, Vec4};
 use bevy_render2::{
     camera::CameraProjection,
     color::Color,
-    core_pipeline::Transparent3dPhase,
     mesh::Mesh,
     render_asset::RenderAssets,
     render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
     render_phase::{Draw, DrawFunctions, RenderPhase, TrackedRenderPass},
     render_resource::*,
     renderer::{RenderContext, RenderDevice},
+    shader::Shader,
     texture::*,
     view::{ExtractedView, ViewUniformOffset},
 };
@@ -25,6 +29,7 @@ pub struct ExtractedAmbientLight {
 
 pub struct ExtractedPointLight {
     color: Color,
+    /// luminous intensity in lumens per steradian
     intensity: f32,
     range: f32,
     radius: f32,
@@ -32,6 +37,8 @@ pub struct ExtractedPointLight {
     shadow_depth_bias: f32,
     shadow_normal_bias: f32,
 }
+
+pub type ExtractedPointLightShadowMap = PointLightShadowMap;
 
 pub struct ExtractedDirectionalLight {
     color: Color,
@@ -42,11 +49,13 @@ pub struct ExtractedDirectionalLight {
     shadow_normal_bias: f32,
 }
 
+pub type ExtractedDirectionalLightShadowMap = DirectionalLightShadowMap;
+
 #[repr(C)]
 #[derive(Copy, Clone, AsStd140, Default, Debug)]
 pub struct GpuPointLight {
+    projection: Mat4,
     color: Vec4,
-    // proj: Mat4,
     position: Vec3,
     inverse_square_range: f32,
     radius: f32,
@@ -80,19 +89,12 @@ pub struct GpuLights {
 // NOTE: this must be kept in sync with the same constants in pbr.frag
 pub const MAX_POINT_LIGHTS: usize = 10;
 pub const MAX_DIRECTIONAL_LIGHTS: usize = 1;
-pub const POINT_SHADOW_SIZE: Extent3d = Extent3d {
-    width: 1024,
-    height: 1024,
-    depth_or_array_layers: (6 * MAX_POINT_LIGHTS) as u32,
-};
-pub const DIRECTIONAL_SHADOW_SIZE: Extent3d = Extent3d {
-    width: 4096,
-    height: 4096,
-    depth_or_array_layers: MAX_DIRECTIONAL_LIGHTS as u32,
-};
+pub const POINT_SHADOW_LAYERS: u32 = (6 * MAX_POINT_LIGHTS) as u32;
+pub const DIRECTIONAL_SHADOW_LAYERS: u32 = MAX_DIRECTIONAL_LIGHTS as u32;
 pub const SHADOW_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
 pub struct ShadowShaders {
+    pub shader_module: ShaderModule,
     pub pipeline: RenderPipeline,
     pub view_layout: BindGroupLayout,
     pub point_light_sampler: Sampler,
@@ -104,6 +106,8 @@ impl FromWorld for ShadowShaders {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.get_resource::<RenderDevice>().unwrap();
         let pbr_shaders = world.get_resource::<PbrShaders>().unwrap();
+        let shader = Shader::from_wgsl(include_str!("depth.wgsl"));
+        let shader_module = render_device.create_shader_module(&shader);
 
         let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             entries: &[
@@ -116,7 +120,7 @@ impl FromWorld for ShadowShaders {
                         has_dynamic_offset: true,
                         // TODO: change this to ViewUniform::std140_size_static once crevice fixes this!
                         // Context: https://github.com/LPGhatguy/crevice/issues/29
-                        min_binding_size: BufferSize::new(80),
+                        min_binding_size: BufferSize::new(144),
                     },
                     count: None,
                 },
@@ -157,14 +161,14 @@ impl FromWorld for ShadowShaders {
                         },
                     ],
                 }],
-                module: &pbr_shaders.shader_module,
+                module: &shader_module,
                 entry_point: "vertex",
             },
             fragment: None,
             depth_stencil: Some(DepthStencilState {
                 format: SHADOW_FORMAT,
                 depth_write_enabled: true,
-                depth_compare: CompareFunction::LessEqual,
+                depth_compare: CompareFunction::GreaterEqual,
                 stencil: StencilState {
                     front: StencilFaceState::IGNORE,
                     back: StencilFaceState::IGNORE,
@@ -191,6 +195,7 @@ impl FromWorld for ShadowShaders {
         });
 
         ShadowShaders {
+            shader_module,
             pipeline,
             view_layout,
             point_light_sampler: render_device.create_sampler(&SamplerDescriptor {
@@ -200,7 +205,7 @@ impl FromWorld for ShadowShaders {
                 mag_filter: FilterMode::Linear,
                 min_filter: FilterMode::Linear,
                 mipmap_filter: FilterMode::Nearest,
-                compare: Some(CompareFunction::LessEqual),
+                compare: Some(CompareFunction::GreaterEqual),
                 ..Default::default()
             }),
             directional_light_sampler: render_device.create_sampler(&SamplerDescriptor {
@@ -210,7 +215,7 @@ impl FromWorld for ShadowShaders {
                 mag_filter: FilterMode::Linear,
                 min_filter: FilterMode::Linear,
                 mipmap_filter: FilterMode::Nearest,
-                compare: Some(CompareFunction::LessEqual),
+                compare: Some(CompareFunction::GreaterEqual),
                 ..Default::default()
             }),
         }
@@ -221,6 +226,8 @@ impl FromWorld for ShadowShaders {
 pub fn extract_lights(
     mut commands: Commands,
     ambient_light: Res<AmbientLight>,
+    point_light_shadow_map: Res<PointLightShadowMap>,
+    directional_light_shadow_map: Res<DirectionalLightShadowMap>,
     point_lights: Query<(Entity, &PointLight, &GlobalTransform)>,
     directional_lights: Query<(Entity, &DirectionalLight, &GlobalTransform)>,
 ) {
@@ -228,6 +235,10 @@ pub fn extract_lights(
         color: ambient_light.color,
         brightness: ambient_light.brightness,
     });
+    commands.insert_resource::<ExtractedPointLightShadowMap>(point_light_shadow_map.clone());
+    commands.insert_resource::<ExtractedDirectionalLightShadowMap>(
+        directional_light_shadow_map.clone(),
+    );
     // This is the point light shadow map texel size for one face of the cube as a distance of 1.0
     // world unit from the light.
     // point_light_texel_size = 2.0 * 1.0 * tan(PI / 4.0) / cube face width in texels
@@ -235,11 +246,14 @@ pub fn extract_lights(
     // point_light_texel_size = 2.0 / cube face width in texels
     // NOTE: When using various PCF kernel sizes, this will need to be adjusted, according to:
     // https://catlikecoding.com/unity/tutorials/custom-srp/point-and-spot-shadows/
-    let point_light_texel_size = 2.0 / POINT_SHADOW_SIZE.width as f32;
+    let point_light_texel_size = 2.0 / point_light_shadow_map.size as f32;
     for (entity, point_light, transform) in point_lights.iter() {
         commands.get_or_spawn(entity).insert(ExtractedPointLight {
             color: point_light.color,
-            intensity: point_light.intensity,
+            // NOTE: Map from luminous power in lumens to luminous intensity in lumens per steradian
+            // for a point light. See https://google.github.io/filament/Filament.html#mjx-eqn-pointLightLuminousPower
+            // for details.
+            intensity: point_light.intensity / (4.0 * std::f32::consts::PI),
             range: point_light.range,
             radius: point_light.radius,
             transform: *transform,
@@ -261,7 +275,8 @@ pub fn extract_lights(
                 directional_light.shadow_projection.top
                     - directional_light.shadow_projection.bottom,
             );
-        let directional_light_texel_size = largest_dimension / DIRECTIONAL_SHADOW_SIZE.width as f32;
+        let directional_light_texel_size =
+            largest_dimension / directional_light_shadow_map.size as f32;
         commands
             .get_or_spawn(entity)
             .insert(ExtractedDirectionalLight {
@@ -362,6 +377,8 @@ pub fn prepare_lights(
     mut light_meta: ResMut<LightMeta>,
     views: Query<Entity, With<RenderPhase<Transparent3dPhase>>>,
     ambient_light: Res<ExtractedAmbientLight>,
+    point_light_shadow_map: Res<ExtractedPointLightShadowMap>,
+    directional_light_shadow_map: Res<ExtractedDirectionalLightShadowMap>,
     point_lights: Query<&ExtractedPointLight>,
     directional_lights: Query<&ExtractedDirectionalLight>,
 ) {
@@ -376,7 +393,11 @@ pub fn prepare_lights(
         let point_light_depth_texture = texture_cache.get(
             &render_device,
             TextureDescriptor {
-                size: POINT_SHADOW_SIZE,
+                size: Extent3d {
+                    width: point_light_shadow_map.size as u32,
+                    height: point_light_shadow_map.size as u32,
+                    depth_or_array_layers: POINT_SHADOW_LAYERS,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
@@ -388,7 +409,11 @@ pub fn prepare_lights(
         let directional_light_depth_texture = texture_cache.get(
             &render_device,
             TextureDescriptor {
-                size: DIRECTIONAL_SHADOW_SIZE,
+                size: Extent3d {
+                    width: directional_light_shadow_map.size as u32,
+                    height: directional_light_shadow_map.size as u32,
+                    depth_or_array_layers: DIRECTIONAL_SHADOW_LAYERS,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
@@ -410,7 +435,7 @@ pub fn prepare_lights(
         // TODO: this should select lights based on relevance to the view instead of the first ones that show up in a query
         for (light_index, light) in point_lights.iter().enumerate().take(MAX_POINT_LIGHTS) {
             let projection =
-                Mat4::perspective_rh(std::f32::consts::FRAC_PI_2, 1.0, 0.1, light.range);
+                Mat4::perspective_infinite_reverse_rh(std::f32::consts::FRAC_PI_2, 1.0, 0.1);
 
             // ignore scale because we don't want to effectively scale light radius and range
             // by applying those as a view transform to shadow map rendering of objects
@@ -447,8 +472,8 @@ pub fn prepare_lights(
                             ),
                         },
                         ExtractedView {
-                            width: POINT_SHADOW_SIZE.width,
-                            height: POINT_SHADOW_SIZE.height,
+                            width: point_light_shadow_map.size as u32,
+                            height: point_light_shadow_map.size as u32,
                             transform: view_translation * view_rotation,
                             projection,
                         },
@@ -459,6 +484,7 @@ pub fn prepare_lights(
             }
 
             gpu_lights.point_lights[light_index] = GpuPointLight {
+                projection,
                 // premultiply color by intensity
                 // we don't use the alpha at all, so no reason to multiply only [0..3]
                 color: (light.color.as_rgba_linear() * light.intensity).into(),
@@ -467,7 +493,6 @@ pub fn prepare_lights(
                 inverse_square_range: 1.0 / (light.range * light.range),
                 near: 0.1,
                 far: light.range,
-                // proj: projection,
                 shadow_depth_bias: light.shadow_depth_bias,
                 shadow_normal_bias: light.shadow_normal_bias,
             };
@@ -533,8 +558,8 @@ pub fn prepare_lights(
                         pass_name: format!("shadow pass directional light {}", i),
                     },
                     ExtractedView {
-                        width: DIRECTIONAL_SHADOW_SIZE.width,
-                        height: DIRECTIONAL_SHADOW_SIZE.height,
+                        width: directional_light_shadow_map.size as u32,
+                        height: directional_light_shadow_map.size as u32,
                         transform: GlobalTransform::from_matrix(view.inverse()),
                         projection,
                     },
@@ -631,7 +656,7 @@ impl Node for ShadowPassNode {
                     depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                         view: &view_light.depth_texture_view,
                         depth_ops: Some(Operations {
-                            load: LoadOp::Clear(1.0),
+                            load: LoadOp::Clear(0.0),
                             store: true,
                         }),
                         stencil_ops: None,

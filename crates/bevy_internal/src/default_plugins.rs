@@ -117,20 +117,28 @@ impl PluginGroup for PipelinedDefaultPlugins {
         group.add(bevy_input::InputPlugin::default());
         group.add(bevy_window::WindowPlugin::default());
         group.add(bevy_asset::AssetPlugin::default());
+        group.add(bevy_scene::ScenePlugin::default());
 
         #[cfg(feature = "bevy_render2")]
         {
             group.add(bevy_render2::RenderPlugin::default());
-            group.add(bevy_render2::core_pipeline::CorePipelinePlugin::default());
+        }
+
+        #[cfg(feature = "bevy_core_pipeline")]
+        {
+            group.add(bevy_core_pipeline::CorePipelinePlugin::default());
+
+            #[cfg(feature = "bevy_sprite2")]
+            group.add(bevy_sprite2::SpritePlugin::default());
+
+            #[cfg(feature = "bevy_pbr2")]
+            group.add(bevy_pbr2::PbrPlugin::default());
+
+            #[cfg(feature = "bevy_gltf2")]
+            group.add(bevy_gltf2::GltfPlugin::default());
         }
 
         #[cfg(feature = "bevy_winit")]
         group.add(bevy_winit::WinitPlugin::default());
-
-        #[cfg(feature = "bevy_sprite2")]
-        group.add(bevy_sprite2::SpritePlugin::default());
-
-        #[cfg(feature = "bevy_pbr2")]
-        group.add(bevy_pbr2::PbrPlugin::default());
     }
 }

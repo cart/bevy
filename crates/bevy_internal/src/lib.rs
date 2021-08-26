@@ -82,6 +82,12 @@ pub mod audio {
     pub use bevy_audio::*;
 }
 
+#[cfg(feature = "bevy_core_pipeline")]
+pub mod core_pipeline {
+    //! Core render pipeline.
+    pub use bevy_core_pipeline::*;
+}
+
 #[cfg(feature = "bevy_gilrs")]
 pub mod gilrs {
     pub use bevy_gilrs::*;
@@ -91,6 +97,12 @@ pub mod gilrs {
 pub mod gltf {
     //! Support for GLTF file loading.
     pub use bevy_gltf::*;
+}
+
+#[cfg(feature = "bevy_gltf2")]
+pub mod gltf2 {
+    //! Support for GLTF file loading.
+    pub use bevy_gltf2::*;
 }
 
 #[cfg(feature = "bevy_pbr")]

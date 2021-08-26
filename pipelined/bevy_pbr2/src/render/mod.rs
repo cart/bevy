@@ -1,11 +1,12 @@
 mod light;
 pub use light::*;
 
+use crate::{NotShadowCaster, NotShadowReceiver, StandardMaterial, StandardMaterialUniformData};
 use bevy_asset::{Assets, Handle};
+use bevy_core_pipeline::Transparent3dPhase;
 use bevy_ecs::{prelude::*, system::SystemState};
 use bevy_math::Mat4;
 use bevy_render2::{
-    core_pipeline::Transparent3dPhase,
     mesh::Mesh,
     render_asset::RenderAssets,
     render_graph::{Node, NodeRunError, RenderGraphContext},
@@ -24,11 +25,8 @@ use wgpu::{
     TextureViewDescriptor,
 };
 
-use crate::{StandardMaterial, StandardMaterialUniformData};
-
 pub struct PbrShaders {
     pipeline: RenderPipeline,
-    shader_module: ShaderModule,
     view_layout: BindGroupLayout,
     material_layout: BindGroupLayout,
     mesh_layout: BindGroupLayout,
@@ -55,7 +53,7 @@ impl FromWorld for PbrShaders {
                         has_dynamic_offset: true,
                         // TODO: change this to ViewUniform::std140_size_static once crevice fixes this!
                         // Context: https://github.com/LPGhatguy/crevice/issues/29
-                        min_binding_size: BufferSize::new(80),
+                        min_binding_size: BufferSize::new(144),
                     },
                     count: None,
                 },
@@ -68,7 +66,7 @@ impl FromWorld for PbrShaders {
                         has_dynamic_offset: true,
                         // TODO: change this to GpuLights::std140_size_static once crevice fixes this!
                         // Context: https://github.com/LPGhatguy/crevice/issues/29
-                        min_binding_size: BufferSize::new(1024),
+                        min_binding_size: BufferSize::new(1424),
                     },
                     count: None,
                 },
@@ -115,20 +113,6 @@ impl FromWorld for PbrShaders {
                     count: None,
                 },
             ],
-            label: None,
-        });
-
-        let mesh_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStage::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: BufferSize::new(Mat4::std140_size_static() as u64),
-                },
-                count: None,
-            }],
             label: None,
         });
 
@@ -234,10 +218,26 @@ impl FromWorld for PbrShaders {
             label: None,
         });
 
+        let mesh_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    // TODO: change this to MeshUniform::std140_size_static once crevice fixes this!
+                    // Context: https://github.com/LPGhatguy/crevice/issues/29
+                    min_binding_size: BufferSize::new(144),
+                },
+                count: None,
+            }],
+            label: None,
+        });
+
         let pipeline_layout = render_device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
             push_constant_ranges: &[],
-            bind_group_layouts: &[&view_layout, &mesh_layout, &material_layout],
+            bind_group_layouts: &[&view_layout, &material_layout, &mesh_layout],
         });
 
         let pipeline = render_device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -293,7 +293,7 @@ impl FromWorld for PbrShaders {
             depth_stencil: Some(DepthStencilState {
                 format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
-                depth_compare: CompareFunction::Less,
+                depth_compare: CompareFunction::Greater,
                 stencil: StencilState {
                     front: StencilFaceState::IGNORE,
                     back: StencilFaceState::IGNORE,
@@ -361,7 +361,6 @@ impl FromWorld for PbrShaders {
         };
         PbrShaders {
             pipeline,
-            shader_module,
             view_layout,
             material_layout,
             mesh_layout,
@@ -375,6 +374,8 @@ struct ExtractedMesh {
     mesh: Handle<Mesh>,
     transform_binding_offset: u32,
     material_handle: Handle<StandardMaterial>,
+    casts_shadows: bool,
+    receives_shadows: bool,
 }
 
 pub struct ExtractedMeshes {
@@ -386,10 +387,23 @@ pub fn extract_meshes(
     meshes: Res<Assets<Mesh>>,
     materials: Res<Assets<StandardMaterial>>,
     images: Res<Assets<Image>>,
-    query: Query<(&GlobalTransform, &Handle<Mesh>, &Handle<StandardMaterial>)>,
+    query: Query<(
+        &GlobalTransform,
+        &Handle<Mesh>,
+        &Handle<StandardMaterial>,
+        Option<&NotShadowCaster>,
+        Option<&NotShadowReceiver>,
+    )>,
 ) {
     let mut extracted_meshes = Vec::new();
-    for (transform, mesh_handle, material_handle) in query.iter() {
+    for (
+        transform,
+        mesh_handle,
+        material_handle,
+        maybe_not_shadow_caster,
+        maybe_not_shadow_receiver,
+    ) in query.iter()
+    {
         if !meshes.contains(mesh_handle) {
             continue;
         }
@@ -420,6 +434,10 @@ pub fn extract_meshes(
                 mesh: mesh_handle.clone_weak(),
                 transform_binding_offset: 0,
                 material_handle: material_handle.clone_weak(),
+                // NOTE: Double-negative is so that meshes cast and receive shadows by default
+                // Not not shadow caster means that this mesh is a shadow caster
+                casts_shadows: maybe_not_shadow_caster.is_none(),
+                receives_shadows: maybe_not_shadow_receiver.is_none(),
             });
         } else {
             continue;
@@ -436,9 +454,26 @@ struct MeshDrawInfo {
     material_bind_group_key: FrameSlabMapKey<BufferId, BindGroup>,
 }
 
+#[derive(Debug, AsStd140)]
+pub struct MeshUniform {
+    model: Mat4,
+    inverse_transpose_model: Mat4,
+    flags: u32,
+}
+
+// NOTE: These must match the bit flags in bevy_pbr2/src/render/pbr.wgsl!
+bitflags::bitflags! {
+    #[repr(transparent)]
+    struct MeshFlags: u32 {
+        const SHADOW_RECEIVER            = (1 << 0);
+        const NONE                       = 0;
+        const UNINITIALIZED              = 0xFFFF;
+    }
+}
+
 #[derive(Default)]
 pub struct MeshMeta {
-    transform_uniforms: DynamicUniformVec<Mat4>,
+    transform_uniforms: DynamicUniformVec<MeshUniform>,
     material_bind_groups: FrameSlabMap<BufferId, BindGroup>,
     mesh_transform_bind_group: FrameSlabMap<BufferId, BindGroup>,
     mesh_transform_bind_group_key: Option<FrameSlabMapKey<BufferId, BindGroup>>,
@@ -454,8 +489,18 @@ pub fn prepare_meshes(
         .transform_uniforms
         .reserve_and_clear(extracted_meshes.meshes.len(), &render_device);
     for extracted_mesh in extracted_meshes.meshes.iter_mut() {
-        extracted_mesh.transform_binding_offset =
-            mesh_meta.transform_uniforms.push(extracted_mesh.transform);
+        let model = extracted_mesh.transform;
+        let inverse_transpose_model = model.inverse().transpose();
+        let flags = if extracted_mesh.receives_shadows {
+            MeshFlags::SHADOW_RECEIVER
+        } else {
+            MeshFlags::NONE
+        };
+        extracted_mesh.transform_binding_offset = mesh_meta.transform_uniforms.push(MeshUniform {
+            model,
+            inverse_transpose_model,
+            flags: flags.bits,
+        });
     }
 
     mesh_meta
@@ -632,39 +677,37 @@ pub fn queue_meshes(
                                 },
                                 BindGroupEntry {
                                     binding: 1,
-                                    resource: BindingResource::TextureView(
-                                        &base_color_texture_view,
-                                    ),
+                                    resource: BindingResource::TextureView(base_color_texture_view),
                                 },
                                 BindGroupEntry {
                                     binding: 2,
-                                    resource: BindingResource::Sampler(&base_color_sampler),
+                                    resource: BindingResource::Sampler(base_color_sampler),
                                 },
                                 BindGroupEntry {
                                     binding: 3,
-                                    resource: BindingResource::TextureView(&emissive_texture_view),
+                                    resource: BindingResource::TextureView(emissive_texture_view),
                                 },
                                 BindGroupEntry {
                                     binding: 4,
-                                    resource: BindingResource::Sampler(&emissive_sampler),
+                                    resource: BindingResource::Sampler(emissive_sampler),
                                 },
                                 BindGroupEntry {
                                     binding: 5,
                                     resource: BindingResource::TextureView(
-                                        &metallic_roughness_texture_view,
+                                        metallic_roughness_texture_view,
                                     ),
                                 },
                                 BindGroupEntry {
                                     binding: 6,
-                                    resource: BindingResource::Sampler(&metallic_roughness_sampler),
+                                    resource: BindingResource::Sampler(metallic_roughness_sampler),
                                 },
                                 BindGroupEntry {
                                     binding: 7,
-                                    resource: BindingResource::TextureView(&occlusion_texture_view),
+                                    resource: BindingResource::TextureView(occlusion_texture_view),
                                 },
                                 BindGroupEntry {
                                     binding: 8,
-                                    resource: BindingResource::Sampler(&occlusion_sampler),
+                                    resource: BindingResource::Sampler(occlusion_sampler),
                                 },
                             ],
                             label: None,
@@ -697,12 +740,14 @@ pub fn queue_meshes(
         for view_light_entity in view_lights.lights.iter().copied() {
             let mut shadow_phase = view_light_shadow_phases.get_mut(view_light_entity).unwrap();
             // TODO: this should only queue up meshes that are actually visible by each "light view"
-            for i in 0..extracted_meshes.meshes.len() {
-                shadow_phase.add(Drawable {
-                    draw_function: draw_shadow_mesh,
-                    draw_key: i,
-                    sort_key: 0, // TODO: sort back-to-front
-                })
+            for (i, mesh) in extracted_meshes.meshes.iter().enumerate() {
+                if mesh.casts_shadows {
+                    shadow_phase.add(Drawable {
+                        draw_function: draw_shadow_mesh,
+                        draw_key: i,
+                        sort_key: 0, // TODO: sort back-to-front
+                    });
+                }
             }
         }
     }
@@ -777,20 +822,20 @@ impl Draw for DrawPbr {
             &mesh_view_bind_groups.view,
             &[view_uniforms.offset, view_lights.gpu_light_binding_index],
         );
+        let mesh_draw_info = &mesh_meta.mesh_draw_info[draw_key];
         pass.set_bind_group(
             1,
+            // &mesh_meta.material_bind_groups[sort_key & ((1 << 10) - 1)],
+            &mesh_meta.material_bind_groups[mesh_draw_info.material_bind_group_key],
+            &[],
+        );
+        pass.set_bind_group(
+            2,
             mesh_meta
                 .mesh_transform_bind_group
                 .get_value(mesh_meta.mesh_transform_bind_group_key.unwrap())
                 .unwrap(),
             &[extracted_mesh.transform_binding_offset],
-        );
-        let mesh_draw_info = &mesh_meta.mesh_draw_info[draw_key];
-        pass.set_bind_group(
-            2,
-            // &mesh_meta.material_bind_groups[sort_key & ((1 << 10) - 1)],
-            &mesh_meta.material_bind_groups[mesh_draw_info.material_bind_group_key],
-            &[],
         );
 
         let gpu_mesh = meshes.into_inner().get(&extracted_mesh.mesh).unwrap();

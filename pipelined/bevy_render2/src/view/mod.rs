@@ -7,7 +7,7 @@ use crate::{
     render_graph::{Node, NodeRunError, RenderGraph, RenderGraphContext},
     render_resource::DynamicUniformVec,
     renderer::{RenderContext, RenderDevice},
-    RenderStage,
+    RenderApp, RenderStage,
 };
 use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::*;
@@ -22,10 +22,10 @@ impl ViewPlugin {
 
 impl Plugin for ViewPlugin {
     fn build(&self, app: &mut App) {
-        let render_app = app.sub_app_mut(0);
+        let render_app = app.sub_app(RenderApp);
         render_app
             .init_resource::<ViewMeta>()
-            .add_system_to_stage(RenderStage::Prepare, prepare_views.system());
+            .add_system_to_stage(RenderStage::Prepare, prepare_views);
 
         let mut graph = render_app.world.get_resource_mut::<RenderGraph>().unwrap();
         graph.add_node(ViewPlugin::VIEW_NODE, ViewNode);
@@ -42,6 +42,7 @@ pub struct ExtractedView {
 #[derive(Clone, AsStd140)]
 pub struct ViewUniform {
     view_proj: Mat4,
+    projection: Mat4,
     world_position: Vec3,
 }
 
@@ -64,9 +65,11 @@ fn prepare_views(
         .uniforms
         .reserve_and_clear(extracted_views.iter_mut().len(), &render_resources);
     for (entity, camera) in extracted_views.iter() {
+        let projection = camera.projection;
         let view_uniforms = ViewUniformOffset {
             offset: view_meta.uniforms.push(ViewUniform {
-                view_proj: camera.projection * camera.transform.compute_matrix().inverse(),
+                view_proj: projection * camera.transform.compute_matrix().inverse(),
+                projection,
                 world_position: camera.transform.translation,
             }),
         };

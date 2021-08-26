@@ -1,18 +1,26 @@
 // TODO: try merging this block with the binding?
+// NOTE: Keep in sync with depth.wgsl
 [[block]]
 struct View {
     view_proj: mat4x4<f32>;
+    projection: mat4x4<f32>;
     world_position: vec3<f32>;
 };
-[[group(0), binding(0)]]
-var view: View;
 
 
 [[block]]
 struct Mesh {
-    transform: mat4x4<f32>;
+    model: mat4x4<f32>;
+    inverse_transpose_model: mat4x4<f32>;
+    // 'flags' is a bit field indicating various options. u32 is 32 bits so we have up to 32 options.
+    flags: u32;
 };
-[[group(1), binding(0)]]
+
+let MESH_FLAGS_SHADOW_RECEIVER_BIT: u32 = 1u;
+
+[[group(0), binding(0)]]
+var view: View;
+[[group(2), binding(0)]]
 var mesh: Mesh;
 
 struct Vertex {
@@ -30,15 +38,17 @@ struct VertexOutput {
 
 [[stage(vertex)]]
 fn vertex(vertex: Vertex) -> VertexOutput {
-    let world_position = mesh.transform * vec4<f32>(vertex.position, 1.0);
+    let world_position = mesh.model * vec4<f32>(vertex.position, 1.0);
 
     var out: VertexOutput;
     out.uv = vertex.uv;
     out.world_position = world_position;
     out.clip_position = view.view_proj * world_position;
-    // FIXME: The inverse transpose of the model matrix should be used to correctly handle scaling
-    // of normals
-    out.world_normal = mat3x3<f32>(mesh.transform.x.xyz, mesh.transform.y.xyz, mesh.transform.z.xyz) * vertex.normal;
+    out.world_normal = mat3x3<f32>(
+        mesh.inverse_transpose_model.x.xyz,
+        mesh.inverse_transpose_model.y.xyz,
+        mesh.inverse_transpose_model.z.xyz
+    ) * vertex.normal;
     return out;
 }
 
@@ -83,13 +93,20 @@ struct StandardMaterial {
     perceptual_roughness: f32;
     metallic: f32;
     reflectance: f32;
-    // 'flags' is a bit field indicating various option. uint is 32 bits so we have up to 32 options.
+    // 'flags' is a bit field indicating various options. u32 is 32 bits so we have up to 32 options.
     flags: u32;
 };
 
+let STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT: u32         = 1u;
+let STANDARD_MATERIAL_FLAGS_EMISSIVE_TEXTURE_BIT: u32           = 2u;
+let STANDARD_MATERIAL_FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT: u32 = 4u;
+let STANDARD_MATERIAL_FLAGS_OCCLUSION_TEXTURE_BIT: u32          = 8u;
+let STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT: u32               = 16u;
+let STANDARD_MATERIAL_FLAGS_UNLIT_BIT: u32                      = 32u;
+
 struct PointLight {
+    projection: mat4x4<f32>;
     color: vec4<f32>;
-    // projection: mat4x4<f32>;
     position: vec3<f32>;
     inverse_square_range: f32;
     radius: f32;
@@ -118,13 +135,6 @@ struct Lights {
     n_directional_lights: u32;
 };
 
-let FLAGS_BASE_COLOR_TEXTURE_BIT: u32         = 1u;
-let FLAGS_EMISSIVE_TEXTURE_BIT: u32           = 2u;
-let FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT: u32 = 4u;
-let FLAGS_OCCLUSION_TEXTURE_BIT: u32          = 8u;
-let FLAGS_DOUBLE_SIDED_BIT: u32               = 16u;
-let FLAGS_UNLIT_BIT: u32                      = 32u;
-
 
 [[group(0), binding(1)]]
 var lights: Lights;
@@ -137,23 +147,23 @@ var directional_shadow_textures: texture_depth_2d_array;
 [[group(0), binding(5)]]
 var directional_shadow_textures_sampler: sampler_comparison;
 
-[[group(2), binding(0)]]
+[[group(1), binding(0)]]
 var material: StandardMaterial;
-[[group(2), binding(1)]]
+[[group(1), binding(1)]]
 var base_color_texture: texture_2d<f32>;
-[[group(2), binding(2)]]
+[[group(1), binding(2)]]
 var base_color_sampler: sampler;
-[[group(2), binding(3)]]
+[[group(1), binding(3)]]
 var emissive_texture: texture_2d<f32>;
-[[group(2), binding(4)]]
+[[group(1), binding(4)]]
 var emissive_sampler: sampler;
-[[group(2), binding(5)]]
+[[group(1), binding(5)]]
 var metallic_roughness_texture: texture_2d<f32>;
-[[group(2), binding(6)]]
+[[group(1), binding(6)]]
 var metallic_roughness_sampler: sampler;
-[[group(2), binding(7)]]
+[[group(1), binding(7)]]
 var occlusion_texture: texture_2d<f32>;
-[[group(2), binding(8)]]
+[[group(1), binding(8)]]
 var occlusion_sampler: sampler;
 
 let PI: f32 = 3.141592653589793;
@@ -349,17 +359,20 @@ fn point_light(
 
     let diffuse = diffuseColor * Fd_Burley(roughness, NdotV, NoL, LoH);
 
+    // See https://google.github.io/filament/Filament.html#mjx-eqn-pointLightLuminanceEquation
     // Lout = f(v,l) Φ / { 4 π d^2 }⟨n⋅l⟩
     // where
     // f(v,l) = (f_d(v,l) + f_r(v,l)) * light_color
-    // Φ is light intensity
-
+    // Φ is luminous power in lumens
     // our rangeAttentuation = 1 / d^2 multiplied with an attenuation factor for smoothing at the edge of the non-physical maximum light radius
-    // It's not 100% clear where the 1/4π goes in the derivation, but we follow the filament shader and leave it out
 
-    // See https://google.github.io/filament/Filament.html#mjx-eqn-pointLightLuminanceEquation
+    // For a point light, luminous intensity, I, in lumens per steradian is given by:
+    // I = Φ / 4 π
+    // The derivation of this can be seen here: https://google.github.io/filament/Filament.html#mjx-eqn-pointLightLuminousPower
+
+    // NOTE: light.color.rgb is premultiplied with light.intensity / 4 π (which would be the luminous intensity) on the CPU
+
     // TODO compensate for energy loss https://google.github.io/filament/Filament.html#materialsystem/improvingthebrdfs/energylossinspecularreflectance
-    // light.color.rgb is premultiplied with light.intensity on the CPU
 
     return ((diffuse + specular_light) * light.color.rgb) * (rangeAttenuation * NoL);
 }
@@ -400,14 +413,22 @@ fn fetch_point_shadow(light_id: i32, frag_position: vec4<f32>, surface_normal: v
     let abs_position_ls = abs(frag_ls);
     let major_axis_magnitude = max(abs_position_ls.x, max(abs_position_ls.y, abs_position_ls.z));
 
-    // do a full projection
-    // vec4 clip = light.projection * vec4(0.0, 0.0, -major_axis_magnitude, 1.0);
-    // float depth = (clip.z / clip.w);
+    // NOTE: These simplifications come from multiplying:
+    //       projection * vec4(0, 0, -major_axis_magnitude, 1.0)
+    //       and keeping only the terms that have any impact on the depth.
+    // Projection-agnostic approach:
+    let z = -major_axis_magnitude * light.projection[2][2] + light.projection[3][2];
+    let w = -major_axis_magnitude * light.projection[2][3] + light.projection[3][3];
 
-    // alternatively do only the necessary multiplications using near/far
-    let proj_r = light.far / (light.near - light.far);
-    let z = -major_axis_magnitude * proj_r + light.near * proj_r;
-    let w = major_axis_magnitude;
+    // For perspective_rh:
+    // let proj_r = light.far / (light.near - light.far);
+    // let z = -major_axis_magnitude * proj_r + light.near * proj_r;
+    // let w = major_axis_magnitude;
+
+    // For perspective_infinite_reverse_rh:
+    // let z = light.near;
+    // let w = major_axis_magnitude;
+
     let depth = z / w;
 
     // do the lookup, using HW PCF and comparison
@@ -460,22 +481,22 @@ struct FragmentInput {
 [[stage(fragment)]]
 fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
     var output_color: vec4<f32> = material.base_color;
-    if ((material.flags & FLAGS_BASE_COLOR_TEXTURE_BIT) != 0u) {
+    if ((material.flags & STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT) != 0u) {
         output_color = output_color * textureSample(base_color_texture, base_color_sampler, in.uv);
     }
 
     // // NOTE: Unlit bit not set means == 0 is true, so the true case is if lit
-    if ((material.flags & FLAGS_UNLIT_BIT) == 0u) {
+    if ((material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u) {
         // TODO use .a for exposure compensation in HDR
         var emissive: vec4<f32> = material.emissive;
-        if ((material.flags & FLAGS_EMISSIVE_TEXTURE_BIT) != 0u) {
+        if ((material.flags & STANDARD_MATERIAL_FLAGS_EMISSIVE_TEXTURE_BIT) != 0u) {
             emissive = vec4<f32>(emissive.rgb * textureSample(emissive_texture, emissive_sampler, in.uv).rgb, 1.0);
         }
 
         // calculate non-linear roughness from linear perceptualRoughness
         var metallic: f32 = material.metallic;
         var perceptual_roughness: f32 = material.perceptual_roughness;
-        if ((material.flags & FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT) != 0u) {
+        if ((material.flags & STANDARD_MATERIAL_FLAGS_METALLIC_ROUGHNESS_TEXTURE_BIT) != 0u) {
             let metallic_roughness = textureSample(metallic_roughness_texture, metallic_roughness_sampler, in.uv);
             // Sampling from GLTF standard channels for now
             metallic = metallic * metallic_roughness.b;
@@ -484,7 +505,7 @@ fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
         let roughness = perceptualRoughnessToRoughness(perceptual_roughness);
 
         var occlusion: f32 = 1.0;
-        if ((material.flags & FLAGS_OCCLUSION_TEXTURE_BIT) != 0u) {
+        if ((material.flags & STANDARD_MATERIAL_FLAGS_OCCLUSION_TEXTURE_BIT) != 0u) {
             occlusion = textureSample(occlusion_texture, occlusion_sampler, in.uv).r;
         }
 
@@ -497,7 +518,7 @@ fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
         //     vec3 B = cross(N, T) * v_WorldTangent.w;
         // #    endif
 
-        if ((material.flags & FLAGS_DOUBLE_SIDED_BIT) != 0u) {
+        if ((material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u) {
             if (!in.is_front) {
                 N = -N;
             }
@@ -513,12 +534,12 @@ fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
         // #    endif
 
         var V: vec3<f32>;
-        if (view.view_proj.w.w != 1.0) { // If the projection is not orthographic
+        if (view.projection.w.w != 1.0) { // If the projection is not orthographic
             // Only valid for a perpective projection
             V = normalize(view.world_position.xyz - in.world_position.xyz);
         } else {
             // Ortho view vec
-            V = normalize(vec3<f32>(-view.view_proj.x.z, -view.view_proj.y.z, -view.view_proj.z.z));
+            V = normalize(vec3<f32>(view.view_proj.x.z, view.view_proj.y.z, view.view_proj.z.z));
         }
 
         // Neubelt and Pettineo 2013, "Crafting a Next-gen Material Pipeline for The Order: 1886"
@@ -540,13 +561,23 @@ fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
         let n_directional_lights = i32(lights.n_directional_lights);
         for (var i: i32 = 0; i < n_point_lights; i = i + 1) {
             let light = lights.point_lights[i];
-            let shadow = fetch_point_shadow(i, in.world_position, in.world_normal);
+            var shadow: f32;
+            if ((mesh.flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u) {
+                shadow = fetch_point_shadow(i, in.world_position, in.world_normal);
+            } else {
+                shadow = 1.0;
+            }
             let light_contrib = point_light(in.world_position.xyz, light, roughness, NdotV, N, V, R, F0, diffuse_color);
             light_accum = light_accum + light_contrib * shadow;
         }
         for (var i: i32 = 0; i < n_directional_lights; i = i + 1) {
             let light = lights.directional_lights[i];
-            let shadow = fetch_directional_shadow(i, in.world_position, in.world_normal);
+            var shadow: f32;
+            if ((mesh.flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u) {
+                shadow = fetch_directional_shadow(i, in.world_position, in.world_normal);
+            } else {
+                shadow = 1.0;
+            }
             let light_contrib = directional_light(light, roughness, NdotV, N, V, R, F0, diffuse_color);
             light_accum = light_accum + light_contrib * shadow;
         }

@@ -1,20 +1,23 @@
-use crate::{
-    color::Color,
-    core_pipeline::Transparent2dPhase,
+use crate::{ClearColor, Transparent3dPhase};
+use bevy_ecs::prelude::*;
+use bevy_render2::{
     render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
     render_phase::{DrawFunctions, RenderPhase, TrackedRenderPass},
+    render_resource::{
+        LoadOp, Operations, RenderPassColorAttachment, RenderPassDepthStencilAttachment,
+        RenderPassDescriptor,
+    },
     renderer::RenderContext,
     view::ExtractedView,
 };
-use bevy_ecs::prelude::*;
-use wgpu::{LoadOp, Operations, RenderPassColorAttachment, RenderPassDescriptor};
 
-pub struct MainPass2dNode {
-    query: QueryState<&'static RenderPhase<Transparent2dPhase>, With<ExtractedView>>,
+pub struct MainPass3dNode {
+    query: QueryState<&'static RenderPhase<Transparent3dPhase>, With<ExtractedView>>,
 }
 
-impl MainPass2dNode {
+impl MainPass3dNode {
     pub const IN_COLOR_ATTACHMENT: &'static str = "color_attachment";
+    pub const IN_DEPTH: &'static str = "depth";
     pub const IN_VIEW: &'static str = "view";
 
     pub fn new(world: &mut World) -> Self {
@@ -24,11 +27,12 @@ impl MainPass2dNode {
     }
 }
 
-impl Node for MainPass2dNode {
+impl Node for MainPass3dNode {
     fn input(&self) -> Vec<SlotInfo> {
         vec![
-            SlotInfo::new(MainPass2dNode::IN_COLOR_ATTACHMENT, SlotType::TextureView),
-            SlotInfo::new(MainPass2dNode::IN_VIEW, SlotType::Entity),
+            SlotInfo::new(MainPass3dNode::IN_COLOR_ATTACHMENT, SlotType::TextureView),
+            SlotInfo::new(MainPass3dNode::IN_DEPTH, SlotType::TextureView),
+            SlotInfo::new(MainPass3dNode::IN_VIEW, SlotType::Entity),
         ]
     }
 
@@ -43,17 +47,26 @@ impl Node for MainPass2dNode {
         world: &World,
     ) -> Result<(), NodeRunError> {
         let color_attachment_texture = graph.get_input_texture(Self::IN_COLOR_ATTACHMENT)?;
+        let clear_color = world.get_resource::<ClearColor>().unwrap();
+        let depth_texture = graph.get_input_texture(Self::IN_DEPTH)?;
         let pass_descriptor = RenderPassDescriptor {
-            label: Some("main_pass_2d"),
+            label: Some("main_pass_3d"),
             color_attachments: &[RenderPassColorAttachment {
                 view: color_attachment_texture,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(Color::rgb(0.4, 0.4, 0.4).into()),
+                    load: LoadOp::Clear(clear_color.0.into()),
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                view: depth_texture,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(0.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
         };
 
         let view_entity = graph.get_input_entity(Self::IN_VIEW)?;
@@ -67,7 +80,6 @@ impl Node for MainPass2dNode {
         let render_pass = render_context
             .command_encoder
             .begin_render_pass(&pass_descriptor);
-
         let mut draw_functions = draw_functions.write();
         let mut tracked_pass = TrackedRenderPass::new(render_pass);
         for drawable in transparent_phase.drawn_things.iter() {

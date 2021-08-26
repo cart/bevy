@@ -27,11 +27,15 @@ use std::{
 ///
 /// ```
 /// # use bevy_ecs::prelude::*;
+/// # use std::marker::PhantomData;
 /// use bevy_ecs::system::SystemParam;
 ///
 /// #[derive(SystemParam)]
-/// struct MyParam<'a> {
-///     foo: Res<'a, usize>,
+/// struct MyParam<'s, 'w> {
+///     foo: Res<'w, usize>,
+///     // TODO: this isn't ideal ... maybe the SystemParam derive can be smarter about world and state lifetimes?
+///     #[system_param(ignore)]
+///     marker: PhantomData<&'s usize>,
 /// }
 ///
 /// fn my_system(param: MyParam) {
@@ -1163,6 +1167,7 @@ macro_rules! impl_system_param_tuple {
             type Item = ($($param::Item,)*);
 
             #[inline]
+            #[allow(clippy::unused_unit)]
             unsafe fn get_param(
                 state: &'s mut Self,
                 system_meta: &SystemMeta,
@@ -1197,6 +1202,7 @@ macro_rules! impl_system_param_tuple {
                 $($param.apply(_world);)*
             }
 
+            #[allow(clippy::unused_unit)]
             fn default_config() -> ($(<$param as SystemParamState>::Config,)*) {
                 ($(<$param as SystemParamState>::default_config(),)*)
             }

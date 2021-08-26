@@ -6,19 +6,32 @@ pub use main_pass_2d::*;
 pub use main_pass_3d::*;
 pub use main_pass_driver::*;
 
-use crate::{
+use bevy_app::{App, Plugin};
+use bevy_ecs::prelude::*;
+use bevy_render2::{
     camera::{ActiveCameras, CameraPlugin},
+    color::Color,
     render_graph::{EmptyNode, RenderGraph, SlotInfo, SlotType},
     render_phase::{sort_phase_system, RenderPhase},
-    render_resource::{Texture, TextureView},
+    render_resource::{
+        Extent3d, Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsage,
+        TextureView,
+    },
     renderer::RenderDevice,
     texture::TextureCache,
     view::{ExtractedView, ViewPlugin},
-    RenderStage,
+    RenderApp, RenderStage, RenderWorld,
 };
-use bevy_app::{App, Plugin};
-use bevy_ecs::prelude::*;
-use wgpu::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsage};
+
+/// Resource that configures the clear color
+#[derive(Clone, Debug)]
+pub struct ClearColor(pub Color);
+
+impl Default for ClearColor {
+    fn default() -> Self {
+        Self(Color::rgb(0.4, 0.4, 0.4))
+    }
+}
 
 // Plugins that contribute to the RenderGraph should use the following label conventions:
 // 1. Graph modules should have a NAME, input module, and node module (where relevant)
@@ -59,20 +72,20 @@ pub struct CorePipelinePlugin;
 
 impl Plugin for CorePipelinePlugin {
     fn build(&self, app: &mut App) {
-        let render_app = app.sub_app_mut(0);
+        app.init_resource::<ClearColor>();
+
+        let render_app = app.sub_app(RenderApp);
         render_app
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_core_pipeline_camera_phases.system(),
-            )
-            .add_system_to_stage(RenderStage::Prepare, prepare_core_views_system.system())
+            .add_system_to_stage(RenderStage::Extract, extract_clear_color)
+            .add_system_to_stage(RenderStage::Extract, extract_core_pipeline_camera_phases)
+            .add_system_to_stage(RenderStage::Prepare, prepare_core_views_system)
             .add_system_to_stage(
                 RenderStage::PhaseSort,
-                sort_phase_system::<Transparent2dPhase>.system(),
+                sort_phase_system::<Transparent2dPhase>,
             )
             .add_system_to_stage(
                 RenderStage::PhaseSort,
-                sort_phase_system::<Transparent3dPhase>.system(),
+                sort_phase_system::<Transparent3dPhase>,
             );
 
         let pass_node_2d = MainPass2dNode::new(&mut render_app.world);
@@ -153,6 +166,14 @@ pub struct Transparent2dPhase;
 pub struct ViewDepthTexture {
     pub texture: Texture,
     pub view: TextureView,
+}
+
+pub fn extract_clear_color(clear_color: Res<ClearColor>, mut render_world: ResMut<RenderWorld>) {
+    // If the clear color has changed
+    if clear_color.is_changed() {
+        // Update the clear color resource in the render world
+        render_world.insert_resource(clear_color.clone())
+    }
 }
 
 pub fn extract_core_pipeline_camera_phases(

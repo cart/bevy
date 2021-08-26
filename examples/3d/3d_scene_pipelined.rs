@@ -22,9 +22,9 @@ fn main() {
         .add_plugins(PipelinedDefaultPlugins)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_plugin(LogDiagnosticsPlugin::default())
-        .add_startup_system(setup.system())
-        .add_system(movement.system())
-        .add_system(animate_light_direction.system())
+        .add_startup_system(setup)
+        .add_system(movement)
+        .add_system(animate_light_direction)
         .run();
 }
 
@@ -36,11 +36,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    commands.insert_resource(AmbientLight {
-        color: Color::ORANGE_RED,
-        brightness: 0.02,
-    });
-    // plane
+    // ground plane
     commands.spawn_bundle(PbrBundle {
         mesh: meshes.add(Mesh::from(shape::Plane { size: 10.0 })),
         material: materials.add(StandardMaterial {
@@ -51,6 +47,7 @@ fn setup(
         ..Default::default()
     });
 
+    // left wall
     let mut transform = Transform::from_xyz(2.5, 2.5, 0.0);
     transform.rotate(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
     commands.spawn_bundle(PbrBundle {
@@ -63,7 +60,7 @@ fn setup(
         }),
         ..Default::default()
     });
-
+    // back (right) wall
     let mut transform = Transform::from_xyz(0.0, 2.5, -2.5);
     transform.rotate(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
     commands.spawn_bundle(PbrBundle {
@@ -76,6 +73,7 @@ fn setup(
         }),
         ..Default::default()
     });
+
     // cube
     commands
         .spawn_bundle(PbrBundle {
@@ -104,12 +102,19 @@ fn setup(
         })
         .insert(Movable);
 
-    // light
+    // ambient light
+    commands.insert_resource(AmbientLight {
+        color: Color::ORANGE_RED,
+        brightness: 0.02,
+    });
+
+    // red point light
     commands
         .spawn_bundle(PointLightBundle {
             // transform: Transform::from_xyz(5.0, 8.0, 2.0),
             transform: Transform::from_xyz(1.0, 2.0, 0.0),
             point_light: PointLight {
+                intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
                 color: Color::RED,
                 ..Default::default()
             },
@@ -130,12 +135,13 @@ fn setup(
             });
         });
 
-    // light
+    // green point light
     commands
         .spawn_bundle(PointLightBundle {
             // transform: Transform::from_xyz(5.0, 8.0, 2.0),
             transform: Transform::from_xyz(-1.0, 2.0, 0.0),
             point_light: PointLight {
+                intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
                 color: Color::GREEN,
                 ..Default::default()
             },
@@ -156,12 +162,13 @@ fn setup(
             });
         });
 
-    // light
+    // blue point light
     commands
         .spawn_bundle(PointLightBundle {
             // transform: Transform::from_xyz(5.0, 8.0, 2.0),
             transform: Transform::from_xyz(0.0, 4.0, 0.0),
             point_light: PointLight {
+                intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
                 color: Color::BLUE,
                 ..Default::default()
             },
@@ -182,6 +189,7 @@ fn setup(
             });
         });
 
+    // directional 'sun' light
     const HALF_SIZE: f32 = 10.0;
     commands.spawn_bundle(DirectionalLightBundle {
         directional_light: DirectionalLight {
