@@ -115,7 +115,8 @@ impl FromWorld for ShadowShaders {
         let render_device = world.get_resource::<RenderDevice>().unwrap();
         let pbr_shaders = world.get_resource::<PbrShaders>().unwrap();
         let shader = Shader::from_wgsl(include_str!("depth.wgsl"));
-        let shader_module = render_device.create_shader_module(&shader);
+        let processed = shader.process(&[]).unwrap();
+        let shader_module = render_device.create_shader_module(&processed);
 
         let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             entries: &[
@@ -734,7 +735,6 @@ impl Node for ShadowPassNode {
                 };
 
                 let draw_functions = world.get_resource::<DrawFunctions<Shadow>>().unwrap();
-
                 let render_pass = render_context
                     .command_encoder
                     .begin_render_pass(&pass_descriptor);

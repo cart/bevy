@@ -13,16 +13,9 @@ pub mod view;
 
 pub use once_cell;
 
-use crate::{
-    camera::CameraPlugin,
-    mesh::MeshPlugin,
-    render_graph::RenderGraph,
-    renderer::render_system,
-    texture::ImagePlugin,
-    view::{ViewPlugin, WindowRenderPlugin},
-};
+use crate::{camera::CameraPlugin, mesh::MeshPlugin, render_asset::RenderAssetPlugin, render_graph::RenderGraph, renderer::render_system, shader::{RenderPipelineCache, Shader, ShaderLoader}, texture::ImagePlugin, view::{ViewPlugin, WindowRenderPlugin}};
 use bevy_app::{App, AppLabel, Plugin};
-use bevy_asset::AssetServer;
+use bevy_asset::{AddAsset, AssetServer};
 use bevy_ecs::prelude::*;
 use std::ops::{Deref, DerefMut};
 use wgpu::BackendBit;
@@ -95,7 +88,10 @@ impl Plugin for RenderPlugin {
             ));
         app.insert_resource(device.clone())
             .insert_resource(queue.clone())
+            .add_asset::<Shader>()
+            .init_asset_loader::<ShaderLoader>()
             .init_resource::<ScratchRenderWorld>();
+        let render_pipeline_cache = RenderPipelineCache::new(device.clone());
         let asset_server = app.world.get_resource::<AssetServer>().unwrap().clone();
 
         let mut render_app = App::empty();
@@ -116,6 +112,7 @@ impl Plugin for RenderPlugin {
             .insert_resource(instance)
             .insert_resource(device)
             .insert_resource(queue)
+            .insert_resource(render_pipeline_cache)
             .insert_resource(asset_server)
             .init_resource::<RenderGraph>();
 
@@ -178,7 +175,8 @@ impl Plugin for RenderPlugin {
             .add_plugin(CameraPlugin)
             .add_plugin(ViewPlugin)
             .add_plugin(MeshPlugin)
-            .add_plugin(ImagePlugin);
+            .add_plugin(ImagePlugin)
+            .add_plugin(RenderAssetPlugin::<Shader>::default());
     }
 }
 

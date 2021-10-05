@@ -1,6 +1,6 @@
 use crate::{
     texture_atlas::{TextureAtlas, TextureAtlasSprite},
-    Rect, Sprite,
+    Rect, Sprite, SPRITE_SHADER_HANDLE,
 };
 use bevy_asset::{Assets, Handle};
 use bevy_core_pipeline::Transparent2d;
@@ -16,7 +16,11 @@ use bevy_render2::{
     render_phase::{Draw, DrawFunctions, RenderPhase, TrackedRenderPass},
     render_resource::*,
     renderer::{RenderContext, RenderDevice},
-    shader::Shader,
+    shader::{
+        FragmentDescriptor, PipelineBundle, PipelineBundleId, PrimitiveDescriptor,
+        RenderPipelineCache, Shader, ShaderDefsKey, SpecializedPipelineId, SpecializedPipelineKey,
+        VertexBufferLayoutDescriptor, VertexDescriptor,
+    },
     texture::{BevyDefault, Image},
     view::{ViewUniformOffset, ViewUniforms},
 };
@@ -25,92 +29,72 @@ use bevy_utils::HashMap;
 use bytemuck::{Pod, Zeroable};
 
 pub struct SpriteShaders {
-    pipeline: RenderPipeline,
+    pipeline_bundle_id: PipelineBundleId,
     view_layout: BindGroupLayout,
     material_layout: BindGroupLayout,
+    specialized_pipeline_key: SpecializedPipelineKey,
+    specialized_pipeline_id: SpecializedPipelineId,
 }
 
 // TODO: this pattern for initializing the shaders / pipeline isn't ideal. this should be handled by the asset system
 impl FromWorld for SpriteShaders {
     fn from_world(world: &mut World) -> Self {
-        let render_device = world.get_resource::<RenderDevice>().unwrap();
-        let shader = Shader::from_wgsl(include_str!("sprite.wgsl"));
-        let shader_module = render_device.create_shader_module(&shader);
-
-        let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    // TODO: change this to ViewUniform::std140_size_static once crevice fixes this!
-                    // Context: https://github.com/LPGhatguy/crevice/issues/29
-                    min_binding_size: BufferSize::new(144),
-                },
-                count: None,
-            }],
-            label: None,
-        });
-
-        let material_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            entries: &[
-                BindGroupLayoutEntry {
+        let (view_layout, material_layout) = {
+            let render_device = world.get_resource::<RenderDevice>().unwrap();
+            let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                entries: &[BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStage::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
+                    visibility: ShaderStage::VERTEX | ShaderStage::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        // TODO: change this to ViewUniform::std140_size_static once crevice fixes this!
+                        // Context: https://github.com/LPGhatguy/crevice/issues/29
+                        min_binding_size: BufferSize::new(144),
                     },
                     count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStage::FRAGMENT,
-                    ty: BindingType::Sampler {
-                        comparison: false,
-                        filtering: true,
-                    },
-                    count: None,
-                },
-            ],
-            label: None,
-        });
+                }],
+                label: None,
+            });
 
-        let pipeline_layout = render_device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: None,
-            push_constant_ranges: &[],
-            bind_group_layouts: &[&view_layout, &material_layout],
-        });
-
-        let pipeline = render_device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: None,
-            depth_stencil: None,
-            vertex: VertexState {
-                buffers: &[VertexBufferLayout {
-                    array_stride: 20,
-                    step_mode: InputStepMode::Vertex,
-                    attributes: &[
-                        VertexAttribute {
-                            format: VertexFormat::Float32x3,
-                            offset: 0,
-                            shader_location: 0,
+            let material_layout =
+                render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                    entries: &[
+                        BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: ShaderStage::FRAGMENT,
+                            ty: BindingType::Texture {
+                                multisampled: false,
+                                sample_type: TextureSampleType::Float { filterable: false },
+                                view_dimension: TextureViewDimension::D2,
+                            },
+                            count: None,
                         },
-                        VertexAttribute {
-                            format: VertexFormat::Float32x2,
-                            offset: 12,
-                            shader_location: 1,
+                        BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: ShaderStage::FRAGMENT,
+                            ty: BindingType::Sampler {
+                                comparison: false,
+                                filtering: true,
+                            },
+                            count: None,
                         },
                     ],
-                }],
-                module: &shader_module,
-                entry_point: "vertex",
+                    label: None,
+                });
+            (view_layout, material_layout)
+        };
+
+        let pipeline_bundle = PipelineBundle {
+            depth_stencil: None,
+            vertex: VertexDescriptor {
+                shader: SPRITE_SHADER_HANDLE.typed::<Shader>(),
+                entry_point: "vertex".to_string(),
             },
-            fragment: Some(FragmentState {
-                module: &shader_module,
-                entry_point: "fragment",
-                targets: &[ColorTargetState {
+            fragment: Some(FragmentDescriptor {
+                shader: SPRITE_SHADER_HANDLE.typed::<Shader>(),
+                entry_point: "fragment".to_string(),
+                targets: vec![ColorTargetState {
                     format: TextureFormat::bevy_default(),
                     blend: Some(BlendState {
                         color: BlendComponent {
@@ -127,21 +111,53 @@ impl FromWorld for SpriteShaders {
                     write_mask: ColorWrite::ALL,
                 }],
             }),
-            layout: Some(&pipeline_layout),
-            multisample: MultisampleState::default(),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                strip_index_format: None,
+            primitive: PrimitiveDescriptor {
                 front_face: FrontFace::Ccw,
                 cull_mode: None,
                 polygon_mode: PolygonMode::Fill,
                 clamp_depth: false,
                 conservative: false,
             },
-        });
+        };
+
+        let world_cell = world.cell();
+        let mut pipeline_cache = world_cell
+            .get_resource_mut::<RenderPipelineCache>()
+            .unwrap();
+        let pipeline_bundle_id = pipeline_cache.add_bundle(pipeline_bundle);
+        let pipeline_layout_key =
+            pipeline_cache.get_or_insert_pipeline_layout(&[&view_layout, &material_layout]);
+
+        let vertex_buffer_layout_key =
+            pipeline_cache.get_or_insert_vertex_buffer_layout(VertexBufferLayoutDescriptor {
+                array_stride: 20,
+                step_mode: InputStepMode::Vertex,
+                attributes: vec![
+                    VertexAttribute {
+                        format: VertexFormat::Float32x3,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    VertexAttribute {
+                        format: VertexFormat::Float32x2,
+                        offset: 12,
+                        shader_location: 1,
+                    },
+                ],
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+            });
+        let specialized_pipeline_key = SpecializedPipelineKey {
+            multisample_count: 1,
+            pipeline_layout: pipeline_layout_key,
+            shader_defs: ShaderDefsKey::new(&[]),
+            vertex_buffer_layout: vertex_buffer_layout_key,
+        };
 
         SpriteShaders {
-            pipeline,
+            pipeline_bundle_id,
+            specialized_pipeline_key,
+            specialized_pipeline_id: SpecializedPipelineId::INVALID,
             view_layout,
             material_layout,
         }
@@ -327,12 +343,19 @@ pub fn queue_sprites(
     render_device: Res<RenderDevice>,
     mut sprite_meta: ResMut<SpriteMeta>,
     view_uniforms: Res<ViewUniforms>,
-    sprite_shaders: Res<SpriteShaders>,
+    mut sprite_shaders: ResMut<SpriteShaders>,
     mut image_bind_groups: ResMut<ImageBindGroups>,
     gpu_images: Res<RenderAssets<Image>>,
+    shaders: Res<RenderAssets<Shader>>,
+    mut pipeline_cache: ResMut<RenderPipelineCache>,
     mut extracted_sprites: Query<(Entity, &ExtractedSprite)>,
     mut views: Query<&mut RenderPhase<Transparent2d>>,
 ) {
+    if let Ok(pipeline_id) = pipeline_cache.specialize(sprite_shaders.pipeline_bundle_id, &shaders, sprite_shaders.specialized_pipeline_key) {
+        sprite_shaders.specialized_pipeline_id = pipeline_id;
+    } else {
+        return;
+    }
     if let Some(view_binding) = view_uniforms.uniforms.binding() {
         sprite_meta.view_bind_group = Some(render_device.create_bind_group(&BindGroupDescriptor {
             entries: &[BindGroupEntry {
@@ -401,6 +424,7 @@ pub struct DrawSprite {
         SRes<SpriteShaders>,
         SRes<SpriteMeta>,
         SRes<ImageBindGroups>,
+        SRes<RenderPipelineCache>,
         SQuery<Read<ViewUniformOffset>>,
         SQuery<Read<ExtractedSprite>>,
     )>,
@@ -423,13 +447,17 @@ impl Draw<Transparent2d> for DrawSprite {
         item: &Transparent2d,
     ) {
         const INDICES: usize = 6;
-        let (sprite_shaders, sprite_meta, image_bind_groups, views, sprites) =
+        let (sprite_shaders, sprite_meta, image_bind_groups, pipeline_cache, views, sprites) =
             self.params.get(world);
         let view_uniform = views.get(view).unwrap();
         let sprite_meta = sprite_meta.into_inner();
         let image_bind_groups = image_bind_groups.into_inner();
         let extracted_sprite = sprites.get(item.entity).unwrap();
-        pass.set_render_pipeline(&sprite_shaders.into_inner().pipeline);
+        let pipeline = pipeline_cache
+            .into_inner()
+            .get_specialized(sprite_shaders.specialized_pipeline_id)
+            .unwrap();
+        pass.set_render_pipeline(pipeline);
         pass.set_vertex_buffer(0, sprite_meta.vertices.buffer().unwrap().slice(..));
         pass.set_index_buffer(
             sprite_meta.indices.buffer().unwrap().slice(..),

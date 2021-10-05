@@ -1,4 +1,5 @@
 mod bind_group;
+mod bind_group_layout;
 mod buffer;
 mod buffer_vec;
 mod pipeline;
@@ -7,6 +8,7 @@ mod texture;
 mod uniform_vec;
 
 pub use bind_group::*;
+pub use bind_group_layout::*;
 pub use buffer::*;
 pub use buffer_vec::*;
 pub use pipeline::*;
@@ -16,7 +18,7 @@ pub use uniform_vec::*;
 
 // TODO: decide where re-exports should go
 pub use wgpu::{
-    util::BufferInitDescriptor, AddressMode, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
+    util::BufferInitDescriptor, AddressMode, BindGroupDescriptor, BindGroupEntry,
     BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent,
     BlendFactor, BlendOperation, BlendState, BufferAddress, BufferBindingType, BufferSize,
     BufferUsage, ColorTargetState, ColorWrite, CompareFunction, ComputePassDescriptor,

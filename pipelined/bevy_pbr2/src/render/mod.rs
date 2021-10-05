@@ -129,7 +129,8 @@ impl FromWorld for PbrShaders {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.get_resource::<RenderDevice>().unwrap();
         let shader = Shader::from_wgsl(include_str!("pbr.wgsl"));
-        let shader_module = render_device.create_shader_module(&shader);
+        let processed = shader.process(&[]).unwrap();
+        let shader_module = render_device.create_shader_module(&processed);
 
         let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             entries: &[
