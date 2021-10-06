@@ -508,7 +508,7 @@ pub fn queue_meshes(
     mut commands: Commands,
     transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
     render_device: Res<RenderDevice>,
-    mut pbr_shaders: ResMut<PbrShaders>,
+    pbr_shaders: Res<PbrShaders>,
     shadow_shaders: Res<ShadowShaders>,
     shaders: Res<RenderAssets<Shader>>,
     mut pipeline_cache: ResMut<RenderPipelineCache>,
@@ -526,15 +526,6 @@ pub fn queue_meshes(
         &mut RenderPhase<Transparent3d>,
     )>,
 ) {
-    if let Ok(pipeline_id) = pipeline_cache.specialize(
-        pbr_shaders.pipeline_bundle_id,
-        &shaders,
-        pbr_shaders.specialized_pipeline_key,
-    ) {
-        pbr_shaders.specialized_pipeline_id = pipeline_id;
-    } else {
-        return;
-    }
     if let (Some(view_binding), Some(light_binding)) = (
         view_uniforms.uniforms.binding(),
         light_meta.view_gpu_lights.binding(),
@@ -593,15 +584,68 @@ pub fn queue_meshes(
                 if !render_materials.contains_key(material_handle) {
                     continue;
                 }
-                // NOTE: row 2 of the view matrix dotted with column 3 of the model matrix
-                //       gives the z component of translation of the mesh in view space
-                let mesh_z = view_row_2.dot(mesh_uniform.transform.col(3));
-                // TODO: currently there is only "transparent phase". this should pick transparent vs opaque according to the mesh material
-                transparent_phase.add(Transparent3d {
-                    entity,
-                    draw_function: draw_pbr,
-                    distance: mesh_z,
-                });
+
+                let hi = vec![
+                    &pbr_shaders.view_layout,
+                    &pbr_shaders.material_layout,
+                    &pbr_shaders.mesh_layout,
+                ];
+                let pipeline_layout_key = pipeline_cache.get_or_insert_pipeline_layout(&hi);
+
+                let vertex_buffer_layout_key = pipeline_cache.get_or_insert_vertex_buffer_layout(
+                    VertexBufferLayoutDescriptor {
+                        array_stride: 32,
+                        step_mode: InputStepMode::Vertex,
+                        strip_index_format: None,
+                        topology: PrimitiveTopology::TriangleList,
+                        attributes: vec![
+                            // Position (GOTCHA! Vertex_Position isn't first in the buffer due to how Mesh sorts attributes (alphabetically))
+                            VertexAttribute {
+                                format: VertexFormat::Float32x3,
+                                offset: 12,
+                                shader_location: 0,
+                            },
+                            // Normal
+                            VertexAttribute {
+                                format: VertexFormat::Float32x3,
+                                offset: 0,
+                                shader_location: 1,
+                            },
+                            // Uv
+                            VertexAttribute {
+                                format: VertexFormat::Float32x2,
+                                offset: 24,
+                                shader_location: 2,
+                            },
+                        ],
+                    },
+                );
+
+                let specialized_pipeline_key = SpecializedPipelineKey {
+                    multisample_count: 1,
+                    pipeline_layout: pipeline_layout_key,
+                    shader_defs: ShaderDefsKey::new(&[]),
+                    vertex_buffer_layout: vertex_buffer_layout_key,
+                };
+
+                if let Ok(pipeline_id) = pipeline_cache.specialize(
+                    pbr_shaders.pipeline_bundle_id,
+                    &shaders,
+                    specialized_pipeline_key,
+                ) {
+                    // NOTE: row 2 of the view matrix dotted with column 3 of the model matrix
+                    //       gives the z component of translation of the mesh in view space
+                    let mesh_z = view_row_2.dot(mesh_uniform.transform.col(3));
+                    // TODO: currently there is only "transparent phase". this should pick transparent vs opaque according to the mesh material
+                    transparent_phase.add(Transparent3d {
+                        entity,
+                        draw_function: draw_pbr,
+                        pipeline: pipeline_id,
+                        distance: mesh_z,
+                    });
+                } else {
+                    return;
+                }
             }
         }
     }
@@ -617,17 +661,17 @@ pub type DrawPbr = (
 
 pub struct SetPbrPipeline;
 impl RenderCommand<Transparent3d> for SetPbrPipeline {
-    type Param = (SRes<PbrShaders>, SRes<RenderPipelineCache>);
+    type Param = SRes<RenderPipelineCache>;
     #[inline]
     fn render<'w>(
         _view: Entity,
         _item: &Transparent3d,
-        (pbr_shaders, pipeline_cache): SystemParamItem<'w, '_, Self::Param>,
+        pipeline_cache: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) {
         let pipeline = pipeline_cache
             .into_inner()
-            .get_specialized(pbr_shaders.specialized_pipeline_id)
+            .get_specialized(_item.pipeline)
             .unwrap();
         pass.set_render_pipeline(&pipeline);
     }
