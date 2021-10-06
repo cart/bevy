@@ -2,7 +2,10 @@ mod light;
 
 pub use light::*;
 
-use crate::{NotShadowCaster, NotShadowReceiver, StandardMaterial, StandardMaterialUniformData};
+use crate::{
+    NotShadowCaster, NotShadowReceiver, StandardMaterial, StandardMaterialUniformData,
+    PBR_SHADER_HANDLE,
+};
 use bevy_asset::Handle;
 use bevy_core_pipeline::Transparent3d;
 use bevy_ecs::{
@@ -17,7 +20,11 @@ use bevy_render2::{
     render_phase::{DrawFunctions, RenderCommand, RenderPhase, TrackedRenderPass},
     render_resource::*,
     renderer::{RenderDevice, RenderQueue},
-    shader::Shader,
+    shader::{
+        FragmentDescriptor, PipelineBundle, PipelineBundleId, PrimitiveDescriptor,
+        RenderPipelineCache, Shader, ShaderDefsKey, SpecializedPipelineId, SpecializedPipelineKey,
+        VertexBufferLayoutDescriptor, VertexDescriptor,
+    },
     texture::{BevyDefault, GpuImage, Image, TextureFormatPixelInfo},
     view::{ExtractedView, ViewUniformOffset, ViewUniforms},
 };
@@ -115,8 +122,9 @@ pub fn extract_meshes(
 }
 
 pub struct PbrShaders {
-    pub pipeline: RenderPipeline,
-    pub shader_module: ShaderModule,
+    pub pipeline_bundle_id: PipelineBundleId,
+    pub specialized_pipeline_key: SpecializedPipelineKey,
+    pub specialized_pipeline_id: SpecializedPipelineId,
     pub view_layout: BindGroupLayout,
     pub material_layout: BindGroupLayout,
     pub mesh_layout: BindGroupLayout,
@@ -127,11 +135,63 @@ pub struct PbrShaders {
 // TODO: this pattern for initializing the shaders / pipeline isn't ideal. this should be handled by the asset system
 impl FromWorld for PbrShaders {
     fn from_world(world: &mut World) -> Self {
-        let render_device = world.get_resource::<RenderDevice>().unwrap();
-        let shader = Shader::from_wgsl(include_str!("pbr.wgsl"));
-        let processed = shader.process(&[]).unwrap();
-        let shader_module = render_device.create_shader_module(&processed);
+        let pipeline_bundle = PipelineBundle {
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: CompareFunction::Greater,
+                stencil: StencilState {
+                    front: StencilFaceState::IGNORE,
+                    back: StencilFaceState::IGNORE,
+                    read_mask: 0,
+                    write_mask: 0,
+                },
+                bias: DepthBiasState {
+                    constant: 0,
+                    slope_scale: 0.0,
+                    clamp: 0.0,
+                },
+            }),
+            vertex: VertexDescriptor {
+                shader: PBR_SHADER_HANDLE.typed::<Shader>(),
+                entry_point: "vertex".to_string(),
+            },
+            fragment: Some(FragmentDescriptor {
+                shader: PBR_SHADER_HANDLE.typed::<Shader>(),
+                entry_point: "fragment".to_string(),
+                targets: vec![ColorTargetState {
+                    format: TextureFormat::bevy_default(),
+                    blend: Some(BlendState {
+                        color: BlendComponent {
+                            src_factor: BlendFactor::SrcAlpha,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
+                        },
+                        alpha: BlendComponent {
+                            src_factor: BlendFactor::One,
+                            dst_factor: BlendFactor::One,
+                            operation: BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: ColorWrite::ALL,
+                }],
+            }),
+            primitive: PrimitiveDescriptor {
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
+                polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
+            },
+        };
 
+        let world_cell = world.cell();
+        let mut pipeline_cache = world_cell
+            .get_resource_mut::<RenderPipelineCache>()
+            .unwrap();
+        let pipeline_bundle_id = pipeline_cache.add_bundle(pipeline_bundle);
+
+        let render_device = world_cell.get_resource::<RenderDevice>().unwrap();
         let view_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             entries: &[
                 // View
@@ -323,91 +383,45 @@ impl FromWorld for PbrShaders {
             }],
             label: None,
         });
+        let pipeline_layout_key = pipeline_cache.get_or_insert_pipeline_layout(&[
+            &view_layout,
+            &material_layout,
+            &mesh_layout,
+        ]);
 
-        let pipeline_layout = render_device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: None,
-            push_constant_ranges: &[],
-            bind_group_layouts: &[&view_layout, &material_layout, &mesh_layout],
-        });
-
-        let pipeline = render_device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: None,
-            vertex: VertexState {
-                buffers: &[VertexBufferLayout {
-                    array_stride: 32,
-                    step_mode: InputStepMode::Vertex,
-                    attributes: &[
-                        // Position (GOTCHA! Vertex_Position isn't first in the buffer due to how Mesh sorts attributes (alphabetically))
-                        VertexAttribute {
-                            format: VertexFormat::Float32x3,
-                            offset: 12,
-                            shader_location: 0,
-                        },
-                        // Normal
-                        VertexAttribute {
-                            format: VertexFormat::Float32x3,
-                            offset: 0,
-                            shader_location: 1,
-                        },
-                        // Uv
-                        VertexAttribute {
-                            format: VertexFormat::Float32x2,
-                            offset: 24,
-                            shader_location: 2,
-                        },
-                    ],
-                }],
-                module: &shader_module,
-                entry_point: "vertex",
-            },
-            fragment: Some(FragmentState {
-                module: &shader_module,
-                entry_point: "fragment",
-                targets: &[ColorTargetState {
-                    format: TextureFormat::bevy_default(),
-                    blend: Some(BlendState {
-                        color: BlendComponent {
-                            src_factor: BlendFactor::SrcAlpha,
-                            dst_factor: BlendFactor::OneMinusSrcAlpha,
-                            operation: BlendOperation::Add,
-                        },
-                        alpha: BlendComponent {
-                            src_factor: BlendFactor::One,
-                            dst_factor: BlendFactor::One,
-                            operation: BlendOperation::Add,
-                        },
-                    }),
-                    write_mask: ColorWrite::ALL,
-                }],
-            }),
-            depth_stencil: Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::Greater,
-                stencil: StencilState {
-                    front: StencilFaceState::IGNORE,
-                    back: StencilFaceState::IGNORE,
-                    read_mask: 0,
-                    write_mask: 0,
-                },
-                bias: DepthBiasState {
-                    constant: 0,
-                    slope_scale: 0.0,
-                    clamp: 0.0,
-                },
-            }),
-            layout: Some(&pipeline_layout),
-            multisample: MultisampleState::default(),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
+        let vertex_buffer_layout_key =
+            pipeline_cache.get_or_insert_vertex_buffer_layout(VertexBufferLayoutDescriptor {
+                array_stride: 32,
+                step_mode: InputStepMode::Vertex,
                 strip_index_format: None,
-                front_face: FrontFace::Ccw,
-                cull_mode: Some(Face::Back),
-                polygon_mode: PolygonMode::Fill,
-                clamp_depth: false,
-                conservative: false,
-            },
-        });
+                topology: PrimitiveTopology::TriangleList,
+                attributes: vec![
+                    // Position (GOTCHA! Vertex_Position isn't first in the buffer due to how Mesh sorts attributes (alphabetically))
+                    VertexAttribute {
+                        format: VertexFormat::Float32x3,
+                        offset: 12,
+                        shader_location: 0,
+                    },
+                    // Normal
+                    VertexAttribute {
+                        format: VertexFormat::Float32x3,
+                        offset: 0,
+                        shader_location: 1,
+                    },
+                    // Uv
+                    VertexAttribute {
+                        format: VertexFormat::Float32x2,
+                        offset: 24,
+                        shader_location: 2,
+                    },
+                ],
+            });
+        let specialized_pipeline_key = SpecializedPipelineKey {
+            multisample_count: 1,
+            pipeline_layout: pipeline_layout_key,
+            shader_defs: ShaderDefsKey::new(&[]),
+            vertex_buffer_layout: vertex_buffer_layout_key,
+        };
 
         // A 1x1x1 'all 1.0' texture to use as a dummy texture to use in place of optional StandardMaterial textures
         let dummy_white_gpu_image = {
@@ -421,7 +435,7 @@ impl FromWorld for PbrShaders {
             let sampler = render_device.create_sampler(&image.sampler_descriptor);
 
             let format_size = image.texture_descriptor.format.pixel_size();
-            let render_queue = world.get_resource_mut::<RenderQueue>().unwrap();
+            let render_queue = world_cell.get_resource_mut::<RenderQueue>().unwrap();
             render_queue.write_texture(
                 ImageCopyTexture {
                     texture: &texture,
@@ -450,8 +464,9 @@ impl FromWorld for PbrShaders {
             }
         };
         PbrShaders {
-            pipeline,
-            shader_module,
+            pipeline_bundle_id,
+            specialized_pipeline_id: SpecializedPipelineId::INVALID,
+            specialized_pipeline_key,
             view_layout,
             material_layout,
             mesh_layout,
@@ -493,8 +508,10 @@ pub fn queue_meshes(
     mut commands: Commands,
     transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
     render_device: Res<RenderDevice>,
-    pbr_shaders: Res<PbrShaders>,
+    mut pbr_shaders: ResMut<PbrShaders>,
     shadow_shaders: Res<ShadowShaders>,
+    shaders: Res<RenderAssets<Shader>>,
+    mut pipeline_cache: ResMut<RenderPipelineCache>,
     light_meta: Res<LightMeta>,
     view_uniforms: Res<ViewUniforms>,
     render_materials: Res<RenderAssets<StandardMaterial>>,
@@ -509,6 +526,15 @@ pub fn queue_meshes(
         &mut RenderPhase<Transparent3d>,
     )>,
 ) {
+    if let Ok(pipeline_id) = pipeline_cache.specialize(
+        pbr_shaders.pipeline_bundle_id,
+        &shaders,
+        pbr_shaders.specialized_pipeline_key,
+    ) {
+        pbr_shaders.specialized_pipeline_id = pipeline_id;
+    } else {
+        return;
+    }
     if let (Some(view_binding), Some(light_binding)) = (
         view_uniforms.uniforms.binding(),
         light_meta.view_gpu_lights.binding(),
@@ -591,15 +617,19 @@ pub type DrawPbr = (
 
 pub struct SetPbrPipeline;
 impl RenderCommand<Transparent3d> for SetPbrPipeline {
-    type Param = SRes<PbrShaders>;
+    type Param = (SRes<PbrShaders>, SRes<RenderPipelineCache>);
     #[inline]
     fn render<'w>(
         _view: Entity,
         _item: &Transparent3d,
-        pbr_shaders: SystemParamItem<'w, '_, Self::Param>,
+        (pbr_shaders, pipeline_cache): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) {
-        pass.set_render_pipeline(&pbr_shaders.into_inner().pipeline);
+        let pipeline = pipeline_cache
+            .into_inner()
+            .get_specialized(pbr_shaders.specialized_pipeline_id)
+            .unwrap();
+        pass.set_render_pipeline(&pipeline);
     }
 }
 

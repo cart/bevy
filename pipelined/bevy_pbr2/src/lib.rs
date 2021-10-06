@@ -3,21 +3,17 @@ mod light;
 mod material;
 mod render;
 
+use bevy_reflect::TypeUuid;
 pub use bundle::*;
 pub use light::*;
 pub use material::*;
 pub use render::*;
 
 use bevy_app::prelude::*;
-use bevy_asset::Handle;
+use bevy_asset::{Assets, Handle, HandleUntyped};
 use bevy_core_pipeline::Transparent3d;
 use bevy_ecs::prelude::*;
-use bevy_render2::{
-    render_component::{ExtractComponentPlugin, UniformComponentPlugin},
-    render_graph::RenderGraph,
-    render_phase::{sort_phase_system, AddRenderCommand, DrawFunctions},
-    RenderApp, RenderStage,
-};
+use bevy_render2::{RenderApp, RenderStage, render_component::{ExtractComponentPlugin, UniformComponentPlugin}, render_graph::RenderGraph, render_phase::{sort_phase_system, AddRenderCommand, DrawFunctions}, shader::Shader};
 
 pub mod draw_3d_graph {
     pub mod node {
@@ -25,11 +21,19 @@ pub mod draw_3d_graph {
     }
 }
 
+pub const PBR_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 4805239651767701046);
+
 #[derive(Default)]
 pub struct PbrPlugin;
 
 impl Plugin for PbrPlugin {
     fn build(&self, app: &mut App) {
+
+        let mut shaders = app.world.get_resource_mut::<Assets<Shader>>().unwrap();
+        let pbr_shader = Shader::from_wgsl(include_str!("render/pbr.wgsl"));
+        shaders.set_untracked(PBR_SHADER_HANDLE, pbr_shader);
+
         app.add_plugin(StandardMaterialPlugin)
             .add_plugin(ExtractComponentPlugin::<Handle<StandardMaterial>>::default())
             .add_plugin(UniformComponentPlugin::<MeshUniform>::default())
