@@ -31,7 +31,8 @@ pub struct WgpuRenderResourceContext {
 }
 
 pub const COPY_BYTES_PER_ROW_ALIGNMENT: usize = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize;
-pub const BIND_BUFFER_ALIGNMENT: usize = wgpu::BIND_BUFFER_ALIGNMENT as usize;
+// TODO: fix this?
+pub const BIND_BUFFER_ALIGNMENT: usize = 256 as usize;
 pub const COPY_BUFFER_ALIGNMENT: usize = wgpu::COPY_BUFFER_ALIGNMENT as usize;
 pub const PUSH_CONSTANT_ALIGNMENT: u32 = wgpu::PUSH_CONSTANT_ALIGNMENT;
 
@@ -236,11 +237,11 @@ impl WgpuRenderResourceContext {
 
     fn try_next_surface_frame(&self, window_id: bevy_window::WindowId) -> Option<TextureId> {
         let mut window_surfaces = self.resources.window_surfaces.write();
-        let mut surface_frames = self.resources.surface_frames.write();
+        let mut surface_frames = self.resources.surface_textures.write();
 
         let window_surface = window_surfaces.get_mut(&window_id).unwrap();
-        let next_texture = window_surface.get_current_frame().ok()?;
-        let view = next_texture.output.texture.create_view(&Default::default());
+        let next_texture = window_surface.get_current_texture().ok()?;
+        let view = next_texture.texture.create_view(&Default::default());
         let id = TextureId::new();
         surface_frames.insert(id, (view, next_texture));
         Some(id)
@@ -384,12 +385,12 @@ impl RenderResourceContext for WgpuRenderResourceContext {
     }
 
     fn drop_surface_frame(&self, texture: TextureId) {
-        let mut surface_frames = self.resources.surface_frames.write();
+        let mut surface_frames = self.resources.surface_textures.write();
         surface_frames.remove(&texture);
     }
 
     fn drop_all_surface_frames(&self) {
-        let mut surface_frames = self.resources.surface_frames.write();
+        let mut surface_frames = self.resources.surface_textures.write();
         surface_frames.clear();
     }
 

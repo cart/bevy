@@ -54,6 +54,7 @@ impl ShaderReflection {
                 flags: naga::back::spv::WriterFlags::empty(),
                 ..naga::back::spv::Options::default()
             },
+            None,
         )
     }
 

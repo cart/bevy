@@ -45,11 +45,11 @@ pub struct TextureViewId(Uuid);
 #[derive(Clone, Debug)]
 pub enum TextureViewValue {
     TextureView(Arc<wgpu::TextureView>),
-    SurfaceFrame {
+    SurfaceTexture {
         // NOTE: The order of these fields is important because the view must be dropped before the
         // frame is dropped
         view: Arc<wgpu::TextureView>,
-        frame: Arc<wgpu::SurfaceFrame>,
+        texture: Arc<wgpu::SurfaceTexture>,
     },
 }
 
@@ -64,6 +64,14 @@ impl TextureView {
     pub fn id(&self) -> TextureViewId {
         self.id
     }
+
+    #[inline]
+    pub fn take_surface_texture(self) -> Option<wgpu::SurfaceTexture> {
+        match self.value {
+            TextureViewValue::TextureView(_) => None,
+            TextureViewValue::SurfaceTexture { texture, .. } => Arc::try_unwrap(texture).ok(),
+        }
+    }
 }
 
 impl From<wgpu::TextureView> for TextureView {
@@ -75,14 +83,14 @@ impl From<wgpu::TextureView> for TextureView {
     }
 }
 
-impl From<wgpu::SurfaceFrame> for TextureView {
-    fn from(value: wgpu::SurfaceFrame) -> Self {
-        let frame = Arc::new(value);
-        let view = Arc::new(frame.output.texture.create_view(&Default::default()));
+impl From<wgpu::SurfaceTexture> for TextureView {
+    fn from(value: wgpu::SurfaceTexture) -> Self {
+        let texture = Arc::new(value);
+        let view = Arc::new(texture.texture.create_view(&Default::default()));
 
         TextureView {
             id: TextureViewId(Uuid::new_v4()),
-            value: TextureViewValue::SurfaceFrame { frame, view },
+            value: TextureViewValue::SurfaceTexture { texture, view },
         }
     }
 }
@@ -94,7 +102,7 @@ impl Deref for TextureView {
     fn deref(&self) -> &Self::Target {
         match &self.value {
             TextureViewValue::TextureView(value) => value,
-            TextureViewValue::SurfaceFrame { view, .. } => view,
+            TextureViewValue::SurfaceTexture { view, .. } => view,
         }
     }
 }
@@ -136,7 +144,7 @@ impl Deref for Sampler {
 #[derive(Clone, Debug)]
 pub struct SurfaceFrame {
     id: TextureViewId,
-    value: Arc<wgpu::SurfaceFrame>,
+    value: Arc<wgpu::SurfaceTexture>,
 }
 
 impl SurfaceFrame {
@@ -146,8 +154,8 @@ impl SurfaceFrame {
     }
 }
 
-impl From<wgpu::SurfaceFrame> for SurfaceFrame {
-    fn from(value: wgpu::SurfaceFrame) -> Self {
+impl From<wgpu::SurfaceTexture> for SurfaceFrame {
+    fn from(value: wgpu::SurfaceTexture) -> Self {
         Self {
             id: TextureViewId(Uuid::new_v4()),
             value: Arc::new(value),
@@ -156,7 +164,7 @@ impl From<wgpu::SurfaceFrame> for SurfaceFrame {
 }
 
 impl Deref for SurfaceFrame {
-    type Target = wgpu::SurfaceFrame;
+    type Target = wgpu::SurfaceTexture;
 
     #[inline]
     fn deref(&self) -> &Self::Target {

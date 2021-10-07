@@ -98,7 +98,7 @@ impl WgpuResourceDiagnosticsPlugin {
             Self::SURFACE_FRAMES,
             render_resource_context
                 .resources
-                .surface_frames
+                .surface_textures
                 .read()
                 .len() as f64,
         );

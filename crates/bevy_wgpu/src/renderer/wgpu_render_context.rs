@@ -234,7 +234,7 @@ fn get_texture_view<'a>(
         TextureAttachment::Id(render_resource) => refs
             .textures
             .get(render_resource)
-            .unwrap_or_else(|| &refs.surface_frames.get(render_resource).unwrap().0),
+            .unwrap_or_else(|| &refs.surface_textures.get(render_resource).unwrap().0),
         TextureAttachment::Input(_) => panic!(
             "Encountered unset `TextureAttachment::Input`. The `RenderGraph` executor should \
             always set `TextureAttachment::Inputs` to `TextureAttachment::RenderResource` before \

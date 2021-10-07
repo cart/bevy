@@ -1,11 +1,11 @@
 mod graph_runner;
 mod render_device;
 
-use bevy_utils::tracing::info;
+use bevy_utils::tracing::{info, info_span};
 pub use graph_runner::*;
 pub use render_device::*;
 
-use crate::render_graph::RenderGraph;
+use crate::{render_graph::RenderGraph, view::ExtractedWindows};
 use bevy_ecs::prelude::*;
 use std::sync::Arc;
 use wgpu::{Backends, CommandEncoder, DeviceDescriptor, Instance, Queue, RequestAdapterOptions};
@@ -24,6 +24,18 @@ pub fn render_system(world: &mut World) {
         world,
     )
     .unwrap();
+    {
+        let span = info_span!("present_frames");
+        let _guard = span.enter();
+        let mut windows = world.get_resource_mut::<ExtractedWindows>().unwrap();
+        for window in windows.values_mut() {
+            if let Some(texture_view) = window.swap_chain_texture.take() {
+                if let Some(surface_texture) = texture_view.take_surface_texture() {
+                    surface_texture.present();
+                }
+            }
+        }
+    }
 }
 
 pub type RenderQueue = Arc<Queue>;

@@ -30,4 +30,4 @@ bitflags = "1.2"
 # direct dependency required for derive macro
 bytemuck = { version = "1", features = ["derive"] }
 crevice = { path = "../../crates/crevice", version = "0.6.0" }
-wgpu = { version = "0.10.0", features = ["spirv"] }
+wgpu = { git = "https://github.com/gfx-rs/wgpu", rev = "5092fb7ea5d3e0dedd87da0cd30e0ecdeb3603d2", features = ["spirv"] }

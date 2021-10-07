@@ -7,13 +7,10 @@ use smallvec::{smallvec, SmallVec};
 use std::{borrow::Cow, collections::VecDeque};
 use thiserror::Error;
 
-use crate::{
-    render_graph::{
+use crate::{render_graph::{
         Edge, NodeId, NodeRunError, NodeState, RenderGraph, RenderGraphContext, SlotLabel,
         SlotType, SlotValue,
-    },
-    renderer::{RenderContext, RenderDevice},
-};
+    }, renderer::{RenderContext, RenderDevice}, view::ExtractedWindows};
 
 pub(crate) struct RenderGraphRunner;
 

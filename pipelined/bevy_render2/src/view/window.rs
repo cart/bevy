@@ -34,7 +34,7 @@ pub struct ExtractedWindow {
     pub physical_width: u32,
     pub physical_height: u32,
     pub vsync: bool,
-    pub swap_chain_frame: Option<TextureView>,
+    pub swap_chain_texture: Option<TextureView>,
     pub size_changed: bool,
 }
 
@@ -74,12 +74,12 @@ fn extract_windows(mut render_world: ResMut<RenderWorld>, windows: Res<Windows>)
                     physical_width: new_width,
                     physical_height: new_height,
                     vsync: window.vsync(),
-                    swap_chain_frame: None,
+                    swap_chain_texture: None,
                     size_changed: false,
                 });
 
         // NOTE: Drop the swap chain frame here
-        extracted_window.swap_chain_frame = None;
+        extracted_window.swap_chain_texture = None;
         extracted_window.size_changed = new_width != extracted_window.physical_width
             || new_height != extracted_window.physical_height;
 
@@ -140,17 +140,17 @@ pub fn prepare_windows(
             render_device.configure_surface(surface, &swap_chain_descriptor);
         }
 
-        let frame = match surface.get_current_frame() {
+        let frame = match surface.get_current_texture() {
             Ok(swap_chain_frame) => swap_chain_frame,
             Err(wgpu::SurfaceError::Outdated) => {
                 render_device.configure_surface(surface, &swap_chain_descriptor);
                 surface
-                    .get_current_frame()
+                    .get_current_texture()
                     .expect("Error reconfiguring surface")
             }
             err => err.expect("Failed to acquire next swap chain texture!"),
         };
 
-        window.swap_chain_frame = Some(TextureView::from(frame));
+        window.swap_chain_texture = Some(TextureView::from(frame));
     }
 }

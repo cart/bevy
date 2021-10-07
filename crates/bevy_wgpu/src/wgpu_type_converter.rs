@@ -673,7 +673,7 @@ impl WgpuFrom<WgpuFeature> for wgpu::Features {
             WgpuFeature::MultiDrawIndirectCount => wgpu::Features::MULTI_DRAW_INDIRECT_COUNT,
             WgpuFeature::PushConstants => wgpu::Features::PUSH_CONSTANTS,
             WgpuFeature::AddressModeClampToBorder => wgpu::Features::ADDRESS_MODE_CLAMP_TO_BORDER,
-            WgpuFeature::NonFillPolygonMode => wgpu::Features::NON_FILL_POLYGON_MODE,
+            WgpuFeature::PolygonModeLine => wgpu::Features::POLYGON_MODE_LINE,
             WgpuFeature::TextureCompressionEtc2 => wgpu::Features::TEXTURE_COMPRESSION_ETC2,
             WgpuFeature::TextureCompressionAstcLdr => wgpu::Features::TEXTURE_COMPRESSION_ASTC_LDR,
             WgpuFeature::TextureAdapterSpecificFormatFeatures => {
@@ -719,6 +719,8 @@ impl WgpuFrom<WgpuLimits> for wgpu::Limits {
             max_vertex_buffers: val.max_vertex_buffers,
             max_vertex_attributes: val.max_vertex_attributes,
             max_vertex_buffer_array_stride: val.max_vertex_buffer_array_stride,
+            min_storage_buffer_offset_alignment: val.min_storage_buffer_offset_alignment,
+            min_uniform_buffer_offset_alignment: val.min_uniform_buffer_offset_alignment,
         }
     }
 }

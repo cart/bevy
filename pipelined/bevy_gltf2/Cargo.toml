@@ -32,4 +32,4 @@ thiserror = "1.0"
 anyhow = "1.0.4"
 base64 = "0.13.0"
 percent-encoding = "2.1"
-wgpu = { version = "0.10.0" }
+wgpu = { git = "https://github.com/gfx-rs/wgpu", rev = "5092fb7ea5d3e0dedd87da0cd30e0ecdeb3603d2" }
