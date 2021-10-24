@@ -13,7 +13,7 @@ use bevy_app::prelude::*;
 use bevy_asset::{Assets, Handle, HandleUntyped};
 use bevy_core_pipeline::Transparent3d;
 use bevy_ecs::prelude::*;
-use bevy_render2::{RenderApp, RenderStage, render_component::{ExtractComponentPlugin, UniformComponentPlugin}, render_graph::RenderGraph, render_phase::{sort_phase_system, AddRenderCommand, DrawFunctions}, shader::Shader};
+use bevy_render2::{RenderApp, RenderStage, render_component::{ExtractComponentPlugin, UniformComponentPlugin}, render_graph::RenderGraph, render_phase::{sort_phase_system, AddRenderCommand, DrawFunctions}, shader::{RenderPipelines, Shader}};
 
 pub mod draw_3d_graph {
     pub mod node {
@@ -60,7 +60,8 @@ impl Plugin for PbrPlugin {
             .init_resource::<PbrShaders>()
             .init_resource::<ShadowShaders>()
             .init_resource::<DrawFunctions<Shadow>>()
-            .init_resource::<LightMeta>();
+            .init_resource::<LightMeta>()
+            .init_resource::<RenderPipelines<PbrShaders>>();
 
         let draw_shadow_mesh = DrawShadowMesh::new(&mut render_app.world);
         let shadow_pass_node = ShadowPassNode::new(&mut render_app.world);

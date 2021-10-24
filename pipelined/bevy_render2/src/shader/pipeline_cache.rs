@@ -6,10 +6,7 @@ use crate::{
 };
 use bevy_asset::Handle;
 use bevy_utils::{AHasher, HashMap, HashSet};
-use std::{
-    hash::{Hash, Hasher},
-    sync::Arc,
-};
+use std::{borrow::Cow, hash::{Hash, Hasher}, sync::Arc};
 use wgpu::{
     ColorTargetState, DepthStencilState, FragmentState, IndexFormat, MultisampleState,
     PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology, RenderPipelineDescriptor,
@@ -107,6 +104,7 @@ pub struct PrimitiveDescriptor {
 pub struct ShaderData {
     pipelines: HashSet<PipelineBundleId>,
     processed_shaders: HashMap<ShaderDefsKey, Arc<ShaderModule>>,
+    processed_shaders_new: HashMap<Vec<String>, Arc<ShaderModule>>,
 }
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
@@ -129,7 +127,7 @@ pub struct PipelineBundleData {
 pub struct SpecializedPipelineId(usize);
 
 impl SpecializedPipelineId {
-    pub const INVALID: Self = SpecializedPipelineId(usize::MAX); 
+    pub const INVALID: Self = SpecializedPipelineId(usize::MAX);
 }
 
 pub struct RenderPipelineCache {
@@ -323,6 +321,24 @@ impl RenderPipelineCache {
         key
     }
 
+    pub fn get_or_insert_pipeline_layout_new<'a>(
+        &'a mut self,
+        bind_group_layouts: &[&BindGroupLayout],
+    ) -> &wgpu::PipelineLayout {
+        let key = PipelineLayoutKey::from(bind_group_layouts);
+        let render_device = &self.render_device;
+        self.pipeline_layouts.entry(key).or_insert_with(|| {
+            let bind_group_layouts = bind_group_layouts
+                .iter()
+                .map(|l| l.value())
+                .collect::<Vec<_>>();
+            render_device.create_pipeline_layout(&PipelineLayoutDescriptor {
+                bind_group_layouts: &bind_group_layouts,
+                ..Default::default()
+            })
+        })
+    }
+
     pub fn get_or_insert_vertex_buffer_layout(
         &mut self,
         vertex_buffer_layout: VertexBufferLayoutDescriptor,
@@ -332,5 +348,46 @@ impl RenderPipelineCache {
             .entry(key)
             .or_insert(vertex_buffer_layout);
         key
+    }
+}
+
+pub struct ProcessedShaderCache {
+    shader_pipelines: HashMap<Handle<Shader>, ProcessedShaderData>,
+    render_device: RenderDevice,
+}
+
+
+#[derive(Default)]
+pub struct ProcessedShaderData {
+    processed_shaders: HashMap<Vec<String>, Arc<ShaderModule>>,
+}
+
+
+impl ProcessedShaderCache {
+    pub fn new(render_device: RenderDevice) -> Self {
+        Self {
+            render_device,
+            shader_pipelines: Default::default(),
+        }
+    }
+
+    // TODO: consider creating custom Shaders collection that mirrors Assets<Shader> and includes processed shader cache
+    // TODO: somehow avoid Arc-ed return? mutable borrow of self prevents getting multiple shader refs
+    pub fn process_shader(&mut self, shaders: &RenderAssets<Shader>, handle: &Handle<Shader>, shader_defs: Vec<String>) -> Option<Arc<ShaderModule>> {
+        let shader = shaders.get(handle)?;
+        let data = self.shader_pipelines
+            .entry(handle.clone_weak())
+            .or_default();
+        let render_device = &self.render_device;
+        // TODO: this shader_defs clone isn't great. try Cow?
+        let module = data
+            .processed_shaders
+            .entry(shader_defs.clone())
+            .or_insert_with(|| {
+                // TODO: pass in shader defs here and handle process errors properly
+                let processed = shader.process(&shader_defs).unwrap();
+                Arc::new(render_device.create_shader_module(&processed))
+            });
+            Some(module.clone())
     }
 }

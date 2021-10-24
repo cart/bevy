@@ -10,7 +10,7 @@ use bevy_app::{App, Plugin};
 use bevy_asset::Handle;
 use bevy_core::FloatOrd;
 use bevy_ecs::prelude::*;
-use bevy_render2::{RenderApp, RenderStage, RenderWorld, camera::{ActiveCameras, CameraPlugin}, color::Color, render_graph::{EmptyNode, RenderGraph, SlotInfo, SlotType}, render_phase::{sort_phase_system, DrawFunctionId, DrawFunctions, PhaseItem, RenderPhase}, render_resource::*, renderer::RenderDevice, shader::SpecializedPipelineId, texture::{Image, TextureCache}, view::ExtractedView};
+use bevy_render2::{RenderApp, RenderStage, RenderWorld, camera::{ActiveCameras, CameraPlugin}, color::Color, render_graph::{EmptyNode, RenderGraph, SlotInfo, SlotType}, render_phase::{sort_phase_system, DrawFunctionId, DrawFunctions, PhaseItem, RenderPhase}, render_resource::*, renderer::RenderDevice, shader::{SpecializedPipelineId, TmpPipelineId}, texture::{Image, TextureCache}, view::ExtractedView};
 
 /// Resource that configures the clear color
 #[derive(Clone, Debug)]
@@ -164,7 +164,7 @@ impl PhaseItem for Transparent2d {
 
 pub struct Transparent3d {
     pub distance: f32,
-    pub pipeline: SpecializedPipelineId,
+    pub pipeline: TmpPipelineId,
     pub entity: Entity,
     pub draw_function: DrawFunctionId,
 }

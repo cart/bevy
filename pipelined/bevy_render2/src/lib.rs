@@ -12,6 +12,7 @@ pub mod texture;
 pub mod view;
 
 pub use once_cell;
+use shader::ProcessedShaderCache;
 
 use crate::{camera::CameraPlugin, mesh::MeshPlugin, render_asset::RenderAssetPlugin, render_graph::RenderGraph, renderer::render_system, shader::{RenderPipelineCache, Shader, ShaderLoader}, texture::ImagePlugin, view::{ViewPlugin, WindowRenderPlugin}};
 use bevy_app::{App, AppLabel, Plugin};
@@ -92,6 +93,7 @@ impl Plugin for RenderPlugin {
             .init_asset_loader::<ShaderLoader>()
             .init_resource::<ScratchRenderWorld>();
         let render_pipeline_cache = RenderPipelineCache::new(device.clone());
+        let processed_shader_cache = ProcessedShaderCache::new(device.clone());
         let asset_server = app.world.get_resource::<AssetServer>().unwrap().clone();
 
         let mut render_app = App::empty();
@@ -113,6 +115,7 @@ impl Plugin for RenderPlugin {
             .insert_resource(device)
             .insert_resource(queue)
             .insert_resource(render_pipeline_cache)
+            .insert_resource(processed_shader_cache)
             .insert_resource(asset_server)
             .init_resource::<RenderGraph>();
 

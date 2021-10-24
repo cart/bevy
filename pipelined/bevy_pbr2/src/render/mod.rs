@@ -22,8 +22,10 @@ use bevy_render2::{
     renderer::{RenderDevice, RenderQueue},
     shader::{
         FragmentDescriptor, PipelineBundle, PipelineBundleId, PrimitiveDescriptor,
-        RenderPipelineCache, Shader, ShaderDefsKey, SpecializedPipelineId, SpecializedPipelineKey,
-        VertexBufferLayoutDescriptor, VertexDescriptor,
+        ProcessedShaderCache, RenderPipelineCache, RenderPipelines, Shader, ShaderDefsKey,
+        SpecializePipeline, SpecializedFragmentState, SpecializedPipelineId,
+        SpecializedPipelineKey, SpecializedRenderPipeline, SpecializedVertexBufferLayout,
+        SpecializedVertexState, VertexBufferLayoutDescriptor, VertexDescriptor,
     },
     texture::{BevyDefault, GpuImage, Image, TextureFormatPixelInfo},
     view::{ExtractedView, ViewUniformOffset, ViewUniforms},
@@ -475,6 +477,113 @@ impl FromWorld for PbrShaders {
     }
 }
 
+bitflags::bitflags! {
+    #[repr(transparent)]
+    pub struct PbrPipelineKey: u32 {
+        const THING = 1;
+    }
+}
+
+impl SpecializePipeline for PbrShaders {
+    type Key = PbrPipelineKey;
+
+    fn specialize_pipeline<'a>(
+        &self,
+        cache: &'a mut RenderPipelineCache,
+        key: Self::Key,
+    ) -> SpecializedRenderPipeline<'a> {
+        let layout = cache.get_or_insert_pipeline_layout_new(&[
+            &self.view_layout,
+            &self.material_layout,
+            &self.mesh_layout,
+        ]);
+        SpecializedRenderPipeline {
+            vertex: SpecializedVertexState {
+                shader: PBR_SHADER_HANDLE.typed::<Shader>(),
+                entry_point: "vertex",
+                shader_defs: vec![],
+                buffers: vec![SpecializedVertexBufferLayout {
+                    array_stride: 32,
+                    step_mode: InputStepMode::Vertex,
+                    attributes: vec![
+                        // Position (GOTCHA! Vertex_Position isn't first in the buffer due to how Mesh sorts attributes (alphabetically))
+                        VertexAttribute {
+                            format: VertexFormat::Float32x3,
+                            offset: 12,
+                            shader_location: 0,
+                        },
+                        // Normal
+                        VertexAttribute {
+                            format: VertexFormat::Float32x3,
+                            offset: 0,
+                            shader_location: 1,
+                        },
+                        // Uv
+                        VertexAttribute {
+                            format: VertexFormat::Float32x2,
+                            offset: 24,
+                            shader_location: 2,
+                        },
+                    ],
+                }],
+            },
+            fragment: Some(SpecializedFragmentState {
+                shader: PBR_SHADER_HANDLE.typed::<Shader>(),
+                shader_defs: vec![],
+                entry_point: "fragment",
+                targets: vec![ColorTargetState {
+                    format: TextureFormat::bevy_default(),
+                    blend: Some(BlendState {
+                        color: BlendComponent {
+                            src_factor: BlendFactor::SrcAlpha,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
+                        },
+                        alpha: BlendComponent {
+                            src_factor: BlendFactor::One,
+                            dst_factor: BlendFactor::One,
+                            operation: BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: ColorWrite::ALL,
+                }],
+            }),
+            layout: Some(layout),
+            primitive: PrimitiveState {
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
+                polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+            },
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: CompareFunction::Greater,
+                stencil: StencilState {
+                    front: StencilFaceState::IGNORE,
+                    back: StencilFaceState::IGNORE,
+                    read_mask: 0,
+                    write_mask: 0,
+                },
+                bias: DepthBiasState {
+                    constant: 0,
+                    slope_scale: 0.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            label: Some("pbr_pipeline"),
+        }
+    }
+}
+
 pub struct TransformBindGroup {
     pub value: BindGroup,
 }
@@ -511,6 +620,8 @@ pub fn queue_meshes(
     pbr_shaders: Res<PbrShaders>,
     shadow_shaders: Res<ShadowShaders>,
     shaders: Res<RenderAssets<Shader>>,
+    mut pipelines: ResMut<RenderPipelines<PbrShaders>>,
+    mut processed_shader_cache: ResMut<ProcessedShaderCache>,
     mut pipeline_cache: ResMut<RenderPipelineCache>,
     light_meta: Res<LightMeta>,
     view_uniforms: Res<ViewUniforms>,
@@ -585,53 +696,56 @@ pub fn queue_meshes(
                     continue;
                 }
 
-                let hi = vec![
-                    &pbr_shaders.view_layout,
-                    &pbr_shaders.material_layout,
-                    &pbr_shaders.mesh_layout,
-                ];
-                let pipeline_layout_key = pipeline_cache.get_or_insert_pipeline_layout(&hi);
+                // let hi = vec![
+                //     &pbr_shaders.view_layout,
+                //     &pbr_shaders.material_layout,
+                //     &pbr_shaders.mesh_layout,
+                // ];
+                // let pipeline_layout_key = pipeline_cache.get_or_insert_pipeline_layout(&hi);
 
-                let vertex_buffer_layout_key = pipeline_cache.get_or_insert_vertex_buffer_layout(
-                    VertexBufferLayoutDescriptor {
-                        array_stride: 32,
-                        step_mode: InputStepMode::Vertex,
-                        strip_index_format: None,
-                        topology: PrimitiveTopology::TriangleList,
-                        attributes: vec![
-                            // Position (GOTCHA! Vertex_Position isn't first in the buffer due to how Mesh sorts attributes (alphabetically))
-                            VertexAttribute {
-                                format: VertexFormat::Float32x3,
-                                offset: 12,
-                                shader_location: 0,
-                            },
-                            // Normal
-                            VertexAttribute {
-                                format: VertexFormat::Float32x3,
-                                offset: 0,
-                                shader_location: 1,
-                            },
-                            // Uv
-                            VertexAttribute {
-                                format: VertexFormat::Float32x2,
-                                offset: 24,
-                                shader_location: 2,
-                            },
-                        ],
-                    },
-                );
+                // let vertex_buffer_layout_key = pipeline_cache.get_or_insert_vertex_buffer_layout(
+                //     VertexBufferLayoutDescriptor {
+                //         array_stride: 32,
+                //         step_mode: InputStepMode::Vertex,
+                //         strip_index_format: None,
+                //         topology: PrimitiveTopology::TriangleList,
+                //         attributes: vec![
+                //             // Position (GOTCHA! Vertex_Position isn't first in the buffer due to how Mesh sorts attributes (alphabetically))
+                //             VertexAttribute {
+                //                 format: VertexFormat::Float32x3,
+                //                 offset: 12,
+                //                 shader_location: 0,
+                //             },
+                //             // Normal
+                //             VertexAttribute {
+                //                 format: VertexFormat::Float32x3,
+                //                 offset: 0,
+                //                 shader_location: 1,
+                //             },
+                //             // Uv
+                //             VertexAttribute {
+                //                 format: VertexFormat::Float32x2,
+                //                 offset: 24,
+                //                 shader_location: 2,
+                //             },
+                //         ],
+                //     },
+                // );
 
-                let specialized_pipeline_key = SpecializedPipelineKey {
-                    multisample_count: 1,
-                    pipeline_layout: pipeline_layout_key,
-                    shader_defs: ShaderDefsKey::new(&[]),
-                    vertex_buffer_layout: vertex_buffer_layout_key,
-                };
+                // let specialized_pipeline_key = SpecializedPipelineKey {
+                //     multisample_count: 1,
+                //     pipeline_layout: pipeline_layout_key,
+                //     shader_defs: ShaderDefsKey::new(&[]),
+                //     vertex_buffer_layout: vertex_buffer_layout_key,
+                // };
+                let key = PbrPipelineKey::THING;
 
-                if let Ok(pipeline_id) = pipeline_cache.specialize(
-                    pbr_shaders.pipeline_bundle_id,
+                if let Some(pipeline_id) = pipelines.create(
+                    &mut pipeline_cache,
+                    &mut processed_shader_cache,
                     &shaders,
-                    specialized_pipeline_key,
+                    &pbr_shaders,
+                    key,
                 ) {
                     // NOTE: row 2 of the view matrix dotted with column 3 of the model matrix
                     //       gives the z component of translation of the mesh in view space
@@ -661,7 +775,7 @@ pub type DrawPbr = (
 
 pub struct SetPbrPipeline;
 impl RenderCommand<Transparent3d> for SetPbrPipeline {
-    type Param = SRes<RenderPipelineCache>;
+    type Param = SRes<RenderPipelines<PbrShaders>>;
     #[inline]
     fn render<'w>(
         _view: Entity,
@@ -669,10 +783,7 @@ impl RenderCommand<Transparent3d> for SetPbrPipeline {
         pipeline_cache: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) {
-        let pipeline = pipeline_cache
-            .into_inner()
-            .get_specialized(_item.pipeline)
-            .unwrap();
+        let pipeline = pipeline_cache.into_inner().get(_item.pipeline).unwrap();
         pass.set_render_pipeline(&pipeline);
     }
 }

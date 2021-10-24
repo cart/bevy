@@ -9,21 +9,7 @@ use bevy_ecs::{
     system::{lifetimeless::*, SystemState},
 };
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
-use bevy_render2::{
-    mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues},
-    render_asset::RenderAssets,
-    render_graph::{Node, NodeRunError, RenderGraphContext},
-    render_phase::{Draw, DrawFunctions, RenderPhase, TrackedRenderPass},
-    render_resource::*,
-    renderer::{RenderContext, RenderDevice},
-    shader::{
-        FragmentDescriptor, PipelineBundle, PipelineBundleId, PrimitiveDescriptor,
-        RenderPipelineCache, Shader, ShaderDefsKey, SpecializedPipelineId, SpecializedPipelineKey,
-        VertexBufferLayoutDescriptor, VertexDescriptor,
-    },
-    texture::{BevyDefault, Image},
-    view::{ViewUniformOffset, ViewUniforms},
-};
+use bevy_render2::{mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues}, render_asset::RenderAssets, render_graph::{Node, NodeRunError, RenderGraphContext}, render_phase::{Draw, DrawFunctions, RenderPhase, TrackedRenderPass}, render_resource::*, renderer::{RenderContext, RenderDevice}, shader::{FragmentDescriptor, PipelineBundle, PipelineBundleId, PrimitiveDescriptor, ProcessedShaderCache, RenderPipelineCache, RenderPipelines, Shader, ShaderDefsKey, SpecializePipeline, SpecializedFragmentState, SpecializedPipelineId, SpecializedPipelineKey, SpecializedRenderPipeline, SpecializedVertexBufferLayout, SpecializedVertexState, VertexBufferLayoutDescriptor, VertexDescriptor}, texture::{BevyDefault, Image}, view::{ViewUniformOffset, ViewUniforms}};
 use bevy_transform::components::GlobalTransform;
 use bevy_utils::HashMap;
 use bytemuck::{Pod, Zeroable};
@@ -163,6 +149,90 @@ impl FromWorld for SpriteShaders {
         }
     }
 }
+
+bitflags::bitflags! {
+    #[repr(transparent)]
+    pub struct SpritePipelineKey: u32 {
+        const THING = 1;
+    }
+}
+
+impl SpecializePipeline for SpriteShaders {
+    type Key = SpritePipelineKey;
+
+    fn specialize_pipeline<'a>(
+        &self,
+        cache: &'a mut RenderPipelineCache,
+        key: Self::Key,
+    ) -> SpecializedRenderPipeline<'a> {
+        let layout = cache.get_or_insert_pipeline_layout_new(&[
+            &self.view_layout,
+            &self.material_layout,
+        ]);
+        SpecializedRenderPipeline {
+            vertex: SpecializedVertexState {
+                shader: SPRITE_SHADER_HANDLE.typed::<Shader>(),
+                entry_point: "vertex",
+                shader_defs: vec![],
+                buffers: vec![SpecializedVertexBufferLayout {
+                    array_stride: 20,
+                    step_mode: InputStepMode::Vertex,
+                    attributes: vec![
+                        VertexAttribute {
+                            format: VertexFormat::Float32x3,
+                            offset: 0,
+                            shader_location: 0,
+                        },
+                        VertexAttribute {
+                            format: VertexFormat::Float32x2,
+                            offset: 12,
+                            shader_location: 1,
+                        },
+                    ],
+                }],
+            },
+            fragment: Some(SpecializedFragmentState {
+                shader: SPRITE_SHADER_HANDLE.typed::<Shader>(),
+                shader_defs: vec![],
+                entry_point: "fragment",
+                targets: vec![ColorTargetState {
+                    format: TextureFormat::bevy_default(),
+                    blend: Some(BlendState {
+                        color: BlendComponent {
+                            src_factor: BlendFactor::SrcAlpha,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
+                        },
+                        alpha: BlendComponent {
+                            src_factor: BlendFactor::One,
+                            dst_factor: BlendFactor::One,
+                            operation: BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: ColorWrite::ALL,
+                }],
+            }),
+            layout: Some(layout),
+            primitive: PrimitiveState {
+                front_face: FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: PolygonMode::Fill,
+                clamp_depth: false,
+                conservative: false,
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            label: Some("sprite_pipeline"),
+        }
+    }
+}
+
 
 pub struct ExtractedSprite {
     transform: Mat4,
@@ -347,6 +417,8 @@ pub fn queue_sprites(
     mut image_bind_groups: ResMut<ImageBindGroups>,
     gpu_images: Res<RenderAssets<Image>>,
     shaders: Res<RenderAssets<Shader>>,
+    mut pipelines: ResMut<RenderPipelines<SpriteShaders>>,
+    mut processed_shader_cache: ResMut<ProcessedShaderCache>,
     mut pipeline_cache: ResMut<RenderPipelineCache>,
     mut extracted_sprites: Query<(Entity, &ExtractedSprite)>,
     mut views: Query<&mut RenderPhase<Transparent2d>>,
