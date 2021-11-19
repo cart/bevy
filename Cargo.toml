@@ -26,6 +26,7 @@ default = [
   "bevy_render2",
   "bevy_pbr2",
   "bevy_winit",
+  "bevy_winit2",
   "render",
   "png",
   "hdr",
@@ -59,6 +60,7 @@ bevy_render2 = ["bevy_internal/bevy_render2"]
 bevy_sprite2 = ["bevy_internal/bevy_sprite2"]
 bevy_pbr2 = ["bevy_internal/bevy_pbr2"]
 bevy_gltf2 = ["bevy_internal/bevy_gltf2"]
+bevy_winit2 = ["bevy_internal/bevy_winit2"]
 
 trace_chrome = ["bevy_internal/trace_chrome"]
 trace_tracy = ["bevy_internal/trace_tracy"]

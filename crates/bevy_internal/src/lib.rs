@@ -158,6 +158,11 @@ pub mod winit {
     pub use bevy_winit::*;
 }
 
+#[cfg(feature = "bevy_winit2")]
+pub mod winit2 {
+    pub use bevy_winit2::*;
+}
+
 #[cfg(feature = "bevy_wgpu")]
 pub mod wgpu {
     //! A render backend utilizing [wgpu](https://wgpu.rs/).
