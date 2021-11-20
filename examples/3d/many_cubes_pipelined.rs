@@ -27,15 +27,17 @@ fn setup(
 ) {
     const WIDTH: usize = 100;
     const HEIGHT: usize = 100;
+    let mesh = meshes.add(Mesh::from(shape::Cube { size: 1.0 }));
+    let material = materials.add(StandardMaterial {
+        base_color: Color::PINK,
+        ..Default::default()
+    });
     for x in 0..WIDTH {
         for y in 0..HEIGHT {
             // cube
             commands.spawn_bundle(PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::PINK,
-                    ..Default::default()
-                }),
+                mesh: mesh.clone(),
+                material: material.clone(),
                 transform: Transform::from_xyz((x as f32) * 2.0, (y as f32) * 2.0, 0.0),
                 ..Default::default()
             });

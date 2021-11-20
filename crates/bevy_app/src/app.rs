@@ -42,14 +42,22 @@ bevy_utils::define_label!(AppLabel);
 /// ```
 pub struct App {
     pub world: World,
-    pub runner: Box<dyn Fn(App)>,
+    tick: usize,
+    // TODO: Send + Sync isn't required here. Temporarily added to make pipelined rendering impl easier.
+    pub runner: Box<dyn Fn(App) + Send + Sync>,
     pub schedule: Schedule,
     sub_apps: HashMap<Box<dyn AppLabel>, SubApp>,
 }
 
-struct SubApp {
-    app: App,
-    runner: Box<dyn Fn(&mut World, &mut App)>,
+pub struct SubApp {
+    pub app: App,
+    pub runner: Box<dyn Fn(&mut App) + Send + Sync>,
+}
+
+impl SubApp {
+    pub fn run(&mut self) {
+        (self.runner)(&mut self.app)
+    }
 }
 
 impl Default for App {
@@ -82,18 +90,17 @@ impl App {
             schedule: Default::default(),
             runner: Box::new(run_once),
             sub_apps: HashMap::default(),
+            tick: 0,
         }
     }
 
     pub fn update(&mut self) {
         #[cfg(feature = "trace")]
-        let bevy_frame_update_span = info_span!("frame");
+        let bevy_frame_update_span = info_span!("frame", name = format!("{}", self.tick).as_str());
         #[cfg(feature = "trace")]
         let _bevy_frame_update_guard = bevy_frame_update_span.enter();
         self.schedule.run(&mut self.world);
-        for sub_app in self.sub_apps.values_mut() {
-            (sub_app.runner)(&mut self.world, &mut sub_app.app);
-        }
+        self.tick += 1;
     }
 
     /// Start the application (through main runner)
@@ -473,7 +480,7 @@ impl App {
     /// App::new()
     ///     .set_runner(my_runner);
     /// ```
-    pub fn set_runner(&mut self, run_fn: impl Fn(App) + 'static) -> &mut Self {
+    pub fn set_runner(&mut self, run_fn: impl Fn(App) + Send + Sync + 'static) -> &mut Self {
         self.runner = Box::new(run_fn);
         self
     }
@@ -595,7 +602,7 @@ impl App {
         &mut self,
         label: impl AppLabel,
         app: App,
-        f: impl Fn(&mut World, &mut App) + 'static,
+        f: impl Fn(&mut App) + Send + Sync + 'static,
     ) -> &mut Self {
         self.sub_apps.insert(
             Box::new(label),
@@ -613,6 +620,10 @@ impl App {
             Ok(app) => app,
             Err(label) => panic!("Sub-App with label '{:?}' does not exist", label),
         }
+    }
+
+    pub fn remove_sub_app(&mut self, label: impl AppLabel) -> Option<SubApp> {
+        self.sub_apps.remove((&label) as &dyn AppLabel)
     }
 
     /// Retrieves a "sub app" inside this [App] with the given label, if it exists. Otherwise returns
