@@ -10,6 +10,7 @@ pub struct Time {
     delta_seconds: f32,
     seconds_since_startup: f64,
     time_since_startup: Duration,
+    tick: u128,
     startup: Instant,
 }
 
@@ -19,6 +20,7 @@ impl Default for Time {
             delta: Duration::from_secs(0),
             last_update: None,
             startup: Instant::now(),
+            tick: 0,
             delta_seconds_f64: 0.0,
             seconds_since_startup: 0.0,
             time_since_startup: Duration::from_secs(0),
@@ -43,6 +45,7 @@ impl Time {
         self.time_since_startup = instant - self.startup;
         self.seconds_since_startup = self.time_since_startup.as_secs_f64();
         self.last_update = Some(instant);
+        self.tick += 1;
     }
 
     /// The delta between the current tick and last tick as a [`Duration`]
@@ -73,6 +76,12 @@ impl Time {
     #[inline]
     pub fn startup(&self) -> Instant {
         self.startup
+    }
+
+    /// The number of times `update()` has been called on Time.
+    #[inline]
+    pub fn tick(&self) -> u128 {
+        self.tick
     }
 
     /// The ['Instant'] when [`Time::update`] was last called, if it exists

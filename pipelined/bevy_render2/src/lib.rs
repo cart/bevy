@@ -11,6 +11,8 @@ pub mod renderer;
 pub mod texture;
 pub mod view;
 
+use bevy_core::Time;
+use crossbeam_channel::{Receiver, Sender};
 pub use once_cell;
 
 use crate::{
@@ -22,7 +24,7 @@ use crate::{
     texture::ImagePlugin,
     view::{ViewPlugin, WindowRenderPlugin},
 };
-use bevy_app::{App, AppLabel, Plugin};
+use bevy_app::{App, AppLabel, CoreStage, Plugin, SubApp};
 use bevy_asset::{AddAsset, AssetServer};
 use bevy_ecs::prelude::*;
 use std::ops::{Deref, DerefMut};
@@ -87,6 +89,58 @@ pub struct RenderApp;
 #[derive(Default)]
 struct ScratchRenderWorld(World);
 
+#[derive(Clone)]
+pub struct RenderAppChannel {
+    pub update_sender: Sender<App>,
+    pub update_receiver: Receiver<App>,
+    pub renderer_sender: Sender<App>,
+    pub renderer_receiver: Receiver<App>,
+}
+
+impl Default for RenderAppChannel {
+    fn default() -> Self {
+        let (update_sender, renderer_receiver) = crossbeam_channel::bounded(1);
+        let (renderer_sender, update_receiver) = crossbeam_channel::bounded(1);
+        Self {
+            update_sender,
+            update_receiver,
+            renderer_sender,
+            renderer_receiver,
+        }
+    }
+}
+
+#[derive(Clone, Hash, Debug, PartialEq, Eq, SystemLabel)]
+pub enum RenderSystem {
+    Extract,
+}
+
+struct RenderTick {
+    last_tick: u128,
+    requested_tick: u128,
+}
+
+impl Default for RenderTick {
+    fn default() -> Self {
+        Self {
+            last_tick: u128::MAX,
+            requested_tick: u128::MAX,
+        }
+    }
+}
+
+impl RenderTick {
+    fn request_render(&mut self, tick: u128) {
+        self.requested_tick = tick;
+    }
+
+    fn render_tick(&mut self) -> bool {
+        let should_tick = self.last_tick != self.requested_tick;
+        self.last_tick = self.requested_tick;
+        should_tick
+    }
+}
+
 impl Plugin for RenderPlugin {
     /// Initializes the renderer, sets up the [`RenderStage`](RenderStage) and creates the rendering sub-app.
     fn build(&self, app: &mut App) {
@@ -124,11 +178,20 @@ impl Plugin for RenderPlugin {
                 ..Default::default()
             },
         ));
+        let render_app_channel = RenderAppChannel::default();
         app.insert_resource(device.clone())
             .insert_resource(queue.clone())
             .add_asset::<Shader>()
             .init_asset_loader::<ShaderLoader>()
-            .init_resource::<ScratchRenderWorld>();
+            .insert_resource(render_app_channel)
+            .init_resource::<ScratchRenderWorld>()
+            .add_system_to_stage(
+                CoreStage::Last,
+                extract_system
+                    .exclusive_system()
+                    .label(RenderSystem::Extract)
+                    .at_end(),
+            );
         let render_pipeline_cache = RenderPipelineCache::new(device.clone());
         let asset_server = app.world.get_resource::<AssetServer>().unwrap().clone();
 
@@ -155,43 +218,19 @@ impl Plugin for RenderPlugin {
             .insert_resource(queue)
             .insert_resource(render_pipeline_cache)
             .insert_resource(asset_server)
+            .init_resource::<RenderTick>()
             .init_resource::<RenderGraph>();
 
-        app.add_sub_app(RenderApp, render_app, move |app_world, render_app| {
+        app.add_sub_app(RenderApp, render_app, move |render_app| {
+            {
+                let mut last_render_tick =
+                    render_app.world.get_resource_mut::<RenderTick>().unwrap();
+                if !last_render_tick.render_tick() {
+                    return;
+                }
+            }
             #[cfg(feature = "trace")]
             let render_span = bevy_utils::tracing::info_span!("renderer subapp");
-            #[cfg(feature = "trace")]
-            let _render_guard = render_span.enter();
-            {
-                #[cfg(feature = "trace")]
-                let stage_span =
-                    bevy_utils::tracing::info_span!("stage", name = "reserve_and_flush");
-                #[cfg(feature = "trace")]
-                let _stage_guard = stage_span.enter();
-
-                // reserve all existing app entities for use in render_app
-                // they can only be spawned using `get_or_spawn()`
-                let meta_len = app_world.entities().meta.len();
-                render_app
-                    .world
-                    .entities()
-                    .reserve_entities(meta_len as u32);
-
-                // flushing as "invalid" ensures that app world entities aren't added as "empty archetype" entities by default
-                // these entities cannot be accessed without spawning directly onto them
-                // this _only_ works as expected because clear_entities() is called at the end of every frame.
-                render_app.world.entities_mut().flush_as_invalid();
-            }
-
-            {
-                #[cfg(feature = "trace")]
-                let stage_span = bevy_utils::tracing::info_span!("stage", name = "extract");
-                #[cfg(feature = "trace")]
-                let _stage_guard = stage_span.enter();
-
-                // extract
-                extract(app_world, render_app);
-            }
 
             {
                 #[cfg(feature = "trace")]
@@ -276,23 +315,59 @@ impl Plugin for RenderPlugin {
 
 /// Executes the [`Extract`](RenderStage::Extract) stage of the renderer.
 /// This updates the render world with the extracted ECS data of the current frame.
-fn extract(app_world: &mut World, render_app: &mut App) {
-    let extract = render_app
-        .schedule
-        .get_stage_mut::<SystemStage>(&RenderStage::Extract)
-        .unwrap();
+fn extract_system(world: &mut World) {
+    world.resource_scope(|world, channel: Mut<RenderAppChannel>| {
+        let mut render_app = channel.update_receiver.recv().unwrap();
+        {
+            #[cfg(feature = "trace")]
+            let stage_span = bevy_utils::tracing::info_span!("stage", name = "reserve_and_flush");
+            #[cfg(feature = "trace")]
+            let _stage_guard = stage_span.enter();
 
-    // temporarily add the render world to the app world as a resource
-    let scratch_world = app_world.remove_resource::<ScratchRenderWorld>().unwrap();
-    let render_world = std::mem::replace(&mut render_app.world, scratch_world.0);
-    app_world.insert_resource(RenderWorld(render_world));
+            // reserve all existing app entities for use in render_app
+            // they can only be spawned using `get_or_spawn()`
+            let meta_len = world.entities().meta.len();
+            render_app
+                .world
+                .entities()
+                .reserve_entities(meta_len as u32);
 
-    extract.run(app_world);
+            // flushing as "invalid" ensures that app world entities aren't added as "empty archetype" entities by default
+            // these entities cannot be accessed without spawning directly onto them
+            // this _only_ works as expected because clear_entities() is called at the end of every frame.
+            render_app.world.entities_mut().flush_as_invalid();
+        }
 
-    // add the render world back to the render app
-    let render_world = app_world.remove_resource::<RenderWorld>().unwrap();
-    let scratch_world = std::mem::replace(&mut render_app.world, render_world.0);
-    app_world.insert_resource(ScratchRenderWorld(scratch_world));
+        {
+            #[cfg(feature = "trace")]
+            let stage_span = bevy_utils::tracing::info_span!("stage", name = "extract");
+            #[cfg(feature = "trace")]
+            let _stage_guard = stage_span.enter();
 
-    extract.apply_buffers(&mut render_app.world);
+            // extract
+            let extract = render_app
+                .schedule
+                .get_stage_mut::<SystemStage>(&RenderStage::Extract)
+                .unwrap();
+
+            // temporarily add the render world to the app world as a resource
+            let scratch_world = world.remove_resource::<ScratchRenderWorld>().unwrap();
+            let render_world = std::mem::replace(&mut render_app.world, scratch_world.0);
+            world.insert_resource(RenderWorld(render_world));
+
+            extract.run(world);
+
+            // add the render world back to the render app
+            let render_world = world.remove_resource::<RenderWorld>().unwrap();
+            let scratch_world = std::mem::replace(&mut render_app.world, render_world.0);
+            world.insert_resource(ScratchRenderWorld(scratch_world));
+
+            extract.apply_buffers(&mut render_app.world);
+        }
+
+        let time = world.get_resource::<Time>().unwrap();
+        let mut render_tick = render_app.world.get_resource_mut::<RenderTick>().unwrap();
+        render_tick.request_render(time.tick());
+        channel.update_sender.send(render_app).unwrap();
+    })
 }
