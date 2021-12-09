@@ -10,7 +10,7 @@ use bevy_input::{
     mouse::{MouseButtonInput, MouseMotion, MouseScrollUnit, MouseWheel},
     touch::TouchInput,
 };
-use bevy_math::{ivec2, Vec2};
+use bevy_math::{ivec2, Vec2, DVec2};
 use bevy_render2::{RenderApp, RenderAppChannel, RenderSystem};
 use bevy_utils::tracing::{error, trace, warn};
 use bevy_window::{
@@ -250,27 +250,24 @@ fn handle_window_events(
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let winit_window = winit_windows.get_window(window_id).unwrap();
-                let position = position.to_logical(winit_window.scale_factor());
-                let inner_size = winit_window
-                    .inner_size()
-                    .to_logical::<f32>(winit_window.scale_factor());
+                let inner_size = winit_window.inner_size();
 
                 // move origin to bottom left
-                let y_position = inner_size.height - position.y;
+                let y_position = inner_size.height as f64 - position.y;
 
-                let position = Vec2::new(position.x, y_position);
-                window.update_cursor_position_from_backend(Some(position));
+                let physical_position = DVec2::new(position.x, y_position);
+                window.update_cursor_physical_position_from_backend(Some(physical_position));
 
                 cursor_moved_events.send(CursorMoved {
                     id: window_id,
-                    position,
+                    position: (physical_position / window.scale_factor()).as_vec2(),
                 });
             }
             WindowEvent::CursorEntered { .. } => {
                 cursor_entered_events.send(CursorEntered { id: window_id });
             }
             WindowEvent::CursorLeft { .. } => {
-                window.update_cursor_position_from_backend(None);
+                window.update_cursor_physical_position_from_backend(None);
                 cursor_left_events.send(CursorLeft { id: window_id });
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -453,16 +450,18 @@ fn update_windows(world: &mut World) {
                         bevy_window::WindowMode::BorderlessFullscreen => {
                             window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
                         }
-                        bevy_window::WindowMode::Fullscreen { use_size } => window.set_fullscreen(
-                            Some(winit::window::Fullscreen::Exclusive(match use_size {
-                                true => get_fitting_videomode(
-                                    &window.current_monitor().unwrap(),
-                                    width,
-                                    height,
-                                ),
-                                false => get_best_videomode(&window.current_monitor().unwrap()),
-                            })),
-                        ),
+                        bevy_window::WindowMode::Fullscreen => {
+                            window.set_fullscreen(Some(winit::window::Fullscreen::Exclusive(
+                                get_best_videomode(&window.current_monitor().unwrap()),
+                            )))
+                        }
+                        bevy_window::WindowMode::SizedFullscreen => window.set_fullscreen(Some(
+                            winit::window::Fullscreen::Exclusive(get_fitting_videomode(
+                                &window.current_monitor().unwrap(),
+                                width,
+                                height,
+                            )),
+                        )),
                         bevy_window::WindowMode::Windowed => window.set_fullscreen(None),
                     }
                 }
