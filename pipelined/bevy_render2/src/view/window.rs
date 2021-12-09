@@ -31,7 +31,7 @@ impl Plugin for WindowRenderPlugin {
             .add_system_to_stage(RenderStage::Extract, extract_windows)
             .add_system_to_stage(
                 RenderStage::Prepare,
-                prepare_windows.label(WindowSystem::Prepare),
+                prepare_windows.exclusive_system().at_start().label(WindowSystem::Prepare),
             );
     }
 }
@@ -147,7 +147,7 @@ pub fn prepare_windows(
         if window_surfaces.configured_windows.insert(window.id) || window.size_changed {
             render_device.configure_surface(surface, &swap_chain_descriptor);
         }
-
+        let time = std::time::Instant::now();
         let frame = match surface.get_current_texture() {
             Ok(swap_chain_frame) => swap_chain_frame,
             Err(wgpu::SurfaceError::Outdated) => {
@@ -158,6 +158,8 @@ pub fn prepare_windows(
             }
             err => err.expect("Failed to acquire next swap chain texture!"),
         };
+        let later = std::time::Instant::now();
+        println!("duration {:?}", (later - time).as_secs_f64() *1000.0);
 
         window.swap_chain_texture = Some(TextureView::from(frame));
     }

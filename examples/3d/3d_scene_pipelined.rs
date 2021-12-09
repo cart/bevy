@@ -14,11 +14,15 @@ use bevy::{
         color::Color,
         mesh::{shape, Mesh},
     },
-    PipelinedDefaultPlugins,
+    PipelinedDefaultPlugins, window::WindowDescriptor,
 };
 
 fn main() {
     App::new()
+    .insert_resource(WindowDescriptor {
+        vsync: false,
+        ..Default::default()
+    })
         .add_plugins(PipelinedDefaultPlugins)
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_plugin(LogDiagnosticsPlugin::default())
@@ -109,114 +113,114 @@ fn setup(
         brightness: 0.02,
     });
 
-    // red point light
-    commands
-        .spawn_bundle(PointLightBundle {
-            // transform: Transform::from_xyz(5.0, 8.0, 2.0),
-            transform: Transform::from_xyz(1.0, 2.0, 0.0),
-            point_light: PointLight {
-                intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
-                color: Color::RED,
-                shadows_enabled: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .with_children(|builder| {
-            builder.spawn_bundle(PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::UVSphere {
-                    radius: 0.1,
-                    ..Default::default()
-                })),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::RED,
-                    emissive: Color::rgba_linear(100.0, 0.0, 0.0, 0.0),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            });
-        });
+    // // red point light
+    // commands
+    //     .spawn_bundle(PointLightBundle {
+    //         // transform: Transform::from_xyz(5.0, 8.0, 2.0),
+    //         transform: Transform::from_xyz(1.0, 2.0, 0.0),
+    //         point_light: PointLight {
+    //             intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
+    //             color: Color::RED,
+    //             shadows_enabled: true,
+    //             ..Default::default()
+    //         },
+    //         ..Default::default()
+    //     })
+    //     .with_children(|builder| {
+    //         builder.spawn_bundle(PbrBundle {
+    //             mesh: meshes.add(Mesh::from(shape::UVSphere {
+    //                 radius: 0.1,
+    //                 ..Default::default()
+    //             })),
+    //             material: materials.add(StandardMaterial {
+    //                 base_color: Color::RED,
+    //                 emissive: Color::rgba_linear(100.0, 0.0, 0.0, 0.0),
+    //                 ..Default::default()
+    //             }),
+    //             ..Default::default()
+    //         });
+    //     });
 
-    // green point light
-    commands
-        .spawn_bundle(PointLightBundle {
-            // transform: Transform::from_xyz(5.0, 8.0, 2.0),
-            transform: Transform::from_xyz(-1.0, 2.0, 0.0),
-            point_light: PointLight {
-                intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
-                color: Color::GREEN,
-                shadows_enabled: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .with_children(|builder| {
-            builder.spawn_bundle(PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::UVSphere {
-                    radius: 0.1,
-                    ..Default::default()
-                })),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::GREEN,
-                    emissive: Color::rgba_linear(0.0, 100.0, 0.0, 0.0),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            });
-        });
+    // // green point light
+    // commands
+    //     .spawn_bundle(PointLightBundle {
+    //         // transform: Transform::from_xyz(5.0, 8.0, 2.0),
+    //         transform: Transform::from_xyz(-1.0, 2.0, 0.0),
+    //         point_light: PointLight {
+    //             intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
+    //             color: Color::GREEN,
+    //             shadows_enabled: true,
+    //             ..Default::default()
+    //         },
+    //         ..Default::default()
+    //     })
+    //     .with_children(|builder| {
+    //         builder.spawn_bundle(PbrBundle {
+    //             mesh: meshes.add(Mesh::from(shape::UVSphere {
+    //                 radius: 0.1,
+    //                 ..Default::default()
+    //             })),
+    //             material: materials.add(StandardMaterial {
+    //                 base_color: Color::GREEN,
+    //                 emissive: Color::rgba_linear(0.0, 100.0, 0.0, 0.0),
+    //                 ..Default::default()
+    //             }),
+    //             ..Default::default()
+    //         });
+    //     });
 
-    // blue point light
-    commands
-        .spawn_bundle(PointLightBundle {
-            // transform: Transform::from_xyz(5.0, 8.0, 2.0),
-            transform: Transform::from_xyz(0.0, 4.0, 0.0),
-            point_light: PointLight {
-                intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
-                color: Color::BLUE,
-                shadows_enabled: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .with_children(|builder| {
-            builder.spawn_bundle(PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::UVSphere {
-                    radius: 0.1,
-                    ..Default::default()
-                })),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::BLUE,
-                    emissive: Color::rgba_linear(0.0, 0.0, 100.0, 0.0),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            });
-        });
+    // // blue point light
+    // commands
+    //     .spawn_bundle(PointLightBundle {
+    //         // transform: Transform::from_xyz(5.0, 8.0, 2.0),
+    //         transform: Transform::from_xyz(0.0, 4.0, 0.0),
+    //         point_light: PointLight {
+    //             intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
+    //             color: Color::BLUE,
+    //             shadows_enabled: true,
+    //             ..Default::default()
+    //         },
+    //         ..Default::default()
+    //     })
+    //     .with_children(|builder| {
+    //         builder.spawn_bundle(PbrBundle {
+    //             mesh: meshes.add(Mesh::from(shape::UVSphere {
+    //                 radius: 0.1,
+    //                 ..Default::default()
+    //             })),
+    //             material: materials.add(StandardMaterial {
+    //                 base_color: Color::BLUE,
+    //                 emissive: Color::rgba_linear(0.0, 0.0, 100.0, 0.0),
+    //                 ..Default::default()
+    //             }),
+    //             ..Default::default()
+    //         });
+    //     });
 
-    // directional 'sun' light
-    const HALF_SIZE: f32 = 10.0;
-    commands.spawn_bundle(DirectionalLightBundle {
-        directional_light: DirectionalLight {
-            // Configure the projection to better fit the scene
-            shadow_projection: OrthographicProjection {
-                left: -HALF_SIZE,
-                right: HALF_SIZE,
-                bottom: -HALF_SIZE,
-                top: HALF_SIZE,
-                near: -10.0 * HALF_SIZE,
-                far: 10.0 * HALF_SIZE,
-                ..Default::default()
-            },
-            shadows_enabled: true,
-            ..Default::default()
-        },
-        transform: Transform {
-            translation: Vec3::new(0.0, 2.0, 0.0),
-            rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_4),
-            ..Default::default()
-        },
-        ..Default::default()
-    });
+    // // directional 'sun' light
+    // const HALF_SIZE: f32 = 10.0;
+    // commands.spawn_bundle(DirectionalLightBundle {
+    //     directional_light: DirectionalLight {
+    //         // Configure the projection to better fit the scene
+    //         shadow_projection: OrthographicProjection {
+    //             left: -HALF_SIZE,
+    //             right: HALF_SIZE,
+    //             bottom: -HALF_SIZE,
+    //             top: HALF_SIZE,
+    //             near: -10.0 * HALF_SIZE,
+    //             far: 10.0 * HALF_SIZE,
+    //             ..Default::default()
+    //         },
+    //         shadows_enabled: true,
+    //         ..Default::default()
+    //     },
+    //     transform: Transform {
+    //         translation: Vec3::new(0.0, 2.0, 0.0),
+    //         rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_4),
+    //         ..Default::default()
+    //     },
+    //     ..Default::default()
+    // });
 
     // camera
     commands.spawn_bundle(PerspectiveCameraBundle {
