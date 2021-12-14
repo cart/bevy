@@ -17,13 +17,13 @@ members = ["crates/*", "examples/ios", "tools/ci", "errors"]
 
 [features]
 default = [
-  "bevy_audio",
+  # "bevy_audio",
   "bevy_gilrs",
   "bevy_winit",
   "render",
   "png",
   "hdr",
-  "mp3",
+  # "mp3",
   "x11",
   "filesystem_watcher"
 ]
