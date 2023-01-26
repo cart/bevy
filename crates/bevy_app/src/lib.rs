@@ -28,7 +28,7 @@ pub mod prelude {
 }
 
 use bevy_ecs::{
-    scheduling::{
+    schedule::{
         apply_system_buffers, IntoSystemConfig, IntoSystemSetConfig, Schedule, ScheduleLabel,
         SystemSet,
     },

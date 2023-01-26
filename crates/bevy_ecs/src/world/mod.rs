@@ -19,7 +19,7 @@ use crate::{
     event::{Event, Events},
     ptr::UnsafeCellDeref,
     query::{DebugCheckedUnwrap, QueryState, ReadOnlyWorldQuery, WorldQuery},
-    scheduling::{Schedule, ScheduleLabel, Schedules},
+    schedule::{Schedule, ScheduleLabel, Schedules},
     storage::{Column, ComponentSparseSet, ResourceData, SparseSet, Storages, TableRow},
     system::Resource,
 };
@@ -1620,7 +1620,7 @@ impl World {
         resources.check_change_ticks(change_tick);
         non_send_resources.check_change_ticks(change_tick);
 
-        if let Some(mut schedules) = self.get_resource_mut::<crate::scheduling::Schedules>() {
+        if let Some(mut schedules) = self.get_resource_mut::<crate::schedule::Schedules>() {
             schedules.check_change_ticks(change_tick);
         }
 
@@ -1992,7 +1992,7 @@ impl World {
     ///
     /// For simple testing use cases, call [`Schedule::run(&mut world)`](Schedule::run) instead.
     pub fn run_schedule(&mut self, label: impl ScheduleLabel) {
-        self.run_schedule_ref(&label)
+        self.run_schedule_ref(&label);
     }
 
     /// Runs the [`Schedule`] associated with the `label` a single time.

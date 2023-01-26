@@ -1,4 +1,4 @@
-use bevy_ecs::{component::Component, scheduling::Schedule, world::World};
+use bevy_ecs::{component::Component, schedule::Schedule, world::World};
 use criterion::{BenchmarkId, Criterion};
 
 #[derive(Component)]
