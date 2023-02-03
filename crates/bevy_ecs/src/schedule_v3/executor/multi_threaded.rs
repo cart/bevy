@@ -196,7 +196,7 @@ impl SystemExecutor for MultiThreadedExecutor {
                 let executor_span = info_span!("schedule_task");
                 #[cfg(feature = "trace")]
                 let executor = executor.instrument(executor_span);
-                scope.spawn(executor);
+                scope.spawn_last(executor);
             },
         );
 
@@ -429,8 +429,10 @@ impl MultiThreadedExecutor {
         let task = async move {
             #[cfg(feature = "trace")]
             let system_guard = system_span.enter();
+            println!("started {}", system.name());
             // SAFETY: access is compatible
             unsafe { system.run_unsafe((), world) };
+            println!("finished {}", system.name());
             #[cfg(feature = "trace")]
             drop(system_guard);
             sender

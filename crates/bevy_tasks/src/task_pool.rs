@@ -1,4 +1,5 @@
 use std::{
+    any::type_name,
     future::Future,
     marker::PhantomData,
     mem,
@@ -331,11 +332,15 @@ impl TaskPool {
         let spawned: ConcurrentQueue<FallibleTask<T>> = ConcurrentQueue::unbounded();
         let spawned_ref: &'env ConcurrentQueue<FallibleTask<T>> =
             unsafe { mem::transmute(&spawned) };
+        let spawned_last: ConcurrentQueue<FallibleTask<T>> = ConcurrentQueue::unbounded();
+        let spawned_last_ref: &'env ConcurrentQueue<FallibleTask<T>> =
+            unsafe { mem::transmute(&spawned_last) };
 
         let scope = Scope {
             executor,
             thread_executor,
             spawned: spawned_ref,
+            spawned_last: spawned_last_ref,
             scope: PhantomData,
             env: PhantomData,
         };
@@ -344,15 +349,49 @@ impl TaskPool {
 
         f(scope_ref);
 
-        if spawned.is_empty() {
+        if spawned.is_empty() && spawned_last.is_empty() {
             Vec::new()
         } else {
             future::block_on(async move {
                 let get_results = async {
-                    let mut results = Vec::with_capacity(spawned_ref.len());
+                    let mut results =
+                        Vec::with_capacity(spawned_ref.len() + spawned_last_ref.len());
+                    let mut index = 0;
+                    let mut task_failed = false;
                     while let Ok(task) = spawned_ref.pop() {
-                        results.push(task.await.unwrap());
+                        if task_failed {
+                            task.cancel().await;
+                        } else {
+                            if let Some(result) = task.await {
+                                unsafe { *results.get_unchecked_mut(index) = result };
+                            } else {
+                                task_failed = true;
+                            }
+                        }
+                        index += 1;
                     }
+                    // this detects _no_ failed tasks when a system panics. index is 0
+                    println!("{task_failed} {index}");
+                    while let Ok(task) = spawned_last_ref.pop() {
+                        if task_failed {
+                            task.cancel().await;
+                        } else {
+                            if let Some(result) = task.await {
+                                unsafe { *results.get_unchecked_mut(index) = result };
+                            } else {
+                                task_failed = true;
+                            }
+                        }
+                        index += 1;
+                    }
+                    // this does not run because we hit the deadlock above
+                    println!("{task_failed} {index}");
+
+                    if task_failed {
+                        panic!("At least one task failed");
+                    }
+
+                    unsafe { results.set_len(index) };
                     results
                 };
 
@@ -503,6 +542,7 @@ pub struct Scope<'scope, 'env: 'scope, T> {
     executor: &'scope async_executor::Executor<'scope>,
     thread_executor: &'scope ThreadExecutor<'scope>,
     spawned: &'scope ConcurrentQueue<FallibleTask<T>>,
+    spawned_last: &'scope ConcurrentQueue<FallibleTask<T>>,
     // make `Scope` invariant over 'scope and 'env
     scope: PhantomData<&'scope mut &'scope ()>,
     env: PhantomData<&'env mut &'env ()>,
@@ -522,6 +562,21 @@ impl<'scope, 'env, T: Send + 'scope> Scope<'scope, 'env, T> {
         // ConcurrentQueue only errors when closed or full, but we never
         // close and use an unbounded queue, so it is safe to unwrap
         self.spawned.push(task).unwrap();
+    }
+
+    /// Spawns a scoped future onto the thread pool. The scope *must* outlive
+    /// the provided future. The results of the future will be returned as a part of
+    /// [`TaskPool::scope`]'s return value.
+    ///
+    /// For futures that should run on the thread `scope` is called on [`Scope::spawn_on_scope`] should be used
+    /// instead.
+    ///
+    /// For more information, see [`TaskPool::scope`].
+    pub fn spawn_last<Fut: Future<Output = T> + 'scope + Send>(&self, f: Fut) {
+        let task = self.executor.spawn(f).fallible();
+        // ConcurrentQueue only errors when closed or full, but we never
+        // close and use an unbounded queue, so it is safe to unwrap
+        self.spawned_last.push(task).unwrap();
     }
 
     /// Spawns a scoped future onto the thread the scope is run on. The scope *must* outlive
@@ -545,6 +600,9 @@ where
     fn drop(&mut self) {
         future::block_on(async {
             while let Ok(task) = self.spawned.pop() {
+                task.cancel().await;
+            }
+            while let Ok(task) = self.spawned_last.pop() {
                 task.cancel().await;
             }
         });
