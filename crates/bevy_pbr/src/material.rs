@@ -18,7 +18,6 @@ use bevy_ecs::{
         SystemParamItem,
     },
 };
-use bevy_reflect::TypeUuid;
 use bevy_render::{
     extract_component::ExtractComponentPlugin,
     mesh::{Mesh, MeshVertexBufferLayout},
@@ -49,8 +48,6 @@ use std::marker::PhantomData;
 /// Materials must implement [`AsBindGroup`] to define how data will be transferred to the GPU and bound in shaders.
 /// [`AsBindGroup`] can be derived, which makes generating bindings straightforward. See the [`AsBindGroup`] docs for details.
 ///
-/// Materials must also implement [`TypeUuid`] so they can be treated as an [`Asset`](bevy_asset::Asset).
-///
 /// # Example
 ///
 /// Here is a simple Material implementation. The [`AsBindGroup`] derive has many features. To see what else is available,
@@ -62,8 +59,7 @@ use std::marker::PhantomData;
 /// # use bevy_render::{render_resource::{AsBindGroup, ShaderRef}, texture::Image, color::Color};
 /// # use bevy_asset::{Handle, AssetServer, Assets};
 ///
-/// #[derive(AsBindGroup, TypeUuid, Debug, Clone)]
-/// #[uuid = "f690fdae-d598-45ab-8225-97e2a3f056e0"]
+/// #[derive(AsBindGroup, Debug, Clone)]
 /// pub struct CustomMaterial {
 ///     // Uniform bindings must implement `ShaderType`, which will be used to convert the value to
 ///     // its shader-compatible equivalent. Most core math types already implement `ShaderType`.
@@ -105,7 +101,7 @@ use std::marker::PhantomData;
 /// @group(1) @binding(2)
 /// var color_sampler: sampler;
 /// ```
-pub trait Material: AsBindGroup + Send + Sync + Clone + TypeUuid + Sized + 'static {
+pub trait Material: AsBindGroup + Send + Sync + Clone + Sized + 'static {
     /// Returns this material's vertex shader. If [`ShaderRef::Default`] is returned, the default mesh vertex shader
     /// will be used.
     fn vertex_shader() -> ShaderRef {

@@ -2,7 +2,6 @@ use crate::{error::TextError, Font, FontAtlas};
 use ab_glyph::{GlyphId, OutlinedGlyph, Point};
 use bevy_asset::{Assets, Handle};
 use bevy_math::Vec2;
-use bevy_reflect::TypeUuid;
 use bevy_render::texture::Image;
 use bevy_sprite::TextureAtlas;
 use bevy_utils::FloatOrd;
@@ -10,8 +9,6 @@ use bevy_utils::HashMap;
 
 type FontSizeKey = FloatOrd;
 
-#[derive(TypeUuid)]
-#[uuid = "73ba778b-b6b5-4f45-982d-d21b6b86ace2"]
 pub struct FontAtlasSet {
     font_atlases: HashMap<FontSizeKey, Vec<FontAtlas>>,
     // TODO unused, remove

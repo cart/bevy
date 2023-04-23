@@ -6,12 +6,26 @@ use bevy_ecs::{
 use bevy_reflect::{FromReflect, Reflect, Uuid};
 use bevy_utils::HashMap;
 use crossbeam_channel::{Receiver, Sender};
+use serde::{Deserialize, Serialize};
 use std::{
     any::TypeId,
     sync::{atomic::AtomicU32, Arc},
 };
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Reflect, FromReflect)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Reflect,
+    FromReflect,
+    Serialize,
+    Deserialize,
+)]
 pub struct AssetIndex {
     pub(crate) generation: u32,
     pub(crate) index: u32,

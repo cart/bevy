@@ -75,8 +75,7 @@ impl Material for CustomMaterial {
 }
 
 // This is the struct that will be passed to your shader
-#[derive(AsBindGroup, TypeUuid, Debug, Clone)]
-#[uuid = "f690fdae-d598-45ab-8225-97e2a3f056e0"]
+#[derive(AsBindGroup, Debug, Clone)]
 #[bind_group_data(CustomMaterialKey)]
 pub struct CustomMaterial {
     #[uniform(0)]

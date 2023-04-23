@@ -1,7 +1,6 @@
 use super::ShaderDefVal;
 use crate::define_atomic_id;
 use bevy_asset::{io::Reader, AssetId, AssetLoader, AssetPath, AsyncReadExt, Handle, LoadContext};
-use bevy_reflect::TypeUuid;
 use bevy_utils::{tracing::error, BoxedFuture, HashMap};
 use naga::{back::wgsl::WriterFlags, valid::Capabilities, valid::ModuleInfo, Module};
 use once_cell::sync::Lazy;
@@ -25,8 +24,7 @@ pub enum ShaderReflectError {
 }
 /// A shader, as defined by its [`ShaderSource`] and [`ShaderStage`](naga::ShaderStage)
 /// This is an "unprocessed" shader. It can contain preprocessor directives.
-#[derive(Debug, Clone, TypeUuid)]
-#[uuid = "d95bc916-6c55-4de3-9622-37e7b6969fda"]
+#[derive(Debug, Clone)]
 pub struct Shader {
     source: Source,
     import_path: Option<ShaderImport>,
@@ -795,8 +793,7 @@ impl From<&'static str> for ShaderRef {
 
 #[cfg(test)]
 mod tests {
-    use bevy_asset::{Handle, UntypedHandle};
-    use bevy_reflect::TypeUuid;
+    use bevy_asset::Handle;
     use bevy_utils::HashMap;
     use naga::ShaderStage;
 

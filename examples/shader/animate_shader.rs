@@ -31,8 +31,7 @@ fn setup(
     });
 }
 
-#[derive(AsBindGroup, TypeUuid, Debug, Clone)]
-#[uuid = "a3d71c04-d054-4946-80f8-ba6cfbc90cad"]
+#[derive(AsBindGroup, Debug, Clone)]
 struct CustomMaterial {}
 
 impl Material for CustomMaterial {

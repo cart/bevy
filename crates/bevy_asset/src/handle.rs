@@ -1,7 +1,8 @@
 use crate::{Asset, AssetId, AssetIndexAllocator, InternalAssetId, UntypedAssetId};
 use bevy_ecs::prelude::*;
-use bevy_reflect::{FromReflect, GetTypeRegistration, Reflect, TypeRegistration, Typed, Uuid};
+use bevy_reflect::{FromReflect, Reflect, ReflectDeserialize, ReflectSerialize, Uuid};
 use crossbeam_channel::{Receiver, Sender};
+use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use std::{
     any::TypeId,
     hash::{Hash, Hasher},
@@ -77,7 +78,8 @@ impl Drop for InternalAssetHandle {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Reflect, FromReflect)]
+#[reflect_value(PartialEq, Hash, Serialize, Deserialize)]
 pub enum Handle<A: Asset> {
     Strong(Arc<InternalAssetHandle>),
     Weak(AssetId<A>),
@@ -89,81 +91,6 @@ impl<T: Asset> Clone for Handle<T> {
             Handle::Strong(handle) => Handle::Strong(handle.clone()),
             Handle::Weak(id) => Handle::Weak(*id),
         }
-    }
-}
-
-impl<A: Asset> GetTypeRegistration for Handle<A> {
-    fn get_type_registration() -> bevy_reflect::TypeRegistration {
-        TypeRegistration::of::<Self>()
-    }
-}
-
-impl<A: Asset> Typed for Handle<A> {
-    fn type_info() -> &'static bevy_reflect::TypeInfo {
-        todo!()
-    }
-}
-impl<A: Asset> Reflect for Handle<A> {
-    fn type_name(&self) -> &str {
-        todo!()
-    }
-
-    fn get_type_info(&self) -> &'static bevy_reflect::TypeInfo {
-        todo!()
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        todo!()
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        todo!()
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        todo!()
-    }
-
-    fn into_reflect(self: Box<Self>) -> Box<dyn Reflect> {
-        todo!()
-    }
-
-    fn as_reflect(&self) -> &dyn Reflect {
-        todo!()
-    }
-
-    fn as_reflect_mut(&mut self) -> &mut dyn Reflect {
-        todo!()
-    }
-
-    fn apply(&mut self, _value: &dyn Reflect) {
-        todo!()
-    }
-
-    fn set(&mut self, _value: Box<dyn Reflect>) -> Result<(), Box<dyn Reflect>> {
-        todo!()
-    }
-
-    fn reflect_ref(&self) -> bevy_reflect::ReflectRef {
-        todo!()
-    }
-
-    fn reflect_mut(&mut self) -> bevy_reflect::ReflectMut {
-        todo!()
-    }
-
-    fn reflect_owned(self: Box<Self>) -> bevy_reflect::ReflectOwned {
-        todo!()
-    }
-
-    fn clone_value(&self) -> Box<dyn Reflect> {
-        todo!()
-    }
-}
-
-impl<A: Asset> FromReflect for Handle<A> {
-    fn from_reflect(_reflect: &dyn Reflect) -> Option<Self> {
-        todo!()
     }
 }
 
@@ -255,6 +182,26 @@ impl<A: Asset> PartialEq for Handle<A> {
 }
 
 impl<A: Asset> Eq for Handle<A> {}
+
+impl<A: Asset> Serialize for Handle<A> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct(std::any::type_name::<Self>(), 1)?;
+        state.serialize_field("id", &self.id())?;
+        state.end()
+    }
+}
+
+impl<'de, A: Asset> Deserialize<'de> for Handle<A> {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        todo!("Give handle serialization a real think :)");
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum UntypedHandle {

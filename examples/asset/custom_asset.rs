@@ -3,13 +3,11 @@
 use bevy::{
     asset::{AssetLoader, LoadContext, LoadedAsset},
     prelude::*,
-    reflect::TypeUuid,
     utils::BoxedFuture,
 };
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, TypeUuid)]
-#[uuid = "39cadc56-aa9c-4543-8640-a018b74b5052"]
+#[derive(Debug, Deserialize)]
 pub struct CustomAsset {
     pub value: i32,
 }

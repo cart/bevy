@@ -3,13 +3,11 @@ use bevy_asset::{
     io::{AsyncReadExt, Reader},
     Asset, AssetLoader, LoadContext,
 };
-use bevy_reflect::TypeUuid;
 use bevy_utils::BoxedFuture;
 use std::{io::Cursor, sync::Arc};
 
 /// A source of audio data
-#[derive(Debug, Clone, TypeUuid)]
-#[uuid = "7a14806a-672b-443b-8d16-4f18afefa463"]
+#[derive(Debug, Clone)]
 pub struct AudioSource {
     /// Raw data of the audio source.
     ///

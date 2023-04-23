@@ -70,8 +70,7 @@ fn setup(
     });
 }
 
-#[derive(Debug, Clone, TypeUuid)]
-#[uuid = "8dd2b424-45a2-4a53-ac29-7ce356b2d5fe"]
+#[derive(Debug, Clone)]
 struct BindlessMaterial {
     textures: Vec<Handle<Image>>,
 }

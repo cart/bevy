@@ -4,7 +4,7 @@ use crate::{
 };
 use bevy_asset::Handle;
 use bevy_math::Vec4;
-use bevy_reflect::{std_traits::ReflectDefault, FromReflect, Reflect, TypeUuid};
+use bevy_reflect::{std_traits::ReflectDefault, FromReflect, Reflect};
 use bevy_render::{
     color::Color, mesh::MeshVertexBufferLayout, render_asset::RenderAssets, render_resource::*,
     texture::Image,
@@ -15,8 +15,7 @@ use bevy_render::{
 /// <https://google.github.io/filament/Material%20Properties.pdf>.
 ///
 /// May be created directly from a [`Color`] or an [`Image`].
-#[derive(AsBindGroup, Reflect, FromReflect, Debug, Clone, TypeUuid)]
-#[uuid = "7494888b-c082-457b-aacf-517228cc0c22"]
+#[derive(AsBindGroup, Reflect, FromReflect, Debug, Clone)]
 #[bind_group_data(StandardMaterialKey)]
 #[uniform(0, StandardMaterialUniform)]
 #[reflect(Default, Debug)]

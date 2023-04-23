@@ -236,12 +236,11 @@ mod tests {
     use std::any::TypeId;
 
     use bevy_app::{App, AppTypeRegistry};
-    use bevy_reflect::{FromReflect, Reflect, ReflectMut, TypeUuid};
+    use bevy_reflect::{FromReflect, Reflect, ReflectMut};
 
     use crate::{AssetApp, AssetPlugin, ReflectAsset, UntypedHandle};
 
-    #[derive(Reflect, FromReflect, TypeUuid)]
-    #[uuid = "09191350-1238-4736-9a89-46f04bda6966"]
+    #[derive(Reflect, FromReflect)]
     struct AssetType {
         field: String,
     }
