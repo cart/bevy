@@ -155,9 +155,8 @@ impl<A: Asset + FromReflect> FromType<A> for ReflectAsset {
                 assets.len()
             },
             ids: |world| {
-                let _assets = world.resource::<Assets<A>>();
-                // Box::new(assets.ids())
-                todo!("Implement asset ids iterator")
+                let assets = world.resource::<Assets<A>>();
+                Box::new(assets.ids().map(|i| i.untyped()))
             },
             remove: |world, handle| {
                 let mut assets = world.resource_mut::<Assets<A>>();

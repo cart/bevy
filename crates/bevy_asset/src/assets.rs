@@ -318,6 +318,27 @@ impl<A: Asset> Assets<A> {
         self.dense_storage.len() + self.hash_map.len()
     }
 
+    pub fn ids(&self) -> impl Iterator<Item = AssetId<A>> + '_ {
+        self.dense_storage
+            .storage
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| match v {
+                Entry::None => None,
+                Entry::Some { value, generation } => {
+                    if value.is_some() {
+                        Some(AssetId::from(AssetIndex {
+                            index: i as u32,
+                            generation: *generation,
+                        }))
+                    } else {
+                        None
+                    }
+                }
+            })
+            .chain(self.hash_map.keys().map(|uuid| AssetId::from(*uuid)))
+    }
+
     // PERF: this could be accelerated if we implement a skip list
     pub fn iter(&self) -> impl Iterator<Item = &A> {
         self.dense_storage
