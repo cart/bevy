@@ -465,7 +465,8 @@ impl AsBindGroupShaderType<StandardMaterialUniform> for StandardMaterial {
         }
         let has_normal_map = self.normal_map_texture.is_some();
         if has_normal_map {
-            if let Some(texture) = images.get(self.normal_map_texture.as_ref().unwrap()) {
+            let normal_map_id = self.normal_map_texture.as_ref().map(|h| h.id()).unwrap();
+            if let Some(texture) = images.get(&normal_map_id) {
                 match texture.texture_format {
                     // All 2-component unorm formats
                     TextureFormat::Rg8Unorm
@@ -561,11 +562,11 @@ impl Material for StandardMaterial {
     }
 
     fn prepass_fragment_shader() -> ShaderRef {
-        PBR_PREPASS_SHADER_HANDLE.typed().into()
+        PBR_PREPASS_SHADER_HANDLE.into()
     }
 
     fn fragment_shader() -> ShaderRef {
-        PBR_SHADER_HANDLE.typed().into()
+        PBR_SHADER_HANDLE.into()
     }
 
     #[inline]

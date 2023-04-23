@@ -1,6 +1,6 @@
 use crate::{Extract, ExtractSchedule, Render, RenderApp, RenderSet};
 use bevy_app::{App, Plugin};
-use bevy_asset::{Asset, AssetEvent, Assets, Handle};
+use bevy_asset::{Asset, AssetEvent, AssetId, Assets};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     prelude::*,
@@ -105,8 +105,8 @@ impl<A: RenderAsset> Plugin for RenderAssetPlugin<A> {
 /// Temporarily stores the extracted and removed assets of the current frame.
 #[derive(Resource)]
 pub struct ExtractedAssets<A: RenderAsset> {
-    extracted: Vec<(Handle<A>, A::ExtractedAsset)>,
-    removed: Vec<Handle<A>>,
+    extracted: Vec<(AssetId<A>, A::ExtractedAsset)>,
+    removed: Vec<AssetId<A>>,
 }
 
 impl<A: RenderAsset> Default for ExtractedAssets<A> {
@@ -121,7 +121,7 @@ impl<A: RenderAsset> Default for ExtractedAssets<A> {
 /// Stores all GPU representations ([`RenderAsset::PreparedAssets`](RenderAsset::PreparedAsset))
 /// of [`RenderAssets`](RenderAsset) as long as they exist.
 #[derive(Resource, Deref, DerefMut)]
-pub struct RenderAssets<A: RenderAsset>(HashMap<Handle<A>, A::PreparedAsset>);
+pub struct RenderAssets<A: RenderAsset>(HashMap<AssetId<A>, A::PreparedAsset>);
 
 impl<A: RenderAsset> Default for RenderAssets<A> {
     fn default() -> Self {
@@ -140,20 +140,20 @@ fn extract_render_asset<A: RenderAsset>(
     let mut removed = Vec::new();
     for event in events.iter() {
         match event {
-            AssetEvent::Created { handle } | AssetEvent::Modified { handle } => {
-                changed_assets.insert(handle.clone_weak());
+            AssetEvent::Added { id } | AssetEvent::Modified { id } => {
+                changed_assets.insert(*id);
             }
-            AssetEvent::Removed { handle } => {
-                changed_assets.remove(handle);
-                removed.push(handle.clone_weak());
+            AssetEvent::Removed { id } => {
+                changed_assets.remove(id);
+                removed.push(*id);
             }
         }
     }
 
     let mut extracted_assets = Vec::new();
-    for handle in changed_assets.drain() {
-        if let Some(asset) = assets.get(&handle) {
-            extracted_assets.push((handle, asset.extract_asset()));
+    for id in changed_assets.drain() {
+        if let Some(asset) = assets.get(id) {
+            extracted_assets.push((id, asset.extract_asset()));
         }
     }
 
@@ -167,7 +167,7 @@ fn extract_render_asset<A: RenderAsset>(
 /// All assets that should be prepared next frame.
 #[derive(Resource)]
 pub struct PrepareNextFrameAssets<A: RenderAsset> {
-    assets: Vec<(Handle<A>, A::ExtractedAsset)>,
+    assets: Vec<(AssetId<A>, A::ExtractedAsset)>,
 }
 
 impl<A: RenderAsset> Default for PrepareNextFrameAssets<A> {
@@ -188,13 +188,13 @@ pub fn prepare_assets<R: RenderAsset>(
 ) {
     let mut param = param.into_inner();
     let queued_assets = std::mem::take(&mut prepare_next_frame.assets);
-    for (handle, extracted_asset) in queued_assets {
+    for (id, extracted_asset) in queued_assets {
         match R::prepare_asset(extracted_asset, &mut param) {
             Ok(prepared_asset) => {
-                render_assets.insert(handle, prepared_asset);
+                render_assets.insert(id, prepared_asset);
             }
             Err(PrepareAssetError::RetryNextUpdate(extracted_asset)) => {
-                prepare_next_frame.assets.push((handle, extracted_asset));
+                prepare_next_frame.assets.push((id, extracted_asset));
             }
         }
     }
@@ -203,13 +203,13 @@ pub fn prepare_assets<R: RenderAsset>(
         render_assets.remove(&removed);
     }
 
-    for (handle, extracted_asset) in std::mem::take(&mut extracted_assets.extracted) {
+    for (id, extracted_asset) in std::mem::take(&mut extracted_assets.extracted) {
         match R::prepare_asset(extracted_asset, &mut param) {
             Ok(prepared_asset) => {
-                render_assets.insert(handle, prepared_asset);
+                render_assets.insert(id, prepared_asset);
             }
             Err(PrepareAssetError::RetryNextUpdate(extracted_asset)) => {
-                prepare_next_frame.assets.push((handle, extracted_asset));
+                prepare_next_frame.assets.push((id, extracted_asset));
             }
         }
     }

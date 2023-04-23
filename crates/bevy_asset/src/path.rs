@@ -3,15 +3,26 @@ use bevy_utils::AHasher;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
+    fmt::Display,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
 };
 
 /// Represents a path to an asset in the file system.
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, Hash, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct AssetPath<'a> {
     path: Cow<'a, Path>,
     label: Option<Cow<'a, str>>,
+}
+
+impl<'a> Display for AssetPath<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.path.display())?;
+        if let Some(label) = &self.label {
+            write!(f, "#{label}")?;
+        }
+        Ok(())
+    }
 }
 
 impl<'a> AssetPath<'a> {
@@ -184,18 +195,6 @@ impl<'a> From<PathBuf> for AssetPath<'a> {
         AssetPath {
             path: Cow::Owned(path),
             label: None,
-        }
-    }
-}
-
-impl<'a> From<String> for AssetPath<'a> {
-    fn from(asset_path: String) -> Self {
-        let mut parts = asset_path.splitn(2, '#');
-        let path = PathBuf::from(parts.next().expect("Path must be set."));
-        let label = parts.next().map(String::from);
-        AssetPath {
-            path: Cow::Owned(path),
-            label: label.map(Cow::Owned),
         }
     }
 }

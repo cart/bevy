@@ -39,7 +39,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_resource::<State>()
-        .add_asset::<CustomAsset>()
+        .init_asset::<CustomAsset>()
         .init_asset_loader::<CustomAssetLoader>()
         .add_systems(Startup, setup)
         .add_systems(Update, print_on_load)

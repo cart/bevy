@@ -1,0 +1,8 @@
+(
+    text: "a",
+    dependencies: [
+        "b.cool.ron",
+        "c.cool.ron",
+    ],
+    embedded_dependencies: [],
+)

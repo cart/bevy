@@ -1,5 +1,5 @@
 use bevy_app::{App, Plugin};
-use bevy_asset::{AddAsset, AssetEvent, AssetServer, Assets, Handle};
+use bevy_asset::{AssetApp, AssetEvent, AssetId, AssetServer, Assets, Handle};
 use bevy_core_pipeline::{
     core_2d::Transparent2d,
     tonemapping::{DebandDither, Tonemapping},
@@ -151,7 +151,7 @@ where
     M::Data: PartialEq + Eq + Hash + Clone,
 {
     fn build(&self, app: &mut App) {
-        app.add_asset::<M>()
+        app.init_asset::<M>()
             .add_plugin(ExtractComponentPlugin::<Handle<M>>::extract_visible());
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
@@ -313,7 +313,7 @@ impl<P: PhaseItem, M: Material2d, const I: usize> RenderCommand<P>
         materials: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        let material2d = materials.into_inner().get(material2d_handle).unwrap();
+        let material2d = materials.into_inner().get(&material2d_handle.id()).unwrap();
         pass.set_bind_group(I, &material2d.bind_group, &[]);
         RenderCommandResult::Success
     }
@@ -376,8 +376,8 @@ pub fn queue_material2d_meshes<M: Material2d>(
             if let Ok((material2d_handle, mesh2d_handle, mesh2d_uniform)) =
                 material2d_meshes.get(*visible_entity)
             {
-                if let Some(material2d) = render_materials.get(material2d_handle) {
-                    if let Some(mesh) = render_meshes.get(&mesh2d_handle.0) {
+                if let Some(material2d) = render_materials.get(&material2d_handle.id()) {
+                    if let Some(mesh) = render_meshes.get(&mesh2d_handle.0.id()) {
                         let mesh_key = view_key
                             | Mesh2dPipelineKey::from_primitive_topology(mesh.primitive_topology);
 
@@ -428,8 +428,8 @@ pub struct PreparedMaterial2d<T: Material2d> {
 
 #[derive(Resource)]
 struct ExtractedMaterials2d<M: Material2d> {
-    extracted: Vec<(Handle<M>, M)>,
-    removed: Vec<Handle<M>>,
+    extracted: Vec<(AssetId<M>, M)>,
+    removed: Vec<AssetId<M>>,
 }
 
 impl<M: Material2d> Default for ExtractedMaterials2d<M> {
@@ -443,7 +443,7 @@ impl<M: Material2d> Default for ExtractedMaterials2d<M> {
 
 /// Stores all prepared representations of [`Material2d`] assets for as long as they exist.
 #[derive(Resource, Deref, DerefMut)]
-pub struct RenderMaterials2d<T: Material2d>(HashMap<Handle<T>, PreparedMaterial2d<T>>);
+pub struct RenderMaterials2d<T: Material2d>(HashMap<AssetId<T>, PreparedMaterial2d<T>>);
 
 impl<T: Material2d> Default for RenderMaterials2d<T> {
     fn default() -> Self {
@@ -462,20 +462,20 @@ fn extract_materials_2d<M: Material2d>(
     let mut removed = Vec::new();
     for event in events.iter() {
         match event {
-            AssetEvent::Created { handle } | AssetEvent::Modified { handle } => {
-                changed_assets.insert(handle.clone_weak());
+            AssetEvent::Added { id } | AssetEvent::Modified { id } => {
+                changed_assets.insert(*id);
             }
-            AssetEvent::Removed { handle } => {
-                changed_assets.remove(handle);
-                removed.push(handle.clone_weak());
+            AssetEvent::Removed { id } => {
+                changed_assets.remove(id);
+                removed.push(*id);
             }
         }
     }
 
     let mut extracted_assets = Vec::new();
-    for handle in changed_assets.drain() {
-        if let Some(asset) = assets.get(&handle) {
-            extracted_assets.push((handle, asset.clone()));
+    for id in changed_assets.drain() {
+        if let Some(asset) = assets.get(id) {
+            extracted_assets.push((id, asset.clone()));
         }
     }
 
@@ -487,7 +487,7 @@ fn extract_materials_2d<M: Material2d>(
 
 /// All [`Material2d`] values of a given type that should be prepared next frame.
 pub struct PrepareNextFrameMaterials<M: Material2d> {
-    assets: Vec<(Handle<M>, M)>,
+    assets: Vec<(AssetId<M>, M)>,
 }
 
 impl<M: Material2d> Default for PrepareNextFrameMaterials<M> {
@@ -510,7 +510,7 @@ fn prepare_materials_2d<M: Material2d>(
     pipeline: Res<Material2dPipeline<M>>,
 ) {
     let queued_assets = std::mem::take(&mut prepare_next_frame.assets);
-    for (handle, material) in queued_assets {
+    for (id, material) in queued_assets {
         match prepare_material2d(
             &material,
             &render_device,
@@ -519,10 +519,10 @@ fn prepare_materials_2d<M: Material2d>(
             &pipeline,
         ) {
             Ok(prepared_asset) => {
-                render_materials.insert(handle, prepared_asset);
+                render_materials.insert(id, prepared_asset);
             }
             Err(AsBindGroupError::RetryNextUpdate) => {
-                prepare_next_frame.assets.push((handle, material));
+                prepare_next_frame.assets.push((id, material));
             }
         }
     }

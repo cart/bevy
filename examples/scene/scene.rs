@@ -4,12 +4,15 @@ use std::{fs::File, io::Write};
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(AssetPlugin {
-            // This tells the AssetServer to watch for changes to assets.
-            // It enables our scenes to automatically reload in game when we modify their files.
-            watch_for_changes: true,
-            ..default()
-        }))
+        // TODO: re-enable hot reloading here
+        .add_plugins(
+            DefaultPlugins, // .set(AssetPlugin {
+                            // // This tells the AssetServer to watch for changes to assets.
+                            // // It enables our scenes to automatically reload in game when we modify their files.
+                            // watch_for_changes: true,
+                            // ..default()
+                            // })
+        )
         .register_type::<ComponentA>()
         .register_type::<ComponentB>()
         .register_type::<ResourceA>()

@@ -29,7 +29,7 @@ impl FromWorld for GizmoLinePipeline {
     fn from_world(render_world: &mut World) -> Self {
         GizmoLinePipeline {
             mesh_pipeline: render_world.resource::<Mesh2dPipeline>().clone(),
-            shader: LINE_SHADER_HANDLE.typed(),
+            shader: LINE_SHADER_HANDLE,
         }
     }
 }
@@ -110,7 +110,7 @@ pub(crate) fn queue_gizmos_2d(
     for (view, mut phase) in &mut views {
         let key = key | Mesh2dPipelineKey::from_hdr(view.hdr);
         for (entity, mesh_handle) in &mesh_handles {
-            let Some(mesh) = gpu_meshes.get(&mesh_handle.0) else { continue; };
+            let Some(mesh) = gpu_meshes.get(&mesh_handle.0.id()) else { continue; };
 
             let key = key | Mesh2dPipelineKey::from_primitive_topology(mesh.primitive_topology);
             let pipeline = specialized_pipelines

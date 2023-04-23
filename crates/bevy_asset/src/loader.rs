@@ -1,274 +1,322 @@
 use crate::{
-    path::AssetPath, AssetIo, AssetIoError, AssetMeta, AssetServer, Assets, Handle, HandleId,
-    RefChangeChannel,
+    io::{AssetReaderError, Reader},
+    meta::{AssetMeta, AssetMetaDyn, Settings, META_FORMAT_VERSION},
+    path::AssetPath,
+    saver::NullSaver,
+    Asset, AssetLoadError, AssetServer, Assets, Handle, UntypedAssetId,
 };
-use anyhow::Error;
-use anyhow::Result;
-use bevy_ecs::system::{Res, ResMut};
-use bevy_reflect::{TypeUuid, TypeUuidDynamic};
+use bevy_ecs::world::World;
 use bevy_utils::{BoxedFuture, HashMap};
-use crossbeam_channel::{Receiver, Sender};
 use downcast_rs::{impl_downcast, Downcast};
-use std::path::Path;
+use futures_lite::AsyncReadExt;
+use ron::error::SpannedError;
+use serde::{Deserialize, Serialize};
+use std::{
+    any::{Any, TypeId},
+    path::Path,
+};
+use thiserror::Error;
 
-/// A loader for an asset source.
-///
-/// Types implementing this trait are used by the asset server to load assets into their respective
-/// asset storages.
 pub trait AssetLoader: Send + Sync + 'static {
+    type Asset: crate::Asset;
+    type Settings: Settings + Default + Serialize + for<'a> Deserialize<'a>;
     /// Processes the asset in an asynchronous closure.
     fn load<'a>(
         &'a self,
-        bytes: &'a [u8],
+        reader: &'a mut Reader,
+        settings: &'a Self::Settings,
         load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, Result<(), Error>>;
+    ) -> BoxedFuture<'a, Result<Self::Asset, anyhow::Error>>;
 
     /// Returns a list of extensions supported by this asset loader, without the preceding dot.
     fn extensions(&self) -> &[&str];
 }
 
-/// An essential piece of data of an application.
-///
-/// Assets are the building blocks of games. They can be anything, from images and sounds to scenes
-/// and scripts. In Bevy, an asset is any struct that has an unique type id, as shown below:
-///
-/// ```rust
-/// use bevy_reflect::TypeUuid;
-/// use serde::Deserialize;
-///
-/// #[derive(Debug, Deserialize, TypeUuid)]
-/// #[uuid = "39cadc56-aa9c-4543-8640-a018b74b5052"]
-/// pub struct CustomAsset {
-///     pub value: i32,
-/// }
-/// ```
-///
-/// See the `assets/custom_asset.rs` example in the repository for more details.
-///
-/// In order to load assets into your game you must either add them manually to an asset storage
-/// with [`Assets::add`] or load them from the filesystem with [`AssetServer::load`].
-pub trait Asset: TypeUuid + AssetDynamic {}
+pub trait ErasedAssetLoader: Send + Sync + 'static {
+    /// Processes the asset in an asynchronous closure.
+    fn load<'a>(
+        &'a self,
+        reader: &'a mut Reader,
+        settings: &'a dyn Settings,
+        load_context: LoadContext<'a>,
+    ) -> BoxedFuture<'a, Result<LoadedAsset, AssetLoaderError>>;
 
-/// An untyped version of the [`Asset`] trait.
-pub trait AssetDynamic: Downcast + TypeUuidDynamic + Send + Sync + 'static {}
-impl_downcast!(AssetDynamic);
-
-impl<T> Asset for T where T: TypeUuid + AssetDynamic + TypeUuidDynamic {}
-
-impl<T> AssetDynamic for T where T: Send + Sync + 'static + TypeUuidDynamic {}
-
-/// A complete asset processed in an [`AssetLoader`].
-pub struct LoadedAsset<T: Asset> {
-    pub(crate) value: Option<T>,
-    pub(crate) dependencies: Vec<AssetPath<'static>>,
+    /// Returns a list of extensions supported by this asset loader, without the preceding dot.
+    fn extensions(&self) -> &[&str];
+    fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError>;
+    fn default_meta(&self) -> Box<dyn AssetMetaDyn>;
+    fn type_name(&self) -> &'static str;
+    fn type_id(&self) -> TypeId;
+    fn asset_type_id(&self) -> TypeId;
 }
 
-impl<T: Asset> LoadedAsset<T> {
-    /// Creates a new loaded asset.
-    pub fn new(value: T) -> Self {
-        Self {
-            value: Some(value),
-            dependencies: Vec::new(),
-        }
+#[derive(Error, Debug)]
+pub enum AssetLoaderError {
+    #[error(transparent)]
+    Load(#[from] anyhow::Error),
+    #[error(transparent)]
+    DeserializeMeta(#[from] DeserializeMetaError),
+}
+
+#[derive(Error, Debug)]
+pub enum DeserializeMetaError {
+    #[error("Failed to deserialize asset meta: {0:?}")]
+    DeserializeSettings(#[from] SpannedError),
+}
+
+impl<L> ErasedAssetLoader for L
+where
+    L: AssetLoader + Send + Sync,
+{
+    /// Processes the asset in an asynchronous closure.
+    fn load<'a>(
+        &'a self,
+        reader: &'a mut Reader,
+        settings: &'a dyn Settings,
+        mut load_context: LoadContext<'a>,
+    ) -> BoxedFuture<'a, Result<LoadedAsset, AssetLoaderError>> {
+        Box::pin(async move {
+            let settings = settings
+                .downcast_ref::<L::Settings>()
+                .expect("AssetLoader settings should match the loader type");
+            let asset =
+                <L as AssetLoader>::load(&self, reader, settings, &mut load_context).await?;
+            Ok(LoadedAsset {
+                id: load_context.asset_id,
+                asset: Box::new(asset),
+                labeled_assets: load_context.labeled_assets,
+                dependencies: load_context.dependencies,
+            })
+        })
     }
 
-    /// Adds a dependency on another asset at the provided path.
-    pub fn add_dependency(&mut self, asset_path: AssetPath) {
-        self.dependencies.push(asset_path.to_owned());
+    fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError> {
+        let meta: AssetMeta<L, NullSaver, L> = ron::de::from_bytes(meta)?;
+        Ok(Box::new(meta))
     }
 
-    /// Adds a dependency on another asset at the provided path.
-    #[must_use]
-    pub fn with_dependency(mut self, asset_path: AssetPath) -> Self {
-        self.add_dependency(asset_path);
-        self
+    fn default_meta(&self) -> Box<dyn AssetMetaDyn> {
+        Box::new(AssetMeta::<L, NullSaver, L> {
+            meta_format_version: META_FORMAT_VERSION.to_string(),
+            loader_settings: L::Settings::default(),
+            loader: self.type_name().to_string(),
+            processor: None,
+        })
     }
 
-    /// Adds dependencies on other assets at the provided paths.
-    #[must_use]
-    pub fn with_dependencies(mut self, asset_paths: Vec<AssetPath<'static>>) -> Self {
-        for asset_path in asset_paths {
-            self.add_dependency(asset_path);
-        }
-        self
+    /// Returns a list of extensions supported by this asset loader, without the preceding dot.
+    fn extensions(&self) -> &[&str] {
+        <L as AssetLoader>::extensions(&self)
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<L>()
+    }
+
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<L>()
+    }
+
+    fn asset_type_id(&self) -> TypeId {
+        TypeId::of::<L::Asset>()
     }
 }
 
-pub(crate) struct BoxedLoadedAsset {
-    pub(crate) value: Option<Box<dyn AssetDynamic>>,
-    pub(crate) dependencies: Vec<AssetPath<'static>>,
+pub struct LoadedAsset {
+    pub id: UntypedAssetId,
+    pub asset: Box<dyn AssetContainer>,
+    pub labeled_assets: HashMap<String, LoadedAsset>,
+    pub dependencies: HashMap<UntypedAssetId, AssetPath<'static>>,
 }
 
-impl<T: Asset> From<LoadedAsset<T>> for BoxedLoadedAsset {
-    fn from(asset: LoadedAsset<T>) -> Self {
-        BoxedLoadedAsset {
-            value: asset
-                .value
-                .map(|value| Box::new(value) as Box<dyn AssetDynamic>),
-            dependencies: asset.dependencies,
-        }
+impl LoadedAsset {
+    pub fn take<A: Asset>(self) -> Option<A> {
+        self.asset.downcast::<A>().map(|a| *a).ok()
+    }
+
+    pub fn get<A: Asset>(&self) -> Option<&A> {
+        self.asset.downcast_ref::<A>()
     }
 }
 
-/// An asynchronous context where an [`Asset`] is processed.
-///
-/// The load context is created by the [`AssetServer`] to process an asset source after loading its
-/// contents into memory. It is then passed to the appropriate [`AssetLoader`] based on the file
-/// extension of the asset's path.
-///
-/// An asset source can define one or more assets from a single source path. The main asset is set
-/// using [`LoadContext::set_default_asset`] and sub-assets are defined with
-/// [`LoadContext::set_labeled_asset`].
+pub trait AssetContainer: Downcast + Any + Send + Sync + 'static {
+    fn insert(self: Box<Self>, id: UntypedAssetId, world: &mut World);
+}
+
+impl_downcast!(AssetContainer);
+
+impl<A: Asset> AssetContainer for A {
+    fn insert(self: Box<Self>, id: UntypedAssetId, world: &mut World) {
+        world
+            .resource_mut::<Assets<A>>()
+            .insert(id.typed_unchecked(), *self);
+    }
+}
+
 pub struct LoadContext<'a> {
-    pub(crate) ref_change_channel: &'a RefChangeChannel,
-    pub(crate) asset_io: &'a dyn AssetIo,
-    pub(crate) labeled_assets: HashMap<Option<String>, BoxedLoadedAsset>,
-    pub(crate) path: &'a Path,
-    pub(crate) version: usize,
+    pub(crate) asset_server: &'a AssetServer,
+    pub(crate) labeled_assets: HashMap<String, LoadedAsset>,
+    pub(crate) asset_path: &'a AssetPath<'a>,
+    pub(crate) asset_id: UntypedAssetId,
+    pub(crate) dependencies: HashMap<UntypedAssetId, AssetPath<'static>>,
+    pub(crate) load_dependencies: Vec<AssetPath<'static>>,
+    pub(crate) should_load_dependencies: bool,
 }
 
 impl<'a> LoadContext<'a> {
     pub(crate) fn new(
-        path: &'a Path,
-        ref_change_channel: &'a RefChangeChannel,
-        asset_io: &'a dyn AssetIo,
-        version: usize,
+        asset_server: &'a AssetServer,
+        asset_id: UntypedAssetId,
+        asset_path: &'a AssetPath<'a>,
+        load_dependencies: bool,
     ) -> Self {
         Self {
-            ref_change_channel,
-            asset_io,
+            asset_server,
+            asset_path,
+            asset_id,
+            should_load_dependencies: load_dependencies,
+            dependencies: HashMap::new(),
+            load_dependencies: Vec::new(),
             labeled_assets: Default::default(),
-            version,
-            path,
         }
     }
 
     /// Gets the source path for this load context.
     pub fn path(&self) -> &Path {
-        self.path
+        self.asset_path.path()
+    }
+
+    /// Gets the source asset path for this load context.
+    pub fn asset_path(&self) -> &AssetPath {
+        self.asset_path
+    }
+
+    /// Gets the source asset path for this load context.
+    pub async fn read_asset_bytes<'b>(
+        &mut self,
+        path: &'b Path,
+    ) -> Result<Vec<u8>, AssetReaderError> {
+        self.load_dependencies
+            .push(AssetPath::new(path.to_owned(), None));
+        let mut reader = self.asset_server.reader().read(path).await?;
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await?;
+        Ok(bytes)
     }
 
     /// Returns `true` if the load context contains an asset with the specified label.
     pub fn has_labeled_asset(&self, label: &str) -> bool {
-        self.labeled_assets.contains_key(&Some(label.to_string()))
+        self.labeled_assets.contains_key(label)
     }
 
-    /// Sets the primary asset loaded from the asset source.
-    pub fn set_default_asset<T: Asset>(&mut self, asset: LoadedAsset<T>) {
-        self.labeled_assets.insert(None, asset.into());
-    }
-
-    /// Sets a secondary asset loaded from the asset source.
-    pub fn set_labeled_asset<T: Asset>(&mut self, label: &str, asset: LoadedAsset<T>) -> Handle<T> {
-        assert!(!label.is_empty());
-        self.labeled_assets
-            .insert(Some(label.to_string()), asset.into());
-        self.get_handle(AssetPath::new_ref(self.path(), Some(label)))
-    }
-
-    /// Gets a handle to an asset of type `T` from its id.
-    pub fn get_handle<I: Into<HandleId>, T: Asset>(&self, id: I) -> Handle<T> {
-        Handle::strong(id.into(), self.ref_change_channel.sender.clone())
-    }
-
-    /// Reads the contents of the file at the specified path through the [`AssetIo`] associated
-    /// with this context.
-    pub async fn read_asset_bytes<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>, AssetIoError> {
-        self.asset_io
-            .watch_path_for_changes(path.as_ref(), Some(self.path.to_owned()))?;
-        self.asset_io.load_path(path.as_ref()).await
-    }
-
-    /// Generates metadata for the assets managed by this load context.
-    pub fn get_asset_metas(&self) -> Vec<AssetMeta> {
-        let mut asset_metas = Vec::new();
-        for (label, asset) in &self.labeled_assets {
-            asset_metas.push(AssetMeta {
-                dependencies: asset.dependencies.clone(),
-                label: label.clone(),
-                type_uuid: asset.value.as_ref().unwrap().type_uuid(),
-            });
-        }
-        asset_metas
-    }
-
-    /// Gets the asset I/O associated with this load context.
-    pub fn asset_io(&self) -> &dyn AssetIo {
-        self.asset_io
-    }
-}
-
-/// The result of loading an asset of type `T`.
-#[derive(Debug)]
-pub struct AssetResult<T> {
-    /// The asset itself.
-    pub asset: Box<T>,
-    /// The unique id of the asset.
-    pub id: HandleId,
-    /// Change version.
-    pub version: usize,
-}
-
-/// An event channel used by asset server to update the asset storage of a `T` asset.
-#[derive(Debug)]
-pub struct AssetLifecycleChannel<T> {
-    /// The sender endpoint of the channel.
-    pub sender: Sender<AssetLifecycleEvent<T>>,
-    /// The receiver endpoint of the channel.
-    pub receiver: Receiver<AssetLifecycleEvent<T>>,
-}
-
-/// Events for the [`AssetLifecycleChannel`].
-pub enum AssetLifecycleEvent<T> {
-    /// An asset was created.
-    Create(AssetResult<T>),
-    /// An asset was freed.
-    Free(HandleId),
-}
-
-/// A trait for sending lifecycle notifications from assets in the asset server.
-pub trait AssetLifecycle: Downcast + Send + Sync + 'static {
-    /// Notifies the asset server that a new asset was created.
-    fn create_asset(&self, id: HandleId, asset: Box<dyn AssetDynamic>, version: usize);
-    /// Notifies the asset server that an asset was freed.
-    fn free_asset(&self, id: HandleId);
-}
-impl_downcast!(AssetLifecycle);
-
-impl<T: AssetDynamic> AssetLifecycle for AssetLifecycleChannel<T> {
-    fn create_asset(&self, id: HandleId, asset: Box<dyn AssetDynamic>, version: usize) {
-        if let Ok(asset) = asset.downcast::<T>() {
-            self.sender
-                .send(AssetLifecycleEvent::Create(AssetResult {
-                    asset,
-                    id,
-                    version,
-                }))
-                .unwrap();
+    /// Retrieves a handle for the asset at the given path and adds that path as a dependency of the asset.
+    /// If the current context is a normal [`AssetServer::load`], an actual asset load will be kicked off immediately, which ensures the load happens
+    /// as soon as possible.
+    /// If the current context is an [`AssetServer::load_direct_async`] (such as in the [`AssetProcessor`](crate::processor::AssetProcessor)),
+    /// a load will not be kicked off automatically. It is then the calling context's responsibility to begin a load if necessary.
+    pub fn load<'b, A: Asset, P: Into<AssetPath<'b>>>(&mut self, path: P) -> Handle<A> {
+        let path = path.into().to_owned();
+        let handle = if self.should_load_dependencies {
+            self.asset_server.load(path.clone())
         } else {
-            panic!(
-                "Failed to downcast asset to {}.",
-                std::any::type_name::<T>()
-            );
+            self.asset_server
+                .get_path_handle(path.clone(), TypeId::of::<A>())
+                .typed_unchecked()
+        };
+        self.dependencies.insert(handle.id().untyped(), path);
+        handle
+    }
+
+    pub fn get_handle<'b, A: Asset, P: Into<AssetPath<'b>>>(&self, _path: P) -> Handle<A> {
+        todo!("This should not be allowed ... we need to record asset dependencies")
+    }
+
+    pub async fn load_direct_async<'b, P: Into<AssetPath<'b>>>(
+        &mut self,
+        path: P,
+    ) -> Result<LoadedAsset, AssetLoadError> {
+        let path = path.into();
+        self.load_dependencies.push(path.to_owned());
+        self.asset_server.load_direct_async(path).await
+    }
+
+    /// This will start a new load context for a labeled asset. This ensures that all `load` calls made in this context
+    /// will be associated with the labeled asset (instead of the root asset directly returned by the loader).  
+    /// Call [`LabeledLoadContext::finish`] to provide the final asset value and return to the main load context.
+    //
+    // DESIGN NOTE: If we required Asset types to be able to enumerate their dependencies, we could probably do away with
+    // this "context scoping". However that would also mean we don't kick off asset loads _during_ the loader, which could
+    // result in assets loading faster.
+    pub fn begin_labeled_asset<'b>(&'b mut self, label: String) -> LabeledLoadContext<'b, 'a> {
+        LabeledLoadContext {
+            load_context: self,
+            label,
+            dependencies: Default::default(),
         }
     }
-
-    fn free_asset(&self, id: HandleId) {
-        self.sender.send(AssetLifecycleEvent::Free(id)).unwrap();
-    }
 }
 
-impl<T> Default for AssetLifecycleChannel<T> {
-    fn default() -> Self {
-        let (sender, receiver) = crossbeam_channel::unbounded();
-        AssetLifecycleChannel { sender, receiver }
-    }
+pub struct LabeledLoadContext<'a, 'b> {
+    load_context: &'a mut LoadContext<'b>,
+    dependencies: HashMap<UntypedAssetId, AssetPath<'static>>,
+    label: String,
 }
 
-/// Updates the [`Assets`] collection according to the changes queued up by [`AssetServer`].
-pub fn update_asset_storage_system<T: Asset + AssetDynamic>(
-    asset_server: Res<AssetServer>,
-    assets: ResMut<Assets<T>>,
-) {
-    asset_server.update_asset_storage(assets);
+impl<'a, 'b> LabeledLoadContext<'a, 'b> {
+    /// Gets the source path for this load context.
+    pub fn path(&self) -> &Path {
+        self.load_context.path()
+    }
+    pub fn load<'c, A: Asset, P: Into<AssetPath<'c>>>(&mut self, path: P) -> Handle<A> {
+        let path = path.into().to_owned();
+        let handle = if self.load_context.should_load_dependencies {
+            self.load_context.asset_server.load(path.clone())
+        } else {
+            self.load_context
+                .asset_server
+                .get_path_handle(path.clone(), TypeId::of::<A>())
+                .typed_unchecked()
+        };
+        self.dependencies.insert(handle.id().untyped(), path);
+        handle
+    }
+
+    pub fn get_handle<'c, A: Asset, P: Into<AssetPath<'c>>>(&self, _path: P) -> Handle<A> {
+        todo!("This should not be allowed ... we need to record asset dependencies")
+    }
+
+    pub async fn load_direct_async<'c, P: Into<AssetPath<'c>>>(
+        &mut self,
+        path: P,
+    ) -> Result<LoadedAsset, AssetLoadError> {
+        let path = path.into();
+        // The top level asset owns all load dependencies
+        self.load_context.load_dependencies.push(path.to_owned());
+        self.load_context.asset_server.load_direct_async(path).await
+    }
+
+    pub fn finish<A: Asset>(self, asset: A) -> Handle<A> {
+        let path = AssetPath::new(
+            self.load_context.path().to_owned(),
+            Some(self.label.clone()),
+        );
+        let handle = self
+            .load_context
+            .asset_server
+            .get_path_handle(path.clone(), TypeId::of::<A>())
+            .typed_unchecked();
+        let id = handle.id().untyped();
+        // main asset should depend on labeled asset for correct recursive load state
+        self.load_context.dependencies.insert(id, path.clone());
+        self.load_context.labeled_assets.insert(
+            self.label,
+            LoadedAsset {
+                id,
+                asset: Box::new(asset),
+                labeled_assets: Default::default(),
+                dependencies: self.dependencies,
+            },
+        );
+        handle
+    }
 }

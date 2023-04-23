@@ -28,7 +28,7 @@ impl Default for SpriteBundle {
             sprite: Default::default(),
             transform: Default::default(),
             global_transform: Default::default(),
-            texture: DEFAULT_IMAGE_HANDLE.typed(),
+            texture: DEFAULT_IMAGE_HANDLE,
             visibility: Default::default(),
             computed_visibility: Default::default(),
         }

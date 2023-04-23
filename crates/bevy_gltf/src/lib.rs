@@ -8,7 +8,7 @@ mod loader;
 pub use loader::*;
 
 use bevy_app::prelude::*;
-use bevy_asset::{AddAsset, Handle};
+use bevy_asset::{AssetApp, Handle};
 use bevy_ecs::{prelude::Component, reflect::ReflectComponent};
 use bevy_pbr::StandardMaterial;
 use bevy_reflect::{Reflect, TypeUuid};
@@ -23,10 +23,10 @@ impl Plugin for GltfPlugin {
     fn build(&self, app: &mut App) {
         app.init_asset_loader::<GltfLoader>()
             .register_type::<GltfExtras>()
-            .add_asset::<Gltf>()
-            .add_asset::<GltfNode>()
-            .add_asset::<GltfPrimitive>()
-            .add_asset::<GltfMesh>();
+            .init_asset::<Gltf>()
+            .init_asset::<GltfNode>()
+            .init_asset::<GltfPrimitive>()
+            .init_asset::<GltfMesh>();
     }
 }
 

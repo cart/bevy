@@ -28,9 +28,8 @@ pub mod prelude {
 use bevy_app::prelude::*;
 #[cfg(feature = "default_font")]
 use bevy_asset::load_internal_binary_asset;
-use bevy_asset::{AddAsset, HandleUntyped};
+use bevy_asset::{AssetApp, Handle};
 use bevy_ecs::prelude::*;
-use bevy_reflect::TypeUuid;
 use bevy_render::{camera::CameraUpdateSystem, ExtractSchedule, RenderApp};
 use bevy_sprite::SpriteSystem;
 use std::num::NonZeroUsize;
@@ -70,13 +69,12 @@ pub enum YAxisOrientation {
     BottomToTop,
 }
 
-pub const DEFAULT_FONT_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Font::TYPE_UUID, 1491772431825224042);
+pub const DEFAULT_FONT_HANDLE: Handle<Font> = Handle::weak_from_u128(1491772431825224042);
 
 impl Plugin for TextPlugin {
     fn build(&self, app: &mut App) {
-        app.add_asset::<Font>()
-            .add_asset::<FontAtlasSet>()
+        app.init_asset::<Font>()
+            .init_asset::<FontAtlasSet>()
             .register_type::<Text>()
             .register_type::<Text2dBounds>()
             .register_type::<TextSection>()

@@ -36,7 +36,7 @@ use crate::{
     Render, RenderApp, RenderSet,
 };
 use bevy_app::{App, Plugin};
-use bevy_asset::{AddAsset, Assets};
+use bevy_asset::{AssetApp, Assets};
 use bevy_ecs::prelude::*;
 
 // TODO: replace Texture names with Image names?
@@ -97,11 +97,11 @@ impl Plugin for ImagePlugin {
             PrepareAssetSet::PreAssetPrepare,
         ))
         .register_type::<Image>()
-        .add_asset::<Image>()
+        .init_asset::<Image>()
         .register_asset_reflect::<Image>();
         app.world
             .resource_mut::<Assets<Image>>()
-            .set_untracked(DEFAULT_IMAGE_HANDLE, Image::default());
+            .insert(DEFAULT_IMAGE_HANDLE, Image::default());
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             let default_sampler = {

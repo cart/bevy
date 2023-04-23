@@ -1548,7 +1548,7 @@ pub struct UiImage {
 impl Default for UiImage {
     fn default() -> UiImage {
         UiImage {
-            texture: DEFAULT_IMAGE_HANDLE.typed(),
+            texture: DEFAULT_IMAGE_HANDLE,
             flip_x: false,
             flip_y: false,
         }

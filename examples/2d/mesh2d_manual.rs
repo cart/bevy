@@ -265,8 +265,8 @@ fn fragment(in: FragmentInput) -> @location(0) vec4<f32> {
 pub struct ColoredMesh2dPlugin;
 
 /// Handle to the custom shader with a unique random ID
-pub const COLORED_MESH2D_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 13828845428412094821);
+pub const COLORED_MESH2D_SHADER_HANDLE: Handle<Shader> =
+    Handle::weak_from_u128(13828845428412094821);
 
 impl Plugin for ColoredMesh2dPlugin {
     fn build(&self, app: &mut App) {

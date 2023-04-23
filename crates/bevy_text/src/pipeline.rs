@@ -1,5 +1,5 @@
 use ab_glyph::{PxScale, ScaleFont};
-use bevy_asset::{Assets, Handle, HandleId};
+use bevy_asset::{AssetId, Assets, Handle};
 use bevy_ecs::component::Component;
 use bevy_ecs::system::Resource;
 use bevy_math::Vec2;
@@ -17,7 +17,7 @@ use crate::{
 #[derive(Default, Resource)]
 pub struct TextPipeline {
     brush: GlyphBrush,
-    map_font_id: HashMap<HandleId, FontId>,
+    map_font_id: HashMap<AssetId<Font>, FontId>,
 }
 
 /// Render information for a corresponding [`Text`](crate::Text) component.
@@ -35,7 +35,7 @@ impl TextPipeline {
         *self
             .map_font_id
             .entry(handle.id())
-            .or_insert_with(|| brush.add_font(handle.clone(), font.font.clone()))
+            .or_insert_with(|| brush.add_font(handle.id(), font.font.clone()))
     }
 
     #[allow(clippy::too_many_arguments)]

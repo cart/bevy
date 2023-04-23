@@ -1,0 +1,17 @@
+(
+    meta_format_version: "1.0",
+    loader: "loader::TextLoader",
+    processor: Some((
+        saver: "loader::TextRonSaver",
+        saver_settings: (
+            appended: "",
+        ),
+        loader: Loader(
+            loader: "loader::TextRonLoader",
+            settings: (),
+        ),
+    )),
+    loader_settings: (
+        blah: false,
+    ),
+)

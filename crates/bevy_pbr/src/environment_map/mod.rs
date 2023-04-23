@@ -1,8 +1,8 @@
 use bevy_app::{App, Plugin};
-use bevy_asset::{load_internal_asset, Handle, HandleUntyped};
+use bevy_asset::{load_internal_asset, Handle};
 use bevy_core_pipeline::prelude::Camera3d;
 use bevy_ecs::{prelude::Component, query::With};
-use bevy_reflect::{Reflect, TypeUuid};
+use bevy_reflect::Reflect;
 use bevy_render::{
     extract_component::{ExtractComponent, ExtractComponentPlugin},
     render_asset::RenderAssets,
@@ -13,8 +13,8 @@ use bevy_render::{
     texture::{FallbackImageCubemap, Image},
 };
 
-pub const ENVIRONMENT_MAP_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 154476556247605696);
+pub const ENVIRONMENT_MAP_SHADER_HANDLE: Handle<Shader> =
+    Handle::weak_from_u128(154476556247605696);
 
 pub struct EnvironmentMapPlugin;
 
@@ -56,7 +56,8 @@ impl EnvironmentMapLight {
     /// Whether or not all textures necessary to use the environment map
     /// have been loaded by the asset server.
     pub fn is_loaded(&self, images: &RenderAssets<Image>) -> bool {
-        images.get(&self.diffuse_map).is_some() && images.get(&self.specular_map).is_some()
+        images.get(&self.diffuse_map.id()).is_some()
+            && images.get(&self.specular_map.id()).is_some()
     }
 }
 
@@ -77,8 +78,8 @@ pub fn get_bindings<'a>(
     bindings: [u32; 3],
 ) -> [BindGroupEntry<'a>; 3] {
     let (diffuse_map, specular_map) = match (
-        environment_map_light.and_then(|env_map| images.get(&env_map.diffuse_map)),
-        environment_map_light.and_then(|env_map| images.get(&env_map.specular_map)),
+        environment_map_light.and_then(|env_map| images.get(&env_map.diffuse_map.id())),
+        environment_map_light.and_then(|env_map| images.get(&env_map.specular_map.id())),
     ) {
         (Some(diffuse_map), Some(specular_map)) => {
             (&diffuse_map.texture_view, &specular_map.texture_view)

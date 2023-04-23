@@ -11,7 +11,7 @@ use crate::{
     renderer::{RenderDevice, RenderQueue},
     texture::BevyDefault,
 };
-use bevy_asset::HandleUntyped;
+use bevy_asset::Handle;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::system::{lifetimeless::SRes, Resource, SystemParamItem};
 use bevy_math::Vec2;
@@ -23,8 +23,7 @@ use wgpu::{Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor};
 
 pub const TEXTURE_ASSET_INDEX: u64 = 0;
 pub const SAMPLER_ASSET_INDEX: u64 = 1;
-pub const DEFAULT_IMAGE_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Image::TYPE_UUID, 13148262314052771789);
+pub const DEFAULT_IMAGE_HANDLE: Handle<Image> = Handle::weak_from_u128(13148262314052771789);
 
 #[derive(Debug)]
 pub enum ImageFormat {
