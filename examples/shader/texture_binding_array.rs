@@ -3,7 +3,6 @@
 
 use bevy::{
     prelude::*,
-    reflect::TypeUuid,
     render::{
         render_asset::RenderAssets,
         render_resource::{AsBindGroupError, PreparedBindGroup, *},

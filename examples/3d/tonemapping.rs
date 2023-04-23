@@ -326,13 +326,13 @@ fn update_image_viewer(
             }
 
             for event in image_events.iter() {
-                let image_changed_h = match event {
-                    AssetEvent::Created { handle } | AssetEvent::Modified { handle } => handle,
+                let image_changed_id = match event {
+                    AssetEvent::Added { id } | AssetEvent::Modified { id } => handle,
                     _ => continue,
                 };
                 if let Some(base_color_texture) = mat.base_color_texture.clone() {
-                    if image_changed_h == &base_color_texture {
-                        if let Some(image_changed) = images.get(image_changed_h) {
+                    if image_changed_id == &base_color_texture {
+                        if let Some(image_changed) = images.get(image_changed_id) {
                             let size = image_changed.size().normalize_or_zero() * 1.4;
                             // Resize Mesh
                             let quad = Mesh::from(shape::Quad::new(size));

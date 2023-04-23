@@ -9,6 +9,8 @@ use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use std::{
     any::TypeId,
+    iter::Enumerate,
+    marker::PhantomData,
     sync::{atomic::AtomicU32, Arc},
 };
 
@@ -316,6 +318,27 @@ impl<A: Asset> Assets<A> {
         self.dense_storage.len() + self.hash_map.len()
     }
 
+    // PERF: this could be accelerated if we implement a skip list
+    pub fn iter(&self) -> impl Iterator<Item = &A> {
+        self.dense_storage
+            .storage
+            .iter()
+            .filter_map(|v| match v {
+                Entry::None => None,
+                Entry::Some { value, .. } => value.as_ref(),
+            })
+            .chain(self.hash_map.values())
+    }
+
+    // PERF: this could be accelerated if we implement a skip list
+    pub fn iter_mut(&mut self) -> AssetsMutIterator<'_, A> {
+        AssetsMutIterator {
+            dense_storage: self.dense_storage.storage.iter_mut().enumerate(),
+            hash_map: self.hash_map.iter_mut(),
+            queued_events: &mut self.queued_events,
+        }
+    }
+
     pub fn track_assets(
         mut assets: ResMut<Self>,
         asset_server: Res<AssetServer>,
@@ -338,5 +361,49 @@ impl<A: Asset> Assets<A> {
             }
         }
         events.send_batch(assets.queued_events.drain(..));
+    }
+}
+
+pub struct AssetsMutIterator<'a, A: Asset> {
+    queued_events: &'a mut Vec<AssetEvent<A>>,
+    dense_storage: Enumerate<std::slice::IterMut<'a, Entry<A>>>,
+    hash_map: bevy_utils::hashbrown::hash_map::IterMut<'a, Uuid, A>,
+}
+
+impl<'a, A: Asset> Iterator for AssetsMutIterator<'a, A> {
+    type Item = &'a mut A;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((i, entry)) = self.dense_storage.next() {
+            match entry {
+                Entry::None => {
+                    continue;
+                }
+                Entry::Some { value, generation } => {
+                    self.queued_events.push(AssetEvent::Modified {
+                        id: AssetId::Index {
+                            index: AssetIndex {
+                                generation: *generation,
+                                index: i as u32,
+                            },
+                            marker: PhantomData,
+                        },
+                    });
+                    if let Some(value) = value {
+                        return Some(value);
+                    } else {
+                        continue;
+                    }
+                }
+            }
+        }
+        if let Some((key, value)) = self.hash_map.next() {
+            self.queued_events.push(AssetEvent::Modified {
+                id: AssetId::Uuid { uuid: *key },
+            });
+            return Some(value);
+        } else {
+            None
+        }
     }
 }

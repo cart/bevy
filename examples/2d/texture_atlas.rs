@@ -1,7 +1,7 @@
 //! In this example we generate a new texture atlas (sprite sheet) from a folder containing
 //! individual sprites.
 
-use bevy::{asset::LoadState, prelude::*};
+use bevy::{asset::AssetLoadState, prelude::*};
 
 fn main() {
     App::new()
@@ -23,7 +23,7 @@ enum AppState {
 
 #[derive(Resource, Default)]
 struct RpgSpriteHandles {
-    handles: Vec<HandleUntyped>,
+    handles: Vec<UntypedHandle>,
 }
 
 fn load_textures(mut rpg_sprite_handles: ResMut<RpgSpriteHandles>, asset_server: Res<AssetServer>) {
@@ -37,7 +37,7 @@ fn check_textures(
     asset_server: Res<AssetServer>,
 ) {
     // Advance the `AppState` once all sprite handles have been loaded by the `AssetServer`
-    if let LoadState::Loaded = asset_server
+    if let AssetLoadState::Loaded = asset_server
         .get_group_load_state(rpg_sprite_handles.handles.iter().map(|handle| handle.id()))
     {
         next_state.set(AppState::Finished);
