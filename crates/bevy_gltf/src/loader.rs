@@ -122,57 +122,6 @@ async fn load_gltf<'a, 'b, 'c>(
     let mut named_materials = HashMap::default();
     let mut linear_textures = HashSet::default();
 
-    // TODO: use the threaded impl on wasm once wasm thread pool doesn't deadlock on it
-    // See https://github.com/bevyengine/bevy/issues/1924 for more details
-    // The taskpool use is also avoided when there is only one texture for performance reasons and
-    // to avoid https://github.com/bevyengine/bevy/pull/2725
-    // if gltf.textures().len() == 1 /*|| cfg!(target_arch = "wasm32") */ {
-    for gltf_texture in gltf.textures() {
-        let (texture, label) = load_texture(
-            gltf_texture,
-            &buffer_data,
-            &linear_textures,
-            load_context,
-            supported_compressed_formats,
-        )
-        .await?;
-        load_context.begin_labeled_asset(label).finish(texture);
-    }
-    // PERF:
-    // TODO: "labeled" LoadContext usage currently requires exclusive access to LoadContext,
-    // which prevents parallelism like this
-    // } else {
-    //     #[cfg(not(target_arch = "wasm32"))]
-    //     IoTaskPool::get()
-    //         .scope(|scope| {
-    //             gltf.textures().for_each(|gltf_texture| {
-    //                 let linear_textures = &linear_textures;
-    //                 let load_context: &LoadContext = load_context;
-    //                 let buffer_data = &buffer_data;
-    //                 scope.spawn(async move {
-    //                     load_texture(
-    //                         gltf_texture,
-    //                         buffer_data,
-    //                         linear_textures,
-    //                         load_context,
-    //                         supported_compressed_formats,
-    //                     )
-    //                     .await
-    //                 });
-    //             });
-    //         })
-    //         .into_iter()
-    //         .filter_map(|res| {
-    //             if let Err(err) = res.as_ref() {
-    //                 warn!("Error loading glTF texture: {}", err);
-    //             }
-    //             res.ok()
-    //         })
-    //         .for_each(|(texture, label)| {
-    //             load_context.begin_labeled_asset(label).finish(texture);
-    //         });
-    // }
-
     for material in gltf.materials() {
         let handle = load_material(&material, load_context);
         if let Some(name) = material.name() {
@@ -453,6 +402,57 @@ async fn load_gltf<'a, 'b, 'c>(
         })
         .collect();
 
+    // TODO: use the threaded impl on wasm once wasm thread pool doesn't deadlock on it
+    // See https://github.com/bevyengine/bevy/issues/1924 for more details
+    // The taskpool use is also avoided when there is only one texture for performance reasons and
+    // to avoid https://github.com/bevyengine/bevy/pull/2725
+    // if gltf.textures().len() == 1 /*|| cfg!(target_arch = "wasm32") */ {
+    for gltf_texture in gltf.textures() {
+        let (texture, label) = load_texture(
+            gltf_texture,
+            &buffer_data,
+            &linear_textures,
+            load_context,
+            supported_compressed_formats,
+        )
+        .await?;
+        load_context.begin_labeled_asset(label).finish(texture);
+    }
+    // PERF:
+    // TODO: "labeled" LoadContext usage currently requires exclusive access to LoadContext,
+    // which prevents parallelism like this
+    // } else {
+    //     #[cfg(not(target_arch = "wasm32"))]
+    //     IoTaskPool::get()
+    //         .scope(|scope| {
+    //             gltf.textures().for_each(|gltf_texture| {
+    //                 let linear_textures = &linear_textures;
+    //                 let load_context: &LoadContext = load_context;
+    //                 let buffer_data = &buffer_data;
+    //                 scope.spawn(async move {
+    //                     load_texture(
+    //                         gltf_texture,
+    //                         buffer_data,
+    //                         linear_textures,
+    //                         load_context,
+    //                         supported_compressed_formats,
+    //                     )
+    //                     .await
+    //                 });
+    //             });
+    //         })
+    //         .into_iter()
+    //         .filter_map(|res| {
+    //             if let Err(err) = res.as_ref() {
+    //                 warn!("Error loading glTF texture: {}", err);
+    //             }
+    //             res.ok()
+    //         })
+    //         .for_each(|(texture, label)| {
+    //             load_context.begin_labeled_asset(label).finish(texture);
+    //         });
+    // }
+
     let skinned_mesh_inverse_bindposes: Vec<_> = gltf
         .skins()
         .map(|gltf_skin| {
@@ -612,24 +612,27 @@ async fn load_texture<'a, 'b>(
                 .decode_utf8()
                 .unwrap();
             let uri = uri.as_ref();
-            if let Ok(data_uri) = DataUri::parse(uri) {
-                let bytes = data_uri.decode()?;
-                let image_type = ImageType::MimeType(data_uri.mime_type);
-                Image::from_buffer(
-                    &bytes,
-                    mime_type.map(ImageType::MimeType).unwrap_or(image_type),
-                    supported_compressed_formats,
-                    is_srgb,
-                )?
+            let (bytes, image_type) = if let Ok(data_uri) = DataUri::parse(uri) {
+                (data_uri.decode()?, ImageType::MimeType(data_uri.mime_type))
             } else {
                 let parent = load_context.path().parent().unwrap();
                 let image_path = parent.join(uri);
-                let image = load_context.load_direct_async(image_path).await?;
-                // TODO: handle this error
-                image
-                    .take::<Image>()
-                    .expect("image path did not point to an image")
-            }
+                // TODO: this should use load() (or at least, load_direct_async), once we can pass in
+                // is_srgb configuration to the loader directly
+                let bytes = load_context.read_asset_bytes(&image_path).await?;
+
+                let extension = Path::new(uri).extension().unwrap().to_str().unwrap();
+                let image_type = ImageType::Extension(extension);
+
+                (bytes, image_type)
+            };
+
+            Image::from_buffer(
+                &bytes,
+                mime_type.map(ImageType::MimeType).unwrap_or(image_type),
+                supported_compressed_formats,
+                is_srgb,
+            )?
         }
     };
     texture.sampler_descriptor = ImageSampler::Descriptor(texture_sampler(&gltf_texture));
@@ -649,7 +652,7 @@ fn load_material(material: &Material, load_context: &mut LoadContext) -> Handle<
     let base_color_texture = pbr.base_color_texture().map(|info| {
         // TODO: handle info.tex_coord() (the *set* index for the right texcoords)
         let label = texture_label(&info.texture());
-        load_context.get_labeled_handle(&label).unwrap()
+        load_context.get_label_handle(&label)
     });
 
     let normal_map_texture: Option<Handle<Image>> =
@@ -657,21 +660,20 @@ fn load_material(material: &Material, load_context: &mut LoadContext) -> Handle<
             // TODO: handle normal_texture.scale
             // TODO: handle normal_texture.tex_coord() (the *set* index for the right texcoords)
             let label = texture_label(&normal_texture.texture());
-            println!("normal texture {}", label);
-            load_context.get_labeled_handle(&label).unwrap()
+            load_context.get_label_handle(&label)
         });
 
     let metallic_roughness_texture = pbr.metallic_roughness_texture().map(|info| {
         // TODO: handle info.tex_coord() (the *set* index for the right texcoords)
         let label = texture_label(&info.texture());
-        load_context.get_labeled_handle(&label).unwrap()
+        load_context.get_label_handle(&label)
     });
 
     let occlusion_texture = material.occlusion_texture().map(|occlusion_texture| {
         // TODO: handle occlusion_texture.tex_coord() (the *set* index for the right texcoords)
         // TODO: handle occlusion_texture.strength() (a scalar multiplier for occlusion strength)
         let label = texture_label(&occlusion_texture.texture());
-        load_context.get_labeled_handle(&label).unwrap()
+        load_context.get_label_handle(&label)
     });
 
     let emissive = material.emissive_factor();
@@ -679,7 +681,7 @@ fn load_material(material: &Material, load_context: &mut LoadContext) -> Handle<
         // TODO: handle occlusion_texture.tex_coord() (the *set* index for the right texcoords)
         // TODO: handle occlusion_texture.strength() (a scalar multiplier for occlusion strength)
         let label = texture_label(&info.texture());
-        load_context.get_labeled_handle(&label).unwrap()
+        load_context.get_label_handle(&label)
     });
 
     load_context.finish(StandardMaterial {
@@ -791,8 +793,8 @@ fn load_node(
 
                 let mut mesh_entity = parent.spawn(PbrBundle {
                     // TODO: handle missing label handle errors here?
-                    mesh: load_context.get_labeled_handle(&primitive_label).unwrap(),
-                    material: load_context.get_labeled_handle(&material_label).unwrap(),
+                    mesh: load_context.get_label_handle(&primitive_label),
+                    material: load_context.get_label_handle(&material_label),
                     ..Default::default()
                 });
                 mesh_entity.insert(Aabb::from_min_max(

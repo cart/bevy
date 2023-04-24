@@ -68,6 +68,13 @@ impl<'a> AssetPath<'a> {
         AssetPath::new_ref(&self.path, None)
     }
 
+    /// Returns this asset path with the given label. This will replace the previous
+    /// label if it exists.
+    #[inline]
+    pub fn with_label(&self, label: &'a str) -> AssetPath<'_> {
+        AssetPath::new_ref(&self.path, Some(label))
+    }
+
     /// Converts the borrowed path data to owned.
     #[inline]
     pub fn to_owned(&self) -> AssetPath<'static> {
