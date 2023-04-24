@@ -597,9 +597,7 @@ pub fn queue_sprites(
 
             // Impossible starting values that will be replaced on the first iteration
             let mut current_batch = SpriteBatch {
-                image_handle_id: AssetId::Uuid {
-                    uuid: Uuid::from_u128(u128::MAX),
-                },
+                image_handle_id: AssetId::invalid(),
                 colored: false,
             };
             let mut current_batch_entity = Entity::PLACEHOLDER;

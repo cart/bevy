@@ -396,7 +396,7 @@ pub fn prepare_uinodes(
 
     let mut start = 0;
     let mut end = 0;
-    let mut current_batch_asset = Default::default();
+    let mut current_batch_asset = AssetId::invalid();
     let mut last_z = 0.0;
     for extracted_uinode in &extracted_uinodes.uinodes {
         if current_batch_asset != extracted_uinode.image {
