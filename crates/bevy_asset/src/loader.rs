@@ -3,7 +3,7 @@ use crate::{
     meta::{AssetMeta, AssetMetaDyn, Settings, META_FORMAT_VERSION},
     path::AssetPath,
     saver::NullSaver,
-    Asset, AssetLoadError, AssetServer, Assets, Handle, UntypedAssetId,
+    Asset, AssetLoadError, AssetServer, Assets, Handle, UntypedAssetId, UntypedHandle,
 };
 use bevy_ecs::world::World;
 use bevy_utils::{BoxedFuture, HashMap};
@@ -156,6 +156,9 @@ impl<A: Asset> AssetContainer for A {
 pub struct LoadContext<'a> {
     pub(crate) asset_server: &'a AssetServer,
     pub(crate) labeled_assets: HashMap<String, LoadedAsset>,
+    // TODO: merge with labeled_assets?
+    // TODO: maybe don't use this approach at all?
+    pub(crate) labeled_handles: HashMap<String, UntypedHandle>,
     pub(crate) asset_path: &'a AssetPath<'a>,
     pub(crate) asset_id: UntypedAssetId,
     pub(crate) dependencies: HashMap<UntypedAssetId, AssetPath<'static>>,
@@ -178,6 +181,7 @@ impl<'a> LoadContext<'a> {
             dependencies: HashMap::new(),
             load_dependencies: Vec::new(),
             labeled_assets: Default::default(),
+            labeled_handles: Default::default(),
         }
     }
 
@@ -227,8 +231,12 @@ impl<'a> LoadContext<'a> {
         handle
     }
 
-    pub fn get_handle<'b, A: Asset, P: Into<AssetPath<'b>>>(&self, _path: P) -> Handle<A> {
-        todo!("This should not be allowed ... we need to record asset dependencies")
+    /// Returns the handle for a labeled asset, if it exists.
+    pub fn get_labeled_handle<'b, A: Asset>(&mut self, label: &str) -> Option<Handle<A>> {
+        let handle = self.labeled_handles.get(label)?.clone().typed();
+        let path = AssetPath::new(self.path().to_owned(), Some(label.to_string()));
+        self.dependencies.insert(handle.id().untyped(), path);
+        Some(handle)
     }
 
     pub async fn load_direct_async<'b, P: Into<AssetPath<'b>>>(
@@ -281,8 +289,12 @@ impl<'a, 'b> LabeledLoadContext<'a, 'b> {
         handle
     }
 
-    pub fn get_handle<'c, A: Asset, P: Into<AssetPath<'c>>>(&self, _path: P) -> Handle<A> {
-        todo!("This should not be allowed ... we need to record asset dependencies")
+    pub fn get_labeled_handle<'c, A: Asset>(&mut self, label: &str) -> Option<Handle<A>> {
+        let untyped_handle = self.load_context.labeled_handles.get(label)?;
+        let handle = untyped_handle.clone().typed();
+        let path = AssetPath::new(self.path().to_owned(), Some(label.to_string()));
+        self.dependencies.insert(handle.id().untyped(), path);
+        Some(handle)
     }
 
     pub async fn load_direct_async<'c, P: Into<AssetPath<'c>>>(
@@ -308,6 +320,9 @@ impl<'a, 'b> LabeledLoadContext<'a, 'b> {
         let id = handle.id().untyped();
         // main asset should depend on labeled asset for correct recursive load state
         self.load_context.dependencies.insert(id, path.clone());
+        self.load_context
+            .labeled_handles
+            .insert(self.label.clone(), handle.clone().untyped());
         self.load_context.labeled_assets.insert(
             self.label,
             LoadedAsset {

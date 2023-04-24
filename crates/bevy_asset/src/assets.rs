@@ -138,8 +138,10 @@ impl<A: Asset> DenseAssetStorage<A> {
             Entry::None => return None,
             Entry::Some { value, generation } => {
                 if *generation == index.generation {
-                    self.len -= 1;
-                    value.take()
+                    value.take().map(|value| {
+                        self.len -= 1;
+                        value
+                    })
                 } else {
                     return None;
                 }
@@ -371,8 +373,13 @@ impl<A: Asset> Assets<A> {
         // re-loads are kicked off appropriately. This function must be "transactional" relative
         // to other asset info operations
         let mut infos = asset_server.data.infos.write();
+        let mut not_ready = Vec::new();
         while let Ok(drop_event) = assets.handle_provider.drop_receiver.try_recv() {
             let id = drop_event.id;
+            if !assets.contains(id.typed()) {
+                not_ready.push(drop_event);
+                continue;
+            }
             if drop_event.asset_server_managed {
                 if infos.process_handle_drop(id.untyped(TypeId::of::<A>())) {
                     assets.remove(id.typed());
@@ -380,6 +387,10 @@ impl<A: Asset> Assets<A> {
             } else {
                 assets.remove(id.typed());
             }
+        }
+        // TODO: this is _extremely_ inefficient find a better fix
+        for event in not_ready {
+            assets.handle_provider.drop_sender.send(event).unwrap();
         }
         events.send_batch(assets.queued_events.drain(..));
     }

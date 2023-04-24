@@ -79,7 +79,7 @@ impl Drop for InternalAssetHandle {
 }
 
 #[derive(Component, Reflect, FromReflect)]
-#[reflect_value(PartialEq, Hash, Serialize, Deserialize)]
+#[reflect_value(Component, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Handle<A: Asset> {
     Strong(Arc<InternalAssetHandle>),
     Weak(AssetId<A>),

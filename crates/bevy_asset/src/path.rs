@@ -62,6 +62,12 @@ impl<'a> AssetPath<'a> {
         &self.path
     }
 
+    /// Gets the path to the asset in the filesystem.
+    #[inline]
+    pub fn without_label(&self) -> AssetPath<'_> {
+        AssetPath::new_ref(&self.path, None)
+    }
+
     /// Converts the borrowed path data to owned.
     #[inline]
     pub fn to_owned(&self) -> AssetPath<'static> {

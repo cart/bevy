@@ -442,6 +442,7 @@ pub enum TextureError {
 }
 
 /// The type of a raw image buffer.
+#[derive(Debug)]
 pub enum ImageType<'a> {
     /// The mime type of an image, for example `"image/png"`.
     MimeType(&'a str),

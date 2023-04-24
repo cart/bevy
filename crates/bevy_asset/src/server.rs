@@ -651,26 +651,30 @@ impl AssetServer {
             }
             Err(err) => return Err(err.into()),
         };
+
         self.load_with_meta_and_loader_internal(id, asset_path, &*meta, &*loader, load_dependencies)
             .await
     }
 
     async fn load_with_meta_and_loader_internal(
         &self,
-        id: Option<UntypedAssetId>,
+        mut id: Option<UntypedAssetId>,
         asset_path: AssetPath<'_>,
         meta: &dyn AssetMetaDyn,
         loader: &dyn ErasedAssetLoader,
         load_dependencies: bool,
     ) -> Result<LoadedAsset, AssetLoadError> {
+        if asset_path.label().is_some() {
+            // if the path is to a label, the current id (if it was passed in) does not match the asset root type
+            // we need to get a new asset id
+            id.take();
+        }
         let id = id.unwrap_or_else(|| {
-            let asset_type_id = loader.asset_type_id();
-            let infos = self.data.infos.read();
-            let provider = infos.handle_providers.get(&asset_type_id).unwrap();
-            UntypedAssetId::Index {
-                index: provider.allocator.reserve(),
-                type_id: asset_type_id,
-            }
+            self.get_path_handle(
+                asset_path.without_label().to_owned(),
+                loader.asset_type_id(),
+            )
+            .id()
         });
         let mut reader = self.data.reader.read(asset_path.path()).await?;
         let load_context = LoadContext::new(self, id, &asset_path, load_dependencies);

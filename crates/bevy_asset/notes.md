@@ -311,7 +311,7 @@ struct Asset<T: Asset> {
     * Who tracks handle roots? This should probably be the Assets collection
     * Try to remove crossbeam channels for recycling ids
 * Impl Reflect and FromReflect for Handle
-* Final pass over todo! and TODO
+* Final pass over todo! and TODO / PERF
 * Validate dependency types in preprocessor? 
 * Asset _unloading_ and _re-loading_ that allows handles to be kept alive while unloading the asset data itself
     * Being able to kick off re-loads (that re-validate existing handles) seems useful!
@@ -321,11 +321,19 @@ struct Asset<T: Asset> {
 * Consider de-duping LoadState / only storing in ECS
     * The problem with this is entities are only created when loading event is processed. If an asset loads before the loading event is processed for a dep, the entity won't exist yet.
     * Do we just remove the components, treat "server state" as the "current source of truth" and then make events the way to listen for changes? 
-
-### MVP Done
-
-* Component init with Asset Handles
-
+* Handles dropping before load breaks?
+    * Implemented slow loop fix ... do better
+    * Add test to ensure this works correctly
+    * Loading sub assets as root appears to be broken?
+        * Need to populate path->handle maps?
+        * load_gltf loads a `Handle<Scene>` subasset, not a `Handle<Gltf>` root asset, ... this seems broken
+            * This Id is used for the event processing, so this is almost certainly the issue
+            * Need to make sure the "load" handle `Handle<Scene> = load("thing.gltf#Scene0")` matches the handle retrieved by the LoadContext 
+* GLTF normal maps aren't working properly
+    * linear_textures isn't populated yet (populated using material normal maps)
+    * populating materials requires textures to be loaded :/
+    * maybe we just use load() instead of get_label_handle() :/
+        * this could be recursive if done improperly!
 
 ### Porting
 
