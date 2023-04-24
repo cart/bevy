@@ -1,6 +1,8 @@
 use crate::{error::TextError, Font, FontAtlas};
 use ab_glyph::{GlyphId, OutlinedGlyph, Point};
+use bevy_asset::{AssetEvent, AssetId};
 use bevy_asset::{Assets, Handle};
+use bevy_ecs::prelude::*;
 use bevy_math::Vec2;
 use bevy_render::texture::Image;
 use bevy_sprite::TextureAtlas;
@@ -8,6 +10,31 @@ use bevy_utils::FloatOrd;
 use bevy_utils::HashMap;
 
 type FontSizeKey = FloatOrd;
+
+#[derive(Default, Resource)]
+pub struct FontAtlasSets {
+    // PERF: in theory this could be optimized with Assets storage ... consider making some fast "simple" AssetMap
+    pub(crate) sets: HashMap<AssetId<Font>, FontAtlasSet>,
+}
+
+impl FontAtlasSets {
+    pub fn get(&self, id: impl Into<AssetId<Font>>) -> Option<&FontAtlasSet> {
+        let id: AssetId<Font> = id.into();
+        self.sets.get(&id)
+    }
+}
+
+pub fn remove_dropped_font_atlas_sets(
+    mut font_atlas_sets: ResMut<FontAtlasSets>,
+    mut font_events: EventReader<AssetEvent<Font>>,
+) {
+    // Clean up font atlas sets for removed fonts
+    for event in font_events.iter() {
+        if let AssetEvent::Removed { id } = event {
+            font_atlas_sets.sets.remove(id);
+        }
+    }
+}
 
 pub struct FontAtlasSet {
     font_atlases: HashMap<FontSizeKey, Vec<FontAtlas>>,

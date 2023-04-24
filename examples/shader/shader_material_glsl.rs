@@ -3,7 +3,6 @@
 use bevy::{
     pbr::{MaterialPipeline, MaterialPipelineKey},
     prelude::*,
-    reflect::TypeUuid,
     render::{
         mesh::MeshVertexBufferLayout,
         render_resource::{

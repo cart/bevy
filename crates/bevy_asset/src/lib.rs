@@ -20,6 +20,7 @@ mod reflect;
 mod server;
 
 pub use assets::*;
+use bevy_log::error;
 pub use event::*;
 pub use futures_lite::{AsyncReadExt, AsyncWriteExt};
 pub use handle::*;
@@ -43,13 +44,16 @@ use std::{any::TypeId, sync::Arc};
 pub enum AssetPlugin {
     Unprocessed {
         source: AssetProvider,
+        watch_for_changes: bool,
     },
     Processed {
         destination: AssetProvider,
+        watch_for_changes: bool,
     },
     ProcessedDev {
         source: AssetProvider,
         destination: AssetProvider,
+        watch_for_changes: bool,
     },
 }
 
@@ -66,6 +70,7 @@ impl AssetPlugin {
     pub fn processed() -> Self {
         Self::Processed {
             destination: Default::default(),
+            watch_for_changes: false,
         }
     }
 
@@ -73,13 +78,31 @@ impl AssetPlugin {
         Self::ProcessedDev {
             source: Default::default(),
             destination: Default::default(),
+            watch_for_changes: false,
         }
     }
 
     pub fn unprocessed() -> Self {
         Self::Unprocessed {
             source: Default::default(),
+            watch_for_changes: false,
         }
+    }
+
+    pub fn watch_for_changes(mut self) -> Self {
+        error!("Watching for changes is not supported yet");
+        match &mut self {
+            AssetPlugin::Unprocessed {
+                watch_for_changes, ..
+            } => *watch_for_changes = true,
+            AssetPlugin::Processed {
+                watch_for_changes, ..
+            } => *watch_for_changes = true,
+            AssetPlugin::ProcessedDev {
+                watch_for_changes, ..
+            } => *watch_for_changes = true,
+        };
+        self
     }
 }
 
@@ -88,14 +111,14 @@ impl Plugin for AssetPlugin {
         app.init_resource::<AssetProviders>();
         {
             match self {
-                AssetPlugin::Unprocessed { source } => {
+                AssetPlugin::Unprocessed { source, .. } => {
                     let source_reader = app
                         .world
                         .resource_mut::<AssetProviders>()
                         .get_source_reader(source);
                     app.insert_resource(AssetServer::new(source_reader));
                 }
-                AssetPlugin::Processed { destination } => {
+                AssetPlugin::Processed { destination, .. } => {
                     let destination_reader = app
                         .world
                         .resource_mut::<AssetProviders>()
@@ -105,6 +128,7 @@ impl Plugin for AssetPlugin {
                 AssetPlugin::ProcessedDev {
                     source,
                     destination,
+                    ..
                 } => {
                     app.add_plugin(AssetProcessorPlugin {
                         source: source.clone(),
@@ -416,6 +440,7 @@ mod tests {
         .add_plugin(LogPlugin::default())
         .add_plugin(AssetPlugin::Unprocessed {
             source: AssetProvider::Custom("Test".to_string()),
+            watch_for_changes: false,
         });
         (app, gate_opener)
     }

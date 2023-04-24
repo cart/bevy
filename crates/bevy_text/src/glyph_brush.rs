@@ -10,8 +10,8 @@ use glyph_brush_layout::{
 };
 
 use crate::{
-    error::TextError, BreakLineOn, Font, FontAtlasSet, FontAtlasWarning, GlyphAtlasInfo,
-    TextAlignment, TextSettings, YAxisOrientation,
+    error::TextError, BreakLineOn, Font, FontAtlasSet, FontAtlasSets, FontAtlasWarning,
+    GlyphAtlasInfo, TextAlignment, TextSettings, YAxisOrientation,
 };
 
 pub struct GlyphBrush {
@@ -57,7 +57,7 @@ impl GlyphBrush {
         &self,
         glyphs: Vec<SectionGlyph>,
         sections: &[SectionText],
-        font_atlas_set_storage: &mut Assets<FontAtlasSet>,
+        font_atlas_sets: &mut FontAtlasSets,
         fonts: &Assets<Font>,
         texture_atlases: &mut Assets<TextureAtlas>,
         textures: &mut Assets<Image>,
@@ -113,10 +113,10 @@ impl GlyphBrush {
             let section_data = sections_data[sg.section_index];
             if let Some(outlined_glyph) = section_data.1.font.outline_glyph(glyph) {
                 let bounds = outlined_glyph.px_bounds();
-                let font_atlas_asset_id: AssetId<FontAtlasSet> =
-                    section_data.0.untyped().typed_unchecked();
-                let font_atlas_set = font_atlas_set_storage
-                    .get_or_insert_with(font_atlas_asset_id, FontAtlasSet::default);
+                let font_atlas_set = font_atlas_sets
+                    .sets
+                    .entry(*section_data.0)
+                    .or_insert_with(FontAtlasSet::default);
 
                 let atlas_info = font_atlas_set
                     .get_glyph_atlas_info(section_data.2, glyph_id, glyph_position)

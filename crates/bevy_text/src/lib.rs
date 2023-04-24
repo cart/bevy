@@ -72,7 +72,6 @@ pub enum YAxisOrientation {
 impl Plugin for TextPlugin {
     fn build(&self, app: &mut App) {
         app.init_asset::<Font>()
-            .init_asset::<FontAtlasSet>()
             .register_type::<Text>()
             .register_type::<Text2dBounds>()
             .register_type::<TextSection>()
@@ -83,15 +82,19 @@ impl Plugin for TextPlugin {
             .init_asset_loader::<FontLoader>()
             .init_resource::<TextSettings>()
             .init_resource::<FontAtlasWarning>()
+            .init_resource::<FontAtlasSets>()
             .insert_resource(TextPipeline::default())
             .add_systems(
                 PostUpdate,
-                update_text2d_layout
-                    // Potential conflict: `Assets<Image>`
-                    // In practice, they run independently since `bevy_render::camera_update_system`
-                    // will only ever observe its own render target, and `update_text2d_layout`
-                    // will never modify a pre-existing `Image` asset.
-                    .ambiguous_with(CameraUpdateSystem),
+                (
+                    update_text2d_layout
+                        // Potential conflict: `Assets<Image>`
+                        // In practice, they run independently since `bevy_render::camera_update_system`
+                        // will only ever observe its own render target, and `update_text2d_layout`
+                        // will never modify a pre-existing `Image` asset.
+                        .ambiguous_with(CameraUpdateSystem),
+                    font_atlas_set::remove_dropped_font_atlas_sets,
+                ),
             );
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {

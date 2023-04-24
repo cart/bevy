@@ -327,7 +327,7 @@ fn update_image_viewer(
 
             for event in image_events.iter() {
                 let image_changed_id = match event {
-                    AssetEvent::Added { id } | AssetEvent::Modified { id } => handle,
+                    AssetEvent::Added { id } | AssetEvent::Modified { id } => id,
                     _ => continue,
                 };
                 if let Some(base_color_texture) = mat.base_color_texture.clone() {

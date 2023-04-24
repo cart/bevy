@@ -1,3 +1,7 @@
+use crate::{
+    error::TextError, glyph_brush::GlyphBrush, scale_value, BreakLineOn, Font, FontAtlasSets,
+    FontAtlasWarning, PositionedGlyph, TextAlignment, TextSection, TextSettings, YAxisOrientation,
+};
 use ab_glyph::{PxScale, ScaleFont};
 use bevy_asset::{AssetId, Assets, Handle};
 use bevy_ecs::component::Component;
@@ -6,13 +10,7 @@ use bevy_math::Vec2;
 use bevy_render::texture::Image;
 use bevy_sprite::TextureAtlas;
 use bevy_utils::HashMap;
-
 use glyph_brush_layout::{FontId, GlyphPositioner, SectionGeometry, SectionText};
-
-use crate::{
-    error::TextError, glyph_brush::GlyphBrush, scale_value, BreakLineOn, Font, FontAtlasSet,
-    FontAtlasWarning, PositionedGlyph, TextAlignment, TextSection, TextSettings, YAxisOrientation,
-};
 
 #[derive(Default, Resource)]
 pub struct TextPipeline {
@@ -47,7 +45,7 @@ impl TextPipeline {
         text_alignment: TextAlignment,
         linebreak_behavior: BreakLineOn,
         bounds: Vec2,
-        font_atlas_set_storage: &mut Assets<FontAtlasSet>,
+        font_atlas_sets: &mut FontAtlasSets,
         texture_atlases: &mut Assets<TextureAtlas>,
         textures: &mut Assets<Image>,
         text_settings: &TextSettings,
@@ -106,7 +104,7 @@ impl TextPipeline {
         let glyphs = self.brush.process_glyphs(
             section_glyphs,
             &sections,
-            font_atlas_set_storage,
+            font_atlas_sets,
             fonts,
             texture_atlases,
             textures,

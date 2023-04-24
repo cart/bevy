@@ -57,7 +57,7 @@ fn setup(
         .iter()
         .map(|id| {
             let path = format!("textures/rpg/tiles/generic-rpg-tile{id:0>2}.png");
-            asset_server.load(path)
+            asset_server.load(&path)
         })
         .collect();
 
@@ -87,7 +87,7 @@ impl AsBindGroup for BindlessMaterial {
         // retrieve the render resources from handles
         let mut images = vec![];
         for handle in self.textures.iter().take(MAX_TEXTURE_COUNT) {
-            match image_assets.get(handle) {
+            match image_assets.get(&handle.id()) {
                 Some(image) => images.push(image),
                 None => return Err(AsBindGroupError::RetryNextUpdate),
             }
