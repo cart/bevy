@@ -341,19 +341,34 @@ impl<A: Asset> Assets<A> {
             .chain(self.hash_map.keys().map(|uuid| AssetId::from(*uuid)))
     }
 
-    // PERF: this could be accelerated if we implement a skip list
-    pub fn iter(&self) -> impl Iterator<Item = &A> {
+    // PERF: this could be accelerated if we implement a skip list. Consider the cost/benefits
+    pub fn iter(&self) -> impl Iterator<Item = (AssetId<A>, &A)> {
         self.dense_storage
             .storage
             .iter()
-            .filter_map(|v| match v {
+            .enumerate()
+            .filter_map(|(i, v)| match v {
                 Entry::None => None,
-                Entry::Some { value, .. } => value.as_ref(),
+                Entry::Some { value, generation } => value.as_ref().map(|v| {
+                    let id = AssetId::Index {
+                        index: AssetIndex {
+                            generation: *generation,
+                            index: i as u32,
+                        },
+                        marker: PhantomData,
+                    }
+                    .into();
+                    (id, v)
+                }),
             })
-            .chain(self.hash_map.values())
+            .chain(
+                self.hash_map
+                    .iter()
+                    .map(|(i, v)| (AssetId::Uuid { uuid: *i }, v)),
+            )
     }
 
-    // PERF: this could be accelerated if we implement a skip list
+    // PERF: this could be accelerated if we implement a skip list. Consider the cost/benefits
     pub fn iter_mut(&mut self) -> AssetsMutIterator<'_, A> {
         AssetsMutIterator {
             dense_storage: self.dense_storage.storage.iter_mut().enumerate(),
@@ -403,7 +418,7 @@ pub struct AssetsMutIterator<'a, A: Asset> {
 }
 
 impl<'a, A: Asset> Iterator for AssetsMutIterator<'a, A> {
-    type Item = &'a mut A;
+    type Item = (AssetId<A>, &'a mut A);
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some((i, entry)) = self.dense_storage.next() {
@@ -412,17 +427,17 @@ impl<'a, A: Asset> Iterator for AssetsMutIterator<'a, A> {
                     continue;
                 }
                 Entry::Some { value, generation } => {
-                    self.queued_events.push(AssetEvent::Modified {
-                        id: AssetId::Index {
-                            index: AssetIndex {
-                                generation: *generation,
-                                index: i as u32,
-                            },
-                            marker: PhantomData,
+                    let id = AssetId::Index {
+                        index: AssetIndex {
+                            generation: *generation,
+                            index: i as u32,
                         },
-                    });
+                        marker: PhantomData,
+                    }
+                    .into();
+                    self.queued_events.push(AssetEvent::Modified { id });
                     if let Some(value) = value {
-                        return Some(value);
+                        return Some((id, value));
                     } else {
                         continue;
                     }
@@ -430,10 +445,9 @@ impl<'a, A: Asset> Iterator for AssetsMutIterator<'a, A> {
             }
         }
         if let Some((key, value)) = self.hash_map.next() {
-            self.queued_events.push(AssetEvent::Modified {
-                id: AssetId::Uuid { uuid: *key },
-            });
-            return Some(value);
+            let id = AssetId::Uuid { uuid: *key };
+            self.queued_events.push(AssetEvent::Modified { id });
+            return Some((id, value));
         } else {
             None
         }

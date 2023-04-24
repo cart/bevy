@@ -324,16 +324,6 @@ struct Asset<T: Asset> {
 * Handles dropping before load breaks?
     * Implemented slow loop fix ... do better
     * Add test to ensure this works correctly
-    * Loading sub assets as root appears to be broken?
-        * Need to populate path->handle maps?
-        * load_gltf loads a `Handle<Scene>` subasset, not a `Handle<Gltf>` root asset, ... this seems broken
-            * This Id is used for the event processing, so this is almost certainly the issue
-            * Need to make sure the "load" handle `Handle<Scene> = load("thing.gltf#Scene0")` matches the handle retrieved by the LoadContext 
-* GLTF normal maps aren't working properly
-    * linear_textures isn't populated yet (populated using material normal maps)
-    * populating materials requires textures to be loaded :/
-    * maybe we just use load() instead of get_label_handle() :/
-        * this could be recursive if done improperly!
 
 ### Porting
 
@@ -371,6 +361,7 @@ struct Asset<T: Asset> {
 * Default Handle ... global id?
 * Move Reader into LoadContext and add LoadContext::read_bytes()?
 * LabeledLoadContext pattern doesn't support parallel context access
+    * Consider moving to a `LoadedAsset<A>` approach (with loaded.with_dependency(&load_context, path))
 
 ### PR Description / RFC
 
