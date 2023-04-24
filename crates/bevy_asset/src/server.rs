@@ -572,6 +572,19 @@ impl AssetServer {
             .map(|i| (i.load_state, i.dep_load_state, i.rec_dep_load_state))
     }
 
+    pub fn get_load_state(&self, id: impl Into<UntypedAssetId>) -> Option<AssetLoadState> {
+        self.data.infos.read().get(id.into()).map(|i| i.load_state)
+    }
+
+    pub fn load_state(&self, id: impl Into<UntypedAssetId>) -> AssetLoadState {
+        let id = id.into();
+        let infos = self.data.infos.read();
+        infos
+            .get(id)
+            .map(|i| i.load_state)
+            .unwrap_or(AssetLoadState::NotLoaded)
+    }
+
     /// Returns an active handle for the given path, if the asset at the given path has already started loading,
     /// or is still "alive".
     pub fn get_handle<'a, C: Component, P: Into<AssetPath<'a>>>(

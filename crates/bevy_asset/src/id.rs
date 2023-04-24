@@ -294,8 +294,23 @@ impl Display for UntypedAssetId {
 }
 
 impl<A: Asset> From<AssetId<A>> for UntypedAssetId {
+    #[inline]
     fn from(value: AssetId<A>) -> Self {
         value.untyped()
+    }
+}
+
+impl<A: Asset> From<Handle<A>> for UntypedAssetId {
+    #[inline]
+    fn from(value: Handle<A>) -> Self {
+        value.id().untyped()
+    }
+}
+
+impl<A: Asset> From<&Handle<A>> for UntypedAssetId {
+    #[inline]
+    fn from(value: &Handle<A>) -> Self {
+        value.id().untyped()
     }
 }
 

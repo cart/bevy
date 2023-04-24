@@ -357,13 +357,14 @@ struct Asset<T: Asset> {
             * Dependency tracking for groups of assets (ex: a list of assets you want to wait to load)
     * Review bevy_asset_loader for UX ideas
 * Implied dependencies (via load calls / scopes) vs dependency enumeration (via Asset type). Call out tradeoffs in PR
-* RenderAssets .. remove need for id extraction
 * Move Reader into LoadContext and add LoadContext::read_bytes()?
+    * This might block parallel access to LoadContext ... parallel asset loading must come first 
 * LabeledLoadContext pattern doesn't support parallel context access
     * Consider moving to a `LoadedAsset<A>` approach (with loaded.with_dependency(&load_context, path))
 * load_folder ... this is a long-running operation ... it should not be sync
     * consider something AssetCollection-like (ex: Return Handle<AssetCollection>)?
     * Multicast pub-sub?
+* Use optimized storage for RenderAssets (and other AssetId maps).
 
 ### PR Description / RFC
 
