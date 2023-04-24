@@ -373,7 +373,7 @@ pub fn queue_material2d_meshes<M: Material2d>(
                 material2d_meshes.get(*visible_entity)
             {
                 if let Some(material2d) = render_materials.get(&material2d_handle.id()) {
-                    if let Some(mesh) = render_meshes.get(&mesh2d_handle.0.id()) {
+                    if let Some(mesh) = render_meshes.get(&mesh2d_handle.0) {
                         let mesh_key = view_key
                             | Mesh2dPipelineKey::from_primitive_topology(mesh.primitive_topology);
 

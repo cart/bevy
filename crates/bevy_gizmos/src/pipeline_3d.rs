@@ -142,7 +142,7 @@ pub(crate) fn queue_gizmos_3d(
     for (view, mut phase) in &mut views {
         let key = key | MeshPipelineKey::from_hdr(view.hdr);
         for (entity, mesh_handle) in &mesh_handles {
-            if let Some(mesh) = render_meshes.get(&mesh_handle.id()) {
+            if let Some(mesh) = render_meshes.get(mesh_handle) {
                 let key = key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
                 let pipeline = pipelines
                     .specialize(

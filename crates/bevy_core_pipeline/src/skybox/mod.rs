@@ -209,7 +209,7 @@ fn queue_skybox_bind_groups(
 ) {
     for (entity, skybox) in &views {
         if let (Some(skybox), Some(view_uniforms)) =
-            (images.get(&skybox.0.id()), view_uniforms.uniforms.binding())
+            (images.get(&skybox.0), view_uniforms.uniforms.binding())
         {
             let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
                 label: Some("skybox_bind_group"),

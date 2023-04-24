@@ -10,12 +10,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    audio: Res<Audio>,
-    audio_sinks: Res<Assets<AudioSink>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, audio: Res<Audio>) {
     let music = asset_server.load("sounds/Windless Slopes.ogg");
     let handle = audio.play(music);
     commands.insert_resource(MusicController(handle));

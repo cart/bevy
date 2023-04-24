@@ -14,7 +14,6 @@ use bevy_ecs::{
     system::{lifetimeless::*, SystemParamItem, SystemState},
 };
 use bevy_math::{Rect, Vec2};
-use bevy_reflect::Uuid;
 use bevy_render::{
     color::Color,
     render_asset::RenderAssets,
@@ -617,7 +616,7 @@ pub fn queue_sprites(
                 };
                 if new_batch != current_batch {
                     // Set-up a new possible batch
-                    if let Some(gpu_image) = gpu_images.get(&new_batch.image_handle_id) {
+                    if let Some(gpu_image) = gpu_images.get(new_batch.image_handle_id) {
                         current_batch = new_batch;
                         current_image_size = Vec2::new(gpu_image.size.x, gpu_image.size.y);
                         current_batch_entity = commands.spawn(current_batch).id();

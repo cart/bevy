@@ -6,7 +6,6 @@ use bevy::{
     core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass},
     pbr::{NotShadowCaster, PbrPlugin},
     prelude::*,
-    reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
 };
 

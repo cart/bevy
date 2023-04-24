@@ -263,7 +263,7 @@ pub fn derive_as_bind_group(ast: syn::DeriveInput) -> Result<TokenStream> {
                         #render_path::render_resource::OwnedBindingResource::TextureView({
                             let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
                             if let Some(handle) = handle {
-                                images.get(&handle.id()).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.texture_view.clone()
+                                images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.texture_view.clone()
                             } else {
                                 fallback_image.texture_view.clone()
                             }
@@ -296,7 +296,7 @@ pub fn derive_as_bind_group(ast: syn::DeriveInput) -> Result<TokenStream> {
                         #render_path::render_resource::OwnedBindingResource::Sampler({
                             let handle: Option<&#asset_path::Handle<#render_path::texture::Image>> = (&self.#field_name).into();
                             if let Some(handle) = handle {
-                                images.get(&handle.id()).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.sampler.clone()
+                                images.get(handle).ok_or_else(|| #render_path::render_resource::AsBindGroupError::RetryNextUpdate)?.sampler.clone()
                             } else {
                                 fallback_image.sampler.clone()
                             }

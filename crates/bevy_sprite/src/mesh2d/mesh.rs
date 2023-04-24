@@ -264,7 +264,7 @@ impl Mesh2dPipeline {
         handle_option: &Option<Handle<Image>>,
     ) -> Option<(&'a TextureView, &'a Sampler)> {
         if let Some(handle) = handle_option {
-            let gpu_image = gpu_images.get(&handle.id())?;
+            let gpu_image = gpu_images.get(handle)?;
             Some((&gpu_image.texture_view, &gpu_image.sampler))
         } else {
             Some((
@@ -581,7 +581,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMesh2d {
         meshes: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        if let Some(gpu_mesh) = meshes.into_inner().get(&mesh_handle.0.id()) {
+        if let Some(gpu_mesh) = meshes.into_inner().get(&mesh_handle.0) {
             pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
             match &gpu_mesh.buffer_info {
                 GpuBufferInfo::Indexed {

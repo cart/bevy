@@ -332,7 +332,7 @@ pub fn get_lut_bindings<'a>(
         Tonemapping::TonyMcMapface => &tonemapping_luts.tony_mc_mapface,
         Tonemapping::BlenderFilmic => &tonemapping_luts.blender_filmic,
     };
-    let lut_image = images.get(&image.id()).unwrap();
+    let lut_image = images.get(image).unwrap();
     [
         BindGroupEntry {
             binding: bindings[0],

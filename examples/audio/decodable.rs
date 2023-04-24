@@ -3,7 +3,6 @@ use bevy::audio::AddAudioSource;
 use bevy::audio::AudioPlugin;
 use bevy::audio::Source;
 use bevy::prelude::*;
-use bevy::reflect::TypeUuid;
 use bevy::utils::Duration;
 
 // This struct usually contains the data for the audio being played.

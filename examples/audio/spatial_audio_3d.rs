@@ -21,13 +21,13 @@ fn setup(
     let gap = 4.0;
 
     let music = asset_server.load("sounds/Windless Slopes.ogg");
-    let handle = audio_sinks.get_handle(audio.play_spatial_with_settings(
+    let handle = audio.play_spatial_with_settings(
         music,
         PlaybackSettings::LOOP,
         Transform::IDENTITY,
         gap,
         Vec3::ZERO,
-    ));
+    );
     commands.insert_resource(AudioController(handle));
 
     // left ear

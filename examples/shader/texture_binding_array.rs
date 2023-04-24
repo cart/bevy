@@ -87,7 +87,7 @@ impl AsBindGroup for BindlessMaterial {
         // retrieve the render resources from handles
         let mut images = vec![];
         for handle in self.textures.iter().take(MAX_TEXTURE_COUNT) {
-            match image_assets.get(&handle.id()) {
+            match image_assets.get(handle) {
                 Some(image) => images.push(image),
                 None => return Err(AsBindGroupError::RetryNextUpdate),
             }

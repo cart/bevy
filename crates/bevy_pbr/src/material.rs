@@ -445,7 +445,7 @@ pub fn queue_material_meshes<M: Material>(
                 material_meshes.get(*visible_entity)
             {
                 if let (Some(mesh), Some(material)) = (
-                    render_meshes.get(&mesh_handle.id()),
+                    render_meshes.get(mesh_handle),
                     render_materials.get(&material_handle.id()),
                 ) {
                     let mut mesh_key =

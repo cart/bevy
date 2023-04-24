@@ -1,7 +1,6 @@
 use crate::{Extract, ExtractSchedule, Render, RenderApp, RenderSet};
 use bevy_app::{App, Plugin};
 use bevy_asset::{Asset, AssetEvent, AssetId, Assets};
-use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     prelude::*,
     system::{StaticSystemParam, SystemParam, SystemParamItem},
@@ -120,12 +119,34 @@ impl<A: RenderAsset> Default for ExtractedAssets<A> {
 
 /// Stores all GPU representations ([`RenderAsset::PreparedAssets`](RenderAsset::PreparedAsset))
 /// of [`RenderAssets`](RenderAsset) as long as they exist.
-#[derive(Resource, Deref, DerefMut)]
+#[derive(Resource)]
 pub struct RenderAssets<A: RenderAsset>(HashMap<AssetId<A>, A::PreparedAsset>);
 
 impl<A: RenderAsset> Default for RenderAssets<A> {
     fn default() -> Self {
         Self(Default::default())
+    }
+}
+
+impl<A: RenderAsset> RenderAssets<A> {
+    pub fn get(&self, id: impl Into<AssetId<A>>) -> Option<&A::PreparedAsset> {
+        self.0.get(&id.into())
+    }
+
+    pub fn get_mut(&mut self, id: impl Into<AssetId<A>>) -> Option<&mut A::PreparedAsset> {
+        self.0.get_mut(&id.into())
+    }
+
+    pub fn insert(
+        &mut self,
+        id: impl Into<AssetId<A>>,
+        value: A::PreparedAsset,
+    ) -> Option<A::PreparedAsset> {
+        self.0.insert(id.into(), value)
+    }
+
+    pub fn remove(&mut self, id: impl Into<AssetId<A>>) -> Option<A::PreparedAsset> {
+        self.0.remove(&id.into())
     }
 }
 
@@ -200,7 +221,7 @@ pub fn prepare_assets<R: RenderAsset>(
     }
 
     for removed in std::mem::take(&mut extracted_assets.removed) {
-        render_assets.remove(&removed);
+        render_assets.remove(removed);
     }
 
     for (id, extracted_asset) in std::mem::take(&mut extracted_assets.extracted) {

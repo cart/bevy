@@ -2,7 +2,6 @@
 
 use bevy::{
     prelude::*,
-    reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef},
 };
 

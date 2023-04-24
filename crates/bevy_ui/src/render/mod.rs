@@ -582,7 +582,7 @@ pub fn queue_uinodes(
                     .values
                     .entry(batch.image)
                     .or_insert_with(|| {
-                        let gpu_image = gpu_images.get(&batch.image).unwrap();
+                        let gpu_image = gpu_images.get(batch.image).unwrap();
                         render_device.create_bind_group(&BindGroupDescriptor {
                             entries: &[
                                 BindGroupEntry {

@@ -5,6 +5,7 @@ use bevy::{
     prelude::*,
     utils::BoxedFuture,
 };
+use futures_lite::AsyncReadExt;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -21,11 +22,13 @@ impl AssetLoader for CustomAssetLoader {
     fn load<'a>(
         &'a self,
         reader: &'a mut Reader,
-        settings: &'a (),
+        _settings: &'a (),
         _load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, Result<Text, anyhow::Error>> {
+    ) -> BoxedFuture<'a, Result<Self::Asset, anyhow::Error>> {
         Box::pin(async move {
-            let custom_asset = ron::de::from_bytes::<CustomAsset>(bytes)?;
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await?;
+            let custom_asset = ron::de::from_bytes::<CustomAsset>(&bytes)?;
             Ok(custom_asset)
         })
     }

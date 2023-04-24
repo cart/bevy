@@ -19,7 +19,6 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
     audio: Res<Audio>,
-    audio_sinks: Res<Assets<SpatialAudioSink>>,
 ) {
     // Space between the two ears
     let gap = 400.0;

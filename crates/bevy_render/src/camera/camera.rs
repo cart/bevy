@@ -424,9 +424,9 @@ impl NormalizedRenderTarget {
             NormalizedRenderTarget::Window(window_ref) => windows
                 .get(&window_ref.entity())
                 .and_then(|window| window.swap_chain_texture_view.as_ref()),
-            NormalizedRenderTarget::Image(image_handle) => images
-                .get(&image_handle.id())
-                .map(|image| &image.texture_view),
+            NormalizedRenderTarget::Image(image_handle) => {
+                images.get(image_handle).map(|image| &image.texture_view)
+            }
         }
     }
 
@@ -440,9 +440,9 @@ impl NormalizedRenderTarget {
             NormalizedRenderTarget::Window(window_ref) => windows
                 .get(&window_ref.entity())
                 .and_then(|window| window.swap_chain_texture_format),
-            NormalizedRenderTarget::Image(image_handle) => images
-                .get(&image_handle.id())
-                .map(|image| image.texture_format),
+            NormalizedRenderTarget::Image(image_handle) => {
+                images.get(image_handle).map(|image| image.texture_format)
+            }
         }
     }
 

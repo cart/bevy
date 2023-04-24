@@ -947,7 +947,7 @@ pub fn queue_prepass_material_meshes<M: Material>(
 
             let (Some(material), Some(mesh)) = (
                 render_materials.get(&material_handle.id()),
-                render_meshes.get(&mesh_handle.id()),
+                render_meshes.get(mesh_handle),
             ) else {
                 continue;
             };
