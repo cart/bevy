@@ -358,10 +358,12 @@ struct Asset<T: Asset> {
     * Review bevy_asset_loader for UX ideas
 * Implied dependencies (via load calls / scopes) vs dependency enumeration (via Asset type). Call out tradeoffs in PR
 * RenderAssets .. remove need for id extraction
-* Default Handle ... global id?
 * Move Reader into LoadContext and add LoadContext::read_bytes()?
 * LabeledLoadContext pattern doesn't support parallel context access
     * Consider moving to a `LoadedAsset<A>` approach (with loaded.with_dependency(&load_context, path))
+* load_folder ... this is a long-running operation ... it should not be sync
+    * consider something AssetCollection-like (ex: Return Handle<AssetCollection>)?
+    * Multicast pub-sub?
 
 ### PR Description / RFC
 

@@ -1,5 +1,5 @@
 use bevy::{
-    asset::LoadState,
+    asset::AssetLoadState,
     prelude::*,
     render::render_resource::{AsBindGroup, ShaderRef},
 };
@@ -62,7 +62,7 @@ fn create_array_texture(
     mut materials: ResMut<Assets<ArrayTextureMaterial>>,
 ) {
     if loading_texture.is_loaded
-        || asset_server.get_load_state(loading_texture.handle.clone()) != LoadState::Loaded
+        || asset_server.get_load_state(loading_texture.handle.clone()) != AssetLoadState::Loaded
     {
         return;
     }

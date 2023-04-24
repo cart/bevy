@@ -13,7 +13,6 @@ use bevy_app::prelude::*;
 use bevy_asset::{load_internal_asset, AssetEvent, AssetId, Assets, Handle};
 use bevy_ecs::prelude::*;
 use bevy_math::{Mat4, Rect, UVec4, Vec2, Vec3, Vec4Swizzles};
-use bevy_render::texture::DEFAULT_IMAGE_HANDLE;
 use bevy_render::{
     camera::Camera,
     color::Color,
@@ -192,7 +191,7 @@ pub fn extract_uinodes(
                 }
                 (image.texture.id(), image.flip_x, image.flip_y)
             } else {
-                (DEFAULT_IMAGE_HANDLE.id(), false, false)
+                (AssetId::default(), false, false)
             };
 
             extracted_uinodes.uinodes.push(ExtractedUiNode {
@@ -468,7 +467,7 @@ pub fn prepare_uinodes(
                 continue;
             }
         }
-        let uvs = if current_batch_asset == DEFAULT_IMAGE_HANDLE.id() {
+        let uvs = if current_batch_asset == AssetId::default() {
             [Vec2::ZERO, Vec2::X, Vec2::ONE, Vec2::Y]
         } else {
             let atlas_extent = extracted_uinode.atlas_size.unwrap_or(uinode_rect.max);

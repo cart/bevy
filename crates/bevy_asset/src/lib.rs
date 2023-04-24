@@ -296,7 +296,7 @@ impl AssetApp for App {
 
 #[macro_export]
 macro_rules! load_internal_asset {
-    ($app: ident, $handle: ident, $path_str: expr, $loader: expr) => {{
+    ($app: ident, $handle: expr, $path_str: expr, $loader: expr) => {{
         let mut assets = $app.world.resource_mut::<$crate::Assets<_>>();
         assets.insert($handle, ($loader)(include_str!($path_str)));
     }};
@@ -304,7 +304,7 @@ macro_rules! load_internal_asset {
 
 #[macro_export]
 macro_rules! load_internal_binary_asset {
-    ($app: ident, $handle: ident, $path_str: expr, $loader: expr) => {{
+    ($app: ident, $handle: expr, $path_str: expr, $loader: expr) => {{
         let mut assets = $app.world.resource_mut::<$crate::Assets<_>>();
         assets.insert($handle, ($loader)(include_bytes!($path_str).as_ref()));
     }};

@@ -69,8 +69,6 @@ pub enum YAxisOrientation {
     BottomToTop,
 }
 
-pub const DEFAULT_FONT_HANDLE: Handle<Font> = Handle::weak_from_u128(1491772431825224042);
-
 impl Plugin for TextPlugin {
     fn build(&self, app: &mut App) {
         app.init_asset::<Font>()
@@ -106,7 +104,7 @@ impl Plugin for TextPlugin {
         #[cfg(feature = "default_font")]
         load_internal_binary_asset!(
             app,
-            DEFAULT_FONT_HANDLE,
+            Handle::default(),
             "FiraMono-subset.ttf",
             |bytes: &[u8]| { Font::try_from_bytes(bytes.to_vec()).unwrap() }
         );

@@ -1,7 +1,7 @@
 //! Implements loader for a custom asset type.
 
 use bevy::{
-    asset::{AssetLoader, LoadContext, LoadedAsset},
+    asset::{io::Reader, AssetLoader, LoadContext},
     prelude::*,
     utils::BoxedFuture,
 };
@@ -16,15 +16,17 @@ pub struct CustomAsset {
 pub struct CustomAssetLoader;
 
 impl AssetLoader for CustomAssetLoader {
+    type Asset = CustomAsset;
+    type Settings = ();
     fn load<'a>(
         &'a self,
-        bytes: &'a [u8],
-        load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
+        reader: &'a mut Reader,
+        settings: &'a (),
+        _load_context: &'a mut LoadContext,
+    ) -> BoxedFuture<'a, Result<Text, anyhow::Error>> {
         Box::pin(async move {
             let custom_asset = ron::de::from_bytes::<CustomAsset>(bytes)?;
-            load_context.set_default_asset(LoadedAsset::new(custom_asset));
-            Ok(())
+            Ok(custom_asset)
         })
     }
 
