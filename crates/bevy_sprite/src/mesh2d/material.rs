@@ -1,5 +1,5 @@
 use bevy_app::{App, Plugin};
-use bevy_asset::{AssetApp, AssetEvent, AssetId, AssetServer, Assets, Handle};
+use bevy_asset::{Asset, AssetApp, AssetEvent, AssetId, AssetServer, Assets, Handle};
 use bevy_core_pipeline::{
     core_2d::Transparent2d,
     tonemapping::{DebandDither, Tonemapping},
@@ -107,7 +107,7 @@ use crate::{
 /// @group(1) @binding(2)
 /// var color_sampler: sampler;
 /// ```
-pub trait Material2d: AsBindGroup + Send + Sync + Clone + Sized + 'static {
+pub trait Material2d: AsBindGroup + Asset + Clone + Sized {
     /// Returns this material's vertex shader. If [`ShaderRef::Default`] is returned, the default mesh vertex shader
     /// will be used.
     fn vertex_shader() -> ShaderRef {

@@ -1,5 +1,5 @@
 use crate::Anchor;
-use bevy_asset::Handle;
+use bevy_asset::{Asset, Handle};
 use bevy_ecs::{component::Component, reflect::ReflectComponent};
 use bevy_math::{Rect, Vec2};
 use bevy_reflect::{FromReflect, Reflect};
@@ -9,7 +9,7 @@ use bevy_utils::HashMap;
 /// An atlas containing multiple textures (like a spritesheet or a tilemap).
 /// [Example usage animating sprite.](https://github.com/bevyengine/bevy/blob/latest/examples/2d/sprite_sheet.rs)
 /// [Example usage loading sprite sheet.](https://github.com/bevyengine/bevy/blob/latest/examples/2d/texture_atlas.rs)
-#[derive(Reflect, FromReflect, Debug, Clone)]
+#[derive(Asset, Reflect, FromReflect, Debug, Clone)]
 #[reflect(Debug)]
 pub struct TextureAtlas {
     /// The handle to the texture in which the sprites are stored

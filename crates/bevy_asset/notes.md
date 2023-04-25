@@ -364,7 +364,15 @@ struct Asset<T: Asset> {
 * load_folder ... this is a long-running operation ... it should not be sync
     * consider something AssetCollection-like (ex: Return Handle<AssetCollection>)?
     * Multicast pub-sub?
-* merge AssetServer into Commands?
+    * A new LoadedFolder asset type and `asset.load_folder("") -> Handle<LoadedFolder>`
+* "Debug" Asset Server
+    * Multiple asset sources (add src to AssetPath: `src://path.png#label`)
+        * register a debug source? `asset_server.load_asset(LoadedAsset::from(my_shader).with_path_unchecked("debug://bevy_render/shaders/foo.wgsl"))`
+* How to handle processed subassets when they have their own paths / are loaded separately? 
+    * Different AssetReader? source asset path is a folder
+    * Granular processed asset loading seems like a good thing (load Scene0 without Scene1)
+* What is a processor if not an AssetServer with hot-reloading that writes processed outputs to disk?
+    * Can it just be an alternative internal_asset_event processor with a top level load() orchestrator?
 ```rust
 
 // Opt-in handles
@@ -455,7 +463,14 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Single Arc tree (no more "active handle" counting)
 * Open Questions
     * Implied dependencies (via load calls / scopes) vs dependency enumeration (via Asset type). Call out tradeoffs in PR
-* Const Typed Handles!
+        * Current plan is "dual mode"
+    * Aggressive sub asset and dependency loading (which could mean adding sub assets for failed assets) vs conservative.
+* Const Typed Handles! Smaller! Faster!
+* Directly load asset instances and track their dependencies
+* Sub Assets are yielded right away
+* Track dependencies for "runtime only" assets
+* multiple asset sources
+* Asset system usability
 
 ### Next Steps
 
@@ -470,4 +485,5 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * "Real cow" asset paths
 * Support processing assets during load (without background processor enabled)
     * Support processing inside Assets? Or just warn/error?
-* Streaming
+* Streaming 
+    * labeled-asset streaming works with load_asset() (assets pop in as the loader works)

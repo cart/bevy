@@ -1,3 +1,4 @@
+use bevy_asset::Asset;
 use bevy_math::Vec3;
 use bevy_transform::prelude::Transform;
 use rodio::{Sink, SpatialSink};
@@ -86,6 +87,7 @@ pub trait AudioSinkPlayback {
 /// }
 /// ```
 ///
+#[derive(Asset)]
 pub struct AudioSink {
     // This field is an Option in order to allow us to have a safe drop that will detach the sink.
     // It will never be None during its life
@@ -155,6 +157,7 @@ impl AudioSinkPlayback for AudioSink {
 /// }
 /// ```
 ///
+#[derive(Asset)]
 pub struct SpatialAudioSink {
     // This field is an Option in order to allow us to have a safe drop that will detach the sink.
     // It will never be None during its life

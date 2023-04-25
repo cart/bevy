@@ -11,6 +11,7 @@ use crate::{
     renderer::{RenderDevice, RenderQueue},
     texture::BevyDefault,
 };
+use bevy_asset::Asset;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::system::{lifetimeless::SRes, Resource, SystemParamItem};
 use bevy_math::Vec2;
@@ -99,7 +100,7 @@ impl ImageFormat {
     }
 }
 
-#[derive(Reflect, FromReflect, Debug, Clone)]
+#[derive(Asset, Reflect, FromReflect, Debug, Clone)]
 #[reflect_value]
 pub struct Image {
     pub data: Vec<u8>,

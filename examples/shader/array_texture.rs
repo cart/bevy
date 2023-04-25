@@ -88,7 +88,7 @@ fn create_array_texture(
     }
 }
 
-#[derive(AsBindGroup, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Debug, Clone)]
 struct ArrayTextureMaterial {
     #[texture(0, dimension = "2d_array")]
     #[sampler(1)]

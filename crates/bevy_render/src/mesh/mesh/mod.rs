@@ -1,5 +1,6 @@
 mod conversions;
 pub mod skinning;
+
 pub use wgpu::PrimitiveTopology;
 
 use crate::{
@@ -8,6 +9,7 @@ use crate::{
     render_resource::{Buffer, VertexBufferLayout},
     renderer::RenderDevice,
 };
+use bevy_asset::Asset;
 use bevy_core::cast_slice;
 use bevy_derive::EnumVariantMeta;
 use bevy_ecs::system::{lifetimeless::SRes, SystemParamItem};
@@ -24,7 +26,7 @@ pub const INDEX_BUFFER_ASSET_INDEX: u64 = 0;
 pub const VERTEX_ATTRIBUTE_BUFFER_ID: u64 = 10;
 
 // TODO: allow values to be unloaded after been submitting to the GPU to conserve memory
-#[derive(Debug, Clone)]
+#[derive(Asset, Debug, Clone)]
 pub struct Mesh {
     primitive_topology: PrimitiveTopology,
     /// `std::collections::BTreeMap` with all defined vertex attributes (Positions, Normals, ...)

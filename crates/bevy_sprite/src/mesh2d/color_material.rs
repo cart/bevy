@@ -1,6 +1,6 @@
 use crate::{Material2d, Material2dPlugin, MaterialMesh2dBundle};
 use bevy_app::{App, Plugin};
-use bevy_asset::{load_internal_asset, AssetApp, Assets, Handle};
+use bevy_asset::{load_internal_asset, Asset, AssetApp, Assets, Handle};
 use bevy_math::Vec4;
 use bevy_reflect::prelude::*;
 use bevy_render::{
@@ -36,7 +36,7 @@ impl Plugin for ColorMaterialPlugin {
 }
 
 /// A [2d material](Material2d) that renders [2d meshes](crate::Mesh2dHandle) with a texture tinted by a uniform color
-#[derive(AsBindGroup, Reflect, FromReflect, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Reflect, FromReflect, Debug, Clone)]
 #[reflect(Default, Debug)]
 #[uniform(0, ColorMaterialUniform)]
 pub struct ColorMaterial {

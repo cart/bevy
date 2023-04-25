@@ -69,7 +69,7 @@ fn setup(
     });
 }
 
-#[derive(Debug, Clone)]
+#[derive(Asset, Debug, Clone)]
 struct BindlessMaterial {
     textures: Vec<Handle<Image>>,
 }

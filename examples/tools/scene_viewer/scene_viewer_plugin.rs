@@ -3,7 +3,7 @@
 //! - Copy the code for the `SceneViewerPlugin` and add the plugin to your App.
 //! - Insert an initialized `SceneHandle` resource into your App's `AssetServer`.
 
-use bevy::{asset::LoadState, gltf::Gltf, prelude::*, scene::InstanceId};
+use bevy::{asset::AssetLoadState, gltf::Gltf, prelude::*, scene::InstanceId};
 
 use std::f32::consts::*;
 use std::fmt;
@@ -79,7 +79,7 @@ fn scene_load_check(
 ) {
     match scene_handle.instance_id {
         None => {
-            if asset_server.get_load_state(&scene_handle.gltf_handle) == LoadState::Loaded {
+            if asset_server.load_state(&scene_handle.gltf_handle) == AssetLoadState::Loaded {
                 let gltf = gltf_assets.get(&scene_handle.gltf_handle).unwrap();
                 if gltf.scenes.len() > 1 {
                     info!(

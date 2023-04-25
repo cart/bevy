@@ -3,6 +3,7 @@ use std::any::TypeId;
 use crate::{DynamicSceneBuilder, Scene, SceneSpawnError};
 use anyhow::Result;
 use bevy_app::AppTypeRegistry;
+use bevy_asset::Asset;
 use bevy_ecs::{
     entity::EntityMap,
     prelude::Entity,
@@ -27,7 +28,7 @@ use serde::Serialize;
 /// * adding the [`Handle<DynamicScene>`](bevy_asset::Handle) to an entity (the scene will only be
 /// visible if the entity already has [`Transform`](bevy_transform::components::Transform) and
 /// [`GlobalTransform`](bevy_transform::components::GlobalTransform) components)
-#[derive(Default)]
+#[derive(Asset, Default)]
 pub struct DynamicScene {
     pub resources: Vec<Box<dyn Reflect>>,
     pub entities: Vec<DynamicEntity>,

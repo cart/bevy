@@ -68,11 +68,20 @@ impl<'a> AssetPath<'a> {
         AssetPath::new_ref(&self.path, None)
     }
 
+    /// Gets the path to the asset in the filesystem.
+    #[inline]
+    pub fn remove_label(&mut self) -> Option<Cow<'a, str>> {
+        self.label.take()
+    }
+
     /// Returns this asset path with the given label. This will replace the previous
     /// label if it exists.
     #[inline]
-    pub fn with_label(&self, label: &'a str) -> AssetPath<'_> {
-        AssetPath::new_ref(&self.path, Some(label))
+    pub fn with_label(&self, label: impl Into<Cow<'a, str>>) -> AssetPath<'a> {
+        AssetPath {
+            path: self.path.clone(),
+            label: Some(label.into()),
+        }
     }
 
     /// Converts the borrowed path data to owned.

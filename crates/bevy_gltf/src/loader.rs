@@ -1,3 +1,4 @@
+use crate::{Gltf, GltfExtras, GltfNode};
 use anyhow::Result;
 use bevy_asset::{
     io::{AssetReaderError, Reader},
@@ -27,11 +28,9 @@ use bevy_render::{
     texture::{CompressedImageFormats, Image, ImageSampler, ImageType, TextureError},
 };
 use bevy_scene::Scene;
-// TODO: re-enable parallelism
-// #[cfg(not(target_arch = "wasm32"))]
-// use bevy_tasks::IoTaskPool;
+#[cfg(not(target_arch = "wasm32"))]
+use bevy_tasks::IoTaskPool;
 use bevy_transform::components::Transform;
-
 use bevy_utils::{HashMap, HashSet};
 use gltf::{
     mesh::Mode,
@@ -40,8 +39,6 @@ use gltf::{
 };
 use std::{collections::VecDeque, path::Path};
 use thiserror::Error;
-
-use crate::{Gltf, GltfExtras, GltfNode};
 
 /// An error that occurs when loading a glTF file.
 #[derive(Error, Debug)]
@@ -226,8 +223,7 @@ async fn load_gltf<'a, 'b, 'c>(
                 }
             }
             let handle = load_context
-                .begin_labeled_asset(format!("Animation{}", animation.index()))
-                .finish(animation_clip);
+                .add_labeled_asset(format!("Animation{}", animation.index()), animation_clip);
             if let Some(name) = animation.name() {
                 named_animations.insert(name.to_string(), handle.clone());
             }
@@ -327,9 +323,7 @@ async fn load_gltf<'a, 'b, 'c>(
                 }
             }
 
-            let mesh = load_context
-                .begin_labeled_asset(primitive_label)
-                .finish(mesh);
+            let mesh = load_context.add_labeled_asset(primitive_label, mesh);
             primitives.push(super::GltfPrimitive {
                 mesh,
                 material: primitive
@@ -341,12 +335,13 @@ async fn load_gltf<'a, 'b, 'c>(
             });
         }
 
-        let handle = load_context
-            .begin_labeled_asset(mesh_label(&mesh))
-            .finish(super::GltfMesh {
+        let handle = load_context.add_labeled_asset(
+            mesh_label(&mesh),
+            super::GltfMesh {
                 primitives,
                 extras: get_gltf_extras(mesh.extras()),
-            });
+            },
+        );
         if let Some(name) = mesh.name() {
             named_meshes.insert(name.to_string(), handle.clone());
         }
@@ -391,7 +386,7 @@ async fn load_gltf<'a, 'b, 'c>(
     }
     let nodes = resolve_node_hierarchy(nodes_intermediate, load_context.path())
         .into_iter()
-        .map(|(label, node)| load_context.begin_labeled_asset(label).finish(node))
+        .map(|(label, node)| load_context.add_labeled_asset(label, node))
         .collect::<Vec<bevy_asset::Handle<GltfNode>>>();
     let named_nodes = named_nodes_intermediate
         .into_iter()
@@ -406,9 +401,10 @@ async fn load_gltf<'a, 'b, 'c>(
     // See https://github.com/bevyengine/bevy/issues/1924 for more details
     // The taskpool use is also avoided when there is only one texture for performance reasons and
     // to avoid https://github.com/bevyengine/bevy/pull/2725
-    // if gltf.textures().len() == 1 /*|| cfg!(target_arch = "wasm32") */ {
+    // if gltf.textures().len() == 1 || cfg!(target_arch = "wasm32") {
     for gltf_texture in gltf.textures() {
-        let (texture, label) = load_texture(
+        let label = texture_label(&gltf_texture);
+        let texture = load_texture(
             gltf_texture,
             &buffer_data,
             &linear_textures,
@@ -416,28 +412,27 @@ async fn load_gltf<'a, 'b, 'c>(
             supported_compressed_formats,
         )
         .await?;
-        load_context.begin_labeled_asset(label).finish(texture);
+        load_context.add_labeled_asset(label, texture);
     }
-    // PERF:
-    // TODO: "labeled" LoadContext usage currently requires exclusive access to LoadContext,
-    // which prevents parallelism like this
     // } else {
     //     #[cfg(not(target_arch = "wasm32"))]
     //     IoTaskPool::get()
     //         .scope(|scope| {
     //             gltf.textures().for_each(|gltf_texture| {
     //                 let linear_textures = &linear_textures;
-    //                 let load_context: &LoadContext = load_context;
     //                 let buffer_data = &buffer_data;
+    //                 let label = texture_label(&gltf_texture);
+    //                 let mut load_context: LoadContext = load_context.begin_labeled_asset(label);
     //                 scope.spawn(async move {
-    //                     load_texture(
+    //                     let image = load_texture(
     //                         gltf_texture,
     //                         buffer_data,
     //                         linear_textures,
-    //                         load_context,
+    //                         &mut load_context,
     //                         supported_compressed_formats,
     //                     )
-    //                     .await
+    //                     .await;
+    //                     image.map(|i| load_context.finish(i))
     //                 });
     //             });
     //         })
@@ -448,8 +443,8 @@ async fn load_gltf<'a, 'b, 'c>(
     //             }
     //             res.ok()
     //         })
-    //         .for_each(|(texture, label)| {
-    //             load_context.begin_labeled_asset(label).finish(texture);
+    //         .for_each(|loaded_asset| {
+    //             load_context.load_asset(loaded_asset);
     //         });
     // }
 
@@ -463,9 +458,10 @@ async fn load_gltf<'a, 'b, 'c>(
                 .map(|mat| Mat4::from_cols_array_2d(&mat))
                 .collect();
 
-            load_context
-                .begin_labeled_asset(skin_label(&gltf_skin))
-                .finish(SkinnedMeshInverseBindposes::from(inverse_bindposes))
+            load_context.add_labeled_asset(
+                skin_label(&gltf_skin),
+                SkinnedMeshInverseBindposes::from(inverse_bindposes),
+            )
         })
         .collect();
 
@@ -527,9 +523,7 @@ async fn load_gltf<'a, 'b, 'c>(
             });
         }
 
-        let scene_handle = load_context
-            .begin_labeled_asset(scene_label(&scene))
-            .finish(Scene::new(world));
+        let scene_handle = load_context.add_labeled_asset(scene_label(&scene), Scene::new(world));
 
         if let Some(name) = scene.name() {
             named_scenes.insert(name.to_string(), scene_handle.clone());
@@ -593,7 +587,7 @@ async fn load_texture<'a, 'b>(
     linear_textures: &HashSet<usize>,
     load_context: &mut LoadContext<'b>,
     supported_compressed_formats: CompressedImageFormats,
-) -> Result<(Image, String), GltfError> {
+) -> Result<Image, GltfError> {
     let is_srgb = !linear_textures.contains(&gltf_texture.index());
     let mut texture = match gltf_texture.source().source() {
         gltf::image::Source::View { view, mime_type } => {
@@ -637,72 +631,72 @@ async fn load_texture<'a, 'b>(
     };
     texture.sampler_descriptor = ImageSampler::Descriptor(texture_sampler(&gltf_texture));
 
-    Ok((texture, texture_label(&gltf_texture)))
+    Ok(texture)
 }
 
 /// Loads a glTF material as a bevy [`StandardMaterial`] and returns it.
 fn load_material(material: &Material, load_context: &mut LoadContext) -> Handle<StandardMaterial> {
     let material_label = material_label(material);
-    let mut load_context = load_context.begin_labeled_asset(material_label);
+    load_context.labeled_asset_scope(material_label, |load_context| {
+        let pbr = material.pbr_metallic_roughness();
 
-    let pbr = material.pbr_metallic_roughness();
-
-    // TODO: handle missing label handle errors here?
-    let color = pbr.base_color_factor();
-    let base_color_texture = pbr.base_color_texture().map(|info| {
-        // TODO: handle info.tex_coord() (the *set* index for the right texcoords)
-        let label = texture_label(&info.texture());
-        load_context.get_label_handle(&label)
-    });
-
-    let normal_map_texture: Option<Handle<Image>> =
-        material.normal_texture().map(|normal_texture| {
-            // TODO: handle normal_texture.scale
-            // TODO: handle normal_texture.tex_coord() (the *set* index for the right texcoords)
-            let label = texture_label(&normal_texture.texture());
+        // TODO: handle missing label handle errors here?
+        let color = pbr.base_color_factor();
+        let base_color_texture = pbr.base_color_texture().map(|info| {
+            // TODO: handle info.tex_coord() (the *set* index for the right texcoords)
+            let label = texture_label(&info.texture());
             load_context.get_label_handle(&label)
         });
 
-    let metallic_roughness_texture = pbr.metallic_roughness_texture().map(|info| {
-        // TODO: handle info.tex_coord() (the *set* index for the right texcoords)
-        let label = texture_label(&info.texture());
-        load_context.get_label_handle(&label)
-    });
+        let normal_map_texture: Option<Handle<Image>> =
+            material.normal_texture().map(|normal_texture| {
+                // TODO: handle normal_texture.scale
+                // TODO: handle normal_texture.tex_coord() (the *set* index for the right texcoords)
+                let label = texture_label(&normal_texture.texture());
+                load_context.get_label_handle(&label)
+            });
 
-    let occlusion_texture = material.occlusion_texture().map(|occlusion_texture| {
-        // TODO: handle occlusion_texture.tex_coord() (the *set* index for the right texcoords)
-        // TODO: handle occlusion_texture.strength() (a scalar multiplier for occlusion strength)
-        let label = texture_label(&occlusion_texture.texture());
-        load_context.get_label_handle(&label)
-    });
+        let metallic_roughness_texture = pbr.metallic_roughness_texture().map(|info| {
+            // TODO: handle info.tex_coord() (the *set* index for the right texcoords)
+            let label = texture_label(&info.texture());
+            load_context.get_label_handle(&label)
+        });
 
-    let emissive = material.emissive_factor();
-    let emissive_texture = material.emissive_texture().map(|info| {
-        // TODO: handle occlusion_texture.tex_coord() (the *set* index for the right texcoords)
-        // TODO: handle occlusion_texture.strength() (a scalar multiplier for occlusion strength)
-        let label = texture_label(&info.texture());
-        load_context.get_label_handle(&label)
-    });
+        let occlusion_texture = material.occlusion_texture().map(|occlusion_texture| {
+            // TODO: handle occlusion_texture.tex_coord() (the *set* index for the right texcoords)
+            // TODO: handle occlusion_texture.strength() (a scalar multiplier for occlusion strength)
+            let label = texture_label(&occlusion_texture.texture());
+            load_context.get_label_handle(&label)
+        });
 
-    load_context.finish(StandardMaterial {
-        base_color: Color::rgba_linear(color[0], color[1], color[2], color[3]),
-        base_color_texture,
-        perceptual_roughness: pbr.roughness_factor(),
-        metallic: pbr.metallic_factor(),
-        metallic_roughness_texture,
-        normal_map_texture,
-        double_sided: material.double_sided(),
-        cull_mode: if material.double_sided() {
-            None
-        } else {
-            Some(Face::Back)
-        },
-        occlusion_texture,
-        emissive: Color::rgb_linear(emissive[0], emissive[1], emissive[2]),
-        emissive_texture,
-        unlit: material.unlit(),
-        alpha_mode: alpha_mode(material),
-        ..Default::default()
+        let emissive = material.emissive_factor();
+        let emissive_texture = material.emissive_texture().map(|info| {
+            // TODO: handle occlusion_texture.tex_coord() (the *set* index for the right texcoords)
+            // TODO: handle occlusion_texture.strength() (a scalar multiplier for occlusion strength)
+            let label = texture_label(&info.texture());
+            load_context.get_label_handle(&label)
+        });
+
+        StandardMaterial {
+            base_color: Color::rgba_linear(color[0], color[1], color[2], color[3]),
+            base_color_texture,
+            perceptual_roughness: pbr.roughness_factor(),
+            metallic: pbr.metallic_factor(),
+            metallic_roughness_texture,
+            normal_map_texture,
+            double_sided: material.double_sided(),
+            cull_mode: if material.double_sided() {
+                None
+            } else {
+                Some(Face::Back)
+            },
+            occlusion_texture,
+            emissive: Color::rgb_linear(emissive[0], emissive[1], emissive[2]),
+            emissive_texture,
+            unlit: material.unlit(),
+            alpha_mode: alpha_mode(material),
+            ..Default::default()
+        }
     })
 }
 

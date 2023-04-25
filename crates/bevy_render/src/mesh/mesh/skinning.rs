@@ -1,4 +1,4 @@
-use bevy_asset::Handle;
+use bevy_asset::{Asset, Handle};
 use bevy_ecs::{
     component::Component,
     entity::{Entity, EntityMap, MapEntities, MapEntitiesError},
@@ -26,7 +26,7 @@ impl MapEntities for SkinnedMesh {
     }
 }
 
-#[derive(Debug)]
+#[derive(Asset, Debug)]
 pub struct SkinnedMeshInverseBindposes(Box<[Mat4]>);
 
 impl From<Vec<Mat4>> for SkinnedMeshInverseBindposes {

@@ -61,7 +61,7 @@ fn setup(
     });
 }
 
-#[derive(Default, AsBindGroup, Debug, Clone)]
+#[derive(Asset, Default, AsBindGroup, Debug, Clone)]
 struct LineMaterial {
     #[uniform(0)]
     color: Color,

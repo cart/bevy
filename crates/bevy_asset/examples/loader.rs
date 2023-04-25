@@ -3,7 +3,7 @@ use bevy_asset::{
     io::{Reader, Writer},
     processor::AssetProcessor,
     saver::AssetSaver,
-    AssetApp, AssetLoader, AssetPlugin, AssetServer, Assets, Handle, LoadContext,
+    Asset, AssetApp, AssetLoader, AssetPlugin, AssetServer, Assets, Handle, LoadContext,
 };
 use bevy_core::TaskPoolPlugin;
 use bevy_ecs::prelude::*;
@@ -48,7 +48,7 @@ impl Plugin for TextPlugin {
     }
 }
 
-#[derive(Component, Debug)]
+#[derive(Asset, Debug)]
 struct Text(String);
 
 impl Drop for Text {
@@ -111,7 +111,7 @@ pub struct CoolTextRon {
     embedded_dependencies: Vec<String>,
 }
 
-#[derive(Component, Debug)]
+#[derive(Asset, Debug)]
 pub struct CoolText {
     text: String,
     dependencies: Vec<Handle<CoolText>>,
@@ -130,7 +130,7 @@ impl AssetLoader for CoolTextLoader {
         reader: &'a mut Reader,
         _settings: &'a Self::Settings,
         load_context: &'a mut LoadContext,
-    ) -> bevy_utils::BoxedFuture<'a, Result<Self::Asset, anyhow::Error>> {
+    ) -> bevy_utils::BoxedFuture<'a, Result<CoolText, anyhow::Error>> {
         Box::pin(async move {
             let mut bytes = Vec::new();
             reader.read_to_end(&mut bytes).await?;

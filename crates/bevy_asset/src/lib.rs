@@ -6,7 +6,8 @@ pub mod saver;
 pub mod prelude {
     #[doc(hidden)]
     pub use crate::{
-        AssetApp, AssetEvent, AssetId, AssetPlugin, AssetServer, Assets, Handle, UntypedHandle,
+        Asset, AssetApp, AssetEvent, AssetId, AssetPlugin, AssetServer, Assets, Handle,
+        UntypedHandle,
     };
 }
 
@@ -20,7 +21,7 @@ mod reflect;
 mod server;
 
 pub use assets::*;
-use bevy_log::error;
+pub use bevy_asset_macros::Asset;
 pub use event::*;
 pub use futures_lite::{AsyncReadExt, AsyncWriteExt};
 pub use handle::*;
@@ -36,6 +37,7 @@ use crate::{
 };
 use bevy_app::{App, AppTypeRegistry, Plugin, PostUpdate};
 use bevy_ecs::{schedule::IntoSystemConfigs, system::Resource, world::FromWorld};
+use bevy_log::error;
 use bevy_reflect::{FromReflect, GetTypeRegistration, Reflect};
 use bevy_utils::HashMap;
 use io::{file::FileAssetReader, AssetReader};
@@ -156,10 +158,9 @@ impl Plugin for AssetPlugin {
     }
 }
 
-pub trait Asset: Send + Sync + 'static {}
-
-// TODO: probably want to remove this in favor of derives
-impl<T> Asset for T where T: Send + Sync + 'static {}
+pub trait Asset: Send + Sync + 'static {
+    fn for_each_dependency(&self, process: impl FnMut(UntypedAssetId));
+}
 
 #[derive(Default, Clone, Debug)]
 pub enum AssetProvider {
@@ -336,6 +337,7 @@ macro_rules! load_internal_binary_asset {
 
 #[cfg(test)]
 mod tests {
+    use crate as bevy_asset;
     use crate::{
         handle::Handle,
         io::{
@@ -357,7 +359,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::path::Path;
 
-    #[derive(Debug)]
+    #[derive(Asset, Debug)]
     pub struct CoolText {
         text: String,
         embedded: String,
@@ -365,7 +367,7 @@ mod tests {
         sub_texts: Vec<Handle<SubText>>,
     }
 
-    #[derive(Debug)]
+    #[derive(Asset, Debug)]
     pub struct SubText {
         text: String,
     }
@@ -402,7 +404,6 @@ mod tests {
                     let cool = loaded.get::<CoolText>().unwrap();
                     embedded.push_str(&cool.text);
                 }
-
                 Ok(CoolText {
                     text: ron.text,
                     embedded,
@@ -414,11 +415,7 @@ mod tests {
                     sub_texts: ron
                         .sub_texts
                         .drain(..)
-                        .map(|text| {
-                            load_context
-                                .begin_labeled_asset(text.clone())
-                                .finish(SubText { text })
-                        })
+                        .map(|text| load_context.add_labeled_asset(text.clone(), SubText { text }))
                         .collect(),
                 })
             })

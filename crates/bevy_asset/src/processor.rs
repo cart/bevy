@@ -1,12 +1,12 @@
 use crate::{
     io::{AssetReaderError, AssetWriter, Writer},
-    loader::{AssetLoader, DeserializeMetaError, ErasedAssetLoader, LoadedAsset},
+    loader::{AssetLoader, DeserializeMetaError, ErasedAssetLoader},
     meta::{
         AssetMeta, AssetMetaDyn, AssetMetaMinimal, ProcessorLoaderMeta, ProcessorMeta,
         META_FORMAT_VERSION,
     },
     saver::AssetSaver,
-    AssetProvider, AssetProviders, AssetServer,
+    AssetProvider, AssetProviders, AssetServer, ErasedLoadedAsset,
 };
 use async_broadcast::{Receiver, Sender};
 use bevy_app::{App, Plugin};
@@ -64,7 +64,7 @@ impl<Source: AssetLoader, Saver: AssetSaver<Asset = Source::Asset>, Destination:
     fn process<'a>(
         &'a self,
         writer: &'a mut Writer,
-        asset: &'a LoadedAsset,
+        asset: &'a ErasedLoadedAsset,
         meta: &'a dyn AssetMetaDyn,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>> {
         let asset = asset.get::<Saver::Asset>().unwrap();
@@ -107,7 +107,7 @@ pub trait ErasedAssetProcessPlan: Send + Sync {
     fn process<'a>(
         &'a self,
         writer: &'a mut Writer,
-        asset: &'a LoadedAsset,
+        asset: &'a ErasedLoadedAsset,
         meta: &'a dyn AssetMetaDyn,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>>;
     fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError>;

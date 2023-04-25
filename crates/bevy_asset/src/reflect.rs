@@ -237,9 +237,10 @@ mod tests {
     use bevy_app::{App, AppTypeRegistry};
     use bevy_reflect::{FromReflect, Reflect, ReflectMut};
 
-    use crate::{AssetApp, AssetPlugin, ReflectAsset, UntypedHandle};
+    use crate as bevy_asset;
+    use crate::{Asset, AssetApp, AssetPlugin, ReflectAsset, UntypedHandle};
 
-    #[derive(Reflect, FromReflect)]
+    #[derive(Asset, Reflect, FromReflect)]
     struct AssetType {
         field: String,
     }

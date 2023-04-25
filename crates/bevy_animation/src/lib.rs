@@ -7,7 +7,7 @@ use std::ops::Deref;
 use std::time::Duration;
 
 use bevy_app::{App, Plugin, PostUpdate};
-use bevy_asset::{AssetApp, Assets, Handle};
+use bevy_asset::{Asset, AssetApp, Assets, Handle};
 use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use bevy_hierarchy::{Children, Parent};
@@ -55,7 +55,7 @@ pub struct EntityPath {
 }
 
 /// A list of [`VariableCurve`], and the [`EntityPath`] to which they apply.
-#[derive(Reflect, FromReflect, Clone, Debug, Default)]
+#[derive(Asset, Reflect, FromReflect, Clone, Debug, Default)]
 pub struct AnimationClip {
     curves: Vec<Vec<VariableCurve>>,
     paths: HashMap<EntityPath, usize>,

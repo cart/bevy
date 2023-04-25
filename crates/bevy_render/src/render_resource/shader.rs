@@ -1,6 +1,8 @@
 use super::ShaderDefVal;
 use crate::define_atomic_id;
-use bevy_asset::{io::Reader, AssetId, AssetLoader, AssetPath, AsyncReadExt, Handle, LoadContext};
+use bevy_asset::{
+    io::Reader, Asset, AssetId, AssetLoader, AssetPath, AsyncReadExt, Handle, LoadContext,
+};
 use bevy_utils::{tracing::error, BoxedFuture, HashMap};
 use naga::{back::wgsl::WriterFlags, valid::Capabilities, valid::ModuleInfo, Module};
 use once_cell::sync::Lazy;
@@ -24,7 +26,7 @@ pub enum ShaderReflectError {
 }
 /// A shader, as defined by its [`ShaderSource`] and [`ShaderStage`](naga::ShaderStage)
 /// This is an "unprocessed" shader. It can contain preprocessor directives.
-#[derive(Debug, Clone)]
+#[derive(Asset, Debug, Clone)]
 pub struct Shader {
     source: Source,
     import_path: Option<ShaderImport>,
@@ -241,7 +243,7 @@ impl AssetLoader for ShaderLoader {
         reader: &'a mut Reader,
         _settings: &'a Self::Settings,
         load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, Result<Self::Asset, anyhow::Error>> {
+    ) -> BoxedFuture<'a, Result<Shader, anyhow::Error>> {
         Box::pin(async move {
             let ext = load_context.path().extension().unwrap().to_str().unwrap();
 

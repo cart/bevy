@@ -685,7 +685,7 @@ impl Material for ColorGradientMaterial {
     }
 }
 
-#[derive(AsBindGroup, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Debug, Clone)]
 pub struct ColorGradientMaterial {}
 
 #[derive(Resource)]

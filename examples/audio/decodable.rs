@@ -9,6 +9,7 @@ use bevy::utils::Duration;
 // This is where data read from an audio file would be stored, for example.
 // Implementing `TypeUuid` will automatically implement `Asset`.
 // This allows the type to be registered as an asset.
+#[derive(Asset)]
 struct SineAudio {
     frequency: f32,
 }

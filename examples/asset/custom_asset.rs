@@ -8,7 +8,7 @@ use bevy::{
 use futures_lite::AsyncReadExt;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Asset, Debug, Deserialize)]
 pub struct CustomAsset {
     pub value: i32,
 }

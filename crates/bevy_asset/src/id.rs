@@ -250,7 +250,8 @@ impl UntypedAssetId {
         assert_eq!(
             self.type_id(),
             TypeId::of::<A>(),
-            "The target AssetId<A>'s TypeId does not match the TypeId of this UntypedAssetId"
+            "The target AssetId<{}>'s TypeId does not match the TypeId of this UntypedAssetId",
+            std::any::type_name::<A>()
         );
         self.typed_unchecked()
     }

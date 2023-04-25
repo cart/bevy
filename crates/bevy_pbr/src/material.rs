@@ -4,7 +4,7 @@ use crate::{
     SetMeshViewBindGroup, Shadow,
 };
 use bevy_app::{App, Plugin};
-use bevy_asset::{AssetApp, AssetEvent, AssetId, AssetServer, Assets, Handle};
+use bevy_asset::{Asset, AssetApp, AssetEvent, AssetId, AssetServer, Assets, Handle};
 use bevy_core_pipeline::{
     core_3d::{AlphaMask3d, Opaque3d, Transparent3d},
     prepass::NormalPrepass,
@@ -101,7 +101,7 @@ use std::marker::PhantomData;
 /// @group(1) @binding(2)
 /// var color_sampler: sampler;
 /// ```
-pub trait Material: AsBindGroup + Send + Sync + Clone + Sized + 'static {
+pub trait Material: Asset + AsBindGroup + Clone + Sized {
     /// Returns this material's vertex shader. If [`ShaderRef::Default`] is returned, the default mesh vertex shader
     /// will be used.
     fn vertex_shader() -> ShaderRef {

@@ -404,6 +404,7 @@ impl<A: Asset> Assets<A> {
             }
         }
         // TODO: this is _extremely_ inefficient find a better fix
+        // This will also loop failed assets indefinitely. Is that ok?
         for event in not_ready {
             assets.handle_provider.drop_sender.send(event).unwrap();
         }

@@ -148,7 +148,7 @@ fn setup(
 }
 
 // This is the struct that will be passed to your shader
-#[derive(AsBindGroup, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Debug, Clone)]
 pub struct CustomMaterial {
     #[uniform(0)]
     color: Color,
@@ -196,7 +196,7 @@ struct ShowPrepassSettings {
 }
 
 // This shader simply loads the prepass texture and outputs it directly
-#[derive(AsBindGroup, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Debug, Clone)]
 pub struct PrepassOutputMaterial {
     #[uniform(0)]
     settings: ShowPrepassSettings,
