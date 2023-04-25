@@ -364,6 +364,85 @@ struct Asset<T: Asset> {
 * load_folder ... this is a long-running operation ... it should not be sync
     * consider something AssetCollection-like (ex: Return Handle<AssetCollection>)?
     * Multicast pub-sub?
+* merge AssetServer into Commands?
+```rust
+
+// Opt-in handles
+#[derive(Asset)]
+
+// Opt-out handles
+#[derive(AssetCollection)]
+
+
+// Maybe this is built into the Asset derive?
+fn load<L: Loadable>(loadable: L) -> Handle<L::Type>{
+
+}
+
+impl<A: Asset> Loadable for TypedAssetPath<A> {
+    type Type: A;
+
+impl<A: Asset> Loadable for DirectoryPath {
+    type Type: LoadedDirectory;
+}
+impl<A: Asset> Loadable for LoadedAsset<A> {
+    type Type: A;
+}
+
+#[derive(Loadable)]
+pub struct StandardMaterial {
+    #[handle]
+    color: Handle<Image>,
+}
+
+#[derive(Loadable)]
+pub struct GameScenes {
+    a: Handle<A>,
+    b: Handle<B>,
+}
+
+impl<A: Asset> Loadable for LoadedAsset<A> {
+    type Type: A;
+}
+
+struct LoadWithSettings<L>(AssetPath)
+
+fn setup(mut commands: Commands, assets: ResMut<AssetServer>) {
+    commands.spawn(assets.load(GameScenes {
+        a: assets.load("a.scn"),
+        b: assets.load("b.scn"),
+    }))
+}
+
+fn on_load(query: Query<&Handle<GameScenes>>) {
+    for handle in query.iter( {
+        if handle.loaded() {
+            do_thing()
+        }
+    })  
+}
+
+fn menu_loaded(handle: In<Handle<Scene>>, commands: Commands, state: NextState<GameState>) {
+    commands.insert_resource(MenuData {handle})
+    state.set(GameState::Menu)
+}
+
+fn enter_menu(commands: Commands, state: ResMut<MenuState>) {
+    let entity = commands.spawn(SceneBundle {handle: state.handle}).id();
+    state.entity = Some(entity);
+}
+
+fn exit_menu(commands: Commands, state: Res<MenuState>) {
+    commands.despawn(SceneBundle {handle: state})
+}
+
+
+app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: In<Handle<Scene>>)
+    .add_system(OnEnter(GameState::Menu), enter_menu)
+    .add_system(OnExit(GameState::Menu), exit_menu)
+```
+
+
 * Use optimized storage for RenderAssets (and other AssetId maps).
 
 ### PR Description / RFC

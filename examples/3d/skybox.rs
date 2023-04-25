@@ -1,9 +1,7 @@
 //! Load a cubemap texture onto a cube like a skybox and cycle through different compressed texture formats
 
-use std::f32::consts::PI;
-
 use bevy::{
-    asset::LoadState,
+    asset::AssetLoadState,
     core_pipeline::Skybox,
     input::mouse::MouseMotion,
     prelude::*,
@@ -13,6 +11,7 @@ use bevy::{
         texture::CompressedImageFormats,
     },
 };
+use std::f32::consts::PI;
 
 const CUBEMAPS: &[(&str, CompressedImageFormats)] = &[
     (
@@ -142,7 +141,7 @@ fn asset_loaded(
     mut skyboxes: Query<&mut Skybox>,
 ) {
     if !cubemap.is_loaded
-        && asset_server.get_load_state(cubemap.image_handle.clone_weak()) == LoadState::Loaded
+        && asset_server.load_state(&cubemap.image_handle) == AssetLoadState::Loaded
     {
         info!("Swapping to {}...", CUBEMAPS[cubemap.index].0);
         let mut image = images.get_mut(&cubemap.image_handle).unwrap();

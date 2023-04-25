@@ -34,7 +34,7 @@ use crate::{
     io::{file::FileAssetWriter, processor_gated::ProcessorGatedReader, AssetWriter},
     processor::{AssetProcessor, AssetProcessorPlugin},
 };
-use bevy_app::{App, AppTypeRegistry, Plugin, PostUpdate, PreUpdate};
+use bevy_app::{App, AppTypeRegistry, Plugin, PostUpdate};
 use bevy_ecs::{schedule::IntoSystemConfigs, system::Resource, world::FromWorld};
 use bevy_reflect::{FromReflect, GetTypeRegistration, Reflect};
 use bevy_utils::HashMap;
@@ -295,7 +295,7 @@ impl AssetApp for App {
             .add_event::<AssetEvent<A>>()
             .register_type::<Handle<A>>()
             .add_systems(
-                PreUpdate,
+                PostUpdate,
                 Assets::<A>::track_assets.after(server::handle_internal_asset_events),
             )
     }

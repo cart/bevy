@@ -596,6 +596,12 @@ impl AssetServer {
         infos.get_path_handle(path).map(|h| h.typed_unchecked())
     }
 
+    pub fn get_asset_path(&self, id: impl Into<UntypedAssetId>) -> Option<AssetPath<'static>> {
+        let infos = self.data.infos.read();
+        let info = infos.get(id.into())?;
+        Some(info.path.to_owned())
+    }
+
     /// Retrieve a handle for the given path. This will create a handle (and AssetInfo) if it does not exist
     pub(crate) fn get_path_handle(
         &self,
