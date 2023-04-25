@@ -401,52 +401,52 @@ async fn load_gltf<'a, 'b, 'c>(
     // See https://github.com/bevyengine/bevy/issues/1924 for more details
     // The taskpool use is also avoided when there is only one texture for performance reasons and
     // to avoid https://github.com/bevyengine/bevy/pull/2725
-    // if gltf.textures().len() == 1 || cfg!(target_arch = "wasm32") {
-    for gltf_texture in gltf.textures() {
-        let label = texture_label(&gltf_texture);
-        let texture = load_texture(
-            gltf_texture,
-            &buffer_data,
-            &linear_textures,
-            load_context,
-            supported_compressed_formats,
-        )
-        .await?;
-        load_context.add_labeled_asset(label, texture);
+    if gltf.textures().len() == 1 || cfg!(target_arch = "wasm32") {
+        for gltf_texture in gltf.textures() {
+            let label = texture_label(&gltf_texture);
+            let texture = load_texture(
+                gltf_texture,
+                &buffer_data,
+                &linear_textures,
+                load_context,
+                supported_compressed_formats,
+            )
+            .await?;
+            load_context.add_labeled_asset(label, texture);
+        }
+    } else {
+        #[cfg(not(target_arch = "wasm32"))]
+        IoTaskPool::get()
+            .scope(|scope| {
+                gltf.textures().for_each(|gltf_texture| {
+                    let linear_textures = &linear_textures;
+                    let buffer_data = &buffer_data;
+                    let label = texture_label(&gltf_texture);
+                    let mut load_context: LoadContext = load_context.begin_labeled_asset(label);
+                    scope.spawn(async move {
+                        let image = load_texture(
+                            gltf_texture,
+                            buffer_data,
+                            linear_textures,
+                            &mut load_context,
+                            supported_compressed_formats,
+                        )
+                        .await;
+                        image.map(|i| load_context.finish(i))
+                    });
+                });
+            })
+            .into_iter()
+            .filter_map(|res| {
+                if let Err(err) = res.as_ref() {
+                    warn!("Error loading glTF texture: {}", err);
+                }
+                res.ok()
+            })
+            .for_each(|loaded_asset| {
+                load_context.load_asset(loaded_asset);
+            });
     }
-    // } else {
-    //     #[cfg(not(target_arch = "wasm32"))]
-    //     IoTaskPool::get()
-    //         .scope(|scope| {
-    //             gltf.textures().for_each(|gltf_texture| {
-    //                 let linear_textures = &linear_textures;
-    //                 let buffer_data = &buffer_data;
-    //                 let label = texture_label(&gltf_texture);
-    //                 let mut load_context: LoadContext = load_context.begin_labeled_asset(label);
-    //                 scope.spawn(async move {
-    //                     let image = load_texture(
-    //                         gltf_texture,
-    //                         buffer_data,
-    //                         linear_textures,
-    //                         &mut load_context,
-    //                         supported_compressed_formats,
-    //                     )
-    //                     .await;
-    //                     image.map(|i| load_context.finish(i))
-    //                 });
-    //             });
-    //         })
-    //         .into_iter()
-    //         .filter_map(|res| {
-    //             if let Err(err) = res.as_ref() {
-    //                 warn!("Error loading glTF texture: {}", err);
-    //             }
-    //             res.ok()
-    //         })
-    //         .for_each(|loaded_asset| {
-    //             load_context.load_asset(loaded_asset);
-    //         });
-    // }
 
     let skinned_mesh_inverse_bindposes: Vec<_> = gltf
         .skins()
