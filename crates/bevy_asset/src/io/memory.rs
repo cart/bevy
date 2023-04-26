@@ -132,13 +132,11 @@ impl Stream for DirStream {
         self: Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let dir = self.dir.0.read();
-        Poll::Ready(
-            dir.assets
-                .values()
-                .nth(self.index)
-                .map(|d| d.path().to_owned()),
-        )
+        let this = self.get_mut();
+        let index = this.index;
+        this.index += 1;
+        let dir = this.dir.0.read();
+        Poll::Ready(dir.assets.values().nth(index).map(|d| d.path().to_owned()))
     }
 }
 

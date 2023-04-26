@@ -13,9 +13,9 @@ pub mod prelude {
 
 mod assets;
 mod event;
+mod folder;
 mod handle;
 mod id;
-mod folder;
 mod loader;
 mod path;
 mod reflect;
@@ -33,6 +33,7 @@ pub use reflect::*;
 pub use server::*;
 
 use crate::{
+    folder::LoadedFolder,
     io::{file::FileAssetWriter, processor_gated::ProcessorGatedReader, AssetWriter},
     processor::{AssetProcessor, AssetProcessorPlugin},
 };
@@ -155,7 +156,8 @@ impl Plugin for AssetPlugin {
                 }
             }
         }
-        app.add_systems(PostUpdate, server::handle_internal_asset_events);
+        app.init_asset::<LoadedFolder>()
+            .add_systems(PostUpdate, server::handle_internal_asset_events);
     }
 }
 
@@ -339,6 +341,7 @@ macro_rules! load_internal_binary_asset {
 #[cfg(test)]
 mod tests {
     use crate as bevy_asset;
+    use crate::folder::LoadedFolder;
     use crate::{
         handle::Handle,
         io::{
@@ -353,6 +356,7 @@ mod tests {
     };
     use bevy_app::{App, Update};
     use bevy_core::TaskPoolPlugin;
+    use bevy_ecs::event::ManualEventReader;
     use bevy_ecs::prelude::*;
     use bevy_log::LogPlugin;
     use bevy_utils::BoxedFuture;
@@ -921,5 +925,86 @@ mod tests {
             app.world.resource::<Assets<CoolText>>().get(id).is_none(),
             "asset has no handles, so it should have been dropped last update"
         );
+    }
+
+    #[test]
+    fn load_folder() {
+        let dir = Dir::default();
+
+        let a_path = "text/a.cool.ron";
+        let a_ron = r#"
+(
+    text: "a",
+    dependencies: [
+        "b.cool.ron",
+    ],
+    embedded_dependencies: [],
+    sub_texts: [],
+)"#;
+        let b_path = "b.cool.ron";
+        let b_ron = r#"
+(
+    text: "b",
+    dependencies: [],
+    embedded_dependencies: [],
+    sub_texts: [],
+)"#;
+
+        let c_path = "text/c.cool.ron";
+        let c_ron = r#"
+(
+    text: "c",
+    dependencies: [
+    ],
+    embedded_dependencies: [],
+    sub_texts: [],
+)"#;
+        dir.insert_asset_text(Path::new(a_path), a_ron);
+        dir.insert_asset_text(Path::new(b_path), b_ron);
+        dir.insert_asset_text(Path::new(c_path), c_ron);
+
+        let (mut app, gate_opener) = test_app(dir);
+        app.init_asset::<CoolText>()
+            .init_asset::<SubText>()
+            .register_asset_loader(CoolTextLoader);
+        let asset_server = app.world.resource::<AssetServer>().clone();
+        let handle: Handle<LoadedFolder> = asset_server.load_folder("text");
+        gate_opener.open(a_path);
+        gate_opener.open(b_path);
+        gate_opener.open(c_path);
+
+        let mut reader = ManualEventReader::default();
+        run_app_until(&mut app, |world| {
+            let events = world.resource::<Events<AssetEvent<LoadedFolder>>>();
+            let asset_server = world.resource::<AssetServer>();
+            let loaded_folders = world.resource::<Assets<LoadedFolder>>();
+            for event in reader.iter(&events) {
+                if let AssetEvent::Added { id } = event {
+                    if *id == handle.id() {
+                        let loaded_folder = loaded_folders.get(&handle).unwrap();
+                        let a_handle: Handle<CoolText> =
+                            asset_server.get_handle("text/a.cool.ron").unwrap();
+                        let c_handle: Handle<CoolText> =
+                            asset_server.get_handle("text/c.cool.ron").unwrap();
+
+                        let mut found_a = false;
+                        let mut found_c = false;
+                        for asset_handle in loaded_folder.handles.iter() {
+                            if asset_handle.id() == a_handle.id().untyped() {
+                                found_a = true;
+                            } else if asset_handle.id() == c_handle.id().untyped() {
+                                found_c = true;
+                            }
+                        }
+                        assert!(found_a);
+                        assert!(found_c);
+                        assert_eq!(loaded_folder.handles.len(), 2);
+                        return Some(());
+                    }
+                }
+            }
+            None
+        });
+        todo!("test recursive load state and failure");
     }
 }

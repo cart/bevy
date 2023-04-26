@@ -590,25 +590,33 @@ impl AssetServer {
         self.load_internal(None, path.into()).await
     }
 
-    #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
     async fn load_internal<'a>(
         &self,
         input_handle: Option<UntypedHandle>,
         mut path: AssetPath<'a>,
     ) -> Result<UntypedHandle, AssetLoadError> {
-        let (meta, loader) = self.get_meta_and_loader(&path).await?;
+        let (meta, loader) = self.get_meta_and_loader(&path).await.map_err(|e| {
+            // if there was an input handle, a "load" operation has already started, so we must produce a "failure" event, if
+            // we cannot find the meta and loader
+            if let Some(handle) = &input_handle {
+                self.send_asset_event(InternalAssetEvent::Failed { id: handle.id() });
+            }
+            e
+        })?;
+
+        let has_label = path.label().is_none();
 
         let (handle, should_load) = match input_handle {
-            // if a handle was passed in, the "should load" check was already done
             Some(handle) => {
                 // TODO: add requested type validation for sub assets
-                if path.label().is_none() && handle.type_id() != loader.asset_type_id() {
+                if !has_label && handle.type_id() != loader.asset_type_id() {
                     return Err(AssetLoadError::RequestedHandleTypeMismatch {
                         path: path.to_owned(),
                         requested: handle.type_id(),
                         actual: loader.type_id(),
                     });
                 }
+                // if a handle was passed in, the "should load" check was already done
                 (handle, true)
             }
             None => {
@@ -625,10 +633,10 @@ impl AssetServer {
             return Ok(handle);
         }
 
-        let actual_id = if path.label().is_some() {
+        let base_asset_id = if has_label {
             path.remove_label();
-            // if the path is to a label, the current id (if it was passed in) does not match the asset root type
-            // we need to get a new asset id
+            // If the path has a label, the current id does not match the asset root type.
+            // We need to get the actual asset id
             let mut infos = self.data.infos.write();
             let (actual_handle, _) = infos.get_or_create_path_handle(
                 path.to_owned(),
@@ -647,16 +655,15 @@ impl AssetServer {
             .await
         {
             Ok(loaded_asset) => {
-                self.send_asset_load_event(actual_id, loaded_asset);
+                self.send_asset_event(InternalAssetEvent::Loaded {
+                    id: base_asset_id,
+                    loaded_asset,
+                });
                 Ok(handle)
             }
             Err(err) => {
-                // TODO: this failed id could belong to either the sub asset or the base asset, which
-                // could produce incorrect load states
-                self.data
-                    .asset_event_sender
-                    .send(InternalAssetEvent::Failed { id: actual_id })
-                    .unwrap();
+                // TODO: fail all loading subassets
+                self.send_asset_event(InternalAssetEvent::Failed { id: base_asset_id });
                 Err(err)
             }
         }
@@ -681,7 +688,10 @@ impl AssetServer {
                 .write()
                 .create_loading_handle(loaded_asset.asset_type_id())
         };
-        self.send_asset_load_event(handle.id(), loaded_asset);
+        self.send_asset_event(InternalAssetEvent::Loaded {
+            id: handle.id(),
+            loaded_asset,
+        });
         handle
     }
 
@@ -694,6 +704,8 @@ impl AssetServer {
             let mut infos = self.data.infos.write();
             infos.create_loading_handle(TypeId::of::<LoadedFolder>())
         };
+
+        let id = handle.id();
 
         fn load_folder<'a>(
             path: &'a Path,
@@ -732,8 +744,11 @@ impl AssetServer {
             .spawn(async move {
                 let mut handles = Vec::new();
                 match load_folder(&owned_path, &server, &mut handles).await {
-                    Ok(_) => todo!(),
-                    Err(_) => todo!(),
+                    Ok(_) => server.send_asset_event(InternalAssetEvent::Loaded {
+                        id,
+                        loaded_asset: LoadedAsset::from(LoadedFolder { handles }).into(),
+                    }),
+                    Err(_) => server.send_asset_event(InternalAssetEvent::Failed { id }),
                 }
             })
             .detach();
@@ -741,11 +756,8 @@ impl AssetServer {
         handle.typed_debug_checked()
     }
 
-    fn send_asset_load_event(&self, id: UntypedAssetId, loaded_asset: ErasedLoadedAsset) {
-        self.data
-            .asset_event_sender
-            .send(InternalAssetEvent::Loaded { id, loaded_asset })
-            .unwrap();
+    fn send_asset_event(&self, event: InternalAssetEvent) {
+        self.data.asset_event_sender.send(event).unwrap();
     }
 
     pub fn get_load_states(

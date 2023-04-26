@@ -3,5 +3,5 @@ use crate::{Asset, UntypedHandle};
 
 #[derive(Asset)]
 pub struct LoadedFolder {
-    handles: Vec<UntypedHandle>,
+    pub handles: Vec<UntypedHandle>,
 }
