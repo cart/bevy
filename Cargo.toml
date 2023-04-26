@@ -892,12 +892,12 @@ category = "Assets"
 wasm = true
 
 [[example]]
-name = "custom_asset_io"
-path = "examples/asset/custom_asset_io.rs"
+name = "custom_asset_reader"
+path = "examples/asset/custom_asset_reader.rs"
 
-[package.metadata.example.custom_asset_io]
+[package.metadata.example.custom_asset_reader]
 name = "Custom Asset IO"
-description = "Implements a custom asset io loader"
+description = "Implements a custom AssetReader"
 category = "Assets"
 wasm = true
 

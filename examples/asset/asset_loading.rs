@@ -36,9 +36,10 @@ fn setup(
         info!("sphere hasn't loaded yet");
     }
 
-    // You can load all assets in a folder like this. They will be loaded in parallel without
-    // blocking
-    let _scenes: Vec<UntypedHandle> = asset_server.load_folder("models/monkey").unwrap();
+    // You can load all assets in a folder like this. This returns a handle to a LoadedFolder asset, which
+    // contains the handles of all assets in the folder. You can track the recursive load state of this asset to
+    // wait until all assets have been loaded.
+    let loaded_folder = asset_server.load_folder("models/monkey");
 
     // Then any asset in the folder can be accessed like this:
     let monkey_handle = asset_server.get_handle("models/monkey/Monkey.gltf#Mesh0/Primitive0");

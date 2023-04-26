@@ -674,8 +674,7 @@ impl AssetServer {
         self.load_asset(LoadedAsset::from(asset))
     }
 
-    #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
-    pub fn load_asset<A: Asset>(&self, asset: impl Into<LoadedAsset<A>>) -> Handle<A> {
+    pub(crate) fn load_asset<A: Asset>(&self, asset: impl Into<LoadedAsset<A>>) -> Handle<A> {
         let loaded_asset: LoadedAsset<A> = asset.into();
         let erased_loaded_asset: ErasedLoadedAsset = loaded_asset.into();
         self.load_asset_untyped(erased_loaded_asset)

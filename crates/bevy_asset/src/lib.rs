@@ -179,21 +179,37 @@ pub struct AssetProviders {
 }
 
 impl AssetProviders {
+    pub fn insert_reader(
+        &mut self,
+        provider: &str,
+        get_reader: impl FnMut() -> Box<dyn AssetReader> + Send + Sync + 'static,
+    ) {
+        self.readers
+            .insert(provider.to_string(), Box::new(get_reader));
+    }
     pub fn with_reader(
         mut self,
         provider: &str,
-        reader: impl FnMut() -> Box<dyn AssetReader> + Send + Sync + 'static,
+        get_reader: impl FnMut() -> Box<dyn AssetReader> + Send + Sync + 'static,
     ) -> Self {
-        self.readers.insert(provider.to_string(), Box::new(reader));
+        self.insert_reader(provider, get_reader);
         self
     }
 
+    pub fn insert_writer(
+        &mut self,
+        provider: &str,
+        get_writer: impl FnMut() -> Box<dyn AssetWriter> + Send + Sync + 'static,
+    ) {
+        self.writers
+            .insert(provider.to_string(), Box::new(get_writer));
+    }
     pub fn with_writer(
         mut self,
         provider: &str,
-        writer: impl FnMut() -> Box<dyn AssetWriter> + Send + Sync + 'static,
+        get_writer: impl FnMut() -> Box<dyn AssetWriter> + Send + Sync + 'static,
     ) -> Self {
-        self.writers.insert(provider.to_string(), Box::new(writer));
+        self.insert_writer(provider, get_writer);
         self
     }
 
