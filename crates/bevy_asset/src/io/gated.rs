@@ -80,4 +80,11 @@ impl<R: AssetReader> AssetReader for GatedReader<R> {
     ) -> BoxedFuture<'a, Result<Box<PathStream>, AssetReaderError>> {
         self.reader.read_directory(path)
     }
+
+    fn is_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<bool, AssetReaderError>> {
+        self.reader.is_directory(path)
+    }
 }

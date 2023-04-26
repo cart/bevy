@@ -232,6 +232,13 @@ impl AssetReader for MemoryAssetReader {
                 .ok_or(AssetReaderError::NotFound(PathBuf::new()))
         })
     }
+
+    fn is_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<bool, AssetReaderError>> {
+        Box::pin(async move { Ok(self.root.get_dir(path).is_some()) })
+    }
 }
 
 #[cfg(test)]

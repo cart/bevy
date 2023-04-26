@@ -243,6 +243,20 @@ impl UntypedHandle {
         }
     }
 
+    /// Converts to a typed Handle. This _will not check if the target Handle type matches_.
+    #[inline]
+    pub fn typed_debug_checked<A: Asset>(self) -> Handle<A> {
+        debug_assert_eq!(
+            self.type_id(),
+            TypeId::of::<A>(),
+            "The target Handle<A>'s TypeId does not match the TypeId of this UntypedHandle"
+        );
+        match self {
+            UntypedHandle::Strong(handle) => Handle::Strong(handle),
+            UntypedHandle::Weak(id) => Handle::Weak(id.typed_unchecked::<A>()),
+        }
+    }
+
     /// Converts to a typed Handle. This will panic if the internal TypeId does not match the given asset type `A`
     #[inline]
     pub fn typed<A: Asset>(self) -> Handle<A> {

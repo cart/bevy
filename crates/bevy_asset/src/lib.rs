@@ -15,6 +15,7 @@ mod assets;
 mod event;
 mod handle;
 mod id;
+mod folder;
 mod loader;
 mod path;
 mod reflect;

@@ -128,14 +128,14 @@ impl<A: Asset + FromReflect> FromType<A> for ReflectAsset {
             assets_resource_type_id: TypeId::of::<Assets<A>>(),
             get: |world, handle| {
                 let assets = world.resource::<Assets<A>>();
-                let asset = assets.get(&handle.typed_unchecked());
+                let asset = assets.get(&handle.typed_debug_checked());
                 asset.map(|asset| asset as &dyn Reflect)
             },
             get_unchecked_mut: |world, handle| {
                 // SAFETY: `get_unchecked_mut` must be called with `UnsafeWorldCell` having access to `Assets<A>`,
                 // and must ensure to only have at most one reference to it live at all times.
                 let assets = unsafe { world.get_resource_mut::<Assets<A>>().unwrap().into_inner() };
-                let asset = assets.get_mut(&handle.typed_unchecked());
+                let asset = assets.get_mut(&handle.typed_debug_checked());
                 asset.map(|asset| asset as &mut dyn Reflect)
             },
             add: |world, value| {
@@ -148,7 +148,7 @@ impl<A: Asset + FromReflect> FromType<A> for ReflectAsset {
                 let mut assets = world.resource_mut::<Assets<A>>();
                 let value: A = FromReflect::from_reflect(value)
                     .expect("could not call `FromReflect::from_reflect` in `ReflectAsset::set`");
-                assets.insert(handle.typed_unchecked(), value)
+                assets.insert(handle.typed_debug_checked(), value)
             },
             len: |world| {
                 let assets = world.resource::<Assets<A>>();
@@ -160,7 +160,7 @@ impl<A: Asset + FromReflect> FromType<A> for ReflectAsset {
             },
             remove: |world, handle| {
                 let mut assets = world.resource_mut::<Assets<A>>();
-                let value = assets.remove(handle.typed_unchecked());
+                let value = assets.remove(handle.typed_debug_checked());
                 value.map(|value| Box::new(value) as Box<dyn Reflect>)
             },
         }
@@ -225,7 +225,7 @@ impl<A: Asset> FromType<Handle<A>> for ReflectHandle {
                     .downcast_ref::<Handle<A>>()
                     .map(|h| h.clone().untyped())
             },
-            typed: |handle: UntypedHandle| Box::new(handle.typed_unchecked::<A>()),
+            typed: |handle: UntypedHandle| Box::new(handle.typed_debug_checked::<A>()),
         }
     }
 }

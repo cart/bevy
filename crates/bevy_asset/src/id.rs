@@ -246,6 +246,17 @@ impl UntypedAssetId {
     }
 
     #[inline]
+    pub fn typed_debug_checked<A: Asset>(self) -> AssetId<A> {
+        debug_assert_eq!(
+            self.type_id(),
+            TypeId::of::<A>(),
+            "The target AssetId<{}>'s TypeId does not match the TypeId of this UntypedAssetId",
+            std::any::type_name::<A>()
+        );
+        self.typed_unchecked()
+    }
+
+    #[inline]
     pub fn typed<A: Asset>(self) -> AssetId<A> {
         assert_eq!(
             self.type_id(),

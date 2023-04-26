@@ -63,4 +63,20 @@ impl AssetReader for ProcessorGatedReader {
             Ok(result)
         })
     }
+
+    fn is_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<bool, AssetReaderError>> {
+        Box::pin(async move {
+            trace!(
+                "Waiting for processing to finish before reading directory {:?}",
+                path
+            );
+            self.processor.wait_until_finished().await;
+            trace!("Processing finished, getting directory status {:?}", path);
+            let result = self.reader.is_directory(path).await?;
+            Ok(result)
+        })
+    }
 }

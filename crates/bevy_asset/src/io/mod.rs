@@ -39,6 +39,11 @@ pub trait AssetReader: Send + Sync + 'static {
         &'a self,
         path: &'a Path,
     ) -> BoxedFuture<'a, Result<Box<PathStream>, AssetReaderError>>;
+    /// Returns an iterator of directory entry names at the provided path.
+    fn is_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<bool, AssetReaderError>>;
 }
 
 pub type Writer = dyn AsyncWrite + Unpin + Send + Sync;

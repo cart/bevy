@@ -88,7 +88,10 @@ where
     /// }
     /// ```
     pub fn play(&self, audio_source: Handle<Source>) -> Handle<AudioSink> {
-        let handle = self.sink_handle_provider.reserve_handle().typed_unchecked();
+        let handle = self
+            .sink_handle_provider
+            .reserve_handle()
+            .typed_debug_checked();
         let config = AudioToPlay {
             settings: PlaybackSettings::ONCE,
             sink_asset: handle.id().untyped(),
@@ -121,7 +124,10 @@ where
         audio_source: Handle<Source>,
         settings: PlaybackSettings,
     ) -> Handle<AudioSink> {
-        let handle = self.sink_handle_provider.reserve_handle().typed_unchecked();
+        let handle = self
+            .sink_handle_provider
+            .reserve_handle()
+            .typed_debug_checked();
         let config = AudioToPlay {
             settings,
             sink_asset: handle.id().untyped(),
@@ -192,7 +198,7 @@ where
         let handle = self
             .spatial_sink_handle_provider
             .reserve_handle()
-            .typed_unchecked();
+            .typed_debug_checked();
         let config = AudioToPlay {
             settings: PlaybackSettings::ONCE,
             sink_asset: handle.id().untyped(),
@@ -247,7 +253,7 @@ where
         let handle = self
             .spatial_sink_handle_provider
             .reserve_handle()
-            .typed_unchecked();
+            .typed_debug_checked();
         let config = AudioToPlay {
             settings,
             sink_asset: handle.id().untyped(),

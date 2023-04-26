@@ -470,6 +470,7 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Sub Assets are yielded right away
 * Track dependencies for "runtime only" assets
 * multiple asset sources
+* Better non-blocking folder loading: LoadedFolder asset 
 * Asset system usability
 
 ### Next Steps

@@ -150,6 +150,19 @@ impl AssetReader for FileAssetReader {
             }
         })
     }
+
+    fn is_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<bool, AssetReaderError>> {
+        Box::pin(async move {
+            let full_path = self.root_path.join(path);
+            let metadata = full_path
+                .metadata()
+                .map_err(|_e| AssetReaderError::NotFound(path.to_owned()))?;
+            Ok(metadata.file_type().is_dir())
+        })
+    }
 }
 
 pub struct FileAssetWriter {

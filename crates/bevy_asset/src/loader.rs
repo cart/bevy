@@ -279,7 +279,7 @@ impl<'a> LoadContext<'a> {
         } else {
             self.asset_server
                 .get_or_create_path_handle(path.clone(), TypeId::of::<A>())
-                .typed_unchecked()
+                .typed_debug_checked()
         };
         self.dependencies.insert(handle.clone().untyped());
         handle
@@ -296,7 +296,7 @@ impl<'a> LoadContext<'a> {
         let handle = self
             .asset_server
             .get_or_create_path_handle(path.to_owned(), TypeId::of::<A>())
-            .typed_unchecked();
+            .typed_debug_checked();
         self.dependencies.insert(handle.clone().untyped());
         handle
     }
