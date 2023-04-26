@@ -3,9 +3,9 @@
 //! It does not know anything about the asset formats, only how to talk to the underlying storage.
 
 use bevy::{
-    asset::{
-        io::{file::FileAssetReader, AssetReader, AssetReaderError, PathStream, Reader},
-        AssetProvider, AssetProviders,
+    asset::io::{
+        file::FileAssetReader, AssetProvider, AssetProviders, AssetReader, AssetReaderError,
+        PathStream, Reader,
     },
     prelude::*,
     utils::BoxedFuture,

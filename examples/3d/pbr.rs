@@ -1,6 +1,6 @@
 //! This example shows how to configure Physically Based Rendering (PBR) parameters.
 
-use bevy::{asset::AssetLoadState, prelude::*};
+use bevy::{asset::LoadState, prelude::*};
 
 fn main() {
     App::new()
@@ -156,8 +156,8 @@ fn environment_map_load_finish(
     label_query: Query<Entity, With<EnvironmentMapLabel>>,
 ) {
     if let Ok(environment_map) = environment_maps.get_single() {
-        if asset_server.load_state(&environment_map.diffuse_map) == AssetLoadState::Loaded
-            && asset_server.load_state(&environment_map.specular_map) == AssetLoadState::Loaded
+        if asset_server.load_state(&environment_map.diffuse_map) == LoadState::Loaded
+            && asset_server.load_state(&environment_map.specular_map) == LoadState::Loaded
         {
             if let Ok(label_entity) = label_query.get_single() {
                 commands.entity(label_entity).despawn();

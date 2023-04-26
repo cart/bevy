@@ -1,5 +1,5 @@
 use crate::Anchor;
-use bevy_asset::{Asset, Handle};
+use bevy_asset::{Asset, AssetId, Handle};
 use bevy_ecs::{component::Component, reflect::ReflectComponent};
 use bevy_math::{Rect, Vec2};
 use bevy_reflect::{FromReflect, Reflect};
@@ -19,7 +19,7 @@ pub struct TextureAtlas {
     /// The specific areas of the atlas where each texture can be found
     pub textures: Vec<Rect>,
     /// Mapping from texture handle to index
-    pub(crate) texture_handles: Option<HashMap<Handle<Image>, usize>>,
+    pub(crate) texture_handles: Option<HashMap<AssetId<Image>, usize>>,
 }
 
 #[derive(Component, Debug, Clone, Reflect, FromReflect)]
@@ -147,9 +147,10 @@ impl TextureAtlas {
     }
 
     /// Returns the index of the texture corresponding to the given image handle in the [`TextureAtlas`]
-    pub fn get_texture_index(&self, texture: &Handle<Image>) -> Option<usize> {
+    pub fn get_texture_index(&self, texture: impl Into<AssetId<Image>>) -> Option<usize> {
+        let id = texture.into();
         self.texture_handles
             .as_ref()
-            .and_then(|texture_handles| texture_handles.get(texture).cloned())
+            .and_then(|texture_handles| texture_handles.get(&id).cloned())
     }
 }

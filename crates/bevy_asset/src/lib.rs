@@ -24,6 +24,7 @@ mod server;
 pub use assets::*;
 pub use bevy_asset_macros::Asset;
 pub use event::*;
+pub use folder::*;
 pub use futures_lite::{AsyncReadExt, AsyncWriteExt};
 pub use handle::*;
 pub use id::*;
@@ -33,16 +34,13 @@ pub use reflect::*;
 pub use server::*;
 
 use crate::{
-    folder::LoadedFolder,
-    io::{file::FileAssetWriter, processor_gated::ProcessorGatedReader, AssetWriter},
+    io::{processor_gated::ProcessorGatedReader, AssetProvider, AssetProviders},
     processor::{AssetProcessor, AssetProcessorPlugin},
 };
 use bevy_app::{App, AppTypeRegistry, Plugin, PostUpdate};
-use bevy_ecs::{schedule::IntoSystemConfigs, system::Resource, world::FromWorld};
+use bevy_ecs::{schedule::IntoSystemConfigs, world::FromWorld};
 use bevy_log::error;
 use bevy_reflect::{FromReflect, GetTypeRegistration, Reflect};
-use bevy_utils::HashMap;
-use io::{file::FileAssetReader, AssetReader};
 use std::{any::TypeId, sync::Arc};
 
 pub enum AssetPlugin {
@@ -165,113 +163,6 @@ pub trait Asset: Send + Sync + 'static {
     fn for_each_dependency(&self, process: impl FnMut(UntypedAssetId));
 }
 
-#[derive(Default, Clone, Debug)]
-pub enum AssetProvider {
-    #[default]
-    Default,
-    Custom(String),
-}
-
-#[derive(Resource, Default)]
-pub struct AssetProviders {
-    readers: HashMap<String, Box<dyn FnMut() -> Box<dyn AssetReader> + Send + Sync>>,
-    writers: HashMap<String, Box<dyn FnMut() -> Box<dyn AssetWriter> + Send + Sync>>,
-}
-
-impl AssetProviders {
-    pub fn insert_reader(
-        &mut self,
-        provider: &str,
-        get_reader: impl FnMut() -> Box<dyn AssetReader> + Send + Sync + 'static,
-    ) {
-        self.readers
-            .insert(provider.to_string(), Box::new(get_reader));
-    }
-    pub fn with_reader(
-        mut self,
-        provider: &str,
-        get_reader: impl FnMut() -> Box<dyn AssetReader> + Send + Sync + 'static,
-    ) -> Self {
-        self.insert_reader(provider, get_reader);
-        self
-    }
-
-    pub fn insert_writer(
-        &mut self,
-        provider: &str,
-        get_writer: impl FnMut() -> Box<dyn AssetWriter> + Send + Sync + 'static,
-    ) {
-        self.writers
-            .insert(provider.to_string(), Box::new(get_writer));
-    }
-    pub fn with_writer(
-        mut self,
-        provider: &str,
-        get_writer: impl FnMut() -> Box<dyn AssetWriter> + Send + Sync + 'static,
-    ) -> Self {
-        self.insert_writer(provider, get_writer);
-        self
-    }
-
-    pub fn get_source_reader(&mut self, provider: &AssetProvider) -> Box<dyn AssetReader> {
-        match provider {
-            AssetProvider::Default => {
-                Box::new(FileAssetReader::new(AssetPlugin::DEFAULT_FILE_SOURCE))
-            }
-            AssetProvider::Custom(provider) => {
-                let get_reader = self
-                    .readers
-                    .get_mut(provider)
-                    .unwrap_or_else(|| panic!("Asset Provider {} does not exist", provider));
-                (get_reader)()
-            }
-        }
-    }
-    pub fn get_destination_reader(&mut self, provider: &AssetProvider) -> Box<dyn AssetReader> {
-        match provider {
-            AssetProvider::Default => {
-                Box::new(FileAssetReader::new(AssetPlugin::DEFAULT_FILE_DESTINATION))
-            }
-            AssetProvider::Custom(provider) => {
-                let get_reader = self
-                    .readers
-                    .get_mut(provider)
-                    .unwrap_or_else(|| panic!("Asset Provider {} does not exist", provider));
-                (get_reader)()
-            }
-        }
-    }
-
-    pub fn get_source_writer(&mut self, provider: &AssetProvider) -> Box<dyn AssetWriter> {
-        match provider {
-            AssetProvider::Default => {
-                Box::new(FileAssetWriter::new(AssetPlugin::DEFAULT_FILE_SOURCE))
-            }
-            AssetProvider::Custom(provider) => {
-                let get_writer = self
-                    .writers
-                    .get_mut(provider)
-                    .unwrap_or_else(|| panic!("Asset Provider {} does not exist", provider));
-                (get_writer)()
-            }
-        }
-    }
-    pub fn get_destination_writer(&mut self, provider: &AssetProvider) -> Box<dyn AssetWriter> {
-        match provider {
-            AssetProvider::Default => {
-                Box::new(FileAssetWriter::new(AssetPlugin::DEFAULT_FILE_DESTINATION))
-            }
-            AssetProvider::Custom(provider) => {
-                let get_writer = self
-                    .writers
-                    .get_mut(provider)
-                    .unwrap_or_else(|| panic!("Asset Provider {} does not exist", provider));
-                (get_writer)()
-            }
-        }
-    }
-}
-
 pub trait AssetApp {
     fn register_asset_loader<L: AssetLoader>(&mut self, loader: L) -> &mut Self;
     fn init_asset_loader<L: AssetLoader + FromWorld>(&mut self) -> &mut Self;
@@ -366,9 +257,8 @@ mod tests {
             Reader,
         },
         loader::{AssetLoader, LoadContext},
-        Asset, AssetApp, AssetDependencyLoadState, AssetEvent, AssetId, AssetLoadState,
-        AssetPlugin, AssetProvider, AssetProviders, AssetRecursiveDependencyLoadState, AssetServer,
-        Assets,
+        Asset, AssetApp, AssetEvent, AssetId, AssetPlugin, AssetProvider, AssetProviders,
+        AssetServer, Assets, DependencyLoadState, LoadState, RecursiveDependencyLoadState,
     };
     use bevy_app::{App, Update};
     use bevy_core::TaskPoolPlugin;
@@ -561,15 +451,15 @@ mod tests {
             let a_text = get::<CoolText>(&app.world, a_id);
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert!(a_text.is_none(), "a's asset should not exist yet");
-            assert_eq!(a_load, AssetLoadState::Loading, "a should still be loading");
+            assert_eq!(a_load, LoadState::Loading, "a should still be loading");
             assert_eq!(
                 a_deps,
-                AssetDependencyLoadState::Loading,
+                DependencyLoadState::Loading,
                 "a deps should still be loading"
             );
             assert_eq!(
                 a_rec_deps,
-                AssetRecursiveDependencyLoadState::Loading,
+                RecursiveDependencyLoadState::Loading,
                 "a recursive deps should still be loading"
             );
         }
@@ -582,25 +472,25 @@ mod tests {
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.dependencies.len(), 2);
-            assert_eq!(a_load, AssetLoadState::Loaded, "a is loaded");
-            assert_eq!(a_deps, AssetDependencyLoadState::Loading);
-            assert_eq!(a_rec_deps, AssetRecursiveDependencyLoadState::Loading);
+            assert_eq!(a_load, LoadState::Loaded, "a is loaded");
+            assert_eq!(a_deps, DependencyLoadState::Loading);
+            assert_eq!(a_rec_deps, RecursiveDependencyLoadState::Loading);
 
             let b_id = a_text.dependencies[0].id();
             let b_text = get::<CoolText>(world, b_id);
             let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
             assert!(b_text.is_none(), "b component should not exist yet");
-            assert_eq!(b_load, AssetLoadState::Loading);
-            assert_eq!(b_deps, AssetDependencyLoadState::Loading);
-            assert_eq!(b_rec_deps, AssetRecursiveDependencyLoadState::Loading);
+            assert_eq!(b_load, LoadState::Loading);
+            assert_eq!(b_deps, DependencyLoadState::Loading);
+            assert_eq!(b_rec_deps, RecursiveDependencyLoadState::Loading);
 
             let c_id = a_text.dependencies[1].id();
             let c_text = get::<CoolText>(world, c_id);
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
             assert!(c_text.is_none(), "c component should not exist yet");
-            assert_eq!(c_load, AssetLoadState::Loading);
-            assert_eq!(c_deps, AssetDependencyLoadState::Loading);
-            assert_eq!(c_rec_deps, AssetRecursiveDependencyLoadState::Loading);
+            assert_eq!(c_load, LoadState::Loading);
+            assert_eq!(c_deps, DependencyLoadState::Loading);
+            assert_eq!(c_rec_deps, RecursiveDependencyLoadState::Loading);
             Some(())
         });
 
@@ -612,25 +502,25 @@ mod tests {
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.dependencies.len(), 2);
-            assert_eq!(a_load, AssetLoadState::Loaded);
-            assert_eq!(a_deps, AssetDependencyLoadState::Loading);
-            assert_eq!(a_rec_deps, AssetRecursiveDependencyLoadState::Loading);
+            assert_eq!(a_load, LoadState::Loaded);
+            assert_eq!(a_deps, DependencyLoadState::Loading);
+            assert_eq!(a_rec_deps, RecursiveDependencyLoadState::Loading);
 
             let b_id = a_text.dependencies[0].id();
             let b_text = get::<CoolText>(world, b_id)?;
             let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
             assert_eq!(b_text.text, "b");
-            assert_eq!(b_load, AssetLoadState::Loaded);
-            assert_eq!(b_deps, AssetDependencyLoadState::Loaded);
-            assert_eq!(b_rec_deps, AssetRecursiveDependencyLoadState::Loaded);
+            assert_eq!(b_load, LoadState::Loaded);
+            assert_eq!(b_deps, DependencyLoadState::Loaded);
+            assert_eq!(b_rec_deps, RecursiveDependencyLoadState::Loaded);
 
             let c_id = a_text.dependencies[1].id();
             let c_text = get::<CoolText>(world, c_id);
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
             assert!(c_text.is_none(), "c component should not exist yet");
-            assert_eq!(c_load, AssetLoadState::Loading);
-            assert_eq!(c_deps, AssetDependencyLoadState::Loading);
-            assert_eq!(c_rec_deps, AssetRecursiveDependencyLoadState::Loading);
+            assert_eq!(c_load, LoadState::Loading);
+            assert_eq!(c_deps, DependencyLoadState::Loading);
+            assert_eq!(c_rec_deps, RecursiveDependencyLoadState::Loading);
             Some(())
         });
 
@@ -647,31 +537,31 @@ mod tests {
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.embedded, "");
             assert_eq!(a_text.dependencies.len(), 2);
-            assert_eq!(a_load, AssetLoadState::Loaded);
+            assert_eq!(a_load, LoadState::Loaded);
 
             let b_id = a_text.dependencies[0].id();
             let b_text = get::<CoolText>(world, b_id)?;
             let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
             assert_eq!(b_text.text, "b");
             assert_eq!(b_text.embedded, "");
-            assert_eq!(b_load, AssetLoadState::Loaded);
-            assert_eq!(b_deps, AssetDependencyLoadState::Loaded);
-            assert_eq!(b_rec_deps, AssetRecursiveDependencyLoadState::Loaded);
+            assert_eq!(b_load, LoadState::Loaded);
+            assert_eq!(b_deps, DependencyLoadState::Loaded);
+            assert_eq!(b_rec_deps, RecursiveDependencyLoadState::Loaded);
 
             let c_id = a_text.dependencies[1].id();
             let c_text = get::<CoolText>(world, c_id)?;
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
             assert_eq!(c_text.text, "c");
             assert_eq!(c_text.embedded, "ab");
-            assert_eq!(c_load, AssetLoadState::Loaded);
+            assert_eq!(c_load, LoadState::Loaded);
             assert_eq!(
                 c_deps,
-                AssetDependencyLoadState::Loading,
+                DependencyLoadState::Loading,
                 "c deps should not be loaded yet because d has not loaded"
             );
             assert_eq!(
                 c_rec_deps,
-                AssetRecursiveDependencyLoadState::Loading,
+                RecursiveDependencyLoadState::Loading,
                 "c rec deps should not be loaded yet because d has not loaded"
             );
 
@@ -681,26 +571,26 @@ mod tests {
             assert_eq!(sub_text.text, "hello");
             let (sub_text_load, sub_text_deps, sub_text_rec_deps) =
                 asset_server.get_load_states(sub_text_id).unwrap();
-            assert_eq!(sub_text_load, AssetLoadState::Loaded);
-            assert_eq!(sub_text_deps, AssetDependencyLoadState::Loaded);
-            assert_eq!(sub_text_rec_deps, AssetRecursiveDependencyLoadState::Loaded);
+            assert_eq!(sub_text_load, LoadState::Loaded);
+            assert_eq!(sub_text_deps, DependencyLoadState::Loaded);
+            assert_eq!(sub_text_rec_deps, RecursiveDependencyLoadState::Loaded);
 
             let d_id = c_text.dependencies[0].id();
             let d_text = get::<CoolText>(world, d_id);
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
             assert!(d_text.is_none(), "d component should not exist yet");
-            assert_eq!(d_load, AssetLoadState::Loading);
-            assert_eq!(d_deps, AssetDependencyLoadState::Loading);
-            assert_eq!(d_rec_deps, AssetRecursiveDependencyLoadState::Loading);
+            assert_eq!(d_load, LoadState::Loading);
+            assert_eq!(d_deps, DependencyLoadState::Loading);
+            assert_eq!(d_rec_deps, RecursiveDependencyLoadState::Loading);
 
             assert_eq!(
                 a_deps,
-                AssetDependencyLoadState::Loaded,
+                DependencyLoadState::Loaded,
                 "If c has been loaded, the a deps should all be considered loaded"
             );
             assert_eq!(
                 a_rec_deps,
-                AssetRecursiveDependencyLoadState::Loading,
+                RecursiveDependencyLoadState::Loading,
                 "d is not loaded, so a's recursive deps should still be loading"
             );
             world.insert_resource(IdResults { b_id, c_id, d_id });
@@ -716,22 +606,22 @@ mod tests {
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
             assert_eq!(c_text.text, "c");
             assert_eq!(c_text.embedded, "ab");
-            assert_eq!(c_load, AssetLoadState::Loaded);
-            assert_eq!(c_deps, AssetDependencyLoadState::Loaded);
-            assert_eq!(c_rec_deps, AssetRecursiveDependencyLoadState::Loaded);
+            assert_eq!(c_load, LoadState::Loaded);
+            assert_eq!(c_deps, DependencyLoadState::Loaded);
+            assert_eq!(c_rec_deps, RecursiveDependencyLoadState::Loaded);
 
             let d_id = c_text.dependencies[0].id();
             let d_text = get::<CoolText>(world, d_id)?;
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
             assert_eq!(d_text.text, "d");
             assert_eq!(d_text.embedded, "");
-            assert_eq!(d_load, AssetLoadState::Loaded);
-            assert_eq!(d_deps, AssetDependencyLoadState::Loaded);
-            assert_eq!(d_rec_deps, AssetRecursiveDependencyLoadState::Loaded);
+            assert_eq!(d_load, LoadState::Loaded);
+            assert_eq!(d_deps, DependencyLoadState::Loaded);
+            assert_eq!(d_rec_deps, RecursiveDependencyLoadState::Loaded);
 
             assert_eq!(
                 a_rec_deps,
-                AssetRecursiveDependencyLoadState::Loaded,
+                RecursiveDependencyLoadState::Loaded,
                 "d is loaded, so a's recursive deps should be loaded"
             );
             Some(())
@@ -875,30 +765,30 @@ mod tests {
             let d_id = c_text.dependencies[0].id();
             let d_text = get::<CoolText>(world, d_id);
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
-            if d_load != AssetLoadState::Failed {
+            if d_load != LoadState::Failed {
                 // wait until d has exited the loading state
                 return None;
             }
 
             assert!(d_text.is_none());
-            assert_eq!(d_load, AssetLoadState::Failed);
-            assert_eq!(d_deps, AssetDependencyLoadState::Failed);
-            assert_eq!(d_rec_deps, AssetRecursiveDependencyLoadState::Failed);
+            assert_eq!(d_load, LoadState::Failed);
+            assert_eq!(d_deps, DependencyLoadState::Failed);
+            assert_eq!(d_rec_deps, RecursiveDependencyLoadState::Failed);
 
             assert_eq!(a_text.text, "a");
-            assert_eq!(a_load, AssetLoadState::Loaded);
-            assert_eq!(a_deps, AssetDependencyLoadState::Loaded);
-            assert_eq!(a_rec_deps, AssetRecursiveDependencyLoadState::Failed);
+            assert_eq!(a_load, LoadState::Loaded);
+            assert_eq!(a_deps, DependencyLoadState::Loaded);
+            assert_eq!(a_rec_deps, RecursiveDependencyLoadState::Failed);
 
             assert_eq!(b_text.text, "b");
-            assert_eq!(b_load, AssetLoadState::Loaded);
-            assert_eq!(b_deps, AssetDependencyLoadState::Loaded);
-            assert_eq!(b_rec_deps, AssetRecursiveDependencyLoadState::Loaded);
+            assert_eq!(b_load, LoadState::Loaded);
+            assert_eq!(b_deps, DependencyLoadState::Loaded);
+            assert_eq!(b_rec_deps, RecursiveDependencyLoadState::Loaded);
 
             assert_eq!(c_text.text, "c");
-            assert_eq!(c_load, AssetLoadState::Loaded);
-            assert_eq!(c_deps, AssetDependencyLoadState::Failed);
-            assert_eq!(c_rec_deps, AssetRecursiveDependencyLoadState::Failed);
+            assert_eq!(c_load, LoadState::Loaded);
+            assert_eq!(c_deps, DependencyLoadState::Failed);
+            assert_eq!(c_rec_deps, RecursiveDependencyLoadState::Failed);
 
             Some(())
         });

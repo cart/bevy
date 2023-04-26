@@ -50,9 +50,9 @@ pub(crate) struct AssetLoaders {
 struct AssetInfo {
     weak_handle: Weak<InternalAssetHandle>,
     path: Option<AssetPath<'static>>,
-    load_state: AssetLoadState,
-    dep_load_state: AssetDependencyLoadState,
-    rec_dep_load_state: AssetRecursiveDependencyLoadState,
+    load_state: LoadState,
+    dep_load_state: DependencyLoadState,
+    rec_dep_load_state: RecursiveDependencyLoadState,
     loading_dependencies: usize,
     failed_dependencies: usize,
     loading_rec_dependencies: usize,
@@ -67,9 +67,9 @@ impl AssetInfo {
         Self {
             weak_handle,
             path,
-            load_state: AssetLoadState::NotLoaded,
-            dep_load_state: AssetDependencyLoadState::Loading,
-            rec_dep_load_state: AssetRecursiveDependencyLoadState::Loading,
+            load_state: LoadState::NotLoaded,
+            dep_load_state: DependencyLoadState::NotLoaded,
+            rec_dep_load_state: RecursiveDependencyLoadState::NotLoaded,
             loading_dependencies: 0,
             failed_dependencies: 0,
             loading_rec_dependencies: 0,
@@ -110,7 +110,9 @@ impl AssetInfos {
         let handle = provider.reserve_handle_internal(true);
         let mut info = AssetInfo::new(Arc::downgrade(&handle), path);
         if loading {
-            info.load_state = AssetLoadState::Loading;
+            info.load_state = LoadState::Loading;
+            info.dep_load_state = DependencyLoadState::Loading;
+            info.rec_dep_load_state = RecursiveDependencyLoadState::Loading;
         }
         infos.insert(handle.id, info);
         UntypedHandle::Strong(handle)
@@ -132,9 +134,11 @@ impl AssetInfos {
                 let mut should_load = false;
                 if loading_mode == HandleLoadingMode::Force
                     || (loading_mode == HandleLoadingMode::Request
-                        && info.load_state == AssetLoadState::NotLoaded)
+                        && info.load_state == LoadState::NotLoaded)
                 {
-                    info.load_state = AssetLoadState::Loading;
+                    info.load_state = LoadState::Loading;
+                    info.dep_load_state = DependencyLoadState::Loading;
+                    info.rec_dep_load_state = RecursiveDependencyLoadState::Loading;
                     should_load = true;
                 }
 
@@ -217,31 +221,32 @@ impl AssetInfos {
         for dep_id in loaded_asset.dependencies.iter() {
             if let Some(dep_info) = self.get_mut(dep_id.id()) {
                 match dep_info.load_state {
-                    AssetLoadState::NotLoaded | AssetLoadState::Loading => {
+                    LoadState::NotLoaded | LoadState::Loading => {
                         // If dependency is loading, wait for it.
                         dep_info.dependants_waiting_on_load.insert(loaded_asset_id);
                     }
-                    AssetLoadState::Loaded => {
+                    LoadState::Loaded => {
                         // If dependency is loaded, reduce our count by one
                         loading_deps -= 1;
                     }
-                    AssetLoadState::Failed => {
+                    LoadState::Failed => {
                         failed_deps += 1;
                         loading_deps -= 1;
                     }
                 }
                 match dep_info.rec_dep_load_state {
-                    AssetRecursiveDependencyLoadState::Loading => {
+                    RecursiveDependencyLoadState::Loading
+                    | RecursiveDependencyLoadState::NotLoaded => {
                         // If dependency is loading, wait for it.
                         dep_info
                             .dependants_waiting_on_recursive_dep_load
                             .insert(loaded_asset_id);
                     }
-                    AssetRecursiveDependencyLoadState::Loaded => {
+                    RecursiveDependencyLoadState::Loaded => {
                         // If dependency is loaded, reduce our count by one
                         loading_rec_deps -= 1;
                     }
-                    AssetRecursiveDependencyLoadState::Failed => {
+                    RecursiveDependencyLoadState::Failed => {
                         failed_rec_deps += 1;
                         loading_rec_deps -= 1;
                     }
@@ -258,15 +263,15 @@ impl AssetInfos {
         }
 
         let dep_load_state = match (loading_deps, failed_deps) {
-            (0, 0) => AssetDependencyLoadState::Loaded,
-            (_loading, 0) => AssetDependencyLoadState::Loading,
-            (_loading, _failed) => AssetDependencyLoadState::Failed,
+            (0, 0) => DependencyLoadState::Loaded,
+            (_loading, 0) => DependencyLoadState::Loading,
+            (_loading, _failed) => DependencyLoadState::Failed,
         };
 
         let rec_dep_load_state = match (loading_rec_deps, failed_rec_deps) {
-            (0, 0) => AssetRecursiveDependencyLoadState::Loaded,
-            (_loading, 0) => AssetRecursiveDependencyLoadState::Loading,
-            (_loading, _failed) => AssetRecursiveDependencyLoadState::Failed,
+            (0, 0) => RecursiveDependencyLoadState::Loaded,
+            (_loading, 0) => RecursiveDependencyLoadState::Loading,
+            (_loading, _failed) => RecursiveDependencyLoadState::Failed,
         };
 
         let (dependants_waiting_on_load, dependants_waiting_on_rec_load) = {
@@ -277,14 +282,13 @@ impl AssetInfos {
             info.failed_dependencies = failed_deps;
             info.loading_rec_dependencies = loading_rec_deps;
             info.failed_rec_dependencies = failed_rec_deps;
-            info.load_state = AssetLoadState::Loaded;
+            info.load_state = LoadState::Loaded;
             info.dep_load_state = dep_load_state;
             info.rec_dep_load_state = rec_dep_load_state;
 
             let dependants_waiting_on_rec_load = if matches!(
                 rec_dep_load_state,
-                AssetRecursiveDependencyLoadState::Loaded
-                    | AssetRecursiveDependencyLoadState::Failed
+                RecursiveDependencyLoadState::Loaded | RecursiveDependencyLoadState::Failed
             ) {
                 Some(std::mem::take(
                     &mut info.dependants_waiting_on_recursive_dep_load,
@@ -304,26 +308,26 @@ impl AssetInfos {
                 info.loading_dependencies -= 1;
                 if info.loading_dependencies == 0 {
                     // send dependencies loaded event
-                    info.dep_load_state = AssetDependencyLoadState::Loaded;
+                    info.dep_load_state = DependencyLoadState::Loaded;
                 }
             }
         }
 
         if let Some(dependants_waiting_on_rec_load) = dependants_waiting_on_rec_load {
             match rec_dep_load_state {
-                AssetRecursiveDependencyLoadState::Loaded => {
+                RecursiveDependencyLoadState::Loaded => {
                     for dep_id in dependants_waiting_on_rec_load {
                         Self::propagate_loaded_state(self, dep_id);
                     }
                 }
-                AssetRecursiveDependencyLoadState::Failed => {
+                RecursiveDependencyLoadState::Failed => {
                     for dep_id in dependants_waiting_on_rec_load {
                         Self::propagate_failed_state(self, dep_id);
                     }
                 }
-                AssetRecursiveDependencyLoadState::Loading => {
+                RecursiveDependencyLoadState::Loading | RecursiveDependencyLoadState::NotLoaded => {
                     // dependants_waiting_on_rec_load should be None in this case
-                    unreachable!("`Loading` state should never be propagated.")
+                    unreachable!("`Loading` and `NotLoaded` state should never be propagated.")
                 }
             }
         }
@@ -333,7 +337,7 @@ impl AssetInfos {
         let dependants_waiting_on_rec_load = if let Some(info) = infos.get_mut(id) {
             info.loading_rec_dependencies -= 1;
             if info.loading_rec_dependencies == 0 && info.failed_rec_dependencies == 0 {
-                info.rec_dep_load_state = AssetRecursiveDependencyLoadState::Loaded;
+                info.rec_dep_load_state = RecursiveDependencyLoadState::Loaded;
                 Some(std::mem::take(
                     &mut info.dependants_waiting_on_recursive_dep_load,
                 ))
@@ -355,7 +359,7 @@ impl AssetInfos {
         let dependants_waiting_on_rec_load = if let Some(info) = infos.get_mut(id) {
             info.loading_rec_dependencies -= 1;
             info.failed_rec_dependencies += 1;
-            info.rec_dep_load_state = AssetRecursiveDependencyLoadState::Failed;
+            info.rec_dep_load_state = RecursiveDependencyLoadState::Failed;
             Some(std::mem::take(
                 &mut info.dependants_waiting_on_recursive_dep_load,
             ))
@@ -375,9 +379,9 @@ impl AssetInfos {
             let info = self
                 .get_mut(id)
                 .expect("Asset info should always exist at this point");
-            info.load_state = AssetLoadState::Failed;
-            info.dep_load_state = AssetDependencyLoadState::Failed;
-            info.rec_dep_load_state = AssetRecursiveDependencyLoadState::Failed;
+            info.load_state = LoadState::Failed;
+            info.dep_load_state = DependencyLoadState::Failed;
+            info.rec_dep_load_state = RecursiveDependencyLoadState::Failed;
             (
                 std::mem::take(&mut info.dependants_waiting_on_load),
                 std::mem::take(&mut info.dependants_waiting_on_recursive_dep_load),
@@ -387,7 +391,7 @@ impl AssetInfos {
         for id in dependants_waiting_on_load {
             if let Some(info) = self.get_mut(id) {
                 info.loading_dependencies -= 1;
-                info.dep_load_state = AssetDependencyLoadState::Failed;
+                info.dep_load_state = DependencyLoadState::Failed;
             }
         }
 
@@ -767,11 +771,7 @@ impl AssetServer {
     pub fn get_load_states(
         &self,
         id: impl Into<UntypedAssetId>,
-    ) -> Option<(
-        AssetLoadState,
-        AssetDependencyLoadState,
-        AssetRecursiveDependencyLoadState,
-    )> {
+    ) -> Option<(LoadState, DependencyLoadState, RecursiveDependencyLoadState)> {
         self.data
             .infos
             .read()
@@ -779,17 +779,31 @@ impl AssetServer {
             .map(|i| (i.load_state, i.dep_load_state, i.rec_dep_load_state))
     }
 
-    pub fn get_load_state(&self, id: impl Into<UntypedAssetId>) -> Option<AssetLoadState> {
+    pub fn get_load_state(&self, id: impl Into<UntypedAssetId>) -> Option<LoadState> {
         self.data.infos.read().get(id.into()).map(|i| i.load_state)
     }
 
-    pub fn load_state(&self, id: impl Into<UntypedAssetId>) -> AssetLoadState {
-        let id = id.into();
-        let infos = self.data.infos.read();
-        infos
-            .get(id)
-            .map(|i| i.load_state)
-            .unwrap_or(AssetLoadState::NotLoaded)
+    pub fn get_recursive_dependency_load_state(
+        &self,
+        id: impl Into<UntypedAssetId>,
+    ) -> Option<RecursiveDependencyLoadState> {
+        self.data
+            .infos
+            .read()
+            .get(id.into())
+            .map(|i| i.rec_dep_load_state)
+    }
+
+    pub fn load_state(&self, id: impl Into<UntypedAssetId>) -> LoadState {
+        self.get_load_state(id).unwrap_or(LoadState::NotLoaded)
+    }
+
+    pub fn recursive_dependency_load_state(
+        &self,
+        id: impl Into<UntypedAssetId>,
+    ) -> RecursiveDependencyLoadState {
+        self.get_recursive_dependency_load_state(id)
+            .unwrap_or(RecursiveDependencyLoadState::NotLoaded)
     }
 
     /// Returns an active handle for the given path, if the asset at the given path has already started loading,
@@ -805,7 +819,7 @@ impl AssetServer {
         infos.get_path_handle(path)
     }
 
-    pub fn get_asset_path(&self, id: impl Into<UntypedAssetId>) -> Option<AssetPath<'static>> {
+    pub fn get_path(&self, id: impl Into<UntypedAssetId>) -> Option<AssetPath<'static>> {
         let infos = self.data.infos.read();
         let info = infos.get(id.into())?;
         Some(info.path.as_ref()?.to_owned())
@@ -918,7 +932,7 @@ pub fn handle_internal_asset_events(world: &mut World) {
 
 /// The load state of an asset.
 #[derive(Component, Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub enum AssetLoadState {
+pub enum LoadState {
     /// The asset has not started loading yet
     NotLoaded,
     /// The asset is in the process of loading.
@@ -931,7 +945,9 @@ pub enum AssetLoadState {
 
 /// The load state of an asset's dependencies.
 #[derive(Component, Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub enum AssetDependencyLoadState {
+pub enum DependencyLoadState {
+    /// The asset has not started loading yet
+    NotLoaded,
     /// Dependencies are still loading
     Loading,
     /// Dependencies have all loaded
@@ -942,7 +958,9 @@ pub enum AssetDependencyLoadState {
 
 /// The recursive load state of an asset's dependencies.
 #[derive(Component, Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub enum AssetRecursiveDependencyLoadState {
+pub enum RecursiveDependencyLoadState {
+    /// The asset has not started loading yet
+    NotLoaded,
     /// Dependencies in this asset's dependency tree are still loading
     Loading,
     /// Dependencies in this asset's dependency tree have all loaded

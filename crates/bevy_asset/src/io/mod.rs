@@ -3,7 +3,10 @@ pub mod gated;
 pub mod memory;
 pub mod processor_gated;
 
+mod provider;
+
 pub use futures_lite::{AsyncReadExt, AsyncWriteExt};
+pub use provider::*;
 
 use bevy_utils::BoxedFuture;
 use futures_io::{AsyncRead, AsyncWrite};

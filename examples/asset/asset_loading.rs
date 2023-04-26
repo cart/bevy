@@ -36,14 +36,6 @@ fn setup(
         info!("sphere hasn't loaded yet");
     }
 
-    // You can load all assets in a folder like this. This returns a handle to a LoadedFolder asset, which
-    // contains the handles of all assets in the folder. You can track the recursive load state of this asset to
-    // wait until all assets have been loaded.
-    let loaded_folder = asset_server.load_folder("models/monkey");
-
-    // Then any asset in the folder can be accessed like this:
-    let monkey_handle = asset_server.get_handle("models/monkey/Monkey.gltf#Mesh0/Primitive0");
-
     // You can also add assets directly to their Assets<T> storage:
     let material_handle = materials.add(StandardMaterial {
         base_color: Color::rgb(0.8, 0.7, 0.6),
@@ -52,7 +44,6 @@ fn setup(
 
     // monkey
     commands.spawn(PbrBundle {
-        mesh: monkey_handle,
         material: material_handle.clone(),
         transform: Transform::from_xyz(-3.0, 0.0, 0.0),
         ..default()

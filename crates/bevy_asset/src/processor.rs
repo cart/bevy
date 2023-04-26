@@ -1,12 +1,12 @@
 use crate::{
-    io::{AssetReaderError, AssetWriter, Writer},
+    io::{AssetProvider, AssetProviders, AssetReaderError, AssetWriter, Writer},
     loader::{AssetLoader, DeserializeMetaError, ErasedAssetLoader},
     meta::{
         AssetMeta, AssetMetaDyn, AssetMetaMinimal, ProcessorLoaderMeta, ProcessorMeta,
         META_FORMAT_VERSION,
     },
     saver::AssetSaver,
-    AssetProvider, AssetProviders, AssetServer, ErasedLoadedAsset,
+    AssetServer, ErasedLoadedAsset,
 };
 use async_broadcast::{Receiver, Sender};
 use bevy_app::{App, Plugin};
