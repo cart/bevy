@@ -1,4 +1,4 @@
-use crate::{Asset, AssetId, AssetIndexAllocator, InternalAssetId, UntypedAssetId};
+use crate::{Asset, AssetId, AssetIndexAllocator, AssetPath, InternalAssetId, UntypedAssetId};
 use bevy_ecs::prelude::*;
 use bevy_reflect::{FromReflect, Reflect, ReflectDeserialize, ReflectSerialize, Uuid};
 use crossbeam_channel::{Receiver, Sender};
@@ -38,10 +38,12 @@ impl AssetHandleProvider {
         &self,
         id: InternalAssetId,
         asset_server_managed: bool,
+        path: Option<AssetPath<'static>>,
     ) -> Arc<InternalAssetHandle> {
         Arc::new(InternalAssetHandle {
             id: id.untyped(self.type_id),
             drop_sender: self.drop_sender.clone(),
+            path,
             asset_server_managed,
         })
     }
@@ -49,14 +51,15 @@ impl AssetHandleProvider {
     pub(crate) fn reserve_handle_internal(
         &self,
         asset_server_managed: bool,
+        path: Option<AssetPath<'static>>,
     ) -> Arc<InternalAssetHandle> {
         let index = self.allocator.reserve();
-        self.get_handle(InternalAssetId::Index(index), asset_server_managed)
+        self.get_handle(InternalAssetId::Index(index), asset_server_managed, path)
     }
 
     pub fn reserve_handle(&self) -> UntypedHandle {
         let index = self.allocator.reserve();
-        UntypedHandle::Strong(self.get_handle(InternalAssetId::Index(index), false))
+        UntypedHandle::Strong(self.get_handle(InternalAssetId::Index(index), false, None))
     }
 }
 
@@ -64,6 +67,7 @@ impl AssetHandleProvider {
 pub struct InternalAssetHandle {
     pub(crate) id: UntypedAssetId,
     pub(crate) asset_server_managed: bool,
+    pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) drop_sender: Sender<DropEvent>,
 }
 
@@ -108,6 +112,15 @@ impl<A: Asset> Handle<A> {
         }
     }
 
+    /// Returns the path if this is (1) a strong handle and (2) the asset has a path
+    #[inline]
+    pub fn path(&self) -> Option<&AssetPath<'static>> {
+        match self {
+            Handle::Strong(handle) => handle.path.as_ref(),
+            Handle::Weak(_) => None,
+        }
+    }
+
     /// Returns `true` if this is a weak handle.
     #[inline]
     pub fn is_weak(&self) -> bool {
@@ -148,7 +161,12 @@ impl<A: Asset> std::fmt::Debug for Handle<A> {
         let name = std::any::type_name::<A>().split("::").last().unwrap();
         match self {
             Handle::Strong(handle) => {
-                write!(f, "StrongHandle<{name}>({:?})", handle.id.internal())
+                write!(
+                    f,
+                    "StrongHandle<{name}>{{ id: {:?}, path: {:?} }}",
+                    handle.id.internal(),
+                    handle.path
+                )
             }
             Handle::Weak(id) => write!(f, "WeakHandle<{name}>({:?})", id.internal()),
         }
@@ -203,7 +221,7 @@ impl<'de, A: Asset> Deserialize<'de> for Handle<A> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum UntypedHandle {
     Strong(Arc<InternalAssetHandle>),
     Weak(UntypedAssetId),
@@ -215,6 +233,15 @@ impl UntypedHandle {
         match self {
             UntypedHandle::Strong(handle) => handle.id,
             UntypedHandle::Weak(id) => *id,
+        }
+    }
+
+    /// Returns the path if this is (1) a strong handle and (2) the asset has a path
+    #[inline]
+    pub fn path(&self) -> Option<&AssetPath<'static>> {
+        match self {
+            UntypedHandle::Strong(handle) => handle.path.as_ref(),
+            UntypedHandle::Weak(_) => None,
         }
     }
 
@@ -283,5 +310,27 @@ impl Hash for UntypedHandle {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id().hash(state);
         self.type_id().hash(state);
+    }
+}
+
+impl std::fmt::Debug for UntypedHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UntypedHandle::Strong(handle) => {
+                write!(
+                    f,
+                    "StrongHandle{{ type_id: {:?}, id: {:?}, path: {:?} }}",
+                    handle.id.type_id(),
+                    handle.id.internal(),
+                    handle.path
+                )
+            }
+            UntypedHandle::Weak(id) => write!(
+                f,
+                "WeakHandle{{ type_id: {:?}, id: {:?} }}",
+                id.type_id(),
+                id.internal()
+            ),
+        }
     }
 }

@@ -282,7 +282,7 @@ impl<A: Asset> Assets<A> {
     pub fn add(&mut self, asset: A) -> Handle<A> {
         let index = self.dense_storage.allocator.reserve();
         self.insert_with_index(index, asset);
-        Handle::Strong(self.handle_provider.get_handle(index.into(), false))
+        Handle::Strong(self.handle_provider.get_handle(index.into(), false, None))
     }
 
     #[inline]

@@ -107,7 +107,7 @@ impl AssetInfos {
             )
         });
 
-        let handle = provider.reserve_handle_internal(true);
+        let handle = provider.reserve_handle_internal(true, path.clone());
         let mut info = AssetInfo::new(Arc::downgrade(&handle), path);
         if loading {
             info.load_state = LoadState::Loading;
@@ -162,7 +162,7 @@ impl AssetInfos {
                             type_id
                         )
                     });
-                    let handle = provider.get_handle(id.internal(), true);
+                    let handle = provider.get_handle(id.internal(), true, Some(path));
                     info.weak_handle = Arc::downgrade(&handle);
                     (UntypedHandle::Strong(handle), should_load)
                 }

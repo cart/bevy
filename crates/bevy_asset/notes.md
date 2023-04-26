@@ -298,32 +298,52 @@ struct Asset<T: Asset> {
 
 ### MVP
 
-* Adopt old-style id + storage system
-    * Update load interfaces to account for TypeId being needed for handle creation
-        * TypeId sources (least to most important)
-            * From extension (hint that could be wrong ... overridden by handle type and meta)
-            * From handle load (hint that could be wrong ... won't exist for untyped loads, overridden by meta, must be compatible with extension) 
-            * From meta-defined loader (source of truth if it exists)
-        * Untyped loading
-            * Check 
-        * Interfaces
-        * make tests to ensure id allocation fails at the appropriate time for "mismatched types" like `let h: Handle<Mesh> = assets.load("x.png");`
-    * Who tracks handle roots? This should probably be the Assets collection
-    * Try to remove crossbeam channels for recycling ids
-* Impl Reflect and FromReflect for Handle
+* Other OS backends: Android, Web
+* Try to remove crossbeam channels for recycling ids
+* Proprely impl Reflect and FromReflect for Handle
 * Final pass over todo! and TODO / PERF
 * Validate dependency types in preprocessor? 
 * Asset _unloading_ and _re-loading_ that allows handles to be kept alive while unloading the asset data itself
     * Being able to kick off re-loads (that re-validate existing handles) seems useful!
     * How would events be handled here?
+* Asset dependency derive
+    * LoadedFolder needs this
 * Hot Reloading
 * Might want to gate dep count increments / decrements on hashset ops (or just use hashsets). Otherwise reloading a dep could affect load correctness. 
-* Consider de-duping LoadState / only storing in ECS
-    * The problem with this is entities are only created when loading event is processed. If an asset loads before the loading event is processed for a dep, the entity won't exist yet.
-    * Do we just remove the components, treat "server state" as the "current source of truth" and then make events the way to listen for changes? 
+    * Use a graph impl (bevy_graph?) for simplicity and correctness?
 * Handles dropping before load breaks?
     * Implemented slow loop fix ... do better
     * Add test to ensure this works correctly
+* Should we combine meta + asset loading apis?
+* More granular preprocessor locking
+    * Global gate on scan (to build view of the world)
+    * Granular gate on individual outputs (maybe done in Assets directly?)
+* Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
+
+```rust
+#[derive(Resource, Loadable)]
+// Loadable could also implement FromWorld
+struct MyAssets {
+  #[load("a.png")]
+  a: Handle<Image>
+  #[load("b.png")]
+  b: Handle<Image>
+}
+// ?
+fn load_resource<T: Loadable + Resource>(&self) {
+  let loadable = T::load(&self);
+  self.queue_loaded_resource(loadable)
+}
+// bad name
+// also not great UX ... need to register MyAssets as an asset and look it up, despite it being
+// created on the spot. Elegant design but might be worth hacking this in to be -> MyAssets
+let my_assets: Handle<MyAssets> = server.load_loadable(); 
+fn load_loadable<T: Loadable>(&self) -> Handle<T> {
+  let my_assets = T::load(&self);
+  self.load_asset(my_assets)
+}
+
+```
 
 ### Porting
 
@@ -335,36 +355,11 @@ struct Asset<T: Asset> {
 
 ### Maybe before PR
 
-* Other OS backends: Android, Web
-* Should we combine meta + asset loading apis?
-* More granular preprocessor locking
-    * Global gate on scan (to build view of the world)
-    * Granular gate on individual outputs (maybe done in Assets directly?)
-* Using load_direct_async for "embedded" processor dependencies means we "re-load" such dependencies multiple times. On the other hand, maybe we want this ownership model.
 * async-fs just wraps std::fs and offloads blocking work to a separate thread pool. This prevents us from blocking the IO thread pool (which seems useful), but it isn't "true" async io. Do we need this or should we just use std::fs directly?
 * Do we try to prevent (or at least identify) circular dependencies?
-* Investigate non-crossbeam-channel approaches to id recycling 
-* Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
     * Handle::Uuid(Uuid), Handle::Index(Arc<IndexHandle>)
 * Consider storing asset path in strong handle. `handle.asset_path() -> Option<AssetPath>` would be very cool
     * Can we store _everything_ in the strong handle? Loading dependencies via atomics? Load state via rwlock?
-* Loading UX
-    * "dependency subscriber system"
-        * "AssetDependencies" derive?
-        * Maybe just a part of the Asset derive?
-        * Should be able to support two cases:
-            * Dependency tracking for non-asset-server assets
-            * Dependency tracking for groups of assets (ex: a list of assets you want to wait to load)
-    * Review bevy_asset_loader for UX ideas
-* Implied dependencies (via load calls / scopes) vs dependency enumeration (via Asset type). Call out tradeoffs in PR
-* Move Reader into LoadContext and add LoadContext::read_bytes()?
-    * This might block parallel access to LoadContext ... parallel asset loading must come first 
-* LabeledLoadContext pattern doesn't support parallel context access
-    * Consider moving to a `LoadedAsset<A>` approach (with loaded.with_dependency(&load_context, path))
-* load_folder ... this is a long-running operation ... it should not be sync
-    * consider something AssetCollection-like (ex: Return Handle<AssetCollection>)?
-    * Multicast pub-sub?
-    * A new LoadedFolder asset type and `asset.load_folder("") -> Handle<LoadedFolder>`
 * "Debug" Asset Server
     * Multiple asset sources (add src to AssetPath: `src://path.png#label`)
         * register a debug source? `asset_server.load_asset(LoadedAsset::from(my_shader).with_path_unchecked("debug://bevy_render/shaders/foo.wgsl"))`
@@ -472,6 +467,7 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * multiple asset sources
 * Better non-blocking folder loading: LoadedFolder asset 
 * Asset system usability
+    * handle.path()
 
 ### Next Steps
 
