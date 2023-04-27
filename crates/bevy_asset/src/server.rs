@@ -608,7 +608,7 @@ impl AssetServer {
             e
         })?;
 
-        let has_label = path.label().is_none();
+        let has_label = path.label().is_some();
 
         let (handle, should_load) = match input_handle {
             Some(handle) => {
