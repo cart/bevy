@@ -251,56 +251,49 @@ struct Asset<T: Asset> {
 
 ### Currently On My Mind
 
-* How to hand out entity/asset handles during load?
-* Using Entities as Handles lazily creates a "duplicate" problem. Would require RWLocks
-* Callout that "this impl is aspirational"
-    * Hinges on RwLocking once for handles being ok
-    * Hinges on non-world ref parallel entity allocation being possible
-* Maybe just use a crossbeam channel for pending ents. Would make reuse across threads possible?
-* Should we "pre-empt" loading dependencies by encoding them in the meta file? Currently deps are handled as part of the loader
-* Overriding default loaders would require loading assetmeta _first_, but this impl relies on knowing the loader type ahead of time (from the path)
-* Can erased loaders store some state?
-    * Ex: default_meta could return a ref, could store a "passthrough" flag
-* Add option to reuse loader settings in processor
-* Should retrieving Meta and Asset bytes be a single call in the interface?
-    * would enable transactionality
-* Maybe AssetMetaDyn could use erased serde w/ a custom deserializer to avoid double-parsing / AssetMetaMinimal
-* AssetPath could avoid a lot of allocations by impling "real cows". Could generally be smarter about these. Do a pass to avoid unnecessary clones
-* Add tests / mock out loader storage
-* How to handle "built in" assets?
-* Add type hint to loader (first check meta, then file extension, then hint)
-* Support loading assets from bytes? Maybe would handle "built in" assets.
-* How will "const" handles be "handled" here? We need them for Bundles.
-* "Default" handles?
-* Idea: store asset_path in handle, but still only use entity for identity  
-* Make load state a bitset: smaller, easier to access, cross-state info tests
-    * Cons: ECS change detection ceases to be useful? Ex: An asset is loaded, then its deps load in a later frame, how do you know if the asset load happened that frame. Need to prevent Loaded | Failed states at runtime.
-    * Maybe just combine into a single type? Still breaks change detection
-* Unified Assets
-    * AssetsMode::Unprocessed
-        * load() reads from source
-        * hitting a processor config will either (1) run the processor inline or (2) fail
-    * AssetMode::Processed
-        * load() reads from destination 
-        * hitting a processor config will either (1) run the processor inline or (2) fail
-    * AssetMode::ProcessedDev
-        * load() reads from destination, blocks on processed status from host (for now in-process, but should support out-of-process for editor scenarios). Should not treat "non-existent because not yet processed" as an "asset does not exist" failure
-        * kicks off processor in new thread ... this should not fail
-        * processor _should not_ share entity identity space with app. Therefore it should have its own copy of Assets?
-* Multiple Preprocessors?
-    * Right now we just have Loader > Saver. Savers could, in theory, provide multiple preprocessor options. But what about arbitrary things like GltfLoader->MeshAsset->MeshOpt(MeshAsset)->NormalFix(MeshAsset)->CompactMeshSaver
-* Give me a handle for a given loading asset path
-    1. Map path to load state in asset server
-        1.5 If load state doesn't exist, kick of load and create state
-    2. allocate asset id (and handle) and increment root count associated with handle
+* Combine meta + asset bytes into a single file for imported assets
+    * this makes loading them transactional
 
 ## TODO
 
 ### MVP
 
-* Other OS backends: Android, Web
+* Should load_direct return the processed version of the asset?
+    * This would mean merging the processor into AssetServer?
+        * load_direct will await the processed versions of load dependencies and return processed assets
+            * store signal channel on AssetInfo
+            * directly loaded assets will include hash
+            * hash comes from "asset source", if it exists on the metadata 
+        * processed_source: Option vs asset_source: Always
+        * new "process" function on asset server that _only_ processes asset
+    * Hot Reloading must behave differently: processed meta will be written, then asset will be written, only generate one load event after both have happened
+    * Is it safe to share runtime ids? centralized metadata?
+* Use hashing to block unnecessary rebuilds 
+    * Build view of current world:
+        * Scan processed folder and get hash info / timestamps / load_dependencies
+        * Generate reverse dependency graph
+    * topo-sort by load dependencies to process in _roughly_ reverse-dependency-order (this might change as you go). just an optimization to avoid re-processing. Add them to the "check_queue"
+    * process given dependency
+        * after re-processing a given dependency force reprocessing of all direct reverse load_dependencies 
+    * Processed sub assets _are not handled correcty_
+        * They are fed into the AssetServer InternalAssetEvent feed and ignored ... how will they be saved?
+            * As normal asset files in the processed folder?
+                * Requires different loading schemes for processed vs unprocessed
+                    * this actually seems desirable?
+                * Requires a clean up step when re-processing 
+        * Can "direct" asset loads return a different type (ex: with owned ErasedLoadedAssets)
+    * Challenge: currenty processing an asset could result in _any_ version of a dependency being loaded (ex: kick off process and then user modifies file during process)
+        * Options:
+            1. Import artifacts into DB (or folder) with transactional hash associated with them. Use this as "source of truth" for asset dependencies.
+            2. Re-hash every direct asset load and compare (eventual consistency)
+        * How to guarantee _specific_ direct-loaded-asset bytes match hash?
+            * The only hash you can trust is the one generated in memory, therefore load_asset_bytes and load_direct_async must compute and store the hash in the load context prior to usage!
+            * We don't want to store all assets in memory at a given time, so this must be signal based and eventually consistent
+            * If we processed an asset with a load dependency hash that mismatches the currently stored hash, trigger a "try reprocess" for that asset
+                * If it mismatches because we loaded a new version of that asset during the processing of the dependant, then that new version should kick off a reprocess of the dependant asset
+                * If it mismatches because we received a new version of an asset that has not been identified by the processor, that new version will get picked up and we will queue a re-process check of the dependant, but we won't do a rebuild because the hash will match 
 * Try to remove crossbeam channels for recycling ids
-* Proprely impl Reflect and FromReflect for Handle
+* Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
 * Validate dependency types in preprocessor? 
 * Asset _unloading_ and _re-loading_ that allows handles to be kept alive while unloading the asset data itself
@@ -319,6 +312,7 @@ struct Asset<T: Asset> {
     * Global gate on scan (to build view of the world)
     * Granular gate on individual outputs (maybe done in Assets directly?)
 * Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
+
 
 ```rust
 #[derive(Resource, Loadable)]
@@ -355,9 +349,21 @@ fn load_loadable<T: Loadable>(&self) -> Handle<T> {
 
 ### Maybe before PR
 
+* Consider reframing meta to be slightly less confusing:
+    * loader, if present means the asset can be loaded directly (optional, provided processor exist)
+    * processor, if present means the asset can be processed ... do not reuse loader.
+        * Processor (enum)
+            * None (copy)
+            * LoadAndSave (define a loader with settings, define a saver)
+            * Direct(read bytes, write bytes)
+    * Maybe just a "type" enum?
+        * Load
+        * Process
+            * LoadAndSave (maybe just a variant of Direct?)
+            * Direct
+* Other OS backends: Android, Web
 * async-fs just wraps std::fs and offloads blocking work to a separate thread pool. This prevents us from blocking the IO thread pool (which seems useful), but it isn't "true" async io. Do we need this or should we just use std::fs directly?
 * Do we try to prevent (or at least identify) circular dependencies?
-    * Handle::Uuid(Uuid), Handle::Index(Arc<IndexHandle>)
 * Consider storing asset path in strong handle. `handle.asset_path() -> Option<AssetPath>` would be very cool
     * Can we store _everything_ in the strong handle? Loading dependencies via atomics? Load state via rwlock?
 * "Debug" Asset Server
@@ -368,6 +374,19 @@ fn load_loadable<T: Loadable>(&self) -> Handle<T> {
     * Granular processed asset loading seems like a good thing (load Scene0 without Scene1)
 * What is a processor if not an AssetServer with hot-reloading that writes processed outputs to disk?
     * Can it just be an alternative internal_asset_event processor with a top level load() orchestrator?
+* Should retrieving Meta and Asset bytes be a single call in the interface?
+    * would enable transactionality
+* Maybe AssetMetaDyn could use erased serde w/ a custom deserializer to avoid double-parsing / AssetMetaMinimal
+* Add type hint to loader (first check meta, then file extension, then hint)
+* Support loading assets from bytes? Maybe would handle "built in" assets.
+* Configurable per-file-type defaults for AssetMeta
+    * Store in ErasedAssetMeta form to avoid serializing/deserializing for each asset 
+* Preprocessing Options
+    * Multiple Preprocessors?
+        * Right now we just have Loader > Saver. Savers could, in theory, provide multiple preprocessor options. But what about arbitrary things like GltfLoader->MeshAsset->MeshOpt(MeshAsset)->NormalFix(MeshAsset)->CompactMeshSaver
+    * wire in arbitrary "transforms" that produce changes in memory 
+* Do we rephrase Reader apis to be `async read(path, bytes: &mut Vec<u8>)`?
+
 ```rust
 
 // Opt-in handles
@@ -450,9 +469,16 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 
 ### PR Description / RFC
 
+* Concept introduction
+    * What is an Asset? (a runtime thing that can be (but doesn't have to be) loaded from an array of bytes with an "asset path" and metadata about those bytes)
+    * Whis is asset preprocessing (the act of taking input "asset source" and writing it to a destination)
+    * The asset server does not care _where_ an asset came from (was it manually created? pre processed?)
+        * This means asset preprocessing is completely optional
 * Efficient asset storage / dense handles / allocate anywhere
 * Dependency tracking
 * Asset Preprocessing
+    * Fully optional
+* "Everything is a loader"
 * Run anywhere / no platform-restricting dependencies
 * Async IO
 * Single Arc tree (no more "active handle" counting)
@@ -466,8 +492,28 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Track dependencies for "runtime only" assets
 * multiple asset sources
 * Better non-blocking folder loading: LoadedFolder asset 
+* Paths are canonical
 * Asset system usability
     * handle.path()
+
+### Why not distill?
+
+* Architectural simplicity: Compare repo size without tests, no inherent need for RPC systems or databases
+    * Distill 24,237 lines of code (including generated), 11,499 (without generated) 
+    * Bevy 3,983
+    * Call out feature diffs for fair contextualization of line differences
+        * distill
+            * supports asset packs, has a DB which can be queried for metadata with faster startup times, transactional
+            * supports GUID ids (bevy plans to but not yet)
+            * Remove asset server (bevy plans to but not supported yet)
+* Direct filesystem access to processed asset state: easier debugging (this is also how unity does it)
+* Optional preprocessing
+* "Run anywhere" processor
+    * We want to support running the processor on the web and arbitrary platforms (consoles, mobile, etc).
+    * lmdb cannot run anywhere
+* reusable loaders
+* Pluggable: arbitrary asset providers
+* Paths are not canonical
 
 ### Next Steps
 
@@ -484,3 +530,11 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
     * Support processing inside Assets? Or just warn/error?
 * Streaming 
     * labeled-asset streaming works with load_asset() (assets pop in as the loader works)
+* Should we "pre-empt" loading dependencies by encoding them in the meta file? Currently deps are handled as part of the loader
+* load_direct_processed
+    * load_direct currently feeds on unprocessed dependencies
+    * Good chunk of load_direct cases want unprocessed:
+        * shader dependencies want WGSL shader, not SPIRV
+        * loading custom file formats with references to other files likely often want their own processing logic
+        * anything with load_asset_bytes
+* Use UntypedAssetIds where possible in preprocessor (instead of AssetPath)

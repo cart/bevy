@@ -1,6 +1,6 @@
 use crate::{
     folder::LoadedFolder,
-    io::{AssetReader, AssetReaderError},
+    io::{AssetReader, AssetReaderError, Reader},
     loader::{AssetLoader, AssetLoaderError, ErasedAssetLoader, LoadContext, LoadedAsset},
     meta::{AssetMetaDyn, AssetMetaMinimal},
     path::AssetPath,
@@ -837,7 +837,7 @@ impl AssetServer {
             .0
     }
 
-    pub async fn load_direct_with_meta_async<'a, P: Into<AssetPath<'a>>>(
+    pub async fn load_direct_with_meta<'a, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
         meta: &dyn AssetMetaDyn,
@@ -851,7 +851,7 @@ impl AssetServer {
             .await
     }
 
-    pub async fn load_direct_async<'a, P: Into<AssetPath<'a>>>(
+    pub async fn load_direct<'a, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
@@ -904,9 +904,42 @@ impl AssetServer {
         load_dependencies: bool,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let mut reader = self.data.reader.read(asset_path.path()).await?;
+        self.load_with_meta_loader_and_reader(
+            asset_path,
+            meta,
+            loader,
+            &mut reader,
+            load_dependencies,
+        )
+        .await
+    }
+
+    pub(crate) async fn load_with_meta_and_reader(
+        &self,
+        asset_path: AssetPath<'_>,
+        meta: &dyn AssetMetaDyn,
+        reader: &mut Reader<'_>,
+        load_dependencies: bool,
+    ) -> Result<ErasedLoadedAsset, AssetLoadError> {
+        let loader_name = meta.source_loader();
+        let loader = self
+            .get_erased_asset_loader_with_type_name(loader_name)
+            .ok_or_else(|| AssetLoadError::MissingAssetLoaderForTypeName(loader_name.clone()))?;
+        self.load_with_meta_loader_and_reader(asset_path, meta, &*loader, reader, load_dependencies)
+            .await
+    }
+
+    async fn load_with_meta_loader_and_reader(
+        &self,
+        asset_path: AssetPath<'_>,
+        meta: &dyn AssetMetaDyn,
+        loader: &dyn ErasedAssetLoader,
+        reader: &mut Reader<'_>,
+        load_dependencies: bool,
+    ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let load_context = LoadContext::new(self, asset_path.to_owned(), load_dependencies);
         loader
-            .load(&mut reader, meta.source_loader_settings(), load_context)
+            .load(reader, meta.source_loader_settings(), load_context)
             .await
             .map_err(|e| AssetLoadError::AssetLoaderError {
                 loader: loader.type_name(),

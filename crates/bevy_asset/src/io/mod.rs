@@ -26,17 +26,20 @@ pub enum AssetReaderError {
     Io(#[from] std::io::Error),
 }
 
-pub type Reader = dyn AsyncRead + Unpin + Send + Sync;
+pub type Reader<'a> = dyn AsyncRead + Unpin + Send + Sync + 'a;
 
 pub trait AssetReader: Send + Sync + 'static {
     /// Returns a future to load the full file data at the provided path.
-    fn read<'a>(&'a self, path: &'a Path)
-        -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>>;
+    // TODO: try using self lifetime (but not path lifetime) on Reader for added flexibility
+    fn read<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>>;
     /// Returns a future to load the full file data at the provided path.
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>>;
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>>;
     /// Returns an iterator of directory entry names at the provided path.
     fn read_directory<'a>(
         &'a self,

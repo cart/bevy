@@ -183,7 +183,7 @@ impl AssetReader for MemoryAssetReader {
     fn read<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
         Box::pin(async move {
             self.root
                 .get_asset(path)
@@ -201,7 +201,7 @@ impl AssetReader for MemoryAssetReader {
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
         Box::pin(async move {
             self.root
                 .get_metadata(path)

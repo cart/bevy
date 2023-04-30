@@ -36,9 +36,14 @@ impl FileAssetReader {
     ///
     /// See `get_base_path` below.
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        Self {
-            root_path: Self::get_base_path().join(path.as_ref()),
-        }
+        let root_path = Self::get_base_path().join(path.as_ref());
+        std::fs::create_dir_all(&root_path).unwrap_or_else(|e| {
+            panic!(
+                "Failed to create root directory {:?} for file asset reader: {:?}",
+                root_path, e
+            )
+        });
+        Self { root_path }
     }
 
     /// Returns the base path of the assets directory, which is normally the executable's parent
@@ -73,7 +78,7 @@ impl AssetReader for FileAssetReader {
     fn read<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
         Box::pin(async move {
             let full_path = self.root_path.join(path);
             match File::open(&full_path).await {
@@ -95,7 +100,7 @@ impl AssetReader for FileAssetReader {
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
         let meta_path = get_meta_path(path);
         Box::pin(async move {
             let full_path = self.root_path.join(meta_path);

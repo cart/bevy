@@ -311,7 +311,7 @@ mod tests {
                 let mut ron: CoolTextRon = ron::de::from_bytes(&bytes)?;
                 let mut embedded = String::new();
                 for dep in ron.embedded_dependencies {
-                    let loaded = load_context.load_direct_async(&dep).await?;
+                    let loaded = load_context.load_direct(&dep).await?;
                     let cool = loaded.get::<CoolText>().unwrap();
                     embedded.push_str(&cool.text);
                 }

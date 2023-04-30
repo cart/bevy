@@ -92,6 +92,7 @@ where
 
     fn default_meta(&self) -> Box<dyn AssetMetaDyn> {
         Box::new(AssetMeta::<L, NullSaver, L> {
+            processed_info: None,
             meta_format_version: META_FORMAT_VERSION.to_string(),
             loader_settings: L::Settings::default(),
             loader: self.type_name().to_string(),
@@ -121,7 +122,7 @@ pub struct LoadedAsset<A: Asset> {
     pub(crate) value: A,
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) dependencies: HashSet<UntypedHandle>,
-    pub(crate) load_dependencies: HashSet<AssetPath<'static>>,
+    pub(crate) loader_dependencies: HashSet<AssetPath<'static>>,
 }
 
 impl<A: Asset> From<A> for LoadedAsset<A> {
@@ -130,7 +131,7 @@ impl<A: Asset> From<A> for LoadedAsset<A> {
             value,
             path: None,
             dependencies: HashSet::default(),
-            load_dependencies: HashSet::default(),
+            loader_dependencies: HashSet::default(),
         }
     }
 }
@@ -139,8 +140,7 @@ pub struct ErasedLoadedAsset {
     pub(crate) value: Box<dyn AssetContainer>,
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) dependencies: HashSet<UntypedHandle>,
-    #[allow(unused)]
-    pub(crate) load_dependencies: HashSet<AssetPath<'static>>,
+    pub(crate) loader_dependencies: HashSet<AssetPath<'static>>,
 }
 
 impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
@@ -149,7 +149,7 @@ impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
             value: Box::new(asset.value),
             path: asset.path,
             dependencies: asset.dependencies,
-            load_dependencies: asset.load_dependencies,
+            loader_dependencies: asset.loader_dependencies,
         }
     }
 }
@@ -189,7 +189,8 @@ pub struct LoadContext<'a> {
     should_load_dependencies: bool,
     asset_path: AssetPath<'static>,
     dependencies: HashSet<UntypedHandle>,
-    load_dependencies: HashSet<AssetPath<'static>>,
+    /// Direct dependencies used by this loader.
+    loader_dependencies: HashSet<AssetPath<'static>>,
 }
 
 impl<'a> LoadContext<'a> {
@@ -203,7 +204,7 @@ impl<'a> LoadContext<'a> {
             asset_path,
             should_load_dependencies: load_dependencies,
             dependencies: HashSet::default(),
-            load_dependencies: HashSet::default(),
+            loader_dependencies: HashSet::default(),
         }
     }
 
@@ -240,7 +241,7 @@ impl<'a> LoadContext<'a> {
             value,
             path: Some(self.asset_path),
             dependencies: self.dependencies,
-            load_dependencies: self.load_dependencies,
+            loader_dependencies: self.loader_dependencies,
         }
     }
 
@@ -259,11 +260,11 @@ impl<'a> LoadContext<'a> {
         &mut self,
         path: &'b Path,
     ) -> Result<Vec<u8>, AssetReaderError> {
-        self.load_dependencies
-            .insert(AssetPath::new(path.to_owned(), None));
         let mut reader = self.asset_server.reader().read(path).await?;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
+        self.loader_dependencies
+            .insert(AssetPath::new(path.to_owned(), None));
         Ok(bytes)
     }
 
@@ -301,12 +302,13 @@ impl<'a> LoadContext<'a> {
         handle
     }
 
-    pub async fn load_direct_async<'b, P: Into<AssetPath<'b>>>(
+    pub async fn load_direct<'b, P: Into<AssetPath<'b>>>(
         &mut self,
         path: P,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path = path.into();
-        self.load_dependencies.insert(path.to_owned());
-        self.asset_server.load_direct_async(path).await
+        let loaded_asset = self.asset_server.load_direct(path.to_owned()).await?;
+        self.loader_dependencies.insert(path.to_owned());
+        Ok(loaded_asset)
     }
 }
