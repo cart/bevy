@@ -432,7 +432,7 @@ async fn load_gltf<'a, 'b, 'c>(
                             supported_compressed_formats,
                         )
                         .await;
-                        image.map(|i| load_context.finish(i))
+                        image.map(|i| load_context.finish(i, None))
                     });
                 });
             })
@@ -444,7 +444,7 @@ async fn load_gltf<'a, 'b, 'c>(
                 res.ok()
             })
             .for_each(|loaded_asset| {
-                load_context.load_asset(loaded_asset);
+                load_context.add_loaded_labeled_asset(loaded_asset);
             });
     }
 

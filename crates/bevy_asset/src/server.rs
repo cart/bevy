@@ -655,10 +655,16 @@ impl AssetServer {
         };
 
         match self
-            .load_with_meta_and_loader(path, &*meta, &*loader, true)
+            .load_with_meta_and_loader(path, meta, &*loader, true)
             .await
         {
-            Ok(loaded_asset) => {
+            Ok(mut loaded_asset) => {
+                for (_, labeled_asset) in loaded_asset.labeled_assets.drain() {
+                    self.send_asset_event(InternalAssetEvent::Loaded {
+                        id: labeled_asset.handle.id(),
+                        loaded_asset: labeled_asset.asset,
+                    })
+                }
                 self.send_asset_event(InternalAssetEvent::Loaded {
                     id: base_asset_id,
                     loaded_asset,
@@ -675,7 +681,7 @@ impl AssetServer {
 
     #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
     pub fn add<A: Asset>(&self, asset: A) -> Handle<A> {
-        self.load_asset(LoadedAsset::from(asset))
+        self.load_asset(LoadedAsset::new(asset, None))
     }
 
     pub(crate) fn load_asset<A: Asset>(&self, asset: impl Into<LoadedAsset<A>>) -> Handle<A> {
@@ -754,7 +760,7 @@ impl AssetServer {
                 match load_folder(&owned_path, &server, &mut handles).await {
                     Ok(_) => server.send_asset_event(InternalAssetEvent::Loaded {
                         id,
-                        loaded_asset: LoadedAsset::from(LoadedFolder { handles }).into(),
+                        loaded_asset: LoadedAsset::new(LoadedFolder { handles }, None).into(),
                     }),
                     Err(_) => server.send_asset_event(InternalAssetEvent::Failed { id }),
                 }
@@ -840,7 +846,7 @@ impl AssetServer {
     pub async fn load_direct_with_meta<'a, P: Into<AssetPath<'a>>>(
         &self,
         path: P,
-        meta: &dyn AssetMetaDyn,
+        meta: Box<dyn AssetMetaDyn>,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path: AssetPath = path.into();
         // TODO: handle this error
@@ -857,7 +863,7 @@ impl AssetServer {
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path: AssetPath = path.into();
         let (meta, loader) = self.get_meta_and_loader(&path).await?;
-        self.load_with_meta_and_loader(path, &*meta, &*loader, false)
+        self.load_with_meta_and_loader(path, meta, &*loader, false)
             .await
     }
 
@@ -899,7 +905,7 @@ impl AssetServer {
     async fn load_with_meta_and_loader(
         &self,
         asset_path: AssetPath<'_>,
-        meta: &dyn AssetMetaDyn,
+        meta: Box<dyn AssetMetaDyn>,
         loader: &dyn ErasedAssetLoader,
         load_dependencies: bool,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
@@ -917,7 +923,7 @@ impl AssetServer {
     pub(crate) async fn load_with_meta_and_reader(
         &self,
         asset_path: AssetPath<'_>,
-        meta: &dyn AssetMetaDyn,
+        meta: Box<dyn AssetMetaDyn>,
         reader: &mut Reader<'_>,
         load_dependencies: bool,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
@@ -932,20 +938,19 @@ impl AssetServer {
     async fn load_with_meta_loader_and_reader(
         &self,
         asset_path: AssetPath<'_>,
-        meta: &dyn AssetMetaDyn,
+        meta: Box<dyn AssetMetaDyn>,
         loader: &dyn ErasedAssetLoader,
         reader: &mut Reader<'_>,
         load_dependencies: bool,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let load_context = LoadContext::new(self, asset_path.to_owned(), load_dependencies);
-        loader
-            .load(reader, meta.source_loader_settings(), load_context)
-            .await
-            .map_err(|e| AssetLoadError::AssetLoaderError {
+        loader.load(reader, meta, load_context).await.map_err(|e| {
+            AssetLoadError::AssetLoaderError {
                 loader: loader.type_name(),
                 path: asset_path.to_owned(),
                 error: e,
-            })
+            }
+        })
     }
 }
 

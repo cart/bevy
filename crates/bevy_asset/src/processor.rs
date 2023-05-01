@@ -83,8 +83,8 @@ impl<Source: AssetLoader, Saver: AssetSaver<Asset = Source::Asset>, Destination:
         &'a self,
         writer: &'a mut Writer,
         asset: &'a ErasedLoadedAsset,
-        meta: &'a dyn AssetMetaDyn,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>> {
+        let meta = asset.meta.as_ref().unwrap();
         let asset = asset.get::<Saver::Asset>().unwrap();
         self.saver.save(
             writer,
@@ -132,7 +132,6 @@ pub trait ErasedAssetProcessPlan: Send + Sync {
         &'a self,
         writer: &'a mut Writer,
         asset: &'a ErasedLoadedAsset,
-        meta: &'a dyn AssetMetaDyn,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>>;
     fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError>;
     fn default_meta(&self) -> Box<dyn AssetMetaDyn>;
@@ -426,7 +425,7 @@ impl AssetProcessor {
             match assets
                 .load_with_meta_and_reader(
                     asset_path,
-                    &*source_meta,
+                    source_meta,
                     &mut asset_bytes.as_slice(),
                     false,
                 )
@@ -435,12 +434,11 @@ impl AssetProcessor {
                 Ok(loaded_asset) => {
                     // TODO: error handling
                     process_plan
-                        .process(&mut writer, &loaded_asset, &*source_meta)
+                        .process(&mut writer, &loaded_asset)
                         .await
                         .unwrap();
                     writer.flush().await.unwrap();
-
-                    let meta = source_meta.into_processed().unwrap();
+                    let meta = loaded_asset.meta.unwrap().into_processed().unwrap();
                     let meta_bytes = meta.serialize();
                     meta_writer.write_all(&meta_bytes).await.unwrap();
                     meta_writer.flush().await.unwrap();

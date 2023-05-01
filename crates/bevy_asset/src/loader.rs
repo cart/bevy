@@ -6,7 +6,7 @@ use crate::{
     Asset, AssetLoadError, AssetServer, Assets, Handle, UntypedAssetId, UntypedHandle,
 };
 use bevy_ecs::world::World;
-use bevy_utils::{BoxedFuture, HashSet};
+use bevy_utils::{BoxedFuture, HashMap, HashSet};
 use downcast_rs::{impl_downcast, Downcast};
 use futures_lite::AsyncReadExt;
 use ron::error::SpannedError;
@@ -37,7 +37,7 @@ pub trait ErasedAssetLoader: Send + Sync + 'static {
     fn load<'a>(
         &'a self,
         reader: &'a mut Reader,
-        settings: &'a dyn Settings,
+        meta: Box<dyn AssetMetaDyn>,
         load_context: LoadContext<'a>,
     ) -> BoxedFuture<'a, Result<ErasedLoadedAsset, AssetLoaderError>>;
 
@@ -72,16 +72,17 @@ where
     fn load<'a>(
         &'a self,
         reader: &'a mut Reader,
-        settings: &'a dyn Settings,
+        meta: Box<dyn AssetMetaDyn>,
         mut load_context: LoadContext<'a>,
     ) -> BoxedFuture<'a, Result<ErasedLoadedAsset, AssetLoaderError>> {
         Box::pin(async move {
-            let settings = settings
+            let settings = meta
+                .source_loader_settings()
                 .downcast_ref::<L::Settings>()
                 .expect("AssetLoader settings should match the loader type");
             let asset =
                 <L as AssetLoader>::load(&self, reader, settings, &mut load_context).await?;
-            Ok(load_context.finish(asset).into())
+            Ok(load_context.finish(asset, Some(meta)).into())
         })
     }
 
@@ -118,20 +119,29 @@ where
     }
 }
 
+pub(crate) struct LabeledAsset {
+    pub(crate) asset: ErasedLoadedAsset,
+    pub(crate) handle: UntypedHandle,
+}
+
 pub struct LoadedAsset<A: Asset> {
     pub(crate) value: A,
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) dependencies: HashSet<UntypedHandle>,
     pub(crate) loader_dependencies: HashSet<AssetPath<'static>>,
+    pub(crate) labeled_assets: HashMap<String, LabeledAsset>,
+    pub(crate) meta: Option<Box<dyn AssetMetaDyn>>,
 }
 
-impl<A: Asset> From<A> for LoadedAsset<A> {
-    fn from(value: A) -> Self {
+impl<A: Asset> LoadedAsset<A> {
+    pub fn new(value: A, meta: Option<Box<dyn AssetMetaDyn>>) -> Self {
         LoadedAsset {
             value,
             path: None,
             dependencies: HashSet::default(),
             loader_dependencies: HashSet::default(),
+            labeled_assets: HashMap::default(),
+            meta,
         }
     }
 }
@@ -141,6 +151,8 @@ pub struct ErasedLoadedAsset {
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) dependencies: HashSet<UntypedHandle>,
     pub(crate) loader_dependencies: HashSet<AssetPath<'static>>,
+    pub(crate) labeled_assets: HashMap<String, LabeledAsset>,
+    pub(crate) meta: Option<Box<dyn AssetMetaDyn>>,
 }
 
 impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
@@ -150,6 +162,8 @@ impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
             path: asset.path,
             dependencies: asset.dependencies,
             loader_dependencies: asset.loader_dependencies,
+            labeled_assets: asset.labeled_assets,
+            meta: asset.meta,
         }
     }
 }
@@ -191,6 +205,7 @@ pub struct LoadContext<'a> {
     dependencies: HashSet<UntypedHandle>,
     /// Direct dependencies used by this loader.
     loader_dependencies: HashSet<AssetPath<'static>>,
+    labeled_assets: HashMap<String, LabeledAsset>,
 }
 
 impl<'a> LoadContext<'a> {
@@ -205,6 +220,7 @@ impl<'a> LoadContext<'a> {
             should_load_dependencies: load_dependencies,
             dependencies: HashSet::default(),
             loader_dependencies: HashSet::default(),
+            labeled_assets: HashMap::default(),
         }
     }
 
@@ -222,13 +238,39 @@ impl<'a> LoadContext<'a> {
         label: String,
         load: impl FnOnce(&mut LoadContext) -> A,
     ) -> Handle<A> {
-        let mut context = self.begin_labeled_asset(label);
+        let mut context = self.begin_labeled_asset(label.clone());
         let asset = load(&mut context);
-        self.load_asset(context.finish(asset))
+        let loaded_asset = context.finish(asset, None);
+        self.add_loaded_labeled_asset(loaded_asset)
     }
 
     pub fn add_labeled_asset<A: Asset>(&mut self, label: String, asset: A) -> Handle<A> {
         self.labeled_asset_scope(label, |_| asset)
+    }
+
+    /// Add a [`LoadedAsset`] that is a "labeled sub asset" of the root path of this load context.
+    /// This can be used in combination with [`LoadContext::begin_labeled_asset`] to parallelize
+    /// sub asset loading.
+    pub fn add_loaded_labeled_asset<A: Asset>(
+        &mut self,
+        loaded_asset: LoadedAsset<A>,
+    ) -> Handle<A> {
+        let path = loaded_asset.path.as_ref().unwrap().to_owned();
+        let loaded_asset: ErasedLoadedAsset = loaded_asset.into();
+        debug_assert_eq!(path.without_label(), self.asset_path.without_label());
+        let label = path.label().unwrap().to_string();
+        let handle = self
+            .asset_server
+            .get_or_create_path_handle(path, TypeId::of::<A>());
+        let returned_handle = handle.clone().typed_debug_checked();
+        self.labeled_assets.insert(
+            label,
+            LabeledAsset {
+                asset: loaded_asset,
+                handle,
+            },
+        );
+        returned_handle
     }
 
     pub fn has_labeled_asset(&self, label: &str) -> bool {
@@ -236,12 +278,14 @@ impl<'a> LoadContext<'a> {
         self.asset_server.get_handle_untyped(path).is_some()
     }
 
-    pub fn finish<A: Asset>(self, value: A) -> LoadedAsset<A> {
+    pub fn finish<A: Asset>(self, value: A, meta: Option<Box<dyn AssetMetaDyn>>) -> LoadedAsset<A> {
         LoadedAsset {
             value,
             path: Some(self.asset_path),
             dependencies: self.dependencies,
             loader_dependencies: self.loader_dependencies,
+            labeled_assets: self.labeled_assets,
+            meta,
         }
     }
 
@@ -282,12 +326,6 @@ impl<'a> LoadContext<'a> {
                 .get_or_create_path_handle(path.clone(), TypeId::of::<A>())
                 .typed_debug_checked()
         };
-        self.dependencies.insert(handle.clone().untyped());
-        handle
-    }
-
-    pub fn load_asset<A: Asset>(&mut self, asset: impl Into<LoadedAsset<A>>) -> Handle<A> {
-        let handle = self.asset_server.load_asset(asset);
         self.dependencies.insert(handle.clone().untyped());
         handle
     }
