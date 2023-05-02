@@ -294,8 +294,8 @@ struct Asset<T: Asset> {
                 * If it mismatches because we loaded a new version of that asset during the processing of the dependant, then that new version should kick off a reprocess of the dependant asset
                 * If it mismatches because we received a new version of an asset that has not been identified by the processor, that new version will get picked up and we will queue a re-process check of the dependant, but we won't do a rebuild because the hash will match 
     * LATEST TODO
-        * Populate hashes
-        * Only re-process assets whose load_dep hashes and current file hash haven't changed (current full_hash logic isn't full)
+        * Re-process if dependencies change
+        * Cleanup unused assets
 * Try to remove crossbeam channels for recycling ids
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF

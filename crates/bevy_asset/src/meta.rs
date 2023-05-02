@@ -7,13 +7,13 @@ use crate::{
     saver::{AssetSaver, NullSaver},
 };
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct LoadDependencyInfo {
     pub hash: u64,
     pub path: String,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct ProcessedInfo {
     pub full_hash: u64,
     pub load_dependencies: Vec<LoadDependencyInfo>,
@@ -98,8 +98,8 @@ pub trait AssetMetaDyn: Downcast + Send + Sync {
     /// loader types don't match.
     fn into_processed(self: Box<Self>) -> Option<Box<dyn AssetMetaDyn>>;
     fn serialize(&self) -> Vec<u8>;
-    fn processed_info(&self) -> Option<&ProcessedInfo>;
-    fn processed_info_mut(&mut self) -> Option<&mut ProcessedInfo>;
+    fn processed_info(&self) -> &Option<ProcessedInfo>;
+    fn processed_info_mut(&mut self) -> &mut Option<ProcessedInfo>;
 }
 
 impl<Source: AssetLoader, Saver: AssetSaver, Destination: AssetLoader> AssetMetaDyn
@@ -173,12 +173,12 @@ where
         }
     }
 
-    fn processed_info(&self) -> Option<&ProcessedInfo> {
-        self.processed_info.as_ref()
+    fn processed_info(&self) -> &Option<ProcessedInfo> {
+        &self.processed_info
     }
 
-    fn processed_info_mut(&mut self) -> Option<&mut ProcessedInfo> {
-        self.processed_info.as_mut()
+    fn processed_info_mut(&mut self) -> &mut Option<ProcessedInfo> {
+        &mut self.processed_info
     }
 }
 

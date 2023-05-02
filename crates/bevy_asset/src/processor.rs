@@ -9,7 +9,7 @@ use crate::{
         ProcessedLoader, ProcessorSettings, META_FORMAT_VERSION,
     },
     saver::AssetSaver,
-    AssetPath, AssetServer, ErasedLoadedAsset, MissingAssetLoaderForExtensionError,
+    AssetLoadError, AssetPath, AssetServer, ErasedLoadedAsset, MissingAssetLoaderForExtensionError,
 };
 use async_broadcast::{Receiver, Sender};
 use bevy_app::{App, Plugin, Startup};
@@ -85,6 +85,8 @@ pub enum ProcessAssetError {
     AssetWriterError(#[from] AssetWriterError),
     #[error("Failed to read asset metadata {0:?}")]
     ReadAssetMetaError(AssetReaderError),
+    #[error(transparent)]
+    AssetLoadError(#[from] AssetLoadError),
 }
 
 impl<Source: AssetLoader, Saver: AssetSaver<Asset = Source::Asset>, Destination: AssetLoader>
@@ -499,7 +501,7 @@ impl AssetProcessor {
     ) -> Result<ProcessResult, ProcessAssetError> {
         trace!("Processing asset {:?}", path);
         let server = &self.server;
-        let (source_meta, meta_bytes, process_plan) =
+        let (mut source_meta, meta_bytes, process_plan) =
             match self.source_reader().read_meta(&path).await {
                 Ok(mut meta_reader) => {
                     let mut meta_bytes = Vec::new();
@@ -544,61 +546,60 @@ impl AssetProcessor {
                 Err(err) => return Err(ProcessAssetError::ReadAssetMetaError(err)),
             };
 
-        // TODO: error handling
+        // TODO:  check timestamp first for early-out
+        let mut reader = self.source_reader().read(&path).await.unwrap();
+        let mut asset_bytes = Vec::new();
+        reader.read_to_end(&mut asset_bytes).await.unwrap();
+        // PERF: in theory these hashes could be streamed if we want to avoid allocating the whole asset.
+        // The downside is that reading assets would need to happen twice (once for the hash and once for the asset loader)
+        // Hard to say which is worse
+        let full_hash = Self::get_full_hash(&meta_bytes, &asset_bytes);
+        let new_processed_info = ProcessedInfo {
+            full_hash,
+            load_dependencies: Vec::new(),
+        };
+
         let asset_path = AssetPath::new(path.to_owned(), None);
-        if let Some(process_plan) = process_plan {
-            trace!("Loading asset directly in order to process it {:?}", path);
-            let mut reader = self.source_reader().read(&path).await.unwrap();
-            let mut asset_bytes = Vec::new();
-            reader.read_to_end(&mut asset_bytes).await.unwrap();
-            // TODO: this isn't quite ready yet
-            let asset_hash = Self::get_asset_hash(&asset_bytes);
-            // PERF: in theory these hashes could be streamed if we want to avoid allocating the whole asset.
-            // The downside is that reading assets would need to happen twice (once for the hash and once for the asset loader)
-            // Hard to say which is worse
-            let full_hash = Self::get_full_hash(&meta_bytes, asset_hash);
-            {
-                let infos = self.data.asset_infos.read().await;
-                if let Some(asset_info) = infos.get(&asset_path) {
-                    // TODO:  check timestamp first for early-out
-                    if let Some(processed_info) = &asset_info.processed_info {
-                        if processed_info.full_hash == full_hash {
-                            trace!(
-                                "Skipping processing of asset {:?} because it has not changed",
-                                asset_path
-                            );
-                            return Ok(ProcessResult::SkippedNotChanged);
-                        }
+        {
+            let infos = self.data.asset_infos.read().await;
+            if let Some(asset_info) = infos.get(&asset_path) {
+                if let Some(processed_info) = &asset_info.processed_info {
+                    if processed_info.full_hash == full_hash {
+                        trace!(
+                            "Skipping processing of asset {:?} because it has not changed",
+                            asset_path
+                        );
+                        return Ok(ProcessResult::SkippedNotChanged);
                     }
                 }
             }
+        }
 
-            let mut writer = self.destination_writer().write(&path).await.unwrap();
-            let mut meta_writer = self.destination_writer().write_meta(&path).await.unwrap();
+        // TODO: error handling
+        let mut writer = self.destination_writer().write(&path).await.unwrap();
+        let mut meta_writer = self.destination_writer().write_meta(&path).await.unwrap();
 
-            match server
+        if let Some(process_plan) = process_plan {
+            trace!("Loading asset directly in order to process it {:?}", path);
+            let loaded_asset = server
                 .load_with_meta_and_reader(
-                    asset_path,
+                    asset_path.clone(),
                     source_meta,
                     &mut asset_bytes.as_slice(),
                     false,
                 )
+                .await?;
+            process_plan
+                .process(&mut writer, &loaded_asset)
                 .await
-            {
-                Ok(loaded_asset) => {
-                    // TODO: error handling
-                    process_plan
-                        .process(&mut writer, &loaded_asset)
-                        .await
-                        .unwrap();
-                    writer.flush().await.unwrap();
-                    let meta = loaded_asset.meta.unwrap().into_processed().unwrap();
-                    let meta_bytes = meta.serialize();
-                    meta_writer.write_all(&meta_bytes).await.unwrap();
-                    meta_writer.flush().await.unwrap();
-                }
-                Err(err) => error!("Failed to process asset due to load error: {}", err),
-            }
+                .unwrap();
+            writer.flush().await.unwrap();
+
+            let mut meta = loaded_asset.meta.unwrap().into_processed().unwrap();
+            *meta.processed_info_mut() = Some(new_processed_info.clone());
+            let meta_bytes = meta.serialize();
+            meta_writer.write_all(&meta_bytes).await.unwrap();
+            meta_writer.flush().await.unwrap();
         } else {
             // TODO: make sure that if this asset was previously "processed", that this state transition is correct
             // Specifically, how will this affect other assets currently being processed?
@@ -606,19 +607,19 @@ impl AssetProcessor {
                 let mut infos = self.data.asset_infos.write().await;
                 infos.remove(&asset_path).await;
             }
-            // PERF: this could be streamed instead of using the full intermediate buffer
-            let mut reader = self.source_reader().read(&path).await.unwrap();
-            let mut bytes = Vec::new();
-            reader.read_to_end(&mut bytes).await.unwrap();
 
-            let mut writer = self.destination_writer().write(&path).await.unwrap();
-            let mut meta_writer = self.destination_writer().write_meta(&path).await.unwrap();
-            writer.write_all(&bytes).await.unwrap();
+            writer.write_all(&asset_bytes).await.unwrap();
             writer.flush().await.unwrap();
-
+            *source_meta.processed_info_mut() = Some(new_processed_info.clone());
             let meta_bytes = source_meta.serialize();
             meta_writer.write_all(&meta_bytes).await.unwrap();
             meta_writer.flush().await.unwrap();
+        }
+
+        {
+            let mut infos = self.data.asset_infos.write().await;
+            let info = infos.get_or_insert(asset_path, true);
+            info.processed_info = Some(new_processed_info);
         }
 
         trace!("Finished processing asset {:?}", path);
@@ -626,16 +627,9 @@ impl AssetProcessor {
     }
 
     /// NOTE: changing the hashing logic here is a _breaking change_ that requires a [`META_FORMAT_VERSION`] bump.
-    fn get_full_hash(meta_bytes: &[u8], asset_hash: u64) -> u64 {
+    fn get_full_hash(meta_bytes: &[u8], asset_bytes: &[u8]) -> u64 {
         let mut hasher = Self::get_hasher();
         meta_bytes.hash(&mut hasher);
-        asset_hash.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    /// NOTE: changing the hashing logic here is a _breaking change_ that requires a [`META_FORMAT_VERSION`] bump.
-    pub(crate) fn get_asset_hash(asset_bytes: &[u8]) -> u64 {
-        let mut hasher = Self::get_hasher();
         asset_bytes.hash(&mut hasher);
         hasher.finish()
     }
