@@ -7,7 +7,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::io::{AssetReader, AssetReaderError, AssetWriter, PathStream, Reader, Writer};
+use crate::io::{
+    AssetReader, AssetReaderError, AssetWriter, AssetWriterError, PathStream, Reader, Writer,
+};
 
 fn get_base_path() -> PathBuf {
     if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
@@ -187,30 +189,28 @@ impl FileAssetWriter {
 }
 
 impl AssetWriter for FileAssetWriter {
-    fn write<'a>(&'a self, path: &'a Path) -> BoxedFuture<'a, Result<Box<Writer>, ()>> {
+    fn write<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Box<Writer>, AssetWriterError>> {
         Box::pin(async move {
             let full_path = self.root_path.join(path);
-            match File::create(&full_path).await {
-                Ok(file) => {
-                    let reader: Box<Writer> = Box::new(file);
-                    Ok(reader)
-                }
-                Err(_e) => Err(()),
-            }
+            let file = File::create(&full_path).await?;
+            let reader: Box<Writer> = Box::new(file);
+            Ok(reader)
         })
     }
 
-    fn write_meta<'a>(&'a self, path: &'a Path) -> BoxedFuture<'a, Result<Box<Writer>, ()>> {
+    fn write_meta<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Box<Writer>, AssetWriterError>> {
         Box::pin(async move {
             let meta_path = get_meta_path(path);
             let full_path = self.root_path.join(meta_path);
-            match File::create(&full_path).await {
-                Ok(file) => {
-                    let reader: Box<Writer> = Box::new(file);
-                    Ok(reader)
-                }
-                Err(_e) => Err(()),
-            }
+            let file = File::create(&full_path).await?;
+            let reader: Box<Writer> = Box::new(file);
+            Ok(reader)
         })
     }
 }

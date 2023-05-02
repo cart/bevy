@@ -138,14 +138,16 @@ impl Plugin for AssetPlugin {
                     });
                     let loaders = {
                         let processor = app.world.resource::<AssetProcessor>();
-                        processor.assets().data.loaders.clone()
+                        processor.server().data.loaders.clone()
                     };
                     let processor = app.world.resource::<AssetProcessor>().clone();
                     let destination_reader = app
                         .world
                         .resource_mut::<AssetProviders>()
                         .get_destination_reader(source);
-                    let gated_reader = ProcessorGatedReader::new(destination_reader, processor);
+                    // the main asset server gates loads based on asset state
+                    let gated_reader =
+                        ProcessorGatedReader::new(destination_reader, processor.data.clone());
                     // the main asset server shares loaders with the processor asset server
                     app.insert_resource(AssetServer::new_with_loaders(
                         Box::new(gated_reader),
@@ -196,7 +198,7 @@ impl AssetApp for App {
             // to ensure the id spaces are entirely separate. Not _strictly_ necessary, but
             // desirable.
             processor
-                .assets()
+                .server()
                 .register_handle_provider(AssetHandleProvider::new(
                     TypeId::of::<A>(),
                     Arc::new(AssetIndexAllocator::default()),

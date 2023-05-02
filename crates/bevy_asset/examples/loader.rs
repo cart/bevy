@@ -24,10 +24,7 @@ fn main() {
         .add_plugin(AssetPlugin::processed_dev())
         .add_plugin(TextPlugin)
         .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            ((print_text, print_and_despawn).chain(), print_cool),
-        )
+        .add_systems(Update, print_text)
         .run();
 }
 
@@ -38,12 +35,11 @@ impl Plugin for TextPlugin {
         app.init_asset::<Text>()
             .init_asset::<CoolText>()
             .register_asset_loader(TextLoader)
-            .register_asset_loader(TextRonLoader)
             .register_asset_loader(CoolTextLoader);
 
         if let Some(processor) = app.world.get_resource::<AssetProcessor>() {
             processor
-                .register_process_plan::<TextLoader, TextRonSaver, TextRonLoader>(TextRonSaver);
+                .register_process_plan::<CoolTextLoader, CoolTextSaver, TextLoader>(CoolTextSaver);
         }
     }
 }
@@ -59,12 +55,6 @@ impl Drop for Text {
 
 #[derive(Default)]
 struct TextLoader;
-
-#[derive(Resource)]
-struct MyHandle(Option<Handle<Text>>);
-
-#[derive(Resource)]
-struct CoolHandle(Option<Handle<CoolText>>);
 
 #[derive(Default, Serialize, Deserialize)]
 struct TextSettings {
@@ -97,13 +87,6 @@ impl AssetLoader for TextLoader {
     }
 }
 
-struct TextRonSaver;
-
-#[derive(Serialize, Deserialize)]
-pub struct RonText {
-    text: String,
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct CoolTextRon {
     text: String,
@@ -114,7 +97,7 @@ pub struct CoolTextRon {
 #[derive(Asset, Debug)]
 pub struct CoolText {
     text: String,
-    dependencies: Vec<Handle<CoolText>>,
+    dependencies: Vec<Handle<Text>>,
 }
 
 #[derive(Default)]
@@ -138,8 +121,8 @@ impl AssetLoader for CoolTextLoader {
             let mut base_text = ron.text;
             for embedded in ron.embedded_dependencies {
                 let loaded = load_context.load_direct(&embedded).await?;
-                let cool = loaded.get::<CoolText>().unwrap();
-                base_text.push_str(&cool.text);
+                let text = loaded.get::<Text>().unwrap();
+                base_text.push_str(&text.0);
             }
             Ok(CoolText {
                 text: base_text,
@@ -157,99 +140,39 @@ impl AssetLoader for CoolTextLoader {
     }
 }
 
+struct CoolTextSaver;
+
 #[derive(Default, Serialize, Deserialize)]
-pub struct RonSaverSettings {
+pub struct CoolTextSaverSettings {
     appended: String,
 }
 
-impl AssetSaver for TextRonSaver {
-    type Asset = Text;
-    type Settings = RonSaverSettings;
+impl AssetSaver for CoolTextSaver {
+    type Asset = CoolText;
+    type Settings = CoolTextSaverSettings;
 
     fn save<'a>(
         &'a self,
         writer: &'a mut Writer,
-        asset: &'a Text,
-        settings: &'a RonSaverSettings,
+        asset: &'a CoolText,
+        settings: &'a CoolTextSaverSettings,
     ) -> bevy_utils::BoxedFuture<'a, Result<(), anyhow::Error>> {
         Box::pin(async move {
-            let ron = ron::to_string(&RonText {
-                text: format!("{}{}", asset.0.clone(), settings.appended),
-            })
-            .unwrap();
-            writer.write_all(ron.as_bytes()).await?;
+            let text = format!("{}{}", asset.text.clone(), settings.appended);
+            writer.write_all(text.as_bytes()).await?;
             Ok(())
         })
     }
-
-    fn extension(&self) -> &'static str {
-        "txt.ron"
-    }
 }
 
-#[derive(Default)]
-struct TextRonLoader;
-
-impl AssetLoader for TextRonLoader {
-    type Asset = Text;
-    type Settings = ();
-    fn load<'a>(
-        &'a self,
-        reader: &'a mut Reader,
-        _settings: &'a (),
-        _load_context: &'a mut LoadContext,
-    ) -> bevy_utils::BoxedFuture<'a, Result<Text, anyhow::Error>> {
-        Box::pin(async move {
-            let mut bytes = Vec::new();
-            reader.read_to_end(&mut bytes).await?;
-            let text: RonText = ron::from_str(&String::from_utf8(bytes)?)?;
-            Ok(Text(text.text))
-        })
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["txt.ron"]
-    }
-}
+#[derive(Resource)]
+struct AText(Handle<Text>);
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
-    let hello: Handle<Text> = assets.load("hello_world.txt");
-    commands.insert_resource(MyHandle(Some(hello)));
-    commands.insert_resource(CoolHandle(Some(assets.load("a.cool.ron"))));
+    let handle: Handle<Text> = assets.load("a.cool.ron");
+    commands.insert_resource(AText(handle));
 }
 
-fn print_text(handle: Res<MyHandle>, texts: Res<Assets<Text>>) {
-    if let Some(handle) = &handle.0 {
-        println!("{:?}", texts.get(handle));
-    } else {
-        println!(
-            "text handle is gone. there are {} text instances",
-            texts.len()
-        )
-    }
-}
-
-fn print_cool(handle: Res<CoolHandle>, cool_texts: Res<Assets<CoolText>>) {
-    if let Some(handle) = &handle.0 {
-        if let Some(text) = cool_texts.get(handle) {
-            println!("{:?}", text);
-            for handle in text.dependencies.iter() {
-                println!("dep {:?}", cool_texts.get(handle));
-            }
-        }
-    } else {
-        println!(
-            "text handle is gone. there are {} text instances",
-            cool_texts.len()
-        )
-    }
-}
-
-fn print_and_despawn(mut iterations: Local<usize>, mut handle: ResMut<MyHandle>) {
-    *iterations += 1;
-
-    if *iterations == 20 {
-        println!("removed handle");
-        handle.0 = None;
-    }
+fn print_text(text: Res<AText>, texts: Res<Assets<Text>>) {
+    println!("{:?}", texts.get(&text.0));
 }

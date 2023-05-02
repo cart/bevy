@@ -258,6 +258,7 @@ struct Asset<T: Asset> {
 
 ### MVP
 
+* Make sure processed nested paths work correctly!
 * Should load_direct return the processed version of the asset?
     * This would mean merging the processor into AssetServer?
         * load_direct will await the processed versions of load dependencies and return processed assets
@@ -292,6 +293,9 @@ struct Asset<T: Asset> {
             * If we processed an asset with a load dependency hash that mismatches the currently stored hash, trigger a "try reprocess" for that asset
                 * If it mismatches because we loaded a new version of that asset during the processing of the dependant, then that new version should kick off a reprocess of the dependant asset
                 * If it mismatches because we received a new version of an asset that has not been identified by the processor, that new version will get picked up and we will queue a re-process check of the dependant, but we won't do a rebuild because the hash will match 
+    * LATEST TODO
+        * Populate hashes
+        * Only re-process assets whose load_dep hashes and current file hash haven't changed (current full_hash logic isn't full)
 * Try to remove crossbeam channels for recycling ids
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
@@ -538,3 +542,4 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
         * loading custom file formats with references to other files likely often want their own processing logic
         * anything with load_asset_bytes
 * Use UntypedAssetIds where possible in preprocessor (instead of AssetPath)
+* One-to-many asset saving. An asset source that produces many assets currently must be processed into a single asset source. If labled assets can be written separately they can each have their own savers and they could be loaded granularly.

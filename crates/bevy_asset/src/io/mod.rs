@@ -65,6 +65,12 @@ pub enum AssetWriterError {
 }
 pub trait AssetWriter: Send + Sync + 'static {
     /// Returns a future to load the full file data at the provided path.
-    fn write<'a>(&'a self, path: &'a Path) -> BoxedFuture<'a, Result<Box<Writer>, ()>>;
-    fn write_meta<'a>(&'a self, path: &'a Path) -> BoxedFuture<'a, Result<Box<Writer>, ()>>;
+    fn write<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Box<Writer>, AssetWriterError>>;
+    fn write_meta<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Box<Writer>, AssetWriterError>>;
 }

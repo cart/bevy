@@ -1,20 +1,23 @@
 use crate::{
     io::{AssetReader, AssetReaderError, PathStream, Reader},
-    processor::AssetProcessor,
+    processor::{AssetProcessorData, ProcessStatus},
 };
 use anyhow::Result;
 use bevy_log::trace;
 use bevy_utils::BoxedFuture;
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 pub struct ProcessorGatedReader {
     reader: Box<dyn AssetReader>,
-    processor: AssetProcessor,
+    processor_data: Arc<AssetProcessorData>,
 }
 
 impl ProcessorGatedReader {
-    pub fn new(reader: Box<dyn AssetReader>, processor: AssetProcessor) -> Self {
-        Self { processor, reader }
+    pub fn new(reader: Box<dyn AssetReader>, processor_data: Arc<AssetProcessorData>) -> Self {
+        Self {
+            processor_data,
+            reader,
+        }
     }
 }
 
@@ -25,8 +28,19 @@ impl AssetReader for ProcessorGatedReader {
     ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
         Box::pin(async move {
             trace!("Waiting for processing to finish before reading {:?}", path);
-            self.processor.wait_until_finished().await;
-            trace!("Processing finished, reading {:?}", path);
+            // TODO: handle the response here
+            let process_result = self.processor_data.wait_until_processed(path).await;
+            match process_result {
+                ProcessStatus::Processed => {}
+                ProcessStatus::Failed | ProcessStatus::NonExistent => {
+                    return Err(AssetReaderError::NotFound(path.to_owned()))
+                }
+            }
+            trace!(
+                "Processing finished with {:?}, reading {:?}",
+                process_result,
+                path
+            );
             let result = self.reader.read(path).await?;
             Ok(result)
         })
@@ -41,8 +55,19 @@ impl AssetReader for ProcessorGatedReader {
                 "Waiting for processing to finish before reading meta {:?}",
                 path
             );
-            self.processor.wait_until_finished().await;
-            trace!("Processing finished, reading meta {:?}", path);
+            // TODO: handle the response here
+            let process_result = self.processor_data.wait_until_processed(path).await;
+            match process_result {
+                ProcessStatus::Processed => {}
+                ProcessStatus::Failed | ProcessStatus::NonExistent => {
+                    return Err(AssetReaderError::NotFound(path.to_owned()));
+                }
+            }
+            trace!(
+                "Processing finished with {:?}, reading meta {:?}",
+                process_result,
+                path
+            );
             let result = self.reader.read_meta(path).await?;
             Ok(result)
         })
@@ -57,7 +82,7 @@ impl AssetReader for ProcessorGatedReader {
                 "Waiting for processing to finish before reading directory {:?}",
                 path
             );
-            self.processor.wait_until_finished().await;
+            self.processor_data.wait_until_finished().await;
             trace!("Processing finished, reading directory {:?}", path);
             let result = self.reader.read_directory(path).await?;
             Ok(result)
@@ -73,7 +98,7 @@ impl AssetReader for ProcessorGatedReader {
                 "Waiting for processing to finish before reading directory {:?}",
                 path
             );
-            self.processor.wait_until_finished().await;
+            self.processor_data.wait_until_finished().await;
             trace!("Processing finished, getting directory status {:?}", path);
             let result = self.reader.is_directory(path).await?;
             Ok(result)

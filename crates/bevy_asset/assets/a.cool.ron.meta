@@ -1,5 +1,17 @@
 (
     meta_format_version: "1.0",
     loader: "loader::CoolTextLoader",
+    processor: Some((
+        saver: "loader::CoolTextSaver",
+        saver_settings: (
+            appended: "",
+        ),
+        loader: Loader(
+            loader: "loader::TextLoader",
+            settings: (
+                blah: false,
+            ),
+        ),
+    )),
     loader_settings: (),
 )

@@ -47,6 +47,7 @@ pub trait ErasedAssetLoader: Send + Sync + 'static {
     fn default_meta(&self) -> Box<dyn AssetMetaDyn>;
     fn type_name(&self) -> &'static str;
     fn type_id(&self) -> TypeId;
+    fn asset_type_name(&self) -> &'static str;
     fn asset_type_id(&self) -> TypeId;
 }
 
@@ -116,6 +117,10 @@ where
 
     fn asset_type_id(&self) -> TypeId {
         TypeId::of::<L::Asset>()
+    }
+
+    fn asset_type_name(&self) -> &'static str {
+        std::any::type_name::<L::Asset>()
     }
 }
 

@@ -13,8 +13,6 @@ pub trait AssetSaver: Send + Sync + 'static {
         asset: &'a Self::Asset,
         settings: &'a Self::Settings,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>>;
-
-    fn extension(&self) -> &'static str;
 }
 
 pub trait ErasedAssetSaver: Send + Sync + 'static {
@@ -24,7 +22,6 @@ pub trait ErasedAssetSaver: Send + Sync + 'static {
         asset: &'a ErasedLoadedAsset,
         settings: &'a dyn Settings,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>>;
-    fn extension(&self) -> &'static str;
     fn type_name(&self) -> &'static str;
 }
 
@@ -44,10 +41,6 @@ impl<S: AssetSaver> ErasedAssetSaver for S {
             Ok(())
         })
     }
-    fn extension(&self) -> &'static str {
-        S::extension(&self)
-    }
-
     fn type_name(&self) -> &'static str {
         std::any::type_name::<S>()
     }
@@ -69,10 +62,6 @@ impl AssetSaver for NullSaver {
         _asset: &'a Self::Asset,
         _settings: &'a Self::Settings,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>> {
-        panic!("NullSaver should never be called");
-    }
-
-    fn extension(&self) -> &'static str {
         panic!("NullSaver should never be called");
     }
 }

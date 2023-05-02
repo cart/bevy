@@ -617,7 +617,8 @@ impl AssetServer {
                     return Err(AssetLoadError::RequestedHandleTypeMismatch {
                         path: path.to_owned(),
                         requested: handle.type_id(),
-                        actual: loader.type_id(),
+                        actual_asset_name: loader.asset_type_name(),
+                        loader_name: loader.type_name(),
                     });
                 }
                 // if a handle was passed in, the "should load" check was already done
@@ -1011,11 +1012,12 @@ pub enum RecursiveDependencyLoadState {
 
 pub enum AssetLoadError {
     // TODO: producer of this error should look up friendly type names
-    #[error("Requested handle of type {requested:?} for asset '{path}' does not match actual asset type {actual:?}")]
+    #[error("Requested handle of type {requested:?} for asset '{path}' does not match actual asset type '{actual_asset_name}', which used loader '{loader_name}'")]
     RequestedHandleTypeMismatch {
         path: AssetPath<'static>,
         requested: TypeId,
-        actual: TypeId,
+        actual_asset_name: &'static str,
+        loader_name: &'static str,
     },
     #[error(transparent)]
     MissingAssetLoaderForExtension(#[from] MissingAssetLoaderForExtensionError),

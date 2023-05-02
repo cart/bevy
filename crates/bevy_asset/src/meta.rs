@@ -15,7 +15,7 @@ pub struct LoadDependencyInfo {
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct ProcessedInfo {
-    pub hash: u64,
+    pub full_hash: u64,
     pub load_dependencies: Vec<LoadDependencyInfo>,
 }
 
