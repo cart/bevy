@@ -1,8 +1,8 @@
 (
     text: "a",
     dependencies: [
-        "b.cool.ron",
-        "c.cool.ron",
+        "foo/b.cool.ron",
+        "foo/c.cool.ron",
     ],
     embedded_dependencies: [],
 )

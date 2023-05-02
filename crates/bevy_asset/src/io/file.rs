@@ -195,6 +195,9 @@ impl AssetWriter for FileAssetWriter {
     ) -> BoxedFuture<'a, Result<Box<Writer>, AssetWriterError>> {
         Box::pin(async move {
             let full_path = self.root_path.join(path);
+            if let Some(parent) = full_path.parent() {
+                async_fs::create_dir_all(parent).await?;
+            }
             let file = File::create(&full_path).await?;
             let reader: Box<Writer> = Box::new(file);
             Ok(reader)
@@ -208,6 +211,9 @@ impl AssetWriter for FileAssetWriter {
         Box::pin(async move {
             let meta_path = get_meta_path(path);
             let full_path = self.root_path.join(meta_path);
+            if let Some(parent) = full_path.parent() {
+                async_fs::create_dir_all(parent).await?;
+            }
             let file = File::create(&full_path).await?;
             let reader: Box<Writer> = Box::new(file);
             Ok(reader)

@@ -15,15 +15,15 @@ use async_broadcast::{Receiver, Sender};
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::prelude::*;
 use bevy_log::{error, trace};
-use bevy_tasks::IoTaskPool;
+use bevy_tasks::{IoTaskPool, Scope};
 use bevy_utils::{BoxedFuture, HashMap, HashSet};
-use futures_lite::{AsyncReadExt, AsyncWriteExt, StreamExt};
+use futures_lite::{AsyncReadExt, AsyncWriteExt, FutureExt, StreamExt};
 use parking_lot::RwLock;
 use std::{
     any::TypeId,
     hash::{Hash, Hasher},
     marker::PhantomData,
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 use thiserror::Error;
@@ -355,18 +355,35 @@ impl AssetProcessor {
         &*self.data.destination_writer
     }
 
+    fn process_assets_internal<'scope, 'env>(
+        &'scope self,
+        scope: &'scope Scope<'scope, 'env, ()>,
+        path: PathBuf,
+    ) -> bevy_utils::BoxedFuture<'scope, Result<(), AssetReaderError>> {
+        async move {
+            if self.source_reader().is_directory(&path).await? {
+                let mut path_stream = self.source_reader().read_directory(&path).await.unwrap();
+                while let Some(path) = path_stream.next().await {
+                    self.process_assets_internal(scope, path).await?;
+                }
+            } else {
+                let processor = self.clone();
+                scope.spawn(async move {
+                    processor.process_asset(&path).await;
+                });
+            }
+            Ok(())
+        }
+        .boxed()
+    }
+
+    // TODO: document this process in full and describe why the "eventual consistency" works
     pub fn process_assets(&self) {
         IoTaskPool::get().scope(|scope| {
             scope.spawn(async move {
                 self.populate_processed_info().await.unwrap();
-                let path = Path::new("");
-                let mut path_stream = self.source_reader().read_directory(path).await.unwrap();
-                while let Some(path) = path_stream.next().await {
-                    let processor = self.clone();
-                    scope.spawn(async move {
-                        processor.process_asset(&path).await;
-                    });
-                }
+                let path = PathBuf::from("");
+                self.process_assets_internal(scope, path).await.unwrap();
             });
         });
         IoTaskPool::get().scope(|scope| {

@@ -295,8 +295,24 @@ struct Asset<T: Asset> {
                 * If it mismatches because we received a new version of an asset that has not been identified by the processor, that new version will get picked up and we will queue a re-process check of the dependant, but we won't do a rebuild because the hash will match 
     * LATEST TODO
         * Re-process if dependencies change
+            * When a process finishes add dependents to queue a check (compare new hash against last hash)
+            * be wary of bug: update_status(Processed) is currently sent for SKippedNotChanged, which could send the "processed" signal too early
+        * Do we need to add "file locking" for processed folder
+            * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
+            * For a given asset load, a read won't happen until there is already a valid processed item
+            * _However_ this might happen
+                1. load starts, asset already processed, so we go through the gate
+                2. processor detects hot-reload and kicks off asset process, write begins (but doesn't finish)
+                3. load read begins, which reads some (but not all) of the written bytes in (2)
+            * After first process, gates are always open (because they have a Processed state)
+                * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
+            * Therefore, processed reader/writer should atomically lock files
         * Cleanup unused assets
             * hashmap of all source asset names, remove all imported that dont have a match
+* Crash recovery
+    * How do we maintain integrity of processed folder in event of a crash at arbitrary times?
+    * Unity uses finally blocks ... do we use catch_unwind?
+    * Short term, use simple "did we crash" detection combined with a full reprocess?
 * Try to remove crossbeam channels for recycling ids
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
@@ -313,9 +329,6 @@ struct Asset<T: Asset> {
     * Implemented slow loop fix ... do better
     * Add test to ensure this works correctly
 * Should we combine meta + asset loading apis?
-* More granular preprocessor locking
-    * Global gate on scan (to build view of the world)
-    * Granular gate on individual outputs (maybe done in Assets directly?)
 * Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
 
 
