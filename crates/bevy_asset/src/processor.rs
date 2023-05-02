@@ -5,8 +5,8 @@ use crate::{
     },
     loader::{AssetLoader, DeserializeMetaError, ErasedAssetLoader},
     meta::{
-        AssetMeta, AssetMetaDyn, AssetMetaMinimal, AssetMetaProcessedInfoMinimal, ProcessedInfo,
-        ProcessedLoader, ProcessorSettings, META_FORMAT_VERSION,
+        AssetMeta, AssetMetaDyn, AssetMetaMinimal, AssetMetaProcessedInfoMinimal,
+        LoadDependencyInfo, ProcessedInfo, ProcessedLoader, ProcessorSettings, META_FORMAT_VERSION,
     },
     saver::AssetSaver,
     AssetLoadError, AssetPath, AssetServer, ErasedLoadedAsset, MissingAssetLoaderForExtensionError,
@@ -553,9 +553,9 @@ impl AssetProcessor {
         // PERF: in theory these hashes could be streamed if we want to avoid allocating the whole asset.
         // The downside is that reading assets would need to happen twice (once for the hash and once for the asset loader)
         // Hard to say which is worse
-        let full_hash = Self::get_full_hash(&meta_bytes, &asset_bytes);
-        let new_processed_info = ProcessedInfo {
-            full_hash,
+        let new_hash = Self::get_hash(&meta_bytes, &asset_bytes);
+        let mut new_processed_info = ProcessedInfo {
+            hash: new_hash,
             load_dependencies: Vec::new(),
         };
 
@@ -563,8 +563,8 @@ impl AssetProcessor {
         {
             let infos = self.data.asset_infos.read().await;
             if let Some(asset_info) = infos.get(&asset_path) {
-                if let Some(processed_info) = &asset_info.processed_info {
-                    if processed_info.full_hash == full_hash {
+                if let Some(current_processed_info) = &asset_info.processed_info {
+                    if current_processed_info.hash == new_hash {
                         trace!(
                             "Skipping processing of asset {:?} because it has not changed",
                             asset_path
@@ -589,6 +589,14 @@ impl AssetProcessor {
                     false,
                 )
                 .await?;
+            for (path, hash) in loaded_asset.loader_dependencies.iter() {
+                new_processed_info
+                    .load_dependencies
+                    .push(LoadDependencyInfo {
+                        hash: *hash,
+                        path: path.to_string(),
+                    })
+            }
             process_plan
                 .process(&mut writer, &loaded_asset)
                 .await
@@ -627,7 +635,7 @@ impl AssetProcessor {
     }
 
     /// NOTE: changing the hashing logic here is a _breaking change_ that requires a [`META_FORMAT_VERSION`] bump.
-    fn get_full_hash(meta_bytes: &[u8], asset_bytes: &[u8]) -> u64 {
+    fn get_hash(meta_bytes: &[u8], asset_bytes: &[u8]) -> u64 {
         let mut hasher = Self::get_hasher();
         meta_bytes.hash(&mut hasher);
         asset_bytes.hash(&mut hasher);

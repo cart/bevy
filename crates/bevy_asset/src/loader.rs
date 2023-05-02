@@ -133,7 +133,7 @@ pub struct LoadedAsset<A: Asset> {
     pub(crate) value: A,
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) dependencies: HashSet<UntypedHandle>,
-    pub(crate) loader_dependencies: HashSet<AssetPath<'static>>,
+    pub(crate) loader_dependencies: HashMap<AssetPath<'static>, u64>,
     pub(crate) labeled_assets: HashMap<String, LabeledAsset>,
     pub(crate) meta: Option<Box<dyn AssetMetaDyn>>,
 }
@@ -144,7 +144,7 @@ impl<A: Asset> LoadedAsset<A> {
             value,
             path: None,
             dependencies: HashSet::default(),
-            loader_dependencies: HashSet::default(),
+            loader_dependencies: HashMap::default(),
             labeled_assets: HashMap::default(),
             meta,
         }
@@ -155,7 +155,7 @@ pub struct ErasedLoadedAsset {
     pub(crate) value: Box<dyn AssetContainer>,
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) dependencies: HashSet<UntypedHandle>,
-    pub(crate) loader_dependencies: HashSet<AssetPath<'static>>,
+    pub(crate) loader_dependencies: HashMap<AssetPath<'static>, u64>,
     pub(crate) labeled_assets: HashMap<String, LabeledAsset>,
     pub(crate) meta: Option<Box<dyn AssetMetaDyn>>,
 }
@@ -209,7 +209,7 @@ pub struct LoadContext<'a> {
     asset_path: AssetPath<'static>,
     dependencies: HashSet<UntypedHandle>,
     /// Direct dependencies used by this loader.
-    loader_dependencies: HashSet<AssetPath<'static>>,
+    loader_dependencies: HashMap<AssetPath<'static>, u64>,
     labeled_assets: HashMap<String, LabeledAsset>,
 }
 
@@ -224,12 +224,18 @@ impl<'a> LoadContext<'a> {
             asset_path,
             should_load_dependencies: load_dependencies,
             dependencies: HashSet::default(),
-            loader_dependencies: HashSet::default(),
+            loader_dependencies: HashMap::default(),
             labeled_assets: HashMap::default(),
         }
     }
 
-    /// Begins an assetload
+    /// Begins a new labeled asset load. Use the returned [`LoadContext`] to load
+    /// dependencies for the new asset and call [`LoadContext::finish`] to finalize the asset load.
+    /// When finished, make sure you call [`Self::add_labled_asset`] to add the results back to the parent
+    /// context.
+    /// Prefer [`Self::labeled_asset_scope`] when possible, which will automatically add
+    /// the labeled [`LoadContext`] back to the parent context.
+    /// [`Self::begin_labeled_asset`] exists largely to enable parallel asset loading.
     pub fn begin_labeled_asset(&self, label: String) -> LoadContext {
         LoadContext::new(
             self.asset_server,
@@ -312,8 +318,9 @@ impl<'a> LoadContext<'a> {
         let mut reader = self.asset_server.reader().read(path).await?;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
-        self.loader_dependencies
-            .insert(AssetPath::new(path.to_owned(), None));
+        todo!("populate hash here");
+        // self.loader_dependencies
+        //     .insert(AssetPath::new(path.to_owned(), None));
         Ok(bytes)
     }
 
@@ -351,7 +358,12 @@ impl<'a> LoadContext<'a> {
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path = path.into();
         let loaded_asset = self.asset_server.load_direct(path.to_owned()).await?;
-        self.loader_dependencies.insert(path.to_owned());
+        let info = loaded_asset
+            .meta
+            .as_ref()
+            .and_then(|m| m.processed_info().as_ref());
+        let hash = info.map(|i| i.hash).unwrap_or(0);
+        self.loader_dependencies.insert(path.to_owned(), hash);
         Ok(loaded_asset)
     }
 }

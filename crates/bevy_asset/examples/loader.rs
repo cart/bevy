@@ -166,13 +166,19 @@ impl AssetSaver for CoolTextSaver {
 }
 
 #[derive(Resource)]
-struct AText(Handle<Text>);
-
-fn setup(mut commands: Commands, assets: Res<AssetServer>) {
-    let handle: Handle<Text> = assets.load("a.cool.ron");
-    commands.insert_resource(AText(handle));
+struct TextAssets {
+    a: Handle<Text>,
+    c: Handle<Text>,
 }
 
-fn print_text(text: Res<AText>, texts: Res<Assets<Text>>) {
-    println!("{:?}", texts.get(&text.0));
+fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+    commands.insert_resource(TextAssets {
+        a: assets.load("a.cool.ron"),
+        c: assets.load("c.cool.ron"),
+    });
+}
+
+fn print_text(handles: Res<TextAssets>, texts: Res<Assets<Text>>) {
+    println!("a {:?}", texts.get(&handles.a));
+    println!("c {:?}", texts.get(&handles.c));
 }

@@ -296,6 +296,7 @@ struct Asset<T: Asset> {
     * LATEST TODO
         * Re-process if dependencies change
         * Cleanup unused assets
+            * hashmap of all source asset names, remove all imported that dont have a match
 * Try to remove crossbeam channels for recycling ids
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
