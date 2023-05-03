@@ -4,7 +4,10 @@ use async_fs::{read_dir, File};
 use bevy_utils::BoxedFuture;
 use crossbeam_channel::Sender;
 use futures_lite::StreamExt;
-use notify::{Error, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{
+    event::{CreateKind, ModifyKind, RemoveKind},
+    Error, Event, RecommendedWatcher, RecursiveMode, Watcher,
+};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -234,29 +237,63 @@ impl AssetWriter for FileAssetWriter {
 }
 
 pub struct FileWatcher {
-    watcher: RecommendedWatcher,
+    _watcher: RecommendedWatcher,
 }
 
 impl FileWatcher {
     pub fn new(root: PathBuf, sender: Sender<AssetSourceEvent>) -> Result<Self, Error> {
+        let owned_root = root.clone();
         let mut watcher = RecommendedWatcher::new(
             move |result: Result<Event, Error>| {
                 let event = result.unwrap();
                 println!("{:?}", event);
-                // match event.kind {
-                //     notify::EventKind::Any => todo!(),
-                //     notify::EventKind::Access(_) => todo!(),
-                //     notify::EventKind::Create(_) => todo!(),
-                //     notify::EventKind::Modify(_) => todo!(),
-                //     notify::EventKind::Remove(_) => todo!(),
-                //     notify::EventKind::Other => todo!(),
-                // }
+                match event.kind {
+                    notify::EventKind::Create(CreateKind::File) => {
+                        let (path, is_meta) = get_asset_path(&owned_root, &event.paths[0]);
+                        if is_meta {
+                            sender.send(AssetSourceEvent::AddedMeta(path)).unwrap();
+                        } else {
+                            sender.send(AssetSourceEvent::Added(path)).unwrap();
+                        }
+                    }
+                    notify::EventKind::Modify(ModifyKind::Data(_)) => {
+                        let (path, is_meta) = get_asset_path(&owned_root, &event.paths[0]);
+                        if is_meta {
+                            sender.send(AssetSourceEvent::ModifiedMeta(path)).unwrap();
+                        } else {
+                            sender.send(AssetSourceEvent::Modified(path)).unwrap();
+                        }
+                    }
+                    notify::EventKind::Remove(RemoveKind::File) => {
+                        let (path, is_meta) = get_asset_path(&owned_root, &event.paths[0]);
+                        if is_meta {
+                            sender.send(AssetSourceEvent::RemovedMeta(path)).unwrap();
+                        } else {
+                            sender.send(AssetSourceEvent::Removed(path)).unwrap();
+                        }
+                    }
+                    _ => {}
+                }
             },
             notify::Config::default(),
         )?;
         watcher.watch(&root, RecursiveMode::Recursive)?;
-        Ok(Self { watcher })
+        Ok(Self { _watcher: watcher })
     }
+}
+
+fn get_asset_path(root: &Path, absolute_path: &Path) -> (PathBuf, bool) {
+    let relative_path = absolute_path.strip_prefix(root).unwrap();
+    let is_meta = relative_path
+        .extension()
+        .map(|e| e == "meta")
+        .unwrap_or(false);
+    let asset_path = if is_meta {
+        relative_path.with_extension("").to_owned()
+    } else {
+        relative_path.to_owned()
+    };
+    (asset_path, is_meta)
 }
 
 impl AssetWatcher for FileWatcher {}

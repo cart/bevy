@@ -532,3 +532,4 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
         * anything with load_asset_bytes
 * Use UntypedAssetIds where possible in preprocessor (instead of AssetPath)
 * One-to-many asset saving. An asset source that produces many assets currently must be processed into a single asset source. If labled assets can be written separately they can each have their own savers and they could be loaded granularly.
+* Lots of "AssetPath as identity" everywhere. Should probably exchange these at runtime for an id that is cheaper to hash. 

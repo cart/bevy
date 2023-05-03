@@ -65,6 +65,7 @@ pub fn start_processor(processor: Res<AssetProcessor>) {
     let processor = processor.clone();
     std::thread::spawn(move || {
         processor.process_assets();
+        futures_lite::future::block_on(processor.listen_for_source_change_events());
     });
 }
 
@@ -469,17 +470,37 @@ impl AssetProcessor {
                 self.process_assets_internal(scope, path).await.unwrap();
             });
         });
-        IoTaskPool::get().scope(|scope| {
-            scope.spawn(async move {
-                self.try_reprocessing_queued().await;
-                let mut asset_infos = self.data.asset_infos.write().await;
-                asset_infos.resolve_maybe_non_existent().await;
-                // clean up metadata in asset server
-                self.server.data.infos.write().consume_handle_drop_events();
-                self.set_state(ProcessorState::Finished).await;
-                trace!("Processing finished");
-            })
-        });
+        futures_lite::future::block_on(self.finish_processing_assets());
+        trace!("Processing finished");
+    }
+
+    pub async fn finish_processing_assets(&self) {
+        self.try_reprocessing_queued().await;
+        let mut asset_infos = self.data.asset_infos.write().await;
+        asset_infos.resolve_maybe_non_existent().await;
+        // clean up metadata in asset server
+        self.server.data.infos.write().consume_handle_drop_events();
+        self.set_state(ProcessorState::Finished).await;
+    }
+
+    // PERF: parallelize change event processing
+    pub async fn listen_for_source_change_events(&self) {
+        trace!("Listening for changes to source assets");
+        loop {
+            for event in self.data.source_event_receiver.try_iter() {
+                match event {
+                    AssetSourceEvent::Modified(path) | AssetSourceEvent::ModifiedMeta(path) => {
+                        trace!("Asset {:?} was modified. Attempting to re-process", path);
+                        self.process_asset(&path).await;
+                    }
+                    _ => {
+                        trace!("Skipped source change event: {:?}", event)
+                    }
+                }
+            }
+            // TODO: make sure the "global processor state" is set appropriately here. or alternatively, remove the global processor state
+            self.finish_processing_assets().await;
+        }
     }
 
     async fn try_reprocessing_queued(&self) {

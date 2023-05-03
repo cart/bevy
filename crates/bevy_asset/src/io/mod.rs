@@ -83,6 +83,7 @@ pub trait AssetWriter: Send + Sync + 'static {
     ) -> BoxedFuture<'a, Result<Box<Writer>, AssetWriterError>>;
 }
 
+#[derive(Clone, Debug)]
 pub enum AssetSourceEvent {
     Added(PathBuf),
     Modified(PathBuf),
