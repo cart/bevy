@@ -5,12 +5,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     loader::AssetLoader,
     saver::{AssetSaver, NullSaver},
+    AssetPath,
 };
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LoadDependencyInfo {
     pub hash: u64,
-    pub path: String,
+    pub path: AssetPath<'static>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]

@@ -258,57 +258,22 @@ struct Asset<T: Asset> {
 
 ### MVP
 
-* Make sure processed nested paths work correctly!
-* Should load_direct return the processed version of the asset?
-    * This would mean merging the processor into AssetServer?
-        * load_direct will await the processed versions of load dependencies and return processed assets
-            * store signal channel on AssetInfo
-            * directly loaded assets will include hash
-            * hash comes from "asset source", if it exists on the metadata 
-        * processed_source: Option vs asset_source: Always
-        * new "process" function on asset server that _only_ processes asset
-    * Hot Reloading must behave differently: processed meta will be written, then asset will be written, only generate one load event after both have happened
-    * Is it safe to share runtime ids? centralized metadata?
 * Use hashing to block unnecessary rebuilds 
-    * Build view of current world:
-        * Scan processed folder and get hash info / timestamps / load_dependencies
-        * Generate reverse dependency graph
-    * topo-sort by load dependencies to process in _roughly_ reverse-dependency-order (this might change as you go). just an optimization to avoid re-processing. Add them to the "check_queue"
-    * process given dependency
-        * after re-processing a given dependency force reprocessing of all direct reverse load_dependencies 
-    * Processed sub assets _are not handled correcty_
-        * They are fed into the AssetServer InternalAssetEvent feed and ignored ... how will they be saved?
-            * As normal asset files in the processed folder?
-                * Requires different loading schemes for processed vs unprocessed
-                    * this actually seems desirable?
-                * Requires a clean up step when re-processing 
-        * Can "direct" asset loads return a different type (ex: with owned ErasedLoadedAssets)
-    * Challenge: currenty processing an asset could result in _any_ version of a dependency being loaded (ex: kick off process and then user modifies file during process)
-        * Options:
-            1. Import artifacts into DB (or folder) with transactional hash associated with them. Use this as "source of truth" for asset dependencies.
-            2. Re-hash every direct asset load and compare (eventual consistency)
-        * How to guarantee _specific_ direct-loaded-asset bytes match hash?
-            * The only hash you can trust is the one generated in memory, therefore load_asset_bytes and load_direct_async must compute and store the hash in the load context prior to usage!
-            * We don't want to store all assets in memory at a given time, so this must be signal based and eventually consistent
-            * If we processed an asset with a load dependency hash that mismatches the currently stored hash, trigger a "try reprocess" for that asset
-                * If it mismatches because we loaded a new version of that asset during the processing of the dependant, then that new version should kick off a reprocess of the dependant asset
-                * If it mismatches because we received a new version of an asset that has not been identified by the processor, that new version will get picked up and we will queue a re-process check of the dependant, but we won't do a rebuild because the hash will match 
-    * LATEST TODO
-        * Re-process if dependencies change
-            * When a process finishes add dependents to queue a check (compare new hash against last hash)
-            * be wary of bug: update_status(Processed) is currently sent for SKippedNotChanged, which could send the "processed" signal too early
-        * Do we need to add "file locking" for processed folder
-            * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
-            * For a given asset load, a read won't happen until there is already a valid processed item
-            * _However_ this might happen
-                1. load starts, asset already processed, so we go through the gate
-                2. processor detects hot-reload and kicks off asset process, write begins (but doesn't finish)
-                3. load read begins, which reads some (but not all) of the written bytes in (2)
-            * After first process, gates are always open (because they have a Processed state)
-                * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
-            * Therefore, processed reader/writer should atomically lock files
-        * Cleanup unused assets
-            * hashmap of all source asset names, remove all imported that dont have a match
+    * Re-process if dependencies change
+        * When a process finishes add dependents to queue a check (compare new hash against last hash)
+        * be wary of bug: update_status(Processed) is currently sent for SKippedNotChanged, which could send the "processed" signal too early
+    * Do we need to add "file locking" for processed folder (sounds like yes ... this might also play into recovery? if we crash with an active lock, that means that asset was not fully written)
+        * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
+        * For a given asset load, a read won't happen until there is already a valid processed item
+        * _However_ this might happen
+            1. load starts, asset already processed, so we go through the gate
+            2. processor detects hot-reload and kicks off asset process, write begins (but doesn't finish)
+            3. load read begins, which reads some (but not all) of the written bytes in (2)
+        * After first process, gates are always open (because they have a Processed state)
+            * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
+        * Therefore, processed reader/writer should atomically lock files
+* Cleanup unused assets
+    * hashmap of all source asset names, remove all imported that dont have a match
 * Crash recovery
     * How do we maintain integrity of processed folder in event of a crash at arbitrary times?
     * Unity uses finally blocks ... do we use catch_unwind?
@@ -316,20 +281,25 @@ struct Asset<T: Asset> {
 * Try to remove crossbeam channels for recycling ids
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
-* Validate dependency types in preprocessor? 
 * Asset _unloading_ and _re-loading_ that allows handles to be kept alive while unloading the asset data itself
     * Being able to kick off re-loads (that re-validate existing handles) seems useful!
     * How would events be handled here?
 * Asset dependency derive
     * LoadedFolder needs this
+    * Wire up Asset::visit_dependencies to LoadedAsset
 * Hot Reloading
-* Might want to gate dep count increments / decrements on hashset ops (or just use hashsets). Otherwise reloading a dep could affect load correctness. 
     * Use a graph impl (bevy_graph?) for simplicity and correctness?
 * Handles dropping before load breaks?
     * Implemented slow loop fix ... do better
     * Add test to ensure this works correctly
 * Should we combine meta + asset loading apis?
 * Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
+* Might want to gate dep count increments / decrements on hashset ops (or just use hashsets). Otherwise reloading a dep could affect load correctness. 
+    * see next point as this probably relates
+* Send "dependency reloaded" events
+    * current dependants_waiting_on_load doesn't enable this, need to retain the whole list
+        * notably, freeing an asset would remove all "dependants" info, and reloading would result in an empty list  
+        * 
 
 
 ```rust
@@ -504,6 +474,10 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
     * Implied dependencies (via load calls / scopes) vs dependency enumeration (via Asset type). Call out tradeoffs in PR
         * Current plan is "dual mode"
     * Aggressive sub asset and dependency loading (which could mean adding sub assets for failed assets) vs conservative.
+    * ProcessorDev right now biases toward "fast/eager startup", which mean older versions of assets might be loaded first
+        * relies on hot reloading
+        * Do we add another "wait for full process" mode that wont load any assets until fully processed?
+            * We don't _really_ need to wait for everything ... after all deps for a given asset are checked we can send the event
 * Const Typed Handles! Smaller! Faster!
 * Directly load asset instances and track their dependencies
 * Sub Assets are yielded right away

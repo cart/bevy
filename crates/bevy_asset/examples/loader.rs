@@ -174,7 +174,7 @@ struct TextAssets {
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     commands.insert_resource(TextAssets {
         a: assets.load("a.cool.ron"),
-        c: assets.load("c.cool.ron"),
+        c: assets.load("foo/c.cool.ron"),
     });
 }
 

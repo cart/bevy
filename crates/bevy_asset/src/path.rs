@@ -11,8 +11,8 @@ use std::{
 /// Represents a path to an asset in the file system.
 #[derive(Debug, Hash, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct AssetPath<'a> {
-    path: Cow<'a, Path>,
-    label: Option<Cow<'a, str>>,
+    pub path: Cow<'a, Path>,
+    pub label: Option<Cow<'a, str>>,
 }
 
 impl<'a> Display for AssetPath<'a> {
