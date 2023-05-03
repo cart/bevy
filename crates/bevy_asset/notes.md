@@ -487,6 +487,7 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Paths are canonical
 * Asset system usability
     * handle.path()
+* Call out "stable type name" as the end game for loader / processor identities
 
 ### Why not distill?
 

@@ -5,6 +5,7 @@ pub mod processor_gated;
 
 mod provider;
 
+use crossbeam_channel::Sender;
 pub use futures_lite::{AsyncReadExt, AsyncWriteExt};
 pub use provider::*;
 
@@ -50,6 +51,13 @@ pub trait AssetReader: Send + Sync + 'static {
         &'a self,
         path: &'a Path,
     ) -> BoxedFuture<'a, Result<bool, AssetReaderError>>;
+
+    /// Returns an Asset watcher that will send events on the given channel.
+    /// If this reader does not support watching for changes, this will return [`None`].
+    fn watch_for_changes(
+        &self,
+        event_sender: Sender<AssetSourceEvent>,
+    ) -> Option<Box<dyn AssetWatcher>>;
 }
 
 pub type Writer = dyn AsyncWrite + Unpin + Send + Sync;
@@ -74,3 +82,14 @@ pub trait AssetWriter: Send + Sync + 'static {
         path: &'a Path,
     ) -> BoxedFuture<'a, Result<Box<Writer>, AssetWriterError>>;
 }
+
+pub enum AssetSourceEvent {
+    Added(PathBuf),
+    Modified(PathBuf),
+    Removed(PathBuf),
+    AddedMeta(PathBuf),
+    ModifiedMeta(PathBuf),
+    RemovedMeta(PathBuf),
+}
+
+pub trait AssetWatcher: Send + Sync + 'static {}

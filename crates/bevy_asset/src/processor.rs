@@ -1,7 +1,7 @@
 use crate::{
     io::{
         processor_gated::ProcessorGatedReader, AssetProvider, AssetProviders, AssetReader,
-        AssetReaderError, AssetWriter, AssetWriterError, Writer,
+        AssetReaderError, AssetSourceEvent, AssetWatcher, AssetWriter, AssetWriterError, Writer,
     },
     loader::{AssetLoader, DeserializeMetaError, ErasedAssetLoader},
     meta::{
@@ -11,7 +11,6 @@ use crate::{
     saver::AssetSaver,
     AssetLoadError, AssetPath, AssetServer, ErasedLoadedAsset, MissingAssetLoaderForExtensionError,
 };
-use async_broadcast::{Receiver, Sender};
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::prelude::*;
 use bevy_log::{error, trace};
@@ -26,7 +25,6 @@ use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
     sync::Arc,
-    thread::current,
 };
 use thiserror::Error;
 
@@ -154,8 +152,8 @@ struct ProcessorAssetInfo {
     processed_info: Option<ProcessedInfo>,
     dependants: HashSet<AssetPath<'static>>,
     status: Option<ProcessStatus>,
-    status_sender: Sender<ProcessStatus>,
-    status_receiver: Receiver<ProcessStatus>,
+    status_sender: async_broadcast::Sender<ProcessStatus>,
+    status_receiver: async_broadcast::Receiver<ProcessStatus>,
 }
 
 impl Default for ProcessorAssetInfo {
@@ -328,8 +326,10 @@ pub struct AssetProcessorData {
     source_writer: Box<dyn AssetWriter>,
     destination_reader: Box<dyn AssetReader>,
     destination_writer: Box<dyn AssetWriter>,
-    finished_sender: Sender<()>,
-    finished_receiver: Receiver<()>,
+    _source_watcher: Box<dyn AssetWatcher>,
+    finished_sender: async_broadcast::Sender<()>,
+    finished_receiver: async_broadcast::Receiver<()>,
+    source_event_receiver: crossbeam_channel::Receiver<AssetSourceEvent>,
 }
 
 impl AssetProcessorData {
@@ -340,6 +340,11 @@ impl AssetProcessorData {
         destination_writer: Box<dyn AssetWriter>,
     ) -> Self {
         let (finished_sender, finished_receiver) = async_broadcast::broadcast(1);
+        let (source_event_sender, source_event_receiver) = crossbeam_channel::unbounded();
+        // TODO: watching for changes could probably be entirely optional / we could just warn here
+        let source_watcher = source_reader
+            .watch_for_changes(source_event_sender)
+            .expect("The provided asset source doesn't support watching for changes");
         AssetProcessorData {
             source_reader,
             source_writer,
@@ -347,6 +352,8 @@ impl AssetProcessorData {
             destination_writer,
             finished_sender,
             finished_receiver,
+            source_event_receiver,
+            _source_watcher: source_watcher,
             state: async_lock::RwLock::new(ProcessorState::Scanning),
             process_plans: Default::default(),
             asset_infos: Default::default(),

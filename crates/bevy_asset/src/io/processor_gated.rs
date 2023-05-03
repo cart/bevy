@@ -104,4 +104,11 @@ impl AssetReader for ProcessorGatedReader {
             Ok(result)
         })
     }
+
+    fn watch_for_changes(
+        &self,
+        event_sender: crossbeam_channel::Sender<super::AssetSourceEvent>,
+    ) -> Option<Box<dyn super::AssetWatcher>> {
+        self.reader.watch_for_changes(event_sender)
+    }
 }

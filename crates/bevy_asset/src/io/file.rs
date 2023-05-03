@@ -1,7 +1,10 @@
+use crate::io::{AssetSourceEvent, AssetWatcher};
 use anyhow::Result;
 use async_fs::{read_dir, File};
 use bevy_utils::BoxedFuture;
+use crossbeam_channel::Sender;
 use futures_lite::StreamExt;
+use notify::{Error, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -170,6 +173,15 @@ impl AssetReader for FileAssetReader {
             Ok(metadata.file_type().is_dir())
         })
     }
+
+    fn watch_for_changes(
+        &self,
+        event_sender: crossbeam_channel::Sender<super::AssetSourceEvent>,
+    ) -> Option<Box<dyn AssetWatcher>> {
+        Some(Box::new(
+            FileWatcher::new(self.root_path.clone(), event_sender).unwrap(),
+        ))
+    }
 }
 
 pub struct FileAssetWriter {
@@ -220,3 +232,31 @@ impl AssetWriter for FileAssetWriter {
         })
     }
 }
+
+pub struct FileWatcher {
+    watcher: RecommendedWatcher,
+}
+
+impl FileWatcher {
+    pub fn new(root: PathBuf, sender: Sender<AssetSourceEvent>) -> Result<Self, Error> {
+        let mut watcher = RecommendedWatcher::new(
+            move |result: Result<Event, Error>| {
+                let event = result.unwrap();
+                println!("{:?}", event);
+                // match event.kind {
+                //     notify::EventKind::Any => todo!(),
+                //     notify::EventKind::Access(_) => todo!(),
+                //     notify::EventKind::Create(_) => todo!(),
+                //     notify::EventKind::Modify(_) => todo!(),
+                //     notify::EventKind::Remove(_) => todo!(),
+                //     notify::EventKind::Other => todo!(),
+                // }
+            },
+            notify::Config::default(),
+        )?;
+        watcher.watch(&root, RecursiveMode::Recursive)?;
+        Ok(Self { watcher })
+    }
+}
+
+impl AssetWatcher for FileWatcher {}

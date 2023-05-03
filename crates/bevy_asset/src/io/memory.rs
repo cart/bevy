@@ -237,6 +237,13 @@ impl AssetReader for MemoryAssetReader {
     ) -> BoxedFuture<'a, std::result::Result<bool, AssetReaderError>> {
         Box::pin(async move { Ok(self.root.get_dir(path).is_some()) })
     }
+
+    fn watch_for_changes(
+        &self,
+        _event_sender: crossbeam_channel::Sender<super::AssetSourceEvent>,
+    ) -> Option<Box<dyn super::AssetWatcher>> {
+        None
+    }
 }
 
 #[cfg(test)]
