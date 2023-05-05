@@ -12,7 +12,6 @@ use crate::{
     saver::AssetSaver,
     AssetLoadError, AssetPath, AssetServer, MissingAssetLoaderForExtensionError,
 };
-use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::prelude::*;
 use bevy_log::{error, trace};
 use bevy_tasks::{IoTaskPool, Scope};
@@ -28,47 +27,6 @@ use std::{
 };
 use thiserror::Error;
 
-#[derive(Default)]
-pub struct AssetProcessorPlugin {
-    pub source: AssetProvider,
-    pub destination: AssetProvider,
-}
-
-impl Plugin for AssetProcessorPlugin {
-    fn build(&self, app: &mut App) {
-        let processor = {
-            let mut providers = app.world.resource_mut::<AssetProviders>();
-            let source_reader = providers.get_source_reader(&self.source);
-            let source_writer = providers.get_source_writer(&self.source);
-            let destination_reader = providers.get_destination_reader(&self.destination);
-            let destination_writer = providers.get_destination_writer(&self.destination);
-            // The asset processor uses its own asset server with its own id space
-            let data = Arc::new(AssetProcessorData::new(
-                source_reader,
-                source_writer,
-                destination_reader,
-                destination_writer,
-            ));
-            let destination_reader = providers.get_destination_reader(&self.destination);
-            let asset_server = AssetServer::new(Box::new(ProcessorGatedReader::new(
-                destination_reader,
-                data.clone(),
-            )));
-            AssetProcessor::new(asset_server, data)
-        };
-        app.insert_resource(processor)
-            .add_systems(Startup, start_processor);
-    }
-}
-
-pub fn start_processor(processor: Res<AssetProcessor>) {
-    let processor = processor.clone();
-    std::thread::spawn(move || {
-        processor.process_assets();
-        futures_lite::future::block_on(processor.listen_for_source_change_events());
-    });
-}
-
 #[derive(Resource, Clone)]
 pub struct AssetProcessor {
     server: AssetServer,
@@ -76,7 +34,23 @@ pub struct AssetProcessor {
 }
 
 impl AssetProcessor {
-    pub fn new(server: AssetServer, data: Arc<AssetProcessorData>) -> Self {
+    pub fn new(
+        providers: &mut AssetProviders,
+        source: &AssetProvider,
+        destination: &AssetProvider,
+    ) -> Self {
+        let data = Arc::new(AssetProcessorData::new(
+            providers.get_source_reader(source),
+            providers.get_source_writer(source),
+            providers.get_destination_reader(destination),
+            providers.get_destination_writer(destination),
+        ));
+        let destination_reader = providers.get_destination_reader(destination);
+        // The asset processor uses its own asset server with its own id space
+        let server = AssetServer::new(Box::new(ProcessorGatedReader::new(
+            destination_reader,
+            data.clone(),
+        )));
         Self { server, data }
     }
 
@@ -133,6 +107,14 @@ impl AssetProcessor {
             Ok(())
         }
         .boxed()
+    }
+
+    pub fn start(processor: Res<Self>) {
+        let processor = processor.clone();
+        std::thread::spawn(move || {
+            processor.process_assets();
+            futures_lite::future::block_on(processor.listen_for_source_change_events());
+        });
     }
 
     // TODO: document this process in full and describe why the "eventual consistency" works

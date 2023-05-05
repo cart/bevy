@@ -35,9 +35,9 @@ pub use server::*;
 
 use crate::{
     io::{processor_gated::ProcessorGatedReader, AssetProvider, AssetProviders},
-    processor::{AssetProcessor, AssetProcessorPlugin},
+    processor::AssetProcessor,
 };
-use bevy_app::{App, AppTypeRegistry, Plugin, PostUpdate};
+use bevy_app::{App, AppTypeRegistry, Plugin, PostUpdate, Startup};
 use bevy_ecs::{schedule::IntoSystemConfigs, world::FromWorld};
 use bevy_log::error;
 use bevy_reflect::{FromReflect, GetTypeRegistration, Reflect};
@@ -132,27 +132,19 @@ impl Plugin for AssetPlugin {
                     destination,
                     ..
                 } => {
-                    app.add_plugin(AssetProcessorPlugin {
-                        source: source.clone(),
-                        destination: destination.clone(),
-                    });
-                    let loaders = {
-                        let processor = app.world.resource::<AssetProcessor>();
-                        processor.server().data.loaders.clone()
-                    };
-                    let processor = app.world.resource::<AssetProcessor>().clone();
-                    let destination_reader = app
-                        .world
-                        .resource_mut::<AssetProviders>()
-                        .get_destination_reader(source);
+                    let mut asset_providers = app.world.resource_mut::<AssetProviders>();
+                    let processor = AssetProcessor::new(&mut *asset_providers, source, destination);
+                    let destination_reader = asset_providers.get_destination_reader(source);
                     // the main asset server gates loads based on asset state
                     let gated_reader =
                         ProcessorGatedReader::new(destination_reader, processor.data.clone());
                     // the main asset server shares loaders with the processor asset server
                     app.insert_resource(AssetServer::new_with_loaders(
                         Box::new(gated_reader),
-                        loaders,
-                    ));
+                        processor.server().data.loaders.clone(),
+                    ))
+                    .insert_resource(processor)
+                    .add_systems(Startup, AssetProcessor::start);
                 }
             }
         }
