@@ -362,7 +362,7 @@ impl<'a> LoadContext<'a> {
             .meta
             .as_ref()
             .and_then(|m| m.processed_info().as_ref());
-        let hash = info.map(|i| i.hash).unwrap_or(0);
+        let hash = info.map(|i| i.full_hash).unwrap_or(0);
         self.loader_dependencies.insert(path.to_owned(), hash);
         Ok(loaded_asset)
     }

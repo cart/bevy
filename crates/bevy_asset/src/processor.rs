@@ -489,7 +489,10 @@ impl AssetProcessor {
         loop {
             for event in self.data.source_event_receiver.try_iter() {
                 match event {
-                    AssetSourceEvent::Modified(path) | AssetSourceEvent::ModifiedMeta(path) => {
+                    AssetSourceEvent::Added(path)
+                    | AssetSourceEvent::AddedMeta(path)
+                    | AssetSourceEvent::Modified(path)
+                    | AssetSourceEvent::ModifiedMeta(path) => {
                         trace!("Asset {:?} was modified. Attempting to re-process", path);
                         self.process_asset(&path).await;
                     }
@@ -702,6 +705,7 @@ impl AssetProcessor {
         let new_hash = Self::get_hash(&meta_bytes, &asset_bytes);
         let mut new_processed_info = ProcessedInfo {
             hash: new_hash,
+            full_hash: new_hash,
             load_dependencies: Vec::new(),
         };
 
@@ -713,13 +717,19 @@ impl AssetProcessor {
                 .and_then(|i| i.processed_info.as_ref())
             {
                 if current_processed_info.hash == new_hash {
+                    println!("hashes are equal");
                     let mut dependency_changed = false;
                     for current_dep_info in &current_processed_info.load_dependencies {
                         let live_hash = infos
                             .get(&current_dep_info.path)
                             .and_then(|i| i.processed_info.as_ref())
-                            .map(|i| i.hash);
-                        if live_hash != Some(current_dep_info.hash) {
+                            .map(|i| i.full_hash);
+                        println!(
+                            " {} {} {:?}",
+                            current_dep_info.path, current_dep_info.full_hash, live_hash
+                        );
+                        if live_hash != Some(current_dep_info.full_hash) {
+                            println!("  changed");
                             dependency_changed = true;
                             break;
                         }
@@ -745,14 +755,23 @@ impl AssetProcessor {
                     false,
                 )
                 .await?;
-            for (path, hash) in loaded_asset.loader_dependencies.iter() {
+            for (path, full_hash) in loaded_asset.loader_dependencies.iter() {
                 new_processed_info
                     .load_dependencies
                     .push(LoadDependencyInfo {
-                        hash: *hash,
+                        full_hash: *full_hash,
+
                         path: path.to_owned(),
                     })
             }
+            let full_hash = Self::get_full_hash(
+                new_hash,
+                new_processed_info
+                    .load_dependencies
+                    .iter()
+                    .map(|i| i.full_hash),
+            );
+            new_processed_info.full_hash = full_hash;
             process_plan
                 .process(&mut writer, &loaded_asset)
                 .await
@@ -791,6 +810,14 @@ impl AssetProcessor {
         hasher.finish()
     }
 
+    fn get_full_hash(hash: u64, dependency_hashes: impl Iterator<Item = u64>) -> u64 {
+        let mut hasher = Self::get_hasher();
+        hash.hash(&mut hasher);
+        for hash in dependency_hashes {
+            hash.hash(&mut hasher);
+        }
+        hasher.finish()
+    }
     /// NOTE: changing the hashing logic here is a _breaking change_ that requires a [`META_FORMAT_VERSION`] bump.
     fn get_hasher() -> bevy_utils::AHasher {
         bevy_utils::AHasher::new_with_keys(

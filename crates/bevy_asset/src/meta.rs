@@ -10,13 +10,16 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LoadDependencyInfo {
-    pub hash: u64,
+    pub full_hash: u64,
     pub path: AssetPath<'static>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct ProcessedInfo {
+    /// A hash of the asset bytes and the asset .meta data
     pub hash: u64,
+    /// A hash of the asset bytes, the asset .meta data, and the `full_hash` of every load_dependency
+    pub full_hash: u64,
     pub load_dependencies: Vec<LoadDependencyInfo>,
 }
 

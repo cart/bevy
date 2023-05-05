@@ -258,20 +258,23 @@ struct Asset<T: Asset> {
 
 ### MVP
 
-* Use hashing to block unnecessary rebuilds 
-    * Re-process if dependencies change
-        * When a process finishes add dependents to queue a check (compare new hash against last hash)
-        * be wary of bug: update_status(Processed) is currently sent for SKippedNotChanged, which could send the "processed" signal too early
-    * Do we need to add "file locking" for processed folder (sounds like yes ... this might also play into recovery? if we crash with an active lock, that means that asset was not fully written)
-        * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
-        * For a given asset load, a read won't happen until there is already a valid processed item
-        * _However_ this might happen
-            1. load starts, asset already processed, so we go through the gate
-            2. processor detects hot-reload and kicks off asset process, write begins (but doesn't finish)
-            3. load read begins, which reads some (but not all) of the written bytes in (2)
-        * After first process, gates are always open (because they have a Processed state)
-            * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
-        * Therefore, processed reader/writer should atomically lock files
+* Hot Reloading
+    * direct (dependency unaware) hotreloading in app
+    * dependency aware hotreloading
+        * needs to store full dep info in meta
+    * Processor 
+        * Removed event
+
+* Do we need to add "file locking" for processed folder (sounds like yes ... this might also play into recovery? if we crash with an active lock, that means that asset was not fully written)
+    * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
+    * For a given asset load, a read won't happen until there is already a valid processed item
+    * _However_ this might happen
+        1. load starts, asset already processed, so we go through the gate
+        2. processor detects hot-reload and kicks off asset process, write begins (but doesn't finish)
+        3. load read begins, which reads some (but not all) of the written bytes in (2)
+    * After first process, gates are always open (because they have a Processed state)
+        * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
+    * Therefore, processed reader/writer should atomically lock files
 * Cleanup unused assets
     * hashmap of all source asset names, remove all imported that dont have a match
 * Crash recovery
@@ -287,8 +290,6 @@ struct Asset<T: Asset> {
 * Asset dependency derive
     * LoadedFolder needs this
     * Wire up Asset::visit_dependencies to LoadedAsset
-* Hot Reloading
-    * Use a graph impl (bevy_graph?) for simplicity and correctness?
 * Handles dropping before load breaks?
     * Implemented slow loop fix ... do better
     * Add test to ensure this works correctly
@@ -300,7 +301,6 @@ struct Asset<T: Asset> {
     * current dependants_waiting_on_load doesn't enable this, need to retain the whole list
         * notably, freeing an asset would remove all "dependants" info, and reloading would result in an empty list  
         * 
-
 
 ```rust
 #[derive(Resource, Loadable)]
@@ -374,6 +374,7 @@ fn load_loadable<T: Loadable>(&self) -> Handle<T> {
         * Right now we just have Loader > Saver. Savers could, in theory, provide multiple preprocessor options. But what about arbitrary things like GltfLoader->MeshAsset->MeshOpt(MeshAsset)->NormalFix(MeshAsset)->CompactMeshSaver
     * wire in arbitrary "transforms" that produce changes in memory 
 * Do we rephrase Reader apis to be `async read(path, bytes: &mut Vec<u8>)`?
+* Loader/Saver Versioning
 
 ```rust
 
@@ -466,6 +467,10 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Dependency tracking
 * Asset Preprocessing
     * Fully optional
+    * General / Recommended Flow
+        * Define "unprocessed" loaders into engine-specific format (images, scenes, meshes, etc)
+        * Define savers for engine specific formats
+        * Add LoadAndSave process plans for assets that use the "unprocessed" loader in combination with engine format savers
 * "Everything is a loader"
 * Run anywhere / no platform-restricting dependencies
 * Async IO
@@ -498,7 +503,7 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
         * distill
             * supports asset packs, has a DB which can be queried for metadata with faster startup times, transactional
             * supports GUID ids (bevy plans to but not yet)
-            * Remove asset server (bevy plans to but not supported yet)
+            * Remote asset server (bevy plans to but not supported yet)
 * Direct filesystem access to processed asset state: easier debugging (this is also how unity does it)
 * Optional preprocessing
 * "Run anywhere" processor
