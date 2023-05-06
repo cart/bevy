@@ -80,7 +80,7 @@ impl AssetPlugin {
         Self::ProcessedDev {
             source: Default::default(),
             destination: Default::default(),
-            watch_for_changes: false,
+            watch_for_changes: true,
         }
     }
 
@@ -113,24 +113,30 @@ impl Plugin for AssetPlugin {
         app.init_resource::<AssetProviders>();
         {
             match self {
-                AssetPlugin::Unprocessed { source, .. } => {
+                AssetPlugin::Unprocessed {
+                    source,
+                    watch_for_changes,
+                } => {
                     let source_reader = app
                         .world
                         .resource_mut::<AssetProviders>()
                         .get_source_reader(source);
-                    app.insert_resource(AssetServer::new(source_reader));
+                    app.insert_resource(AssetServer::new(source_reader, *watch_for_changes));
                 }
-                AssetPlugin::Processed { destination, .. } => {
+                AssetPlugin::Processed {
+                    destination,
+                    watch_for_changes,
+                } => {
                     let destination_reader = app
                         .world
                         .resource_mut::<AssetProviders>()
                         .get_destination_reader(destination);
-                    app.insert_resource(AssetServer::new(destination_reader));
+                    app.insert_resource(AssetServer::new(destination_reader, *watch_for_changes));
                 }
                 AssetPlugin::ProcessedDev {
                     source,
                     destination,
-                    ..
+                    watch_for_changes,
                 } => {
                     let mut asset_providers = app.world.resource_mut::<AssetProviders>();
                     let processor = AssetProcessor::new(&mut *asset_providers, source, destination);
@@ -142,6 +148,7 @@ impl Plugin for AssetPlugin {
                     app.insert_resource(AssetServer::new_with_loaders(
                         Box::new(gated_reader),
                         processor.server().data.loaders.clone(),
+                        *watch_for_changes,
                     ))
                     .insert_resource(processor)
                     .add_systems(Startup, AssetProcessor::start);

@@ -329,7 +329,7 @@ impl<'a> LoadContext<'a> {
     /// as soon as possible.
     /// If the current context is an [`AssetServer::load_direct_async`] (such as in the [`AssetProcessor`](crate::processor::AssetProcessor)),
     /// a load will not be kicked off automatically. It is then the calling context's responsibility to begin a load if necessary.
-    pub fn load<'b, A: Asset, P: Into<AssetPath<'b>>>(&mut self, path: P) -> Handle<A> {
+    pub fn load<'b, A: Asset>(&mut self, path: impl Into<AssetPath<'b>>) -> Handle<A> {
         let path = path.into().to_owned();
         let handle = if self.should_load_dependencies {
             self.asset_server.load(path.clone())
@@ -352,9 +352,9 @@ impl<'a> LoadContext<'a> {
         handle
     }
 
-    pub async fn load_direct<'b, P: Into<AssetPath<'b>>>(
+    pub async fn load_direct<'b>(
         &mut self,
-        path: P,
+        path: impl Into<AssetPath<'b>>,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path = path.into();
         let loaded_asset = self.asset_server.load_direct(path.to_owned()).await?;

@@ -246,7 +246,6 @@ impl FileWatcher {
         let mut watcher = RecommendedWatcher::new(
             move |result: Result<Event, Error>| {
                 let event = result.unwrap();
-                println!("{:?}", event);
                 match event.kind {
                     notify::EventKind::Create(CreateKind::File) => {
                         let (path, is_meta) = get_asset_path(&owned_root, &event.paths[0]);

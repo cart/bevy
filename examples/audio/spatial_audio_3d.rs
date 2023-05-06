@@ -13,7 +13,6 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     audio: Res<Audio>,
-    audio_sinks: Res<Assets<SpatialAudioSink>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {

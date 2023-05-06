@@ -259,11 +259,12 @@ struct Asset<T: Asset> {
 ### MVP
 
 * Hot Reloading
-    * direct (dependency unaware) hotreloading in app
     * dependency aware hotreloading
         * needs to store full dep info in meta
+        * this only matters for unprocessed load_deps, processor handles this for us by modifying load dep dependants
     * Processor 
         * Removed event
+        * Rename event
 
 * Do we need to add "file locking" for processed folder (sounds like yes ... this might also play into recovery? if we crash with an active lock, that means that asset was not fully written)
     * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
@@ -538,3 +539,4 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Use UntypedAssetIds where possible in preprocessor (instead of AssetPath)
 * One-to-many asset saving. An asset source that produces many assets currently must be processed into a single asset source. If labled assets can be written separately they can each have their own savers and they could be loaded granularly.
 * Lots of "AssetPath as identity" everywhere. Should probably exchange these at runtime for an id that is cheaper to hash. 
+* watch_for_changes: default to true for dev builds?

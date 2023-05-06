@@ -4,16 +4,16 @@ pub use info::*;
 
 use crate::{
     folder::LoadedFolder,
-    io::{AssetReader, AssetReaderError, Reader},
+    io::{AssetReader, AssetReaderError, AssetSourceEvent, AssetWatcher, Reader},
     loader::{AssetLoader, AssetLoaderError, ErasedAssetLoader, LoadContext, LoadedAsset},
     meta::{AssetMetaDyn, AssetMetaMinimal},
     path::AssetPath,
     Asset, AssetHandleProvider, Assets, ErasedLoadedAsset, Handle, UntypedAssetId, UntypedHandle,
 };
 use bevy_ecs::prelude::*;
-use bevy_log::error;
+use bevy_log::{error, info};
 use bevy_tasks::IoTaskPool;
-use bevy_utils::HashMap;
+use bevy_utils::{HashMap, HashSet};
 use crossbeam_channel::{Receiver, Sender};
 use futures_lite::{AsyncReadExt, FutureExt, StreamExt};
 use parking_lot::RwLock;
@@ -30,29 +30,45 @@ pub struct AssetServerData {
     pub(crate) loaders: Arc<RwLock<AssetLoaders>>,
     asset_event_sender: Sender<InternalAssetEvent>,
     asset_event_receiver: Receiver<InternalAssetEvent>,
+    source_event_receiver: Receiver<AssetSourceEvent>,
     reader: Box<dyn AssetReader>,
+    _watcher: Option<Box<dyn AssetWatcher>>,
 }
 
 impl AssetServer {
-    pub fn new(reader: Box<dyn AssetReader>) -> Self {
-        Self::new_with_loaders(reader, Default::default())
+    pub fn new(reader: Box<dyn AssetReader>, watch_for_changes: bool) -> Self {
+        Self::new_with_loaders(reader, Default::default(), watch_for_changes)
     }
 
     pub(crate) fn new_with_loaders(
         reader: Box<dyn AssetReader>,
         loaders: Arc<RwLock<AssetLoaders>>,
+        watch_for_changes: bool,
     ) -> Self {
         let (asset_event_sender, asset_event_receiver) = crossbeam_channel::unbounded();
+        let (source_event_sender, source_event_receiver) = crossbeam_channel::unbounded();
+        let watcher = if watch_for_changes {
+            let watcher = reader.watch_for_changes(source_event_sender);
+            if watcher.is_none() {
+                error!("Cannot watch for changes because the current `AssetReader` does not support it");
+            }
+            watcher
+        } else {
+            None
+        };
         Self {
             data: Arc::new(AssetServerData {
                 reader,
+                _watcher: watcher,
                 asset_event_sender,
                 asset_event_receiver,
+                source_event_receiver,
                 loaders,
                 infos: RwLock::new(AssetInfos::default()),
             }),
         }
     }
+
     pub fn reader(&self) -> &dyn AssetReader {
         &*self.data.reader
     }
@@ -135,7 +151,7 @@ impl AssetServer {
     }
 
     #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
-    pub fn load<'a, A: Asset, P: Into<AssetPath<'a>>>(&self, path: P) -> Handle<A> {
+    pub fn load<'a, A: Asset>(&self, path: impl Into<AssetPath<'a>>) -> Handle<A> {
         let path: AssetPath = path.into();
         let (handle, should_load) = {
             let mut infos = self.data.infos.write();
@@ -152,7 +168,10 @@ impl AssetServer {
             let server = self.clone();
             IoTaskPool::get()
                 .spawn(async move {
-                    if let Err(err) = server.load_internal(Some(owned_handle), owned_path).await {
+                    if let Err(err) = server
+                        .load_internal(Some(owned_handle), owned_path, false)
+                        .await
+                    {
                         error!("{}", err);
                     }
                 })
@@ -163,17 +182,18 @@ impl AssetServer {
     }
 
     #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
-    pub(crate) async fn load_untyped_async<'a, P: Into<AssetPath<'a>>>(
+    pub(crate) async fn load_untyped_async<'a>(
         &self,
-        path: P,
+        path: impl Into<AssetPath<'a>>,
     ) -> Result<UntypedHandle, AssetLoadError> {
-        self.load_internal(None, path.into()).await
+        self.load_internal(None, path.into(), false).await
     }
 
     async fn load_internal<'a>(
         &self,
         input_handle: Option<UntypedHandle>,
         mut path: AssetPath<'a>,
+        force: bool,
     ) -> Result<UntypedHandle, AssetLoadError> {
         let (meta, loader) = self.get_meta_and_loader(&path).await.map_err(|e| {
             // if there was an input handle, a "load" operation has already started, so we must produce a "failure" event, if
@@ -210,7 +230,7 @@ impl AssetServer {
             }
         };
 
-        if !should_load {
+        if !should_load && !force {
             return Ok(handle);
         }
 
@@ -256,6 +276,22 @@ impl AssetServer {
         }
     }
 
+    pub fn reload<'a>(&self, path: impl Into<AssetPath<'a>>) {
+        let server = self.clone();
+        let path = path.into();
+        let owned_path = path.to_owned();
+        IoTaskPool::get()
+            .spawn(async move {
+                if server.data.infos.read().is_path_alive(&owned_path) {
+                    info!("Reloading {owned_path} because it has changed");
+                    if let Err(err) = server.load_internal(None, owned_path, true).await {
+                        error!("{}", err);
+                    }
+                }
+            })
+            .detach();
+    }
+
     #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
     pub fn add<A: Asset>(&self, asset: A) -> Handle<A> {
         self.load_asset(LoadedAsset::new(asset, None))
@@ -290,7 +326,7 @@ impl AssetServer {
     /// contain handles to all assets in the folder. You can wait for all assets to load by checking the LoadedFolder's
     /// [`AssetRecursiveDependencyLoadState`].
     #[must_use = "not using the returned strong handle may result in the unexpected release of the assets"]
-    pub fn load_folder<P: AsRef<Path>>(&self, path: P) -> Handle<LoadedFolder> {
+    pub fn load_folder(&self, path: impl AsRef<Path>) -> Handle<LoadedFolder> {
         let handle = {
             let mut infos = self.data.infos.write();
             infos.create_loading_handle(TypeId::of::<LoadedFolder>())
@@ -391,12 +427,12 @@ impl AssetServer {
 
     /// Returns an active handle for the given path, if the asset at the given path has already started loading,
     /// or is still "alive".
-    pub fn get_handle<'a, A: Asset, P: Into<AssetPath<'a>>>(&self, path: P) -> Option<Handle<A>> {
+    pub fn get_handle<'a, A: Asset>(&self, path: impl Into<AssetPath<'a>>) -> Option<Handle<A>> {
         self.get_handle_untyped(path)
             .map(|h| h.typed_debug_checked())
     }
 
-    pub fn get_handle_untyped<'a, P: Into<AssetPath<'a>>>(&self, path: P) -> Option<UntypedHandle> {
+    pub fn get_handle_untyped<'a>(&self, path: impl Into<AssetPath<'a>>) -> Option<UntypedHandle> {
         let infos = self.data.infos.read();
         let path = path.into();
         infos.get_path_handle(path)
@@ -420,9 +456,9 @@ impl AssetServer {
             .0
     }
 
-    pub async fn load_direct_with_meta<'a, P: Into<AssetPath<'a>>>(
+    pub async fn load_direct_with_meta<'a>(
         &self,
-        path: P,
+        path: impl Into<AssetPath<'a>>,
         meta: Box<dyn AssetMetaDyn>,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path: AssetPath = path.into();
@@ -434,9 +470,9 @@ impl AssetServer {
             .await
     }
 
-    pub async fn load_direct<'a, P: Into<AssetPath<'a>>>(
+    pub async fn load_direct<'a>(
         &self,
-        path: P,
+        path: impl Into<AssetPath<'a>>,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path: AssetPath = path.into();
         let (meta, loader) = self.get_meta_and_loader(&path).await?;
@@ -541,6 +577,22 @@ pub fn handle_internal_asset_events(world: &mut World) {
                 }
                 InternalAssetEvent::Failed { id } => infos.process_asset_fail(id),
             }
+        }
+
+        let mut paths_to_reload = HashSet::new();
+        for event in assets.data.source_event_receiver.try_iter() {
+            match event {
+                // TODO: if the asset was processed and the processed file was changed, the first modified event
+                // should be skipped?
+                AssetSourceEvent::Modified(path) | AssetSourceEvent::ModifiedMeta(path) => {
+                    paths_to_reload.insert(path);
+                }
+                _ => {}
+            }
+        }
+
+        for path in paths_to_reload {
+            assets.reload(path);
         }
     })
 }

@@ -33,6 +33,24 @@ pub struct AssetProcessor {
     pub(crate) data: Arc<AssetProcessorData>,
 }
 
+pub struct AssetProcessorData {
+    process_plans: RwLock<
+        HashMap<(&'static str, &'static str, &'static str), Arc<dyn ErasedAssetProcessPlan>>,
+    >,
+    default_process_plans:
+        RwLock<HashMap<&'static str, (&'static str, &'static str, &'static str)>>,
+    state: async_lock::RwLock<ProcessorState>,
+    pub(crate) asset_infos: async_lock::RwLock<ProcessorAssetInfos>,
+    source_reader: Box<dyn AssetReader>,
+    source_writer: Box<dyn AssetWriter>,
+    destination_reader: Box<dyn AssetReader>,
+    destination_writer: Box<dyn AssetWriter>,
+    finished_sender: async_broadcast::Sender<()>,
+    finished_receiver: async_broadcast::Receiver<()>,
+    source_event_receiver: crossbeam_channel::Receiver<AssetSourceEvent>,
+    _source_watcher: Option<Box<dyn AssetWatcher>>,
+}
+
 impl AssetProcessor {
     pub fn new(
         providers: &mut AssetProviders,
@@ -47,10 +65,10 @@ impl AssetProcessor {
         ));
         let destination_reader = providers.get_destination_reader(destination);
         // The asset processor uses its own asset server with its own id space
-        let server = AssetServer::new(Box::new(ProcessorGatedReader::new(
-            destination_reader,
-            data.clone(),
-        )));
+        let server = AssetServer::new(
+            Box::new(ProcessorGatedReader::new(destination_reader, data.clone())),
+            true,
+        );
         Self { server, data }
     }
 
@@ -87,28 +105,6 @@ impl AssetProcessor {
         &*self.data.destination_writer
     }
 
-    fn process_assets_internal<'scope, 'env>(
-        &'scope self,
-        scope: &'scope Scope<'scope, 'env, ()>,
-        path: PathBuf,
-    ) -> bevy_utils::BoxedFuture<'scope, Result<(), AssetReaderError>> {
-        async move {
-            if self.source_reader().is_directory(&path).await? {
-                let mut path_stream = self.source_reader().read_directory(&path).await.unwrap();
-                while let Some(path) = path_stream.next().await {
-                    self.process_assets_internal(scope, path).await?;
-                }
-            } else {
-                let processor = self.clone();
-                scope.spawn(async move {
-                    processor.process_asset(&path).await;
-                });
-            }
-            Ok(())
-        }
-        .boxed()
-    }
-
     pub fn start(processor: Res<Self>) {
         let processor = processor.clone();
         std::thread::spawn(move || {
@@ -131,7 +127,35 @@ impl AssetProcessor {
         trace!("Processing finished");
     }
 
-    pub async fn finish_processing_assets(&self) {
+    // PERF: parallelize change event processing
+    pub async fn listen_for_source_change_events(&self) {
+        trace!("Listening for changes to source assets");
+        loop {
+            let mut paths_to_reprocess = HashSet::new();
+            for event in self.data.source_event_receiver.try_iter() {
+                match event {
+                    AssetSourceEvent::Added(path)
+                    | AssetSourceEvent::AddedMeta(path)
+                    | AssetSourceEvent::Modified(path)
+                    | AssetSourceEvent::ModifiedMeta(path) => {
+                        paths_to_reprocess.insert(path);
+                    }
+                    _ => {
+                        trace!("Skipped source change event: {:?}", event)
+                    }
+                }
+            }
+
+            for path in paths_to_reprocess {
+                trace!("Asset {:?} was modified. Attempting to re-process", path);
+                self.process_asset(&path).await;
+            }
+            // TODO: make sure the "global processor state" is set appropriately here. or alternatively, remove the global processor state
+            self.finish_processing_assets().await;
+        }
+    }
+
+    async fn finish_processing_assets(&self) {
         self.try_reprocessing_queued().await;
         let mut asset_infos = self.data.asset_infos.write().await;
         asset_infos.resolve_maybe_non_existent().await;
@@ -140,27 +164,26 @@ impl AssetProcessor {
         self.set_state(ProcessorState::Finished).await;
     }
 
-    // PERF: parallelize change event processing
-    pub async fn listen_for_source_change_events(&self) {
-        trace!("Listening for changes to source assets");
-        loop {
-            for event in self.data.source_event_receiver.try_iter() {
-                match event {
-                    AssetSourceEvent::Added(path)
-                    | AssetSourceEvent::AddedMeta(path)
-                    | AssetSourceEvent::Modified(path)
-                    | AssetSourceEvent::ModifiedMeta(path) => {
-                        trace!("Asset {:?} was modified. Attempting to re-process", path);
-                        self.process_asset(&path).await;
-                    }
-                    _ => {
-                        trace!("Skipped source change event: {:?}", event)
-                    }
+    fn process_assets_internal<'scope, 'env>(
+        &'scope self,
+        scope: &'scope Scope<'scope, 'env, ()>,
+        path: PathBuf,
+    ) -> bevy_utils::BoxedFuture<'scope, Result<(), AssetReaderError>> {
+        async move {
+            if self.source_reader().is_directory(&path).await? {
+                let mut path_stream = self.source_reader().read_directory(&path).await.unwrap();
+                while let Some(path) = path_stream.next().await {
+                    self.process_assets_internal(scope, path).await?;
                 }
+            } else {
+                let processor = self.clone();
+                scope.spawn(async move {
+                    processor.process_asset(&path).await;
+                });
             }
-            // TODO: make sure the "global processor state" is set appropriately here. or alternatively, remove the global processor state
-            self.finish_processing_assets().await;
+            Ok(())
         }
+        .boxed()
     }
 
     async fn try_reprocessing_queued(&self) {
@@ -234,7 +257,7 @@ impl AssetProcessor {
     /// Populates the current view of each processed asset's [`ProcessedInfo`] from the processed "destination".
     /// This info will later be used to determine whether or not to re-process an asset
     /// Under normal circumstances, this should always succeed. But if it fails the path of the failed
-    pub async fn populate_processed_info(&self) -> Result<(), PopulateProcessedInfoError> {
+    async fn populate_processed_info(&self) -> Result<(), PopulateProcessedInfoError> {
         // PERF: parallelize this and see what kind of wins we get?
         fn populate_info<'a>(
             processor: &'a AssetProcessor,
@@ -294,14 +317,15 @@ impl AssetProcessor {
         let base_path = Path::new("");
         populate_info(&self, base_path).await
     }
-    pub async fn process_asset(&self, path: &Path) {
+
+    async fn process_asset(&self, path: &Path) {
         let result = self.process_asset_internal(path).await;
         let mut infos = self.data.asset_infos.write().await;
         let asset_path = AssetPath::new(path.to_owned(), None);
         infos.finish_processing(asset_path, result).await;
     }
 
-    pub async fn process_asset_internal(
+    async fn process_asset_internal(
         &self,
         path: &Path,
     ) -> Result<ProcessResult, ProcessAssetError> {
@@ -374,19 +398,13 @@ impl AssetProcessor {
                 .and_then(|i| i.processed_info.as_ref())
             {
                 if current_processed_info.hash == new_hash {
-                    println!("hashes are equal");
                     let mut dependency_changed = false;
                     for current_dep_info in &current_processed_info.load_dependencies {
                         let live_hash = infos
                             .get(&current_dep_info.path)
                             .and_then(|i| i.processed_info.as_ref())
                             .map(|i| i.full_hash);
-                        println!(
-                            " {} {} {:?}",
-                            current_dep_info.path, current_dep_info.full_hash, live_hash
-                        );
                         if live_hash != Some(current_dep_info.full_hash) {
-                            println!("  changed");
                             dependency_changed = true;
                             break;
                         }
@@ -484,24 +502,6 @@ impl AssetProcessor {
     }
 }
 
-pub struct AssetProcessorData {
-    process_plans: RwLock<
-        HashMap<(&'static str, &'static str, &'static str), Arc<dyn ErasedAssetProcessPlan>>,
-    >,
-    default_process_plans:
-        RwLock<HashMap<&'static str, (&'static str, &'static str, &'static str)>>,
-    state: async_lock::RwLock<ProcessorState>,
-    asset_infos: async_lock::RwLock<ProcessorAssetInfos>,
-    source_reader: Box<dyn AssetReader>,
-    source_writer: Box<dyn AssetWriter>,
-    destination_reader: Box<dyn AssetReader>,
-    destination_writer: Box<dyn AssetWriter>,
-    _source_watcher: Box<dyn AssetWatcher>,
-    finished_sender: async_broadcast::Sender<()>,
-    finished_receiver: async_broadcast::Receiver<()>,
-    source_event_receiver: crossbeam_channel::Receiver<AssetSourceEvent>,
-}
-
 impl AssetProcessorData {
     pub fn new(
         source_reader: Box<dyn AssetReader>,
@@ -512,9 +512,12 @@ impl AssetProcessorData {
         let (finished_sender, finished_receiver) = async_broadcast::broadcast(1);
         let (source_event_sender, source_event_receiver) = crossbeam_channel::unbounded();
         // TODO: watching for changes could probably be entirely optional / we could just warn here
-        let source_watcher = source_reader
-            .watch_for_changes(source_event_sender)
-            .expect("The provided asset source doesn't support watching for changes");
+        let source_watcher = source_reader.watch_for_changes(source_event_sender);
+        if source_watcher.is_none() {
+            error!(
+                "Cannot watch for changes because the current `AssetReader` does not support it"
+            );
+        }
         AssetProcessorData {
             source_reader,
             source_writer,

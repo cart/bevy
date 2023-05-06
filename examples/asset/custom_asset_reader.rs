@@ -19,14 +19,14 @@ impl<T: AssetReader> AssetReader for CustomAssetReader<T> {
     fn read<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
         info!("Reading {:?}", path);
         self.0.read(path)
     }
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
         self.0.read_meta(path)
     }
 
@@ -42,6 +42,13 @@ impl<T: AssetReader> AssetReader for CustomAssetReader<T> {
         path: &'a Path,
     ) -> BoxedFuture<'a, Result<bool, AssetReaderError>> {
         self.0.is_directory(path)
+    }
+
+    fn watch_for_changes(
+        &self,
+        event_sender: crossbeam_channel::Sender<bevy_internal::asset::io::AssetSourceEvent>,
+    ) -> Option<Box<dyn bevy_internal::asset::io::AssetWatcher>> {
+        self.0.watch_for_changes(event_sender)
     }
 }
 

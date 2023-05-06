@@ -165,6 +165,16 @@ impl AssetInfos {
         Some(UntypedHandle::Strong(strong_handle))
     }
 
+    /// Returns `true` if this path has
+    pub(crate) fn is_path_alive(&self, path: &AssetPath) -> bool {
+        if let Some(id) = self.path_to_id.get(path) {
+            if let Some(info) = self.infos.get(id) {
+                return info.weak_handle.strong_count() > 0;
+            }
+        }
+        false
+    }
+
     // Returns `true` if the asset should be removed from the collection
     pub(crate) fn process_handle_drop(&mut self, id: UntypedAssetId) -> bool {
         Self::process_handle_drop_internal(&mut self.infos, &mut self.path_to_id, id)

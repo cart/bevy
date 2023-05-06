@@ -47,12 +47,6 @@ impl Plugin for TextPlugin {
 #[derive(Asset, Debug)]
 struct Text(String);
 
-impl Drop for Text {
-    fn drop(&mut self) {
-        println!("text dropped: {}", self.0);
-    }
-}
-
 #[derive(Default)]
 struct TextLoader;
 
