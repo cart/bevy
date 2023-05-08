@@ -258,12 +258,17 @@ struct Asset<T: Asset> {
 
 ### MVP
 
+* Missing load_dependencies result in processor hangs because we are always waiting for them to be processed
+    * To resolve this, we must have an "immediate" answer to the question "does this file exist" (for wait_until_processed) 
+    * Determine asset existence "first" via full directory scan, then modify wait_until_processed to immediately fail on nonexistence?
+    * This probably means we could remove the "resolve_nonexistent" step
 * Hot Reloading
     * dependency aware hotreloading
         * needs to store full dep info in meta
         * this only matters for unprocessed load_deps, processor handles this for us by modifying load dep dependants
     * Processor 
         * Removed event
+            * Sometimes a rename::From event (need to add "rename" start/stop events)
         * Rename event
 
 * Do we need to add "file locking" for processed folder (sounds like yes ... this might also play into recovery? if we crash with an active lock, that means that asset was not fully written)
@@ -366,6 +371,7 @@ fn load_loadable<T: Loadable>(&self) -> Handle<T> {
 * Should retrieving Meta and Asset bytes be a single call in the interface?
     * would enable transactionality
 * Maybe AssetMetaDyn could use erased serde w/ a custom deserializer to avoid double-parsing / AssetMetaMinimal
+    * Or untyped reflect?
 * Add type hint to loader (first check meta, then file extension, then hint)
 * Support loading assets from bytes? Maybe would handle "built in" assets.
 * Configurable per-file-type defaults for AssetMeta
@@ -488,6 +494,8 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Directly load asset instances and track their dependencies
 * Sub Assets are yielded right away
 * Track dependencies for "runtime only" assets
+* Lazy init via hot-reloading
+    * You can create handles at runtime to assets that havent been created yet
 * multiple asset sources
 * Better non-blocking folder loading: LoadedFolder asset 
 * Paths are canonical
@@ -516,6 +524,8 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 
 ### Next Steps
 
+* bevy cli: `bevy asset-processor run`
+    * Run bevy game in "asset processing mode"
 * Asset Packing
 * Migrations:
     * Loader settings migrations (based on loader version)

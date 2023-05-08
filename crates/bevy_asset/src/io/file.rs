@@ -234,6 +234,40 @@ impl AssetWriter for FileAssetWriter {
             Ok(reader)
         })
     }
+
+    fn remove<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<(), AssetWriterError>> {
+        Box::pin(async move {
+            let full_path = self.root_path.join(path);
+            async_fs::remove_file(full_path).await?;
+            Ok(())
+        })
+    }
+
+    fn remove_meta<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<(), AssetWriterError>> {
+        Box::pin(async move {
+            let meta_path = get_meta_path(path);
+            let full_path = self.root_path.join(meta_path);
+            async_fs::remove_file(full_path).await?;
+            Ok(())
+        })
+    }
+
+    fn remove_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<(), AssetWriterError>> {
+        Box::pin(async move {
+            let full_path = self.root_path.join(path);
+            async_fs::remove_dir_all(full_path).await?;
+            Ok(())
+        })
+    }
 }
 
 pub struct FileWatcher {
@@ -246,6 +280,7 @@ impl FileWatcher {
         let mut watcher = RecommendedWatcher::new(
             move |result: Result<Event, Error>| {
                 let event = result.unwrap();
+                println!("{event:?}");
                 match event.kind {
                     notify::EventKind::Create(CreateKind::File) => {
                         let (path, is_meta) = get_asset_path(&owned_root, &event.paths[0]);
@@ -254,6 +289,10 @@ impl FileWatcher {
                         } else {
                             sender.send(AssetSourceEvent::Added(path)).unwrap();
                         }
+                    }
+                    notify::EventKind::Create(CreateKind::Folder) => {
+                        let (path, _) = get_asset_path(&owned_root, &event.paths[0]);
+                        sender.send(AssetSourceEvent::AddedFolder(path)).unwrap();
                     }
                     notify::EventKind::Modify(ModifyKind::Data(_)) => {
                         let (path, is_meta) = get_asset_path(&owned_root, &event.paths[0]);
@@ -270,6 +309,10 @@ impl FileWatcher {
                         } else {
                             sender.send(AssetSourceEvent::Removed(path)).unwrap();
                         }
+                    }
+                    notify::EventKind::Remove(RemoveKind::Folder) => {
+                        let (path, _) = get_asset_path(&owned_root, &event.paths[0]);
+                        sender.send(AssetSourceEvent::RemovedFolder(path)).unwrap();
                     }
                     _ => {}
                 }

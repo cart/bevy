@@ -13,7 +13,7 @@ use crate::{
     AssetLoadError, AssetPath, AssetServer, MissingAssetLoaderForExtensionError,
 };
 use bevy_ecs::prelude::*;
-use bevy_log::{error, trace};
+use bevy_log::{error, trace, warn};
 use bevy_tasks::{IoTaskPool, Scope};
 use bevy_utils::{HashMap, HashSet};
 use futures_lite::{AsyncReadExt, AsyncWriteExt, FutureExt, StreamExt};
@@ -123,6 +123,8 @@ impl AssetProcessor {
                 self.process_assets_internal(scope, path).await.unwrap();
             });
         });
+        // This must happen _after_ the scope resolves or it will happen "too early"
+        // Don't move this into the async scope above! process_assets is a blocking/sync function this is fine
         futures_lite::future::block_on(self.finish_processing_assets());
         trace!("Processing finished");
     }
@@ -131,25 +133,52 @@ impl AssetProcessor {
     pub async fn listen_for_source_change_events(&self) {
         trace!("Listening for changes to source assets");
         loop {
-            let mut paths_to_reprocess = HashSet::new();
             for event in self.data.source_event_receiver.try_iter() {
                 match event {
                     AssetSourceEvent::Added(path)
                     | AssetSourceEvent::AddedMeta(path)
                     | AssetSourceEvent::Modified(path)
                     | AssetSourceEvent::ModifiedMeta(path) => {
-                        paths_to_reprocess.insert(path);
+                        trace!("Asset {:?} was modified. Attempting to re-process", path);
+                        self.process_asset(&path).await;
                     }
-                    _ => {
-                        trace!("Skipped source change event: {:?}", event)
+                    AssetSourceEvent::Removed(path) => {
+                        trace!("Removing processed {:?} because source was removed", path);
+                        error!("remove not implemented");
+                        // // TODO: clean up in memory
+                        // if let Err(err) = self.destination_writer().remove(&path).await {
+                        //     warn!("Failed to remove non-existent asset {path:?}: {err}");
+                        // }
+                    }
+                    AssetSourceEvent::RemovedMeta(path) => {
+                        // If meta was removed, we might need to regenerate it
+                        // likewise, the user might be manually re-adding the asset
+                        // Therefore, we shouldn't automatically delete meta ... that is a
+                        // user-initiated action.
+                        trace!(
+                            "Meta for asset {:?} was removed. Attempting to re-process",
+                            path
+                        );
+                        self.process_asset(&path).await;
+                    }
+                    AssetSourceEvent::AddedFolder(path) => {
+                        trace!("Folder {:?} was added. Attempting to re-process", path);
+                        error!("add folder not implemented");
+                        // IoTaskPool::get().scope(|scope| {
+                        //     self.process_assets_internal(scope, path);
+                        // });
+                    }
+                    AssetSourceEvent::RemovedFolder(path) => {
+                        trace!("Removing folder {:?} because source was removed", path);
+                        error!("remove folder not implemented");
+                        // TODO: clean up memory
+                        // if let Err(err) = self.destination_writer().remove_directory(&path).await {
+                        //     warn!("Failed to remove folder {path:?}: {err}");
+                        // }
                     }
                 }
             }
 
-            for path in paths_to_reprocess {
-                trace!("Asset {:?} was modified. Attempting to re-process", path);
-                self.process_asset(&path).await;
-            }
             // TODO: make sure the "global processor state" is set appropriately here. or alternatively, remove the global processor state
             self.finish_processing_assets().await;
         }
@@ -159,6 +188,9 @@ impl AssetProcessor {
         self.try_reprocessing_queued().await;
         let mut asset_infos = self.data.asset_infos.write().await;
         asset_infos.resolve_maybe_non_existent().await;
+        asset_infos
+            .remove_orphaned_imports(self.destination_writer())
+            .await;
         // clean up metadata in asset server
         self.server.data.infos.write().consume_handle_drop_events();
         self.set_state(ProcessorState::Finished).await;
@@ -278,6 +310,10 @@ impl AssetProcessor {
                         populate_info(processor, &child_path).await?
                     }
                 } else {
+                    {
+                        let mut infos = processor.data.asset_infos.write().await;
+                        infos.initial_processed_asset_paths.push(path.to_owned());
+                    }
                     let mut meta_reader = reader
                         .read_meta(&path)
                         .await
@@ -626,6 +662,7 @@ pub struct ProcessorAssetInfos {
     infos: HashMap<AssetPath<'static>, ProcessorAssetInfo>,
     maybe_non_existent: HashSet<AssetPath<'static>>,
     check_reprocess_queue: VecDeque<PathBuf>,
+    initial_processed_asset_paths: Vec<PathBuf>,
 }
 
 impl ProcessorAssetInfos {
@@ -742,6 +779,33 @@ impl ProcessorAssetInfos {
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    /// Removed imported assets that no longer exist, using the "initial processed assets" view of the world.
+    /// This must run after [`ProcessorAssetInfos::resolve_maybe_non_existent`].
+    async fn remove_orphaned_imports(&mut self, writer: &dyn AssetWriter) {
+        if self.initial_processed_asset_paths.is_empty() {
+            // Either this has already run or there were no imported assets
+            // Future removes will be picked up by hot reloading (or the next server init)
+            return;
+        }
+        for path in self.initial_processed_asset_paths.drain(..) {
+            let asset_path = AssetPath::new_ref(&path, None);
+            let should_remove = if let Some(info) = self.infos.get(&asset_path) {
+                info.status.is_none()
+            } else {
+                true
+            };
+            if should_remove {
+                if let Err(err) = writer.remove(&path).await {
+                    warn!("Failed to remove non-existent asset {path:?}: {err}");
+                }
+
+                if let Err(err) = writer.remove_meta(&path).await {
+                    warn!("Failed to remove non-existent meta {path:?}: {err}");
+                }
             }
         }
     }
