@@ -1,4 +1,7 @@
-use crate::io::{AssetSourceEvent, AssetWatcher};
+use crate::io::{
+    AssetReader, AssetReaderError, AssetSourceEvent, AssetWatcher, AssetWriter, AssetWriterError,
+    PathStream, Reader, Writer,
+};
 use anyhow::Result;
 use async_fs::{read_dir, File};
 use bevy_utils::BoxedFuture;
@@ -11,10 +14,6 @@ use notify::{
 use std::{
     env,
     path::{Path, PathBuf},
-};
-
-use crate::io::{
-    AssetReader, AssetReaderError, AssetWriter, AssetWriterError, PathStream, Reader, Writer,
 };
 
 fn get_base_path() -> PathBuf {

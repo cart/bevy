@@ -58,6 +58,18 @@ pub trait AssetReader: Send + Sync + 'static {
         &self,
         event_sender: Sender<AssetSourceEvent>,
     ) -> Option<Box<dyn AssetWatcher>>;
+
+    fn read_meta_bytes<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, Result<Vec<u8>, AssetReaderError>> {
+        Box::pin(async move {
+            let mut meta_reader = self.read_meta(path).await?;
+            let mut meta_bytes = Vec::new();
+            meta_reader.read_to_end(&mut meta_bytes).await?;
+            Ok(meta_bytes)
+        })
+    }
 }
 
 pub type Writer = dyn AsyncWrite + Unpin + Send + Sync;

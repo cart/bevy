@@ -484,13 +484,8 @@ impl AssetServer {
         &self,
         asset_path: &AssetPath<'_>,
     ) -> Result<(Box<dyn AssetMetaDyn>, Arc<dyn ErasedAssetLoader>), AssetLoadError> {
-        match self.data.reader.read_meta(asset_path.path()).await {
-            Ok(mut meta_reader) => {
-                let mut meta_bytes = Vec::new();
-                meta_reader
-                    .read_to_end(&mut meta_bytes)
-                    .await
-                    .map_err(|_| AssetLoadError::AssetMetaReadError)?;
+        match self.data.reader.read_meta_bytes(asset_path.path()).await {
+            Ok(meta_bytes) => {
                 // TODO: this isn't fully minimal yet. we only need the loader
                 let minimal: AssetMetaMinimal = ron::de::from_bytes(&meta_bytes).unwrap();
                 // TODO: handle this error
