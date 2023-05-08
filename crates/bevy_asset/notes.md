@@ -258,10 +258,6 @@ struct Asset<T: Asset> {
 
 ### MVP
 
-* Missing load_dependencies result in processor hangs because we are always waiting for them to be processed
-    * To resolve this, we must have an "immediate" answer to the question "does this file exist" (for wait_until_processed) 
-    * Determine asset existence "first" via full directory scan, then modify wait_until_processed to immediately fail on nonexistence?
-    * This probably means we could remove the "resolve_nonexistent" step
 * Hot Reloading
     * dependency aware hotreloading
         * needs to store full dep info in meta
@@ -270,7 +266,8 @@ struct Asset<T: Asset> {
         * Removed event
             * Sometimes a rename::From event (need to add "rename" start/stop events)
         * Rename event
-
+        * Add Folder event
+            * Blocked dependants don't get reprocessed (file is empty ... ex when foo is missing and then added d is still empty) 
 * Do we need to add "file locking" for processed folder (sounds like yes ... this might also play into recovery? if we crash with an active lock, that means that asset was not fully written)
     * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
     * For a given asset load, a read won't happen until there is already a valid processed item
@@ -281,9 +278,13 @@ struct Asset<T: Asset> {
     * After first process, gates are always open (because they have a Processed state)
         * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
     * Therefore, processed reader/writer should atomically lock files
+    * Combine read lock and "wait for process" action?
 * Cleanup unused assets
     * hashmap of all source asset names, remove all imported that dont have a match
 * Crash recovery
+    * Log
+        * If last entry in log on startup is _not_ a Finished action, clean up entries
+        * Maybe have global start/stop too to detect if there was not a clean exit. Is this necessary/useful?
     * How do we maintain integrity of processed folder in event of a crash at arbitrary times?
     * Unity uses finally blocks ... do we use catch_unwind?
     * Short term, use simple "did we crash" detection combined with a full reprocess?
@@ -303,10 +304,11 @@ struct Asset<T: Asset> {
 * Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
 * Might want to gate dep count increments / decrements on hashset ops (or just use hashsets). Otherwise reloading a dep could affect load correctness. 
     * see next point as this probably relates
-* Send "dependency reloaded" events
-    * current dependants_waiting_on_load doesn't enable this, need to retain the whole list
-        * notably, freeing an asset would remove all "dependants" info, and reloading would result in an empty list  
-        * 
+* Events
+    * Send "dependency reloaded" events
+        * current dependants_waiting_on_load doesn't enable this, need to retain the whole list
+            * notably, freeing an asset would remove all "dependants" info, and reloading would result in an empty list  
+    * Send recursive dependencies loaded event
 
 ```rust
 #[derive(Resource, Loadable)]
@@ -550,3 +552,4 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * One-to-many asset saving. An asset source that produces many assets currently must be processed into a single asset source. If labled assets can be written separately they can each have their own savers and they could be loaded granularly.
 * Lots of "AssetPath as identity" everywhere. Should probably exchange these at runtime for an id that is cheaper to hash. 
 * watch_for_changes: default to true for dev builds?
+* Delay hotreloading? https://github.com/bevyengine/bevy/pull/8503

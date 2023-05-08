@@ -10,7 +10,8 @@ use crate::{
     loader::{AssetLoader, ErasedAssetLoader},
     meta::{AssetMetaMinimal, AssetMetaProcessedInfoMinimal, LoadDependencyInfo, ProcessedInfo},
     saver::AssetSaver,
-    AssetLoadError, AssetPath, AssetServer, MissingAssetLoaderForExtensionError,
+    AssetLoadError, AssetLoaderError, AssetPath, AssetServer, LoadDirectError,
+    MissingAssetLoaderForExtensionError,
 };
 use bevy_ecs::prelude::*;
 use bevy_log::{error, trace, warn};
@@ -167,10 +168,12 @@ impl AssetProcessor {
                     }
                     AssetSourceEvent::AddedFolder(path) => {
                         trace!("Folder {:?} was added. Attempting to re-process", path);
-                        error!("add folder not implemented");
-                        // IoTaskPool::get().scope(|scope| {
-                        //     self.process_assets_internal(scope, path);
-                        // });
+                        // error!("add folder not implemented");
+                        IoTaskPool::get().scope(|scope| {
+                            scope.spawn(async move {
+                                self.process_assets_internal(scope, path).await.unwrap();
+                            });
+                        });
                     }
                     AssetSourceEvent::RemovedFolder(path) => {
                         trace!("Removing folder {:?} because source was removed", path);
@@ -365,15 +368,7 @@ impl AssetProcessor {
             }
 
             for dependency in dependencies {
-                if let Some(info) = asset_infos.get_mut(&dependency) {
-                    info.dependants.insert(asset_path.to_owned());
-                } else {
-                    let dependants = asset_infos
-                        .non_existent_dependants
-                        .entry(dependency)
-                        .or_default();
-                    dependants.insert(asset_path.to_owned());
-                }
+                asset_infos.add_dependant(&dependency, asset_path.to_owned());
             }
         }
 
@@ -724,15 +719,26 @@ impl ProcessorAssetInfo {
 pub struct ProcessorAssetInfos {
     /// The "current" in memory view of the asset space. During processing, if path does not exist in this, it should
     /// be considered non-existent.
+    /// NOTE: YOU MUST USE `get_or_insert` TO ADD ITEMS TO THIS COLLECTION
     infos: HashMap<AssetPath<'static>, ProcessorAssetInfo>,
-    // TODO: keep this up to date (and move data into infos when loaded)
+    /// Dependants for assets that don't exist. This exists to track "dangling" asset references due to deleted / missing files.
+    /// If the dependant asset is added, it can "resolve" these dependancies and re-compute those assets.
+    /// Therefore this _must_ always be consistent with the `infos` data. If a new asset is added to `infos`, it should
+    /// check this maps for dependencies and add them. If an asset is removed, it should update the dependants here.
     non_existent_dependants: HashMap<AssetPath<'static>, HashSet<AssetPath<'static>>>,
     check_reprocess_queue: VecDeque<PathBuf>,
 }
 
 impl ProcessorAssetInfos {
     fn get_or_insert(&mut self, asset_path: AssetPath<'static>) -> &mut ProcessorAssetInfo {
-        self.infos.entry(asset_path).or_default()
+        self.infos.entry(asset_path.clone()).or_insert_with(|| {
+            let mut info = ProcessorAssetInfo::default();
+            // track existing dependenants by resolving existing "hanging" dependants.
+            if let Some(dependants) = self.non_existent_dependants.remove(&asset_path) {
+                info.dependants = dependants;
+            }
+            info
+        })
     }
 
     fn get(&self, asset_path: &AssetPath<'static>) -> Option<&ProcessorAssetInfo> {
@@ -741,6 +747,18 @@ impl ProcessorAssetInfos {
 
     fn get_mut(&mut self, asset_path: &AssetPath<'static>) -> Option<&mut ProcessorAssetInfo> {
         self.infos.get_mut(asset_path)
+    }
+
+    fn add_dependant(&mut self, asset_path: &AssetPath<'static>, dependant: AssetPath<'static>) {
+        if let Some(info) = self.get_mut(asset_path) {
+            info.dependants.insert(dependant);
+        } else {
+            let dependants = self
+                .non_existent_dependants
+                .entry(asset_path.to_owned())
+                .or_default();
+            dependants.insert(dependant);
+        }
     }
 
     async fn finish_processing(
@@ -752,39 +770,24 @@ impl ProcessorAssetInfos {
             Ok(ProcessResult::Processed(processed_info)) => {
                 trace!("Finished processing asset {:?}", asset_path,);
                 // clean up old dependants
-                let old_load_deps = self
+                let old_processed_info = self
                     .infos
                     .get_mut(&asset_path)
-                    .and_then(|i| i.processed_info.as_mut())
-                    .map(|i| std::mem::take(&mut i.load_dependencies))
-                    .unwrap_or_default();
-                for old_load_dep in old_load_deps {
-                    if let Some(info) = self.infos.get_mut(&old_load_dep.path) {
-                        info.dependants.remove(&asset_path);
-                    }
+                    .and_then(|i| i.processed_info.take());
+                if let Some(old_processed_info) = old_processed_info {
+                    self.clear_dependencies(&asset_path, old_processed_info);
                 }
+
                 // populate new dependants
                 for load_dependency_info in &processed_info.load_dependencies {
-                    let dependency_info = self
-                        .get_mut(&load_dependency_info.path)
-                        .expect("dependency should exist");
-                    dependency_info.dependants.insert(asset_path.to_owned());
+                    self.add_dependant(&load_dependency_info.path, asset_path.to_owned());
                 }
-                {
-                    let info = match self.infos.entry(asset_path) {
-                        bevy_utils::hashbrown::hash_map::Entry::Occupied(entry) => {
-                            // queue dependentants for a re-check
-                            for path in entry.get().dependants.iter() {
-                                self.check_reprocess_queue.push_back(path.path().to_owned());
-                            }
-                            entry.into_mut()
-                        }
-                        bevy_utils::hashbrown::hash_map::Entry::Vacant(entry) => {
-                            entry.insert(ProcessorAssetInfo::default())
-                        }
-                    };
-                    info.processed_info = Some(processed_info);
-                    info.update_status(ProcessStatus::Processed).await;
+                let info = self.get_or_insert(asset_path);
+                info.processed_info = Some(processed_info);
+                info.update_status(ProcessStatus::Processed).await;
+                let dependants = info.dependants.iter().cloned().collect::<Vec<_>>();
+                for path in dependants {
+                    self.check_reprocess_queue.push_back(path.path().to_owned());
                 }
             }
             Ok(ProcessResult::SkippedNotChanged) => {
@@ -805,7 +808,24 @@ impl ProcessorAssetInfos {
                 trace!("No loader found for {:?}", asset_path);
             }
             Err(err) => {
-                error!("Failed to process asset {:?} {}", asset_path, err);
+                error!("Failed to process asset {:?}: {:?}", asset_path, err);
+                // if this failed because a dependency could not be loaded, make sure it is reprocessed if that dependency is reprocessed
+                if let ProcessAssetError::AssetLoadError(AssetLoadError::AssetLoaderError {
+                    error: AssetLoaderError::Load(loader_error),
+                    ..
+                }) = err
+                {
+                    if let Some(error) = loader_error.downcast_ref::<LoadDirectError>() {
+                        let info = self.get_mut(&asset_path).expect("info should exist");
+                        info.processed_info = Some(ProcessedInfo {
+                            hash: u64::MAX,
+                            full_hash: u64::MAX,
+                            load_dependencies: vec![],
+                        });
+                        self.add_dependant(&error.dependency, asset_path.to_owned());
+                    }
+                }
+
                 let info = self.get_mut(&asset_path).expect("info should exist");
                 info.update_status(ProcessStatus::Failed).await;
             }
@@ -816,11 +836,26 @@ impl ProcessorAssetInfos {
     async fn remove(&mut self, asset_path: &AssetPath<'static>) {
         let info = self.infos.remove(asset_path);
         if let Some(info) = info {
+            if let Some(processed_info) = info.processed_info {
+                self.clear_dependencies(&asset_path, processed_info);
+            }
             // Tell all listeners this asset does not exist
             info.status_sender
                 .broadcast(ProcessStatus::NonExistent)
                 .await
                 .unwrap();
+        }
+    }
+
+    fn clear_dependencies(&mut self, asset_path: &AssetPath<'static>, removed_info: ProcessedInfo) {
+        for old_load_dep in removed_info.load_dependencies {
+            if let Some(info) = self.infos.get_mut(&old_load_dep.path) {
+                info.dependants.remove(asset_path);
+            } else {
+                if let Some(dependants) = self.non_existent_dependants.get_mut(&old_load_dep.path) {
+                    dependants.remove(&asset_path);
+                }
+            }
         }
     }
 }

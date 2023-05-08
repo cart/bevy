@@ -60,6 +60,13 @@ pub enum AssetLoaderError {
 }
 
 #[derive(Error, Debug)]
+#[error("Failed to load dependency {dependency:?} {error}")]
+pub struct LoadDirectError {
+    pub dependency: AssetPath<'static>,
+    pub error: AssetLoadError,
+}
+
+#[derive(Error, Debug)]
 pub enum DeserializeMetaError {
     #[error("Failed to deserialize asset meta: {0:?}")]
     DeserializeSettings(#[from] SpannedError),
@@ -355,9 +362,16 @@ impl<'a> LoadContext<'a> {
     pub async fn load_direct<'b>(
         &mut self,
         path: impl Into<AssetPath<'b>>,
-    ) -> Result<ErasedLoadedAsset, AssetLoadError> {
+    ) -> Result<ErasedLoadedAsset, LoadDirectError> {
         let path = path.into();
-        let loaded_asset = self.asset_server.load_direct(path.to_owned()).await?;
+        let loaded_asset = self
+            .asset_server
+            .load_direct(path.to_owned())
+            .await
+            .map_err(|e| LoadDirectError {
+                dependency: path.to_owned(),
+                error: e,
+            })?;
         let info = loaded_asset
             .meta
             .as_ref()
