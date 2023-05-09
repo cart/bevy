@@ -266,8 +266,6 @@ struct Asset<T: Asset> {
         * Removed event
             * Sometimes a rename::From event (need to add "rename" start/stop events)
         * Rename event
-        * Add Folder event
-            * Blocked dependants don't get reprocessed (file is empty ... ex when foo is missing and then added d is still empty) 
 * Do we need to add "file locking" for processed folder (sounds like yes ... this might also play into recovery? if we crash with an active lock, that means that asset was not fully written)
     * For a given processor loop run, a dependent won't try to read until processing for that item has finished, so this is safe
     * For a given asset load, a read won't happen until there is already a valid processed item
@@ -279,8 +277,6 @@ struct Asset<T: Asset> {
         * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
     * Therefore, processed reader/writer should atomically lock files
     * Combine read lock and "wait for process" action?
-* Cleanup unused assets
-    * hashmap of all source asset names, remove all imported that dont have a match
 * Crash recovery
     * Log
         * If last entry in log on startup is _not_ a Finished action, clean up entries
@@ -288,20 +284,15 @@ struct Asset<T: Asset> {
     * How do we maintain integrity of processed folder in event of a crash at arbitrary times?
     * Unity uses finally blocks ... do we use catch_unwind?
     * Short term, use simple "did we crash" detection combined with a full reprocess?
-* Try to remove crossbeam channels for recycling ids
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
-* Asset _unloading_ and _re-loading_ that allows handles to be kept alive while unloading the asset data itself
-    * Being able to kick off re-loads (that re-validate existing handles) seems useful!
-    * How would events be handled here?
 * Asset dependency derive
     * LoadedFolder needs this
     * Wire up Asset::visit_dependencies to LoadedAsset
-* Handles dropping before load breaks?
-    * Implemented slow loop fix ... do better
-    * Add test to ensure this works correctly
-* Should we combine meta + asset loading apis?
-* Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
+* Should we combine meta + asset byte loading apis?
+    * Single "lock" transaction
+    * Would mean we aren't streaming bytes anymore?
+    * Externalize "locking" outside Reader api?
 * Might want to gate dep count increments / decrements on hashset ops (or just use hashsets). Otherwise reloading a dep could affect load correctness. 
     * see next point as this probably relates
 * Events
@@ -345,6 +336,9 @@ fn load_loadable<T: Loadable>(&self) -> Handle<T> {
 
 ### Maybe before PR
 
+* (give this a try and see how easy it is for pr) Asset _unloading_ and _re-loading_ that allows handles to be kept alive while unloading the asset data itself
+    * Being able to kick off re-loads (that re-validate existing handles) seems useful!
+    * How would events be handled here?
 * Consider reframing meta to be slightly less confusing:
     * loader, if present means the asset can be loaded directly (optional, provided processor exist)
     * processor, if present means the asset can be processed ... do not reuse loader.
@@ -384,6 +378,11 @@ fn load_loadable<T: Loadable>(&self) -> Handle<T> {
     * wire in arbitrary "transforms" that produce changes in memory 
 * Do we rephrase Reader apis to be `async read(path, bytes: &mut Vec<u8>)`?
 * Loader/Saver Versioning
+* Cleanup unused folders
+    * assets are cleaned up, but folders are not
+* Try to remove crossbeam channels for recycling ids
+* Handles dropping before load: already implemented slow loop fix ... do better
+    * Add test to ensure this works correctly
 
 ```rust
 
@@ -553,3 +552,4 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Lots of "AssetPath as identity" everywhere. Should probably exchange these at runtime for an id that is cheaper to hash. 
 * watch_for_changes: default to true for dev builds?
 * Delay hotreloading? https://github.com/bevyengine/bevy/pull/8503
+* Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices

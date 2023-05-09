@@ -35,13 +35,13 @@ pub struct AssetProcessor {
 }
 
 pub struct AssetProcessorData {
+    pub(crate) asset_infos: async_lock::RwLock<ProcessorAssetInfos>,
     process_plans: RwLock<
         HashMap<(&'static str, &'static str, &'static str), Arc<dyn ErasedAssetProcessPlan>>,
     >,
     default_process_plans:
         RwLock<HashMap<&'static str, (&'static str, &'static str, &'static str)>>,
     state: async_lock::RwLock<ProcessorState>,
-    pub(crate) asset_infos: async_lock::RwLock<ProcessorAssetInfos>,
     source_reader: Box<dyn AssetReader>,
     source_writer: Box<dyn AssetWriter>,
     destination_reader: Box<dyn AssetReader>,
