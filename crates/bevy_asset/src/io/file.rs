@@ -16,7 +16,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn get_base_path() -> PathBuf {
+pub(crate) fn get_base_path() -> PathBuf {
     if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         PathBuf::from(manifest_dir)
     } else {
@@ -264,6 +264,18 @@ impl AssetWriter for FileAssetWriter {
         Box::pin(async move {
             let full_path = self.root_path.join(path);
             async_fs::remove_dir_all(full_path).await?;
+            Ok(())
+        })
+    }
+
+    fn remove_assets_in_directory<'a>(
+        &'a self,
+        path: &'a Path,
+    ) -> BoxedFuture<'a, std::result::Result<(), AssetWriterError>> {
+        Box::pin(async move {
+            let full_path = self.root_path.join(path);
+            async_fs::remove_dir_all(&full_path).await?;
+            async_fs::create_dir_all(&full_path).await?;
             Ok(())
         })
     }

@@ -1,5 +1,7 @@
+mod log;
 mod process_plan;
 
+pub use log::*;
 pub use process_plan::*;
 
 use crate::{
@@ -17,6 +19,7 @@ use bevy_ecs::prelude::*;
 use bevy_log::{error, trace, warn};
 use bevy_tasks::{IoTaskPool, Scope};
 use bevy_utils::{BoxedFuture, HashMap, HashSet};
+use futures_io::ErrorKind;
 use futures_lite::{AsyncReadExt, AsyncWriteExt, FutureExt, StreamExt};
 use parking_lot::RwLock;
 use std::{
@@ -36,6 +39,7 @@ pub struct AssetProcessor {
 
 pub struct AssetProcessorData {
     pub(crate) asset_infos: async_lock::RwLock<ProcessorAssetInfos>,
+    log: async_lock::RwLock<Option<ProcessorTransactionLog>>,
     process_plans: RwLock<
         HashMap<(&'static str, &'static str, &'static str), Arc<dyn ErasedAssetProcessPlan>>,
     >,
@@ -149,15 +153,15 @@ impl AssetProcessor {
                     }
                     AssetSourceEvent::Removed(path) => {
                         trace!("Removing processed {:?} because source was removed", path);
-                        error!("remove not implemented");
+                        error!("remove is not implemented");
                         // // TODO: clean up in memory
                         // if let Err(err) = self.destination_writer().remove(&path).await {
                         //     warn!("Failed to remove non-existent asset {path:?}: {err}");
                         // }
                     }
                     AssetSourceEvent::RemovedMeta(path) => {
-                        // If meta was removed, we might need to regenerate it
-                        // likewise, the user might be manually re-adding the asset
+                        // If meta was removed, we might need to regenerate it.
+                        // Likewise, the user might be manually re-adding the asset.
                         // Therefore, we shouldn't automatically delete meta ... that is a
                         // user-initiated action.
                         trace!(
@@ -177,7 +181,7 @@ impl AssetProcessor {
                     }
                     AssetSourceEvent::RemovedFolder(path) => {
                         trace!("Removing folder {:?} because source was removed", path);
-                        error!("remove folder not implemented");
+                        error!("remove folder is not implemented");
                         // TODO: clean up memory
                         // if let Err(err) = self.destination_writer().remove_directory(&path).await {
                         //     warn!("Failed to remove folder {path:?}: {err}");
@@ -291,6 +295,7 @@ impl AssetProcessor {
     /// Populates the initial view of each asset by scanning the source and destination folders.
     /// This info will later be used to determine whether or not to re-process an asset
     async fn initialize(&self) -> Result<(), InitializeError> {
+        self.validate_transaction_log_and_recover().await;
         let mut asset_infos = self.data.asset_infos.write().await;
         fn get_asset_paths<'a>(
             reader: &'a dyn AssetReader,
@@ -514,6 +519,12 @@ impl AssetProcessor {
                     .map(|i| i.full_hash),
             );
             new_processed_info.full_hash = full_hash;
+            // TODO: if the process plan fails this will produce an "unfinished" log entry, forcing a rebuild on next run.
+            // Directly writing to the asset file in the process plan necessitates this behavior.
+            {
+                let mut logger = self.data.log.write().await;
+                logger.as_mut().unwrap().begin_path(&path).await.unwrap();
+            }
             process_plan
                 .process(&mut writer, &loaded_asset)
                 .await
@@ -533,6 +544,10 @@ impl AssetProcessor {
                 infos.remove(&asset_path).await;
             }
 
+            {
+                let mut logger = self.data.log.write().await;
+                logger.as_mut().unwrap().begin_path(&path).await.unwrap();
+            }
             writer.write_all(&asset_bytes).await.unwrap();
             writer.flush().await.unwrap();
             *source_meta.processed_info_mut() = Some(new_processed_info.clone());
@@ -541,7 +556,81 @@ impl AssetProcessor {
             meta_writer.flush().await.unwrap();
         }
 
+        {
+            let mut logger = self.data.log.write().await;
+            logger.as_mut().unwrap().end_path(&path).await.unwrap();
+        }
+
         Ok(ProcessResult::Processed(new_processed_info))
+    }
+
+    async fn validate_transaction_log_and_recover(&self) {
+        if let Err(err) = ProcessorTransactionLog::validate().await {
+            let state_is_valid = match err {
+                ValidateLogError::ReadLogError(err) => {
+                    error!("Failed to read processor log file. Processed assets cannot be validated so they must be re-generated {err}");
+                    false
+                }
+                ValidateLogError::EntryErrors(entry_errors) => {
+                    let mut state_is_valid = true;
+                    for entry_error in entry_errors {
+                        match entry_error {
+                            LogEntryError::DuplicateTransaction(_)
+                            | LogEntryError::EndedMissingTransaction(_) => {
+                                error!("{}", entry_error);
+                                state_is_valid = false;
+                                break;
+                            }
+                            LogEntryError::UnfinishedTransaction(path) => {
+                                trace!("Asset {path:?} did not finish processing. Clearning state for that asset");
+                                if let Err(err) = self.destination_writer().remove(&path).await {
+                                    match err {
+                                        AssetWriterError::Io(err) => {
+                                            // any error but NotFound means we could be in a bad state
+                                            if err.kind() != ErrorKind::NotFound {
+                                                error!("Failed to remove asset {path:?}: {err}");
+                                                state_is_valid = false;
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Err(err) = self.destination_writer().remove_meta(&path).await
+                                {
+                                    match err {
+                                        AssetWriterError::Io(err) => {
+                                            // any error but NotFound means we could be in a bad state
+                                            if err.kind() != ErrorKind::NotFound {
+                                                error!(
+                                                    "Failed to remove asset meta {path:?}: {err}"
+                                                );
+                                                state_is_valid = false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    state_is_valid
+                }
+            };
+
+            if !state_is_valid {
+                error!("Processed asset transaction log state was invalid and unrecoverable for some reason (see previous logs). Removing processed assets and starting fresh.");
+                if let Err(err) = self
+                    .destination_writer()
+                    .remove_assets_in_directory(&Path::new(""))
+                    .await
+                {
+                    panic!("Processed assets were in a bad state. To correct this, the asset processor attempted to remove all processed assets and start from scratch. This failed. There is no way to continue. Try restarting, or deleting imported asset state manually. {err}");
+                }
+            }
+        }
+        let mut log = self.data.log.write().await;
+        *log = match ProcessorTransactionLog::new().await {
+            Ok(log) => Some(log),
+            Err(err) => panic!("Failed to initialize asset processor log. This cannot be recovered. Try restarting. If that doesn't work, try deleting processed asset state. {}", err),
+        };
     }
 
     /// NOTE: changing the hashing logic here is a _breaking change_ that requires a [`META_FORMAT_VERSION`] bump.
@@ -598,6 +687,7 @@ impl AssetProcessorData {
             source_event_receiver,
             _source_watcher: source_watcher,
             state: async_lock::RwLock::new(ProcessorState::Initializing),
+            log: Default::default(),
             process_plans: Default::default(),
             asset_infos: Default::default(),
             default_process_plans: Default::default(),
@@ -873,4 +963,6 @@ pub enum InitializeError {
     FailedToReadSourcePaths(AssetReaderError),
     #[error(transparent)]
     FailedToReadDestinationPaths(AssetReaderError),
+    #[error("Failed to validate asset log: {0}")]
+    ValidateLogError(ValidateLogError),
 }

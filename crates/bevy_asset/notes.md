@@ -277,13 +277,6 @@ struct Asset<T: Asset> {
         * Multiple parallel hot-reloaded dependent processings could then result in reading bad bytes
     * Therefore, processed reader/writer should atomically lock files
     * Combine read lock and "wait for process" action?
-* Crash recovery
-    * Log
-        * If last entry in log on startup is _not_ a Finished action, clean up entries
-        * Maybe have global start/stop too to detect if there was not a clean exit. Is this necessary/useful?
-    * How do we maintain integrity of processed folder in event of a crash at arbitrary times?
-    * Unity uses finally blocks ... do we use catch_unwind?
-    * Short term, use simple "did we crash" detection combined with a full reprocess?
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
 * Asset dependency derive
@@ -383,6 +376,7 @@ fn load_loadable<T: Loadable>(&self) -> Handle<T> {
 * Try to remove crossbeam channels for recycling ids
 * Handles dropping before load: already implemented slow loop fix ... do better
     * Add test to ensure this works correctly
+* ProcessorLog should be an interface so it isn't hard-coded to files
 
 ```rust
 
@@ -482,6 +476,9 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * "Everything is a loader"
 * Run anywhere / no platform-restricting dependencies
 * Async IO
+    * Why use async_fs (blocking io on a thread pool) when we could just do blocking io on our own IO thread pool?
+        * That would "starve" the IO thread pool / prevent progress
+        * Support other true-async backends (network)
 * Single Arc tree (no more "active handle" counting)
 * Open Questions
     * Implied dependencies (via load calls / scopes) vs dependency enumeration (via Asset type). Call out tradeoffs in PR
@@ -503,6 +500,9 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * Asset system usability
     * handle.path()
 * Call out "stable type name" as the end game for loader / processor identities
+* Why `.imported_assets/Default` instead of `.imported_assets`?
+    * In the future will add "import profiles" for different platforms / configurations (with Default being the default profile)
+    * Allows us to put the processor log in `.imported_assets/log`
 
 ### Why not distill?
 
