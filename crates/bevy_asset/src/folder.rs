@@ -3,5 +3,6 @@ use crate::{Asset, UntypedHandle};
 
 #[derive(Asset)]
 pub struct LoadedFolder {
+    #[dependency]
     pub handles: Vec<UntypedHandle>,
 }

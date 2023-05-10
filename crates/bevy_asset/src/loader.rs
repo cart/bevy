@@ -146,11 +146,16 @@ pub struct LoadedAsset<A: Asset> {
 }
 
 impl<A: Asset> LoadedAsset<A> {
-    pub fn new(value: A, meta: Option<Box<dyn AssetMetaDyn>>) -> Self {
+    /// Create a new loaded asset. This will use [`AssetDependencyVisitor`](crate::AssetDependencyVisitor) to populate `dependencies`.
+    pub fn new_with_dependencies(value: A, meta: Option<Box<dyn AssetMetaDyn>>) -> Self {
+        let mut dependencies = HashSet::new();
+        value.visit_dependencies(&mut |handle| {
+            dependencies.insert(handle);
+        });
         LoadedAsset {
             value,
             path: None,
-            dependencies: HashSet::default(),
+            dependencies,
             loader_dependencies: HashMap::default(),
             labeled_assets: HashMap::default(),
             meta,

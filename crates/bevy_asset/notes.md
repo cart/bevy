@@ -279,9 +279,6 @@ struct Asset<T: Asset> {
     * Combine read lock and "wait for process" action?
 * Proprely impl Reflect and FromReflect for Handle. Make sure it can be used in Bevy Scenes
 * Final pass over todo! and TODO / PERF
-* Asset dependency derive
-    * LoadedFolder needs this
-    * Wire up Asset::visit_dependencies to LoadedAsset
 * Should we combine meta + asset byte loading apis?
     * Single "lock" transaction
     * Would mean we aren't streaming bytes anymore?
@@ -488,13 +485,14 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
         * relies on hot reloading
         * Do we add another "wait for full process" mode that wont load any assets until fully processed?
             * We don't _really_ need to wait for everything ... after all deps for a given asset are checked we can send the event
+    * AssetDependencyVistitor
+        * Dependencies are auto-populated by AssetLoaders. Defining visitors on Asset impls is totally optional / only needed to support manually created assets. 
 * Const Typed Handles! Smaller! Faster!
 * Directly load asset instances and track their dependencies
 * Sub Assets are yielded right away
 * Track dependencies for "runtime only" assets
 * Lazy init via hot-reloading
     * You can create handles at runtime to assets that havent been created yet
-* multiple asset sources
 * Better non-blocking folder loading: LoadedFolder asset 
 * Paths are canonical
 * Asset system usability
@@ -528,6 +526,7 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * bevy cli: `bevy asset-processor run`
     * Run bevy game in "asset processing mode"
 * Asset Packing
+* multiple asset sources
 * Migrations:
     * Loader settings migrations (based on loader version)
     * Saver settings migrations (based on loader version)
@@ -553,3 +552,5 @@ app.add_system(Update, menu_loaded.on_load::<Scene>("menu.scn")) // take an in: 
 * watch_for_changes: default to true for dev builds?
 * Delay hotreloading? https://github.com/bevyengine/bevy/pull/8503
 * Handles could probably be considered "always strong" if we disallow Weak(Index). All arc-ed handles could always be indices
+* Support custom Asset root dependency visitors?
+* Automagically track "manually managed" asset dependency changes, even if they occur from Assets collections?

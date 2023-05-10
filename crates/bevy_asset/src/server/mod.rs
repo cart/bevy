@@ -15,7 +15,7 @@ use bevy_log::{error, info};
 use bevy_tasks::IoTaskPool;
 use bevy_utils::{HashMap, HashSet};
 use crossbeam_channel::{Receiver, Sender};
-use futures_lite::{AsyncReadExt, FutureExt, StreamExt};
+use futures_lite::{FutureExt, StreamExt};
 use parking_lot::RwLock;
 use std::{any::TypeId, path::Path, sync::Arc};
 use thiserror::Error;
@@ -294,7 +294,7 @@ impl AssetServer {
 
     #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
     pub fn add<A: Asset>(&self, asset: A) -> Handle<A> {
-        self.load_asset(LoadedAsset::new(asset, None))
+        self.load_asset(LoadedAsset::new_with_dependencies(asset, None))
     }
 
     pub(crate) fn load_asset<A: Asset>(&self, asset: impl Into<LoadedAsset<A>>) -> Handle<A> {
@@ -373,7 +373,11 @@ impl AssetServer {
                 match load_folder(&owned_path, &server, &mut handles).await {
                     Ok(_) => server.send_asset_event(InternalAssetEvent::Loaded {
                         id,
-                        loaded_asset: LoadedAsset::new(LoadedFolder { handles }, None).into(),
+                        loaded_asset: LoadedAsset::new_with_dependencies(
+                            LoadedFolder { handles },
+                            None,
+                        )
+                        .into(),
                     }),
                     Err(_) => server.send_asset_event(InternalAssetEvent::Failed { id }),
                 }

@@ -162,8 +162,39 @@ impl Plugin for AssetPlugin {
     }
 }
 
-pub trait Asset: Send + Sync + 'static {
-    fn for_each_dependency(&self, process: impl FnMut(UntypedAssetId));
+pub trait Asset: AssetDependencyVisitor + Send + Sync + 'static {}
+
+pub trait AssetDependencyVisitor {
+    // TODO: should this be an owned handle or can it be an UntypedAssetId
+    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedHandle));
+}
+
+impl<A: Asset> AssetDependencyVisitor for Handle<A> {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedHandle)) {
+        visit(self.clone().untyped())
+    }
+}
+
+impl AssetDependencyVisitor for UntypedHandle {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedHandle)) {
+        visit(self.clone())
+    }
+}
+
+impl<A: Asset> AssetDependencyVisitor for Vec<Handle<A>> {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedHandle)) {
+        for dependency in self.iter() {
+            visit(dependency.clone().untyped())
+        }
+    }
+}
+
+impl AssetDependencyVisitor for Vec<UntypedHandle> {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedHandle)) {
+        for dependency in self.iter() {
+            visit(dependency.clone())
+        }
+    }
 }
 
 pub trait AssetApp {
@@ -277,7 +308,9 @@ mod tests {
     pub struct CoolText {
         text: String,
         embedded: String,
+        #[dependency]
         dependencies: Vec<Handle<CoolText>>,
+        #[dependency]
         sub_texts: Vec<Handle<SubText>>,
     }
 
