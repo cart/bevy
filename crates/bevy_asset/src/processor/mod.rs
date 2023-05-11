@@ -28,6 +28,7 @@ use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Instant,
 };
 use thiserror::Error;
 
@@ -124,6 +125,7 @@ impl AssetProcessor {
 
     // TODO: document this process in full and describe why the "eventual consistency" works
     pub fn process_assets(&self) {
+        let start_time = Instant::now();
         debug!("Processing started");
         IoTaskPool::get().scope(|scope| {
             scope.spawn(async move {
@@ -135,7 +137,8 @@ impl AssetProcessor {
         // This must happen _after_ the scope resolves or it will happen "too early"
         // Don't move this into the async scope above! process_assets is a blocking/sync function this is fine
         futures_lite::future::block_on(self.finish_processing_assets());
-        debug!("Processing finished");
+        let end_time = Instant::now();
+        debug!("Processing finished in {:?}", end_time - start_time);
     }
 
     // PERF: parallelize change event processing
