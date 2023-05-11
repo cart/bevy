@@ -1,10 +1,7 @@
 //! In this example we generate a new texture atlas (sprite sheet) from a folder containing
 //! individual sprites.
 
-use bevy::{
-    asset::{LoadState, LoadedFolder, RecursiveDependencyLoadState},
-    prelude::*,
-};
+use bevy::{asset::LoadedFolder, prelude::*};
 
 fn main() {
     App::new()
@@ -34,15 +31,13 @@ fn load_textures(mut commands: Commands, asset_server: Res<AssetServer>) {
 fn check_textures(
     mut next_state: ResMut<NextState<AppState>>,
     rpg_sprite_folder: ResMut<RpgSpriteFolder>,
-    asset_server: Res<AssetServer>,
+    mut events: EventReader<AssetEvent<LoadedFolder>>,
 ) {
     // Advance the `AppState` once all sprite handles have been loaded by the `AssetServer`
-    // TODO: use combined load state (and ultimately a helper)
-    if LoadState::Loaded == asset_server.load_state(&rpg_sprite_folder.0)
-        && RecursiveDependencyLoadState::Loaded
-            == asset_server.recursive_dependency_load_state(&rpg_sprite_folder.0)
-    {
-        next_state.set(AppState::Finished);
+    for event in events.iter() {
+        if event.is_loaded_with_dependencies(&rpg_sprite_folder.0) {
+            next_state.set(AppState::Finished);
+        }
     }
 }
 

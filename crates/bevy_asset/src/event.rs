@@ -8,6 +8,44 @@ pub enum AssetEvent<A: Asset> {
     LoadedWithDependencies { id: AssetId<A> },
 }
 
+impl<A: Asset> AssetEvent<A> {
+    pub fn is_loaded_with_dependencies(&self, id: impl Into<AssetId<A>>) -> bool {
+        let input_id: AssetId<A> = id.into();
+        if let AssetEvent::LoadedWithDependencies { id } = self {
+            *id == input_id
+        } else {
+            false
+        }
+    }
+
+    pub fn is_added(&self, id: impl Into<AssetId<A>>) -> bool {
+        let input_id: AssetId<A> = id.into();
+        if let AssetEvent::Added { id } = self {
+            *id == input_id
+        } else {
+            false
+        }
+    }
+
+    pub fn is_modified(&self, id: impl Into<AssetId<A>>) -> bool {
+        let input_id: AssetId<A> = id.into();
+        if let AssetEvent::Modified { id } = self {
+            *id == input_id
+        } else {
+            false
+        }
+    }
+
+    pub fn is_removed(&self, id: impl Into<AssetId<A>>) -> bool {
+        let input_id: AssetId<A> = id.into();
+        if let AssetEvent::Removed { id } = self {
+            *id == input_id
+        } else {
+            false
+        }
+    }
+}
+
 impl<A: Asset> Clone for AssetEvent<A> {
     fn clone(&self) -> Self {
         match self {
