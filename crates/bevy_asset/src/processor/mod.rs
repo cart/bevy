@@ -211,16 +211,16 @@ impl AssetProcessor {
             if self.source_reader().is_directory(&path).await? {
                 let mut path_stream = self.source_reader().read_directory(&path).await.unwrap();
                 while let Some(path) = path_stream.next().await {
-                    // Files without extensions are skipped
-                    if path.extension().is_some() {
-                        self.process_assets_internal(scope, path).await?;
-                    }
+                    self.process_assets_internal(scope, path).await?;
                 }
             } else {
-                let processor = self.clone();
-                scope.spawn(async move {
-                    processor.process_asset(&path).await;
-                });
+                // Files without extensions are skipped
+                if path.extension().is_some() {
+                    let processor = self.clone();
+                    scope.spawn(async move {
+                        processor.process_asset(&path).await;
+                    });
+                }
             }
             Ok(())
         }
@@ -711,7 +711,6 @@ impl AssetProcessorData {
                 None => return ProcessStatus::NonExistent,
             }
         };
-
         receiver.recv().await.unwrap()
     }
 
