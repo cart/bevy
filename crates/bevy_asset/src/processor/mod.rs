@@ -540,13 +540,6 @@ impl AssetProcessor {
             meta_writer.write_all(&meta_bytes).await.unwrap();
             meta_writer.flush().await.unwrap();
         } else {
-            // TODO: make sure that if this asset was previously "processed", that this state transition is correct
-            // Specifically, how will this affect other assets currently being processed?
-            {
-                let mut infos = self.data.asset_infos.write().await;
-                infos.remove(&asset_path).await;
-            }
-
             {
                 let mut logger = self.data.log.write().await;
                 logger.as_mut().unwrap().begin_path(&path).await.unwrap();
