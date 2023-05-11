@@ -500,10 +500,11 @@ pub fn queue_sprites(
     // If an image has changed, the GpuImage has (probably) changed
     for event in &events.images {
         match event {
-            AssetEvent::Added { .. } => None,
+            AssetEvent::Added { .. } => {}
             AssetEvent::Modified { id } | AssetEvent::Removed { id } => {
-                image_bind_groups.values.remove(id)
+                image_bind_groups.values.remove(id);
             }
+            AssetEvent::LoadedWithDependencies { id } => { /* images don't have dependencies */ }
         };
     }
 

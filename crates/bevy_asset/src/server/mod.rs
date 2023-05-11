@@ -8,7 +8,8 @@ use crate::{
     loader::{AssetLoader, AssetLoaderError, ErasedAssetLoader, LoadContext, LoadedAsset},
     meta::{AssetMetaDyn, AssetMetaMinimal},
     path::AssetPath,
-    Asset, AssetHandleProvider, Assets, ErasedLoadedAsset, Handle, UntypedAssetId, UntypedHandle,
+    Asset, AssetEvent, AssetHandleProvider, Assets, ErasedLoadedAsset, Handle, UntypedAssetId,
+    UntypedHandle,
 };
 use bevy_ecs::prelude::*;
 use bevy_log::{error, info};
@@ -89,6 +90,16 @@ impl AssetServer {
 
     pub fn register_asset<A: Asset>(&self, assets: &Assets<A>) {
         self.register_handle_provider(assets.get_handle_provider());
+        fn sender<A: Asset>(world: &mut World, id: UntypedAssetId) {
+            world
+                .resource_mut::<Events<AssetEvent<A>>>()
+                .send(AssetEvent::LoadedWithDependencies { id: id.typed() });
+        }
+        self.data
+            .infos
+            .write()
+            .dependency_loaded_event_sender
+            .insert(TypeId::of::<A>(), sender::<A>);
     }
 
     pub(crate) fn register_handle_provider(&self, handle_provider: AssetHandleProvider) {
@@ -331,7 +342,6 @@ impl AssetServer {
             let mut infos = self.data.infos.write();
             infos.create_loading_handle(TypeId::of::<LoadedFolder>())
         };
-
         let id = handle.id();
 
         fn load_folder<'a>(
@@ -567,19 +577,31 @@ impl AssetServer {
 }
 
 pub fn handle_internal_asset_events(world: &mut World) {
-    world.resource_scope(|world, assets: Mut<AssetServer>| {
-        let mut infos = assets.data.infos.write();
-        for event in assets.data.asset_event_receiver.try_iter() {
+    world.resource_scope(|world, server: Mut<AssetServer>| {
+        let mut infos = server.data.infos.write();
+        for event in server.data.asset_event_receiver.try_iter() {
             match event {
                 InternalAssetEvent::Loaded { id, loaded_asset } => {
-                    infos.process_asset_load(id, loaded_asset, world);
+                    infos.process_asset_load(
+                        id,
+                        loaded_asset,
+                        world,
+                        &server.data.asset_event_sender,
+                    );
+                }
+                InternalAssetEvent::LoadedWithDependencies { id } => {
+                    let sender = infos
+                        .dependency_loaded_event_sender
+                        .get(&id.type_id())
+                        .expect("Asset event sender should exist");
+                    sender(world, id);
                 }
                 InternalAssetEvent::Failed { id } => infos.process_asset_fail(id),
             }
         }
 
         let mut paths_to_reload = HashSet::new();
-        for event in assets.data.source_event_receiver.try_iter() {
+        for event in server.data.source_event_receiver.try_iter() {
             match event {
                 // TODO: if the asset was processed and the processed file was changed, the first modified event
                 // should be skipped?
@@ -591,7 +613,7 @@ pub fn handle_internal_asset_events(world: &mut World) {
         }
 
         for path in paths_to_reload {
-            assets.reload(path);
+            server.reload(path);
         }
     })
 }
@@ -607,6 +629,9 @@ pub enum InternalAssetEvent {
     Loaded {
         id: UntypedAssetId,
         loaded_asset: ErasedLoadedAsset,
+    },
+    LoadedWithDependencies {
+        id: UntypedAssetId,
     },
     Failed {
         id: UntypedAssetId,

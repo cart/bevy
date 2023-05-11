@@ -1,10 +1,12 @@
 use crate::{
-    AssetHandleProvider, AssetPath, DependencyLoadState, ErasedLoadedAsset, InternalAssetHandle,
-    LoadState, RecursiveDependencyLoadState, UntypedAssetId, UntypedHandle,
+    AssetEvent, AssetHandleProvider, AssetPath, DependencyLoadState, ErasedLoadedAsset,
+    InternalAssetEvent, InternalAssetHandle, LoadState, RecursiveDependencyLoadState,
+    UntypedAssetId, UntypedHandle,
 };
 use bevy_ecs::world::World;
 use bevy_log::warn;
 use bevy_utils::{Entry, HashMap, HashSet};
+use crossbeam_channel::Sender;
 use std::{
     any::TypeId,
     sync::{Arc, Weak},
@@ -49,6 +51,7 @@ pub struct AssetInfos {
     path_to_id: HashMap<AssetPath<'static>, UntypedAssetId>,
     infos: HashMap<UntypedAssetId, AssetInfo>,
     pub(crate) handle_providers: HashMap<TypeId, AssetHandleProvider>,
+    pub(crate) dependency_loaded_event_sender: HashMap<TypeId, fn(&mut World, UntypedAssetId)>,
 }
 
 impl AssetInfos {
@@ -185,6 +188,7 @@ impl AssetInfos {
         loaded_asset_id: UntypedAssetId,
         loaded_asset: ErasedLoadedAsset,
         world: &mut World,
+        sender: &Sender<InternalAssetEvent>,
     ) {
         loaded_asset.value.insert(loaded_asset_id, world);
         let mut loading_deps = loaded_asset.dependencies.len();
@@ -225,13 +229,11 @@ impl AssetInfos {
                     }
                 }
             } else {
-                // the dependency id no longer exists, which implies it was manually removed
+                // the dependency id does not exist, which implies it was manually removed or never existed in the first place
                 warn!(
-                    "Manually removed dependency {:?} during load. This was probably a mistake",
-                    dep_id
+                    "Dependency {:?} from asset {:?} is unknown. This asset's dependency load status will not switch to 'Loaded' until the unknown dependency is loaded.",
+                    dep_id, loaded_asset_id
                 );
-                loading_deps -= 1;
-                loading_rec_deps -= 1;
             }
         }
 
@@ -242,7 +244,14 @@ impl AssetInfos {
         };
 
         let rec_dep_load_state = match (loading_rec_deps, failed_rec_deps) {
-            (0, 0) => RecursiveDependencyLoadState::Loaded,
+            (0, 0) => {
+                sender
+                    .send(InternalAssetEvent::LoadedWithDependencies {
+                        id: loaded_asset_id,
+                    })
+                    .unwrap();
+                RecursiveDependencyLoadState::Loaded
+            }
             (_loading, 0) => RecursiveDependencyLoadState::Loading,
             (_loading, _failed) => RecursiveDependencyLoadState::Failed,
         };
@@ -290,7 +299,7 @@ impl AssetInfos {
             match rec_dep_load_state {
                 RecursiveDependencyLoadState::Loaded => {
                     for dep_id in dependants_waiting_on_rec_load {
-                        Self::propagate_loaded_state(self, dep_id);
+                        Self::propagate_loaded_state(self, dep_id, sender);
                     }
                 }
                 RecursiveDependencyLoadState::Failed => {
@@ -306,11 +315,20 @@ impl AssetInfos {
         }
     }
 
-    fn propagate_loaded_state(infos: &mut AssetInfos, id: UntypedAssetId) {
+    fn propagate_loaded_state(
+        infos: &mut AssetInfos,
+        id: UntypedAssetId,
+        sender: &Sender<InternalAssetEvent>,
+    ) {
         let dependants_waiting_on_rec_load = if let Some(info) = infos.get_mut(id) {
             info.loading_rec_dependencies -= 1;
             if info.loading_rec_dependencies == 0 && info.failed_rec_dependencies == 0 {
                 info.rec_dep_load_state = RecursiveDependencyLoadState::Loaded;
+                if info.load_state == LoadState::Loaded {
+                    sender
+                        .send(InternalAssetEvent::LoadedWithDependencies { id })
+                        .unwrap();
+                }
                 Some(std::mem::take(
                     &mut info.dependants_waiting_on_recursive_dep_load,
                 ))
@@ -323,7 +341,7 @@ impl AssetInfos {
 
         if let Some(dependants_waiting_on_rec_load) = dependants_waiting_on_rec_load {
             for dep_id in dependants_waiting_on_rec_load {
-                Self::propagate_loaded_state(infos, dep_id);
+                Self::propagate_loaded_state(infos, dep_id, sender);
             }
         }
     }

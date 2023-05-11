@@ -163,6 +163,12 @@ impl<A: Asset> LoadedAsset<A> {
     }
 }
 
+impl<A: Asset> From<A> for LoadedAsset<A> {
+    fn from(asset: A) -> Self {
+        LoadedAsset::new_with_dependencies(asset, None)
+    }
+}
+
 pub struct ErasedLoadedAsset {
     pub(crate) value: Box<dyn AssetContainer>,
     pub(crate) path: Option<AssetPath<'static>>,

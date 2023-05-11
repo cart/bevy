@@ -554,9 +554,13 @@ pub fn queue_uinodes(
     // If an image has changed, the GpuImage has (probably) changed
     for event in &events.images {
         match event {
-            AssetEvent::Added { .. } => None,
+            AssetEvent::Added { .. } => {}
             AssetEvent::Modified { id } | AssetEvent::Removed { id } => {
-                image_bind_groups.values.remove(id)
+                image_bind_groups.values.remove(id);
+            }
+            AssetEvent::LoadedWithDependencies { id } => {
+                // TODO: handle this
+                bevy_log::warn!("LoadedWithDependencies event isn't handled yet");
             }
         };
     }

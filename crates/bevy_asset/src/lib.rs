@@ -406,6 +406,16 @@ mod tests {
         world.resource::<Assets<A>>().get(id)
     }
 
+    #[derive(Resource, Default)]
+    struct StoredEvents(Vec<AssetEvent<CoolText>>);
+
+    fn store_asset_events(
+        mut reader: EventReader<AssetEvent<CoolText>>,
+        mut storage: ResMut<StoredEvents>,
+    ) {
+        storage.0.extend(reader.iter().cloned());
+    }
+
     #[test]
     fn load_dependencies() {
         let dir = Dir::default();
@@ -454,16 +464,6 @@ mod tests {
         dir.insert_asset_text(Path::new(b_path), b_ron);
         dir.insert_asset_text(Path::new(c_path), c_ron);
         dir.insert_asset_text(Path::new(d_path), d_ron);
-
-        fn store_asset_events(
-            mut reader: EventReader<AssetEvent<CoolText>>,
-            mut storage: ResMut<StoredEvents>,
-        ) {
-            storage.0.extend(reader.iter().cloned());
-        }
-
-        #[derive(Resource, Default)]
-        struct StoredEvents(Vec<AssetEvent<CoolText>>);
 
         #[derive(Resource)]
         struct IdResults {
@@ -687,12 +687,22 @@ mod tests {
         let id_results = app.world.remove_resource::<IdResults>().unwrap();
         let expected_events = vec![
             AssetEvent::Added { id: a_id },
+            AssetEvent::LoadedWithDependencies {
+                id: id_results.b_id,
+            },
             AssetEvent::Added {
                 id: id_results.b_id,
             },
             AssetEvent::Added {
                 id: id_results.c_id,
             },
+            AssetEvent::LoadedWithDependencies {
+                id: id_results.d_id,
+            },
+            AssetEvent::LoadedWithDependencies {
+                id: id_results.c_id,
+            },
+            AssetEvent::LoadedWithDependencies { id: a_id },
             AssetEvent::Added {
                 id: id_results.d_id,
             },
@@ -832,9 +842,26 @@ mod tests {
 
     #[test]
     fn manual_asset_management() {
-        let mut app = App::new();
-        app.add_plugin(AssetPlugin::unprocessed())
-            .init_asset::<CoolText>();
+        let dir = Dir::default();
+
+        let dep_path = "dep.cool.ron";
+        let dep_ron = r#"
+(
+    text: "dep",
+    dependencies: [],
+    embedded_dependencies: [],
+    sub_texts: [],
+)"#;
+
+        dir.insert_asset_text(Path::new(dep_path), dep_ron);
+
+        let (mut app, gate_opener) = test_app(dir);
+        app.init_asset::<CoolText>()
+            .init_asset::<SubText>()
+            .init_resource::<StoredEvents>()
+            .register_asset_loader(CoolTextLoader)
+            .add_systems(Update, store_asset_events);
+
         let hello = "hello".to_string();
         let empty = "".to_string();
 
@@ -844,7 +871,7 @@ mod tests {
                 texts.add(CoolText {
                     text: hello.clone(),
                     embedded: empty.clone(),
-                    dependencies: Vec::new(),
+                    dependencies: vec![],
                     sub_texts: Vec::new(),
                 })
             };
@@ -867,6 +894,44 @@ mod tests {
             app.world.resource::<Assets<CoolText>>().get(id).is_none(),
             "asset has no handles, so it should have been dropped last update"
         );
+        // remove event is emitted
+        app.update();
+        let events = std::mem::take(&mut app.world.resource_mut::<StoredEvents>().0);
+        let expected_events = vec![AssetEvent::Added { id }, AssetEvent::Removed { id }];
+        assert_eq!(events, expected_events);
+
+        let dep_handle = app.world.resource::<AssetServer>().load(dep_path);
+        let a = CoolText {
+            text: "a".to_string(),
+            embedded: empty.clone(),
+            // this dependency is behind a manual load gate, which should prevent 'a' from emitting a LoadedWithDependencies event
+            dependencies: vec![dep_handle.clone()],
+            sub_texts: Vec::new(),
+        };
+        let a_handle = app.world.resource::<AssetServer>().load_asset(a);
+        app.update();
+        // TODO: ideally it doesn't take two updates for the added event to emit
+        app.update();
+
+        let events = std::mem::take(&mut app.world.resource_mut::<StoredEvents>().0);
+        let expected_events = vec![AssetEvent::Added { id: a_handle.id() }];
+        assert_eq!(events, expected_events);
+
+        gate_opener.open(dep_path);
+        app.update();
+        app.update();
+
+        let events = std::mem::take(&mut app.world.resource_mut::<StoredEvents>().0);
+        let expected_events = vec![
+            AssetEvent::LoadedWithDependencies {
+                id: dep_handle.id(),
+            },
+            AssetEvent::LoadedWithDependencies { id: a_handle.id() },
+            AssetEvent::Added {
+                id: dep_handle.id(),
+            },
+        ];
+        assert_eq!(events, expected_events);
     }
 
     #[test]
@@ -920,8 +985,9 @@ mod tests {
             let events = world.resource::<Events<AssetEvent<LoadedFolder>>>();
             let asset_server = world.resource::<AssetServer>();
             let loaded_folders = world.resource::<Assets<LoadedFolder>>();
+            let cool_texts = world.resource::<Assets<CoolText>>();
             for event in reader.iter(&events) {
-                if let AssetEvent::Added { id } = event {
+                if let AssetEvent::LoadedWithDependencies { id } = event {
                     if *id == handle.id() {
                         let loaded_folder = loaded_folders.get(&handle).unwrap();
                         let a_handle: Handle<CoolText> =
@@ -941,12 +1007,20 @@ mod tests {
                         assert!(found_a);
                         assert!(found_c);
                         assert_eq!(loaded_folder.handles.len(), 2);
+
+                        let a_text = cool_texts.get(&a_handle).unwrap();
+                        let b_text = cool_texts.get(&a_text.dependencies[0]).unwrap();
+                        let c_text = cool_texts.get(&c_handle).unwrap();
+
+                        assert_eq!("a", a_text.text);
+                        assert_eq!("b", b_text.text);
+                        assert_eq!("c", c_text.text);
+
                         return Some(());
                     }
                 }
             }
             None
         });
-        todo!("test recursive load state and failure");
     }
 }
