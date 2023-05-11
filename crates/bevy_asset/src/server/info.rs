@@ -1,7 +1,6 @@
 use crate::{
-    AssetEvent, AssetHandleProvider, AssetPath, DependencyLoadState, ErasedLoadedAsset,
-    InternalAssetEvent, InternalAssetHandle, LoadState, RecursiveDependencyLoadState,
-    UntypedAssetId, UntypedHandle,
+    AssetHandleProvider, AssetPath, DependencyLoadState, ErasedLoadedAsset, InternalAssetEvent,
+    InternalAssetHandle, LoadState, RecursiveDependencyLoadState, UntypedAssetId, UntypedHandle,
 };
 use bevy_ecs::world::World;
 use bevy_log::warn;
@@ -12,6 +11,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
+#[derive(Debug)]
 pub(crate) struct AssetInfo {
     weak_handle: Weak<InternalAssetHandle>,
     pub(crate) path: Option<AssetPath<'static>>,
@@ -52,6 +52,15 @@ pub struct AssetInfos {
     infos: HashMap<UntypedAssetId, AssetInfo>,
     pub(crate) handle_providers: HashMap<TypeId, AssetHandleProvider>,
     pub(crate) dependency_loaded_event_sender: HashMap<TypeId, fn(&mut World, UntypedAssetId)>,
+}
+
+impl std::fmt::Debug for AssetInfos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssetInfos")
+            .field("path_to_id", &self.path_to_id)
+            .field("infos", &self.infos)
+            .finish()
+    }
 }
 
 impl AssetInfos {

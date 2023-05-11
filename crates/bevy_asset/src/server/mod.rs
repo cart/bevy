@@ -722,3 +722,11 @@ fn format_missing_asset_ext(exts: &[String]) -> String {
         String::new()
     }
 }
+
+impl std::fmt::Debug for AssetServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssetServer")
+            .field("info", &self.data.infos.read())
+            .finish()
+    }
+}
