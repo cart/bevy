@@ -85,7 +85,7 @@ impl AssetReader for FileAssetReader {
     fn read<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         Box::pin(async move {
             let full_path = self.root_path.join(path);
             match File::open(&full_path).await {
@@ -107,7 +107,7 @@ impl AssetReader for FileAssetReader {
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         let meta_path = get_meta_path(path);
         Box::pin(async move {
             let full_path = self.root_path.join(meta_path);

@@ -35,12 +35,12 @@ pub trait AssetReader: Send + Sync + 'static {
     fn read<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>>;
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>>;
     /// Returns a future to load the full file data at the provided path.
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>>;
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>>;
     /// Returns an iterator of directory entry names at the provided path.
     fn read_directory<'a>(
         &'a self,

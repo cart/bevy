@@ -52,7 +52,7 @@ impl<R: AssetReader> AssetReader for GatedReader<R> {
     fn read<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         let receiver = {
             let mut gates = self.gates.write().unwrap();
             let gates = gates
@@ -70,7 +70,7 @@ impl<R: AssetReader> AssetReader for GatedReader<R> {
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         self.reader.read_meta(path)
     }
 

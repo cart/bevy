@@ -25,7 +25,7 @@ impl AssetReader for ProcessorGatedReader {
     fn read<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         Box::pin(async move {
             trace!("Waiting for processing to finish before reading {:?}", path);
             // TODO: handle the response here
@@ -49,7 +49,7 @@ impl AssetReader for ProcessorGatedReader {
     fn read_meta<'a>(
         &'a self,
         path: &'a Path,
-    ) -> BoxedFuture<'a, Result<Box<Reader<'static>>, AssetReaderError>> {
+    ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         Box::pin(async move {
             trace!(
                 "Waiting for processing to finish before reading meta {:?}",

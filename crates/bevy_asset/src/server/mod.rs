@@ -533,7 +533,7 @@ impl AssetServer {
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let mut reader = self.data.reader.read(asset_path.path()).await?;
         self.load_with_meta_loader_and_reader(
-            asset_path,
+            &asset_path,
             meta,
             loader,
             &mut reader,
@@ -553,13 +553,19 @@ impl AssetServer {
         let loader = self
             .get_erased_asset_loader_with_type_name(loader_name)
             .ok_or_else(|| AssetLoadError::MissingAssetLoaderForTypeName(loader_name.clone()))?;
-        self.load_with_meta_loader_and_reader(asset_path, meta, &*loader, reader, load_dependencies)
-            .await
+        self.load_with_meta_loader_and_reader(
+            &asset_path,
+            meta,
+            &*loader,
+            reader,
+            load_dependencies,
+        )
+        .await
     }
 
     async fn load_with_meta_loader_and_reader(
         &self,
-        asset_path: AssetPath<'_>,
+        asset_path: &AssetPath<'_>,
         meta: Box<dyn AssetMetaDyn>,
         loader: &dyn ErasedAssetLoader,
         reader: &mut Reader<'_>,
