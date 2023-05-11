@@ -14,3 +14,4 @@ dxil.dll
 assets/scenes/load_scene_example-new.scn.ron
 
 crates/bevy_asset/.imported_assets
+.imported_assets
