@@ -16,7 +16,7 @@ use crate::{
     MissingAssetLoaderForExtensionError,
 };
 use bevy_ecs::prelude::*;
-use bevy_log::{error, trace, warn};
+use bevy_log::{debug, error, trace, warn};
 use bevy_tasks::{IoTaskPool, Scope};
 use bevy_utils::{BoxedFuture, HashMap, HashSet};
 use futures_io::ErrorKind;
@@ -124,7 +124,7 @@ impl AssetProcessor {
 
     // TODO: document this process in full and describe why the "eventual consistency" works
     pub fn process_assets(&self) {
-        trace!("Processing started");
+        debug!("Processing started");
         IoTaskPool::get().scope(|scope| {
             scope.spawn(async move {
                 self.initialize().await.unwrap();
@@ -135,12 +135,12 @@ impl AssetProcessor {
         // This must happen _after_ the scope resolves or it will happen "too early"
         // Don't move this into the async scope above! process_assets is a blocking/sync function this is fine
         futures_lite::future::block_on(self.finish_processing_assets());
-        trace!("Processing finished");
+        debug!("Processing finished");
     }
 
     // PERF: parallelize change event processing
     pub async fn listen_for_source_change_events(&self) {
-        trace!("Listening for changes to source assets");
+        debug!("Listening for changes to source assets");
         loop {
             for event in self.data.source_event_receiver.try_iter() {
                 match event {
@@ -148,11 +148,11 @@ impl AssetProcessor {
                     | AssetSourceEvent::AddedMeta(path)
                     | AssetSourceEvent::Modified(path)
                     | AssetSourceEvent::ModifiedMeta(path) => {
-                        trace!("Asset {:?} was modified. Attempting to re-process", path);
+                        debug!("Asset {:?} was modified. Attempting to re-process", path);
                         self.process_asset(&path).await;
                     }
                     AssetSourceEvent::Removed(path) => {
-                        trace!("Removing processed {:?} because source was removed", path);
+                        debug!("Removing processed {:?} because source was removed", path);
                         error!("remove is not implemented");
                         // // TODO: clean up in memory
                         // if let Err(err) = self.destination_writer().remove(&path).await {
@@ -164,14 +164,14 @@ impl AssetProcessor {
                         // Likewise, the user might be manually re-adding the asset.
                         // Therefore, we shouldn't automatically delete meta ... that is a
                         // user-initiated action.
-                        trace!(
+                        debug!(
                             "Meta for asset {:?} was removed. Attempting to re-process",
                             path
                         );
                         self.process_asset(&path).await;
                     }
                     AssetSourceEvent::AddedFolder(path) => {
-                        trace!("Folder {:?} was added. Attempting to re-process", path);
+                        debug!("Folder {:?} was added. Attempting to re-process", path);
                         // error!("add folder not implemented");
                         IoTaskPool::get().scope(|scope| {
                             scope.spawn(async move {
@@ -180,7 +180,7 @@ impl AssetProcessor {
                         });
                     }
                     AssetSourceEvent::RemovedFolder(path) => {
-                        trace!("Removing folder {:?} because source was removed", path);
+                        debug!("Removing folder {:?} because source was removed", path);
                         error!("remove folder is not implemented");
                         // TODO: clean up memory
                         // if let Err(err) = self.destination_writer().remove_directory(&path).await {
@@ -211,7 +211,10 @@ impl AssetProcessor {
             if self.source_reader().is_directory(&path).await? {
                 let mut path_stream = self.source_reader().read_directory(&path).await.unwrap();
                 while let Some(path) = path_stream.next().await {
-                    self.process_assets_internal(scope, path).await?;
+                    // Files without extensions are skipped
+                    if path.extension().is_some() {
+                        self.process_assets_internal(scope, path).await?;
+                    }
                 }
             } else {
                 let processor = self.clone();
@@ -344,7 +347,7 @@ impl AssetProcessor {
                     Ok(meta_bytes) => {
                         match ron::de::from_bytes::<AssetMetaProcessedInfoMinimal>(&meta_bytes) {
                             Ok(minimal) => {
-                                trace!(
+                                debug!(
                                     "Populated processed info for asset {path:?} {:?}",
                                     minimal.processed_info
                                 );
@@ -357,18 +360,18 @@ impl AssetProcessor {
                                 info.processed_info = minimal.processed_info;
                             }
                             Err(err) => {
-                                trace!("Removing processed data for {path:?} because meta could not be parsed: {err}");
+                                debug!("Removing processed data for {path:?} because meta could not be parsed: {err}");
                                 self.remove_processed_asset(path).await;
                             }
                         }
                     }
                     Err(err) => {
-                        trace!("Removing processed data for {path:?} because meta failed to load: {err}");
+                        debug!("Removing processed data for {path:?} because meta failed to load: {err}");
                         self.remove_processed_asset(path).await;
                     }
                 }
             } else {
-                trace!("Removing processed data for non-existent asset {path:?}");
+                debug!("Removing processed data for non-existent asset {path:?}");
                 self.remove_processed_asset(path).await;
             }
 
@@ -403,7 +406,7 @@ impl AssetProcessor {
         &self,
         path: &Path,
     ) -> Result<ProcessResult, ProcessAssetError> {
-        trace!("Processing asset {:?}", path);
+        debug!("Processing asset {:?}", path);
         let server = &self.server;
         let (mut source_meta, meta_bytes, process_plan) =
             match self.source_reader().read_meta_bytes(&path).await {
@@ -493,7 +496,7 @@ impl AssetProcessor {
         let mut meta_writer = self.destination_writer().write_meta(&path).await.unwrap();
 
         if let Some(process_plan) = process_plan {
-            trace!("Loading asset directly in order to process it {:?}", path);
+            debug!("Loading asset directly in order to process it {:?}", path);
             let loaded_asset = server
                 .load_with_meta_and_reader(
                     asset_path.clone(),
@@ -582,7 +585,7 @@ impl AssetProcessor {
                                 break;
                             }
                             LogEntryError::UnfinishedTransaction(path) => {
-                                trace!("Asset {path:?} did not finish processing. Clearning state for that asset");
+                                debug!("Asset {path:?} did not finish processing. Clearning state for that asset");
                                 if let Err(err) = self.destination_writer().remove(&path).await {
                                     match err {
                                         AssetWriterError::Io(err) => {
@@ -858,7 +861,7 @@ impl ProcessorAssetInfos {
     ) {
         match result {
             Ok(ProcessResult::Processed(processed_info)) => {
-                trace!("Finished processing asset {:?}", asset_path,);
+                debug!("Finished processing asset {:?}", asset_path,);
                 // clean up old dependants
                 let old_processed_info = self
                     .infos
@@ -881,7 +884,7 @@ impl ProcessorAssetInfos {
                 }
             }
             Ok(ProcessResult::SkippedNotChanged) => {
-                trace!(
+                debug!(
                     "Skipping processing of asset {:?} because it has not changed",
                     asset_path
                 );
