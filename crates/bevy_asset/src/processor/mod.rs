@@ -21,7 +21,7 @@ use bevy_tasks::{IoTaskPool, Scope};
 use bevy_utils::{BoxedFuture, HashMap, HashSet};
 use futures_io::ErrorKind;
 use futures_lite::{AsyncReadExt, AsyncWriteExt, FutureExt, StreamExt};
-use parking_lot::{lock_api::RawRwLock, RwLock};
+use parking_lot::RwLock;
 use std::{
     collections::VecDeque,
     hash::{Hash, Hasher},
@@ -493,23 +493,28 @@ impl AssetProcessor {
                 }
             }
         }
-        let transaction_lock = {
+        // Note: this lock must remain alive until all processed asset asset and meta writes have finished (or failed)
+        // See ProcessedAssetInfo::file_transaction_lock docs for more info
+        let _transaction_lock = {
             let mut infos = self.data.asset_infos.write().await;
             let info = infos.get_or_insert(asset_path.clone());
-            info.file_transaction_lock.clone()
+            info.file_transaction_lock.write_arc()
         };
-        transaction_lock.lock_exclusive();
-        // TODO: when adding error handling, make sure the lock is unlocked
         // TODO: error handling
         let mut writer = self.destination_writer().write(&path).await.unwrap();
         let mut meta_writer = self.destination_writer().write_meta(&path).await.unwrap();
 
         if let Some(process_plan) = process_plan {
+            let loader_name = process_plan.source_loader();
+            let loader = server
+                .get_erased_asset_loader_with_type_name(&loader_name)
+                .unwrap();
             debug!("Loading asset directly in order to process it {:?}", path);
             let loaded_asset = server
-                .load_with_meta_and_reader(
-                    asset_path.clone(),
+                .load_with_meta_loader_and_reader(
+                    &asset_path,
                     source_meta,
+                    &*loader,
                     &mut asset_bytes.as_slice(),
                     false,
                 )
@@ -565,10 +570,6 @@ impl AssetProcessor {
             let mut logger = self.data.log.write().await;
             logger.as_mut().unwrap().end_path(&path).await.unwrap();
         }
-
-        // SAFETY: exclusive lock was acquired above
-        // See ProcessedAssetInfo::file_transaction_lock docs for rationale
-        unsafe { transaction_lock.unlock_exclusive() }
 
         Ok(ProcessResult::Processed(new_processed_info))
     }
@@ -792,10 +793,7 @@ pub(crate) struct ProcessorAssetInfo {
     ///     * this second scenario almost certainly isn't possible with the current implementation, but its worth protecting against
     /// This lock defends against those scenarios by ensuring readers don't read while processed files are being written. And it ensures
     /// Because this lock is shared across meta and asset bytes, readers can esure they don't read "old" versions of metadata with "new" asset data.  
-    /// This is a "raw" rwlock because:
-    /// * it doesn't need to own data
-    /// * [`ProcessorGatedReader`] needs to hold locks without lifetimes tied to [`ProcessorAssetInfo`]. High level lock guards have lifetimes
-    pub(crate) file_transaction_lock: Arc<parking_lot::RawRwLock>,
+    pub(crate) file_transaction_lock: Arc<RwLock<()>>,
     status_sender: async_broadcast::Sender<ProcessStatus>,
     status_receiver: async_broadcast::Receiver<ProcessStatus>,
 }
@@ -806,7 +804,7 @@ impl Default for ProcessorAssetInfo {
         Self {
             processed_info: Default::default(),
             dependants: Default::default(),
-            file_transaction_lock: Arc::new(RawRwLock::INIT),
+            file_transaction_lock: Default::default(),
             status: None,
             status_sender,
             status_receiver,

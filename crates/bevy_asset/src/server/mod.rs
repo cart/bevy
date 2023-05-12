@@ -206,14 +206,18 @@ impl AssetServer {
         mut path: AssetPath<'a>,
         force: bool,
     ) -> Result<UntypedHandle, AssetLoadError> {
-        let (meta, loader) = self.get_meta_and_loader(&path).await.map_err(|e| {
-            // if there was an input handle, a "load" operation has already started, so we must produce a "failure" event, if
-            // we cannot find the meta and loader
-            if let Some(handle) = &input_handle {
-                self.send_asset_event(InternalAssetEvent::Failed { id: handle.id() });
-            }
-            e
-        })?;
+        let owned_path = path.to_owned();
+        let (meta, loader, mut reader) = self
+            .get_meta_loader_and_reader(&owned_path)
+            .await
+            .map_err(|e| {
+                // if there was an input handle, a "load" operation has already started, so we must produce a "failure" event, if
+                // we cannot find the meta and loader
+                if let Some(handle) = &input_handle {
+                    self.send_asset_event(InternalAssetEvent::Failed { id: handle.id() });
+                }
+                e
+            })?;
 
         let has_label = path.label().is_some();
 
@@ -244,7 +248,6 @@ impl AssetServer {
         if !should_load && !force {
             return Ok(handle);
         }
-
         let base_asset_id = if has_label {
             path.remove_label();
             // If the path has a label, the current id does not match the asset root type.
@@ -263,7 +266,7 @@ impl AssetServer {
         };
 
         match self
-            .load_with_meta_and_loader(path, meta, &*loader, true)
+            .load_with_meta_loader_and_reader(&path, meta, &*loader, &mut *reader, true)
             .await
         {
             Ok(mut loaded_asset) => {
@@ -470,34 +473,32 @@ impl AssetServer {
             .0
     }
 
-    pub async fn load_direct_with_meta<'a>(
-        &self,
-        path: impl Into<AssetPath<'a>>,
-        meta: Box<dyn AssetMetaDyn>,
-    ) -> Result<ErasedLoadedAsset, AssetLoadError> {
-        let path: AssetPath = path.into();
-        // TODO: handle this error
-        let loader = self
-            .get_erased_asset_loader_with_type_name(meta.source_loader())
-            .unwrap();
-        self.load_with_meta_and_loader(path, meta, &*loader, false)
-            .await
-    }
-
     pub async fn load_direct<'a>(
         &self,
         path: impl Into<AssetPath<'a>>,
     ) -> Result<ErasedLoadedAsset, AssetLoadError> {
         let path: AssetPath = path.into();
-        let (meta, loader) = self.get_meta_and_loader(&path).await?;
-        self.load_with_meta_and_loader(path, meta, &*loader, false)
+        let (meta, loader, mut reader) = self.get_meta_loader_and_reader(&path).await?;
+        self.load_with_meta_loader_and_reader(&path, meta, &*loader, &mut *reader, false)
             .await
     }
 
-    async fn get_meta_and_loader(
-        &self,
-        asset_path: &AssetPath<'_>,
-    ) -> Result<(Box<dyn AssetMetaDyn>, Arc<dyn ErasedAssetLoader>), AssetLoadError> {
+    async fn get_meta_loader_and_reader<'a>(
+        &'a self,
+        asset_path: &'a AssetPath<'_>,
+    ) -> Result<
+        (
+            Box<dyn AssetMetaDyn>,
+            Arc<dyn ErasedAssetLoader>,
+            Box<Reader<'a>>,
+        ),
+        AssetLoadError,
+    > {
+        // NOTE: We grab the asset byte reader first to ensure this is transactional for AssetReaders like ProcessorGatedReader
+        // The asset byte reader will "lock" the processed asset, preventing writes for the duration of the lock.
+        // Then the meta reader, if meta exists, will correspond to the meta for the current "version" of the asset.
+        // See ProcessedAssetInfo::file_transaction_lock for more context
+        let reader = self.data.reader.read(asset_path.path()).await?;
         match self.data.reader.read_meta_bytes(asset_path.path()).await {
             Ok(meta_bytes) => {
                 // TODO: this isn't fully minimal yet. we only need the loader
@@ -505,7 +506,9 @@ impl AssetServer {
                 // TODO: handle this error
                 let loader = self
                     .get_erased_asset_loader_with_type_name(&minimal.loader)
-                    .unwrap();
+                    .ok_or_else(|| {
+                        AssetLoadError::MissingAssetLoaderForTypeName(minimal.loader.clone())
+                    })?;
                 let meta = loader.deserialize_meta(&meta_bytes).map_err(|e| {
                     AssetLoadError::AssetLoaderError {
                         path: asset_path.to_owned(),
@@ -513,57 +516,20 @@ impl AssetServer {
                         error: AssetLoaderError::DeserializeMeta(e),
                     }
                 })?;
-                Ok((meta, loader))
+
+                Ok((meta, loader, reader))
             }
             Err(AssetReaderError::NotFound(_)) => {
                 let loader = self.get_path_asset_loader(asset_path.path())?;
                 let meta = loader.default_meta();
-                Ok((meta, loader))
+                let reader = self.data.reader.read(asset_path.path()).await?;
+                Ok((meta, loader, reader))
             }
             Err(err) => return Err(err.into()),
         }
     }
 
-    async fn load_with_meta_and_loader(
-        &self,
-        asset_path: AssetPath<'_>,
-        meta: Box<dyn AssetMetaDyn>,
-        loader: &dyn ErasedAssetLoader,
-        load_dependencies: bool,
-    ) -> Result<ErasedLoadedAsset, AssetLoadError> {
-        let mut reader = self.data.reader.read(asset_path.path()).await?;
-        self.load_with_meta_loader_and_reader(
-            &asset_path,
-            meta,
-            loader,
-            &mut reader,
-            load_dependencies,
-        )
-        .await
-    }
-
-    pub(crate) async fn load_with_meta_and_reader(
-        &self,
-        asset_path: AssetPath<'_>,
-        meta: Box<dyn AssetMetaDyn>,
-        reader: &mut Reader<'_>,
-        load_dependencies: bool,
-    ) -> Result<ErasedLoadedAsset, AssetLoadError> {
-        let loader_name = meta.source_loader();
-        let loader = self
-            .get_erased_asset_loader_with_type_name(loader_name)
-            .ok_or_else(|| AssetLoadError::MissingAssetLoaderForTypeName(loader_name.clone()))?;
-        self.load_with_meta_loader_and_reader(
-            &asset_path,
-            meta,
-            &*loader,
-            reader,
-            load_dependencies,
-        )
-        .await
-    }
-
-    async fn load_with_meta_loader_and_reader(
+    pub(crate) async fn load_with_meta_loader_and_reader(
         &self,
         asset_path: &AssetPath<'_>,
         meta: Box<dyn AssetMetaDyn>,

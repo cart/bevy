@@ -7,7 +7,7 @@ use anyhow::Result;
 use bevy_log::trace;
 use bevy_utils::BoxedFuture;
 use futures_io::AsyncRead;
-use parking_lot::lock_api::RawRwLock;
+use parking_lot::lock_api::ArcRwLockReadGuard;
 use std::{path::Path, pin::Pin, sync::Arc};
 
 pub struct ProcessorGatedReader {
@@ -25,12 +25,12 @@ impl ProcessorGatedReader {
     async fn get_transaction_lock(
         &self,
         path: &Path,
-    ) -> Result<Arc<parking_lot::RawRwLock>, AssetReaderError> {
+    ) -> Result<ArcRwLockReadGuard<parking_lot::RawRwLock, ()>, AssetReaderError> {
         let infos = self.processor_data.asset_infos.read().await;
         let info = infos
             .get(&AssetPath::new(path.to_owned(), None))
             .ok_or_else(|| AssetReaderError::NotFound(path.to_owned()))?;
-        Ok(info.file_transaction_lock.clone())
+        Ok(info.file_transaction_lock.read_arc())
     }
 }
 
@@ -133,15 +133,17 @@ impl AssetReader for ProcessorGatedReader {
 
 pub struct TransactionLockedReader<'a> {
     reader: Box<Reader<'a>>,
-    file_transaction_lock: Arc<parking_lot::RawRwLock>,
+    _file_transaction_lock: ArcRwLockReadGuard<parking_lot::RawRwLock, ()>,
 }
 
 impl<'a> TransactionLockedReader<'a> {
-    fn new(reader: Box<Reader<'a>>, file_transaction_lock: Arc<parking_lot::RawRwLock>) -> Self {
-        file_transaction_lock.lock_shared();
+    fn new(
+        reader: Box<Reader<'a>>,
+        file_transaction_lock: ArcRwLockReadGuard<parking_lot::RawRwLock, ()>,
+    ) -> Self {
         Self {
             reader,
-            file_transaction_lock,
+            _file_transaction_lock: file_transaction_lock,
         }
     }
 }
@@ -153,14 +155,5 @@ impl<'a> AsyncRead for TransactionLockedReader<'a> {
         buf: &mut [u8],
     ) -> std::task::Poll<futures_io::Result<usize>> {
         Pin::new(&mut self.reader).poll_read(cx, buf)
-    }
-}
-
-impl<'a> Drop for TransactionLockedReader<'a> {
-    fn drop(&mut self) {
-        // Safety: A TransactionLockedReader always holds a shared lock (see `new` constructor).
-        unsafe {
-            self.file_transaction_lock.unlock_shared();
-        }
     }
 }

@@ -40,6 +40,10 @@ impl<Source: AssetLoader, Saver: AssetSaver<Asset = Source::Asset>, Destination:
         Ok(Box::new(meta))
     }
 
+    fn source_loader(&self) -> &'static str {
+        std::any::type_name::<Source>()
+    }
+
     fn default_meta(&self) -> Box<dyn AssetMetaDyn> {
         Box::new(AssetMeta::<Source, Saver, Destination> {
             meta_format_version: META_FORMAT_VERSION.to_string(),
@@ -70,4 +74,5 @@ pub trait ErasedAssetProcessPlan: Send + Sync {
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>>;
     fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError>;
     fn default_meta(&self) -> Box<dyn AssetMetaDyn>;
+    fn source_loader(&self) -> &'static str;
 }
