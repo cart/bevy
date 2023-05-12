@@ -2,9 +2,10 @@ use crate::io::{AssetReader, AssetReaderError, PathStream, Reader};
 use anyhow::Result;
 use bevy_utils::{BoxedFuture, HashMap};
 use crossbeam_channel::{Receiver, Sender};
+use parking_lot::RwLock;
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 pub struct GatedReader<R: AssetReader> {
@@ -27,7 +28,7 @@ pub struct GateOpener {
 
 impl GateOpener {
     pub fn open<P: AsRef<Path>>(&self, path: P) {
-        let mut gates = self.gates.write().unwrap();
+        let mut gates = self.gates.write();
         let gates = gates
             .entry(path.as_ref().to_path_buf())
             .or_insert_with(|| crossbeam_channel::unbounded());
@@ -54,7 +55,7 @@ impl<R: AssetReader> AssetReader for GatedReader<R> {
         path: &'a Path,
     ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         let receiver = {
-            let mut gates = self.gates.write().unwrap();
+            let mut gates = self.gates.write();
             let gates = gates
                 .entry(path.to_path_buf())
                 .or_insert_with(|| crossbeam_channel::unbounded());

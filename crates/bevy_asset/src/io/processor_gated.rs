@@ -1,11 +1,14 @@
 use crate::{
     io::{AssetReader, AssetReaderError, PathStream, Reader},
     processor::{AssetProcessorData, ProcessStatus},
+    AssetPath,
 };
 use anyhow::Result;
 use bevy_log::trace;
 use bevy_utils::BoxedFuture;
-use std::{path::Path, sync::Arc};
+use futures_io::AsyncRead;
+use parking_lot::lock_api::RawRwLock;
+use std::{path::Path, pin::Pin, sync::Arc};
 
 pub struct ProcessorGatedReader {
     reader: Box<dyn AssetReader>,
@@ -18,6 +21,16 @@ impl ProcessorGatedReader {
             processor_data,
             reader,
         }
+    }
+    async fn get_transaction_lock(
+        &self,
+        path: &Path,
+    ) -> Result<Arc<parking_lot::RawRwLock>, AssetReaderError> {
+        let infos = self.processor_data.asset_infos.read().await;
+        let info = infos
+            .get(&AssetPath::new(path.to_owned(), None))
+            .ok_or_else(|| AssetReaderError::NotFound(path.to_owned()))?;
+        Ok(info.file_transaction_lock.clone())
     }
 }
 
@@ -41,8 +54,11 @@ impl AssetReader for ProcessorGatedReader {
                 process_result,
                 path
             );
-            let result = self.reader.read(path).await?;
-            Ok(result)
+            let lock = self.get_transaction_lock(path).await?;
+            let asset_reader = self.reader.read(path).await?;
+            let reader: Box<Reader<'a>> =
+                Box::new(TransactionLockedReader::new(asset_reader, lock));
+            Ok(reader)
         })
     }
 
@@ -68,8 +84,10 @@ impl AssetReader for ProcessorGatedReader {
                 process_result,
                 path
             );
-            let result = self.reader.read_meta(path).await?;
-            Ok(result)
+            let lock = self.get_transaction_lock(path).await?;
+            let meta_reader = self.reader.read_meta(path).await?;
+            let reader: Box<Reader<'a>> = Box::new(TransactionLockedReader::new(meta_reader, lock));
+            Ok(reader)
         })
     }
 
@@ -110,5 +128,39 @@ impl AssetReader for ProcessorGatedReader {
         event_sender: crossbeam_channel::Sender<super::AssetSourceEvent>,
     ) -> Option<Box<dyn super::AssetWatcher>> {
         self.reader.watch_for_changes(event_sender)
+    }
+}
+
+pub struct TransactionLockedReader<'a> {
+    reader: Box<Reader<'a>>,
+    file_transaction_lock: Arc<parking_lot::RawRwLock>,
+}
+
+impl<'a> TransactionLockedReader<'a> {
+    fn new(reader: Box<Reader<'a>>, file_transaction_lock: Arc<parking_lot::RawRwLock>) -> Self {
+        file_transaction_lock.lock_shared();
+        Self {
+            reader,
+            file_transaction_lock,
+        }
+    }
+}
+
+impl<'a> AsyncRead for TransactionLockedReader<'a> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<futures_io::Result<usize>> {
+        Pin::new(&mut self.reader).poll_read(cx, buf)
+    }
+}
+
+impl<'a> Drop for TransactionLockedReader<'a> {
+    fn drop(&mut self) {
+        // Safety: A TransactionLockedReader always holds a shared lock (see `new` constructor).
+        unsafe {
+            self.file_transaction_lock.unlock_shared();
+        }
     }
 }

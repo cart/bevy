@@ -21,7 +21,7 @@ use bevy_tasks::{IoTaskPool, Scope};
 use bevy_utils::{BoxedFuture, HashMap, HashSet};
 use futures_io::ErrorKind;
 use futures_lite::{AsyncReadExt, AsyncWriteExt, FutureExt, StreamExt};
-use parking_lot::RwLock;
+use parking_lot::{lock_api::RawRwLock, RwLock};
 use std::{
     collections::VecDeque,
     hash::{Hash, Hasher},
@@ -493,7 +493,13 @@ impl AssetProcessor {
                 }
             }
         }
-
+        let transaction_lock = {
+            let mut infos = self.data.asset_infos.write().await;
+            let info = infos.get_or_insert(asset_path.clone());
+            info.file_transaction_lock.clone()
+        };
+        transaction_lock.lock_exclusive();
+        // TODO: when adding error handling, make sure the lock is unlocked
         // TODO: error handling
         let mut writer = self.destination_writer().write(&path).await.unwrap();
         let mut meta_writer = self.destination_writer().write_meta(&path).await.unwrap();
@@ -559,6 +565,10 @@ impl AssetProcessor {
             let mut logger = self.data.log.write().await;
             logger.as_mut().unwrap().end_path(&path).await.unwrap();
         }
+
+        // SAFETY: exclusive lock was acquired above
+        // See ProcessedAssetInfo::file_transaction_lock docs for rationale
+        unsafe { transaction_lock.unlock_exclusive() }
 
         Ok(ProcessResult::Processed(new_processed_info))
     }
@@ -770,10 +780,22 @@ pub enum ProcessStatus {
     NonExistent,
 }
 
-struct ProcessorAssetInfo {
+pub(crate) struct ProcessorAssetInfo {
     processed_info: Option<ProcessedInfo>,
     dependants: HashSet<AssetPath<'static>>,
     status: Option<ProcessStatus>,
+    /// A lock that controls read/write access to processed asset files. The lock is shared for both the asset bytes and the meta bytes.
+    /// _This lock must be locked whenever a read or write to processed assets occurs_
+    /// There are scenarios where processed assets (and their metadata) are being read and written in multiple places at once:
+    /// * when the processor is running in parallel with an app
+    /// * when processing assets in parallel, the processor might read an asset's load_dependencies when processing new versions of those dependencies
+    ///     * this second scenario almost certainly isn't possible with the current implementation, but its worth protecting against
+    /// This lock defends against those scenarios by ensuring readers don't read while processed files are being written. And it ensures
+    /// Because this lock is shared across meta and asset bytes, readers can esure they don't read "old" versions of metadata with "new" asset data.  
+    /// This is a "raw" rwlock because:
+    /// * it doesn't need to own data
+    /// * [`ProcessorGatedReader`] needs to hold locks without lifetimes tied to [`ProcessorAssetInfo`]. High level lock guards have lifetimes
+    pub(crate) file_transaction_lock: Arc<parking_lot::RawRwLock>,
     status_sender: async_broadcast::Sender<ProcessStatus>,
     status_receiver: async_broadcast::Receiver<ProcessStatus>,
 }
@@ -784,6 +806,7 @@ impl Default for ProcessorAssetInfo {
         Self {
             processed_info: Default::default(),
             dependants: Default::default(),
+            file_transaction_lock: Arc::new(RawRwLock::INIT),
             status: None,
             status_sender,
             status_receiver,
@@ -829,7 +852,7 @@ impl ProcessorAssetInfos {
         })
     }
 
-    fn get(&self, asset_path: &AssetPath<'static>) -> Option<&ProcessorAssetInfo> {
+    pub(crate) fn get(&self, asset_path: &AssetPath<'static>) -> Option<&ProcessorAssetInfo> {
         self.infos.get(asset_path)
     }
 
