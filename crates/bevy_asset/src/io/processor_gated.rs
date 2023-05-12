@@ -41,7 +41,6 @@ impl AssetReader for ProcessorGatedReader {
     ) -> BoxedFuture<'a, Result<Box<Reader<'a>>, AssetReaderError>> {
         Box::pin(async move {
             trace!("Waiting for processing to finish before reading {:?}", path);
-            // TODO: handle the response here
             let process_result = self.processor_data.wait_until_processed(path).await;
             match process_result {
                 ProcessStatus::Processed => {}
@@ -71,7 +70,6 @@ impl AssetReader for ProcessorGatedReader {
                 "Waiting for processing to finish before reading meta {:?}",
                 path
             );
-            // TODO: handle the response here
             let process_result = self.processor_data.wait_until_processed(path).await;
             match process_result {
                 ProcessStatus::Processed => {}

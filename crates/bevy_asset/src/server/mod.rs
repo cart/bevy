@@ -223,7 +223,6 @@ impl AssetServer {
 
         let (handle, should_load) = match input_handle {
             Some(handle) => {
-                // TODO: add requested type validation for sub assets
                 if !has_label && handle.type_id() != loader.asset_type_id() {
                     return Err(AssetLoadError::RequestedHandleTypeMismatch {
                         path: path.to_owned(),
@@ -283,7 +282,6 @@ impl AssetServer {
                 Ok(handle)
             }
             Err(err) => {
-                // TODO: fail all loading subassets
                 self.send_asset_event(InternalAssetEvent::Failed { id: base_asset_id });
                 Err(err)
             }
@@ -503,7 +501,6 @@ impl AssetServer {
             Ok(meta_bytes) => {
                 // TODO: this isn't fully minimal yet. we only need the loader
                 let minimal: AssetMetaMinimal = ron::de::from_bytes(&meta_bytes).unwrap();
-                // TODO: handle this error
                 let loader = self
                     .get_erased_asset_loader_with_type_name(&minimal.loader)
                     .ok_or_else(|| {
@@ -652,7 +649,6 @@ pub enum RecursiveDependencyLoadState {
 #[derive(Error, Debug)]
 
 pub enum AssetLoadError {
-    // TODO: producer of this error should look up friendly type names
     #[error("Requested handle of type {requested:?} for asset '{path}' does not match actual asset type '{actual_asset_name}', which used loader '{loader_name}'")]
     RequestedHandleTypeMismatch {
         path: AssetPath<'static>,

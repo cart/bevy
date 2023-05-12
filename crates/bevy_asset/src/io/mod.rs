@@ -31,7 +31,6 @@ pub type Reader<'a> = dyn AsyncRead + Unpin + Send + Sync + 'a;
 
 pub trait AssetReader: Send + Sync + 'static {
     /// Returns a future to load the full file data at the provided path.
-    // TODO: try using self lifetime (but not path lifetime) on Reader for added flexibility
     fn read<'a>(
         &'a self,
         path: &'a Path,

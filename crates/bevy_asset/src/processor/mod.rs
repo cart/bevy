@@ -145,7 +145,12 @@ impl AssetProcessor {
     pub async fn listen_for_source_change_events(&self) {
         debug!("Listening for changes to source assets");
         loop {
+            let mut started_processing = false;
             for event in self.data.source_event_receiver.try_iter() {
+                if !started_processing {
+                    self.set_state(ProcessorState::Processing).await;
+                    started_processing = true;
+                }
                 match event {
                     AssetSourceEvent::Added(path)
                     | AssetSourceEvent::AddedMeta(path)
@@ -193,8 +198,9 @@ impl AssetProcessor {
                 }
             }
 
-            // TODO: make sure the "global processor state" is set appropriately here. or alternatively, remove the global processor state
-            self.finish_processing_assets().await;
+            if started_processing {
+                self.finish_processing_assets().await;
+            }
         }
     }
 
