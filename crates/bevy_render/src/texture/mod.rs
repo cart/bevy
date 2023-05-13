@@ -9,6 +9,7 @@ mod fallback_image;
 mod hdr_texture_loader;
 #[allow(clippy::module_inception)]
 mod image;
+mod image_saver;
 mod image_texture_loader;
 #[cfg(feature = "ktx2")]
 mod ktx2;
@@ -27,6 +28,7 @@ pub use exr_texture_loader::*;
 pub use hdr_texture_loader::*;
 
 pub use fallback_image::*;
+pub use image_saver::*;
 pub use image_texture_loader::*;
 pub use texture_cache::*;
 
@@ -36,7 +38,10 @@ use crate::{
     Render, RenderApp, RenderSet,
 };
 use bevy_app::{App, Plugin};
-use bevy_asset::{AssetApp, Assets, Handle};
+use bevy_asset::{
+    processor::{AssetProcessor, LoadAndSave},
+    AssetApp, Assets, Handle,
+};
 use bevy_ecs::prelude::*;
 
 // TODO: replace Texture names with Image names?
@@ -80,7 +85,7 @@ impl Plugin for ImagePlugin {
             feature = "ktx2",
         ))]
         {
-            app.init_asset_loader::<ImageTextureLoader>();
+            app.init_asset_loader::<ImageLoader>();
         }
 
         #[cfg(feature = "exr")]
@@ -102,6 +107,11 @@ impl Plugin for ImagePlugin {
         app.world
             .resource_mut::<Assets<Image>>()
             .insert(Handle::default(), Image::default());
+        if let Some(processor) = app.world.get_resource::<AssetProcessor>() {
+            processor.register_processor::<LoadAndSave<ImageLoader, CompressedImageSaver>>(
+                CompressedImageSaver.into(),
+            );
+        }
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             let default_sampler = {

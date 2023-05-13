@@ -1,17 +1,12 @@
 (
     meta_format_version: "1.0",
-    loader: "loader::CoolTextLoader",
-    processor: Some((
-        saver: "loader::CoolTextSaver",
-        saver_settings: (
-            appended: "",
-        ),
-        loader: Loader(
-            loader: "loader::TextLoader",
-            settings: (
-                blah: false,
+    asset: Process(
+        processor: "bevy_asset::processor::process_plan::LoadAndSave<loader::CoolTextLoader, loader::CoolTextSaver>",
+        settings: (
+            loader_settings: (),
+            saver_settings: (
+                appended: "",
             ),
         ),
-    )),
-    loader_settings: (),
+    ),
 )

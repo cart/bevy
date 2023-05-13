@@ -16,6 +16,7 @@ use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::system::{lifetimeless::SRes, Resource, SystemParamItem};
 use bevy_math::Vec2;
 use bevy_reflect::{FromReflect, Reflect};
+use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use thiserror::Error;
 use wgpu::{Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor};
@@ -23,7 +24,7 @@ use wgpu::{Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor};
 pub const TEXTURE_ASSET_INDEX: u64 = 0;
 pub const SAMPLER_ASSET_INDEX: u64 = 1;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum ImageFormat {
     Avif,
     Basis,
@@ -447,6 +448,8 @@ pub enum ImageType<'a> {
     MimeType(&'a str),
     /// The extension of an image file, for example `"png"`.
     Extension(&'a str),
+    /// The direct format of the image
+    Format(ImageFormat),
 }
 
 impl<'a> ImageType<'a> {
@@ -456,6 +459,7 @@ impl<'a> ImageType<'a> {
                 .ok_or_else(|| TextureError::InvalidImageMimeType(mime_type.to_string())),
             ImageType::Extension(extension) => ImageFormat::from_extension(extension)
                 .ok_or_else(|| TextureError::InvalidImageExtension(extension.to_string())),
+            ImageType::Format(format) => Ok(*format),
         }
     }
 }

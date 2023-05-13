@@ -45,6 +45,7 @@ default = [
   "png",
   "hdr",
   "ktx2",
+  "basis-universal",
   "zstd",
   "vorbis",
   "x11",

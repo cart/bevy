@@ -1,4 +1,4 @@
-use crate as bevy_asset;
+use crate::AssetLoader;
 use crate::{io::Writer, meta::Settings, Asset, ErasedLoadedAsset};
 use bevy_utils::BoxedFuture;
 use serde::{Deserialize, Serialize};
@@ -6,13 +6,14 @@ use serde::{Deserialize, Serialize};
 pub trait AssetSaver: Send + Sync + 'static {
     type Asset: Asset;
     type Settings: Settings + Default + Serialize + for<'a> Deserialize<'a>;
+    type OutputLoader: AssetLoader;
 
     fn save<'a>(
         &'a self,
         writer: &'a mut Writer,
         asset: &'a Self::Asset,
         settings: &'a Self::Settings,
-    ) -> BoxedFuture<'a, Result<(), anyhow::Error>>;
+    ) -> BoxedFuture<'a, Result<<Self::OutputLoader as AssetLoader>::Settings, anyhow::Error>>;
 }
 
 pub trait ErasedAssetSaver: Send + Sync + 'static {
@@ -43,25 +44,5 @@ impl<S: AssetSaver> ErasedAssetSaver for S {
     }
     fn type_name(&self) -> &'static str {
         std::any::type_name::<S>()
-    }
-}
-
-pub struct NullSaver;
-
-#[derive(Asset)]
-pub struct NullAsset;
-
-impl AssetSaver for NullSaver {
-    type Asset = NullAsset;
-
-    type Settings = ();
-
-    fn save<'a>(
-        &'a self,
-        _writer: &'a mut Writer,
-        _asset: &'a Self::Asset,
-        _settings: &'a Self::Settings,
-    ) -> BoxedFuture<'a, Result<(), anyhow::Error>> {
-        panic!("NullSaver should never be called");
     }
 }

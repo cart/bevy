@@ -2,7 +2,6 @@ use crate::{
     io::{AssetReaderError, Reader},
     meta::{AssetMeta, AssetMetaDyn, Settings, META_FORMAT_VERSION},
     path::AssetPath,
-    saver::NullSaver,
     Asset, AssetLoadError, AssetServer, Assets, Handle, UntypedAssetId, UntypedHandle,
 };
 use bevy_ecs::world::World;
@@ -85,7 +84,8 @@ where
     ) -> BoxedFuture<'a, Result<ErasedLoadedAsset, AssetLoaderError>> {
         Box::pin(async move {
             let settings = meta
-                .source_loader_settings()
+                .loader_settings()
+                .expect("Loader settings should exist")
                 .downcast_ref::<L::Settings>()
                 .expect("AssetLoader settings should match the loader type");
             let asset =
@@ -95,17 +95,18 @@ where
     }
 
     fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError> {
-        let meta: AssetMeta<L, NullSaver, L> = ron::de::from_bytes(meta)?;
+        let meta: AssetMeta<L, ()> = ron::de::from_bytes(meta)?;
         Ok(Box::new(meta))
     }
 
     fn default_meta(&self) -> Box<dyn AssetMetaDyn> {
-        Box::new(AssetMeta::<L, NullSaver, L> {
+        Box::new(AssetMeta::<L, ()> {
             processed_info: None,
             meta_format_version: META_FORMAT_VERSION.to_string(),
-            loader_settings: L::Settings::default(),
-            loader: self.type_name().to_string(),
-            processor: None,
+            asset: crate::meta::AssetAction::Load {
+                loader: self.type_name().to_string(),
+                settings: L::Settings::default(),
+            },
         })
     }
 

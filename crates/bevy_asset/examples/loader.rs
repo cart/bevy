@@ -1,7 +1,7 @@
 use bevy_app::{App, Plugin, ScheduleRunnerPlugin, ScheduleRunnerSettings, Startup, Update};
 use bevy_asset::{
     io::{Reader, Writer},
-    processor::AssetProcessor,
+    processor::{AssetProcessor, LoadAndSave},
     saver::AssetSaver,
     Asset, AssetApp, AssetLoader, AssetPlugin, AssetServer, Assets, Handle, LoadContext,
 };
@@ -38,8 +38,9 @@ impl Plugin for TextPlugin {
             .register_asset_loader(CoolTextLoader);
 
         if let Some(processor) = app.world.get_resource::<AssetProcessor>() {
-            processor
-                .register_process_plan::<CoolTextLoader, CoolTextSaver, TextLoader>(CoolTextSaver);
+            processor.register_processor::<LoadAndSave<CoolTextLoader, CoolTextSaver>>(
+                CoolTextSaver.into(),
+            );
         }
     }
 }
@@ -144,17 +145,18 @@ pub struct CoolTextSaverSettings {
 impl AssetSaver for CoolTextSaver {
     type Asset = CoolText;
     type Settings = CoolTextSaverSettings;
+    type OutputLoader = TextLoader;
 
     fn save<'a>(
         &'a self,
         writer: &'a mut Writer,
-        asset: &'a CoolText,
-        settings: &'a CoolTextSaverSettings,
-    ) -> bevy_utils::BoxedFuture<'a, Result<(), anyhow::Error>> {
+        asset: &'a Self::Asset,
+        settings: &'a Self::Settings,
+    ) -> bevy_utils::BoxedFuture<'a, Result<TextSettings, anyhow::Error>> {
         Box::pin(async move {
             let text = format!("{}{}", asset.text.clone(), settings.appended);
             writer.write_all(text.as_bytes()).await?;
-            Ok(())
+            Ok(TextSettings::default())
         })
     }
 }

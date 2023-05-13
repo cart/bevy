@@ -9,11 +9,8 @@ use crate::{
         processor_gated::ProcessorGatedReader, AssetProvider, AssetProviders, AssetReader,
         AssetReaderError, AssetSourceEvent, AssetWatcher, AssetWriter, AssetWriterError,
     },
-    loader::{AssetLoader, ErasedAssetLoader},
-    meta::{AssetMetaMinimal, AssetMetaProcessedInfoMinimal, LoadDependencyInfo, ProcessedInfo},
-    saver::AssetSaver,
+    meta::{AssetActionMinimal, AssetMetaMinimal, AssetMetaProcessedInfoMinimal, ProcessedInfo},
     AssetLoadError, AssetLoaderError, AssetPath, AssetServer, LoadDirectError,
-    MissingAssetLoaderForExtensionError,
 };
 use bevy_ecs::prelude::*;
 use bevy_log::{debug, error, trace, warn};
@@ -25,7 +22,6 @@ use parking_lot::RwLock;
 use std::{
     collections::VecDeque,
     hash::{Hash, Hasher},
-    marker::PhantomData,
     path::{Path, PathBuf},
     sync::Arc,
     time::Instant,
@@ -41,11 +37,8 @@ pub struct AssetProcessor {
 pub struct AssetProcessorData {
     pub(crate) asset_infos: async_lock::RwLock<ProcessorAssetInfos>,
     log: async_lock::RwLock<Option<ProcessorTransactionLog>>,
-    process_plans: RwLock<
-        HashMap<(&'static str, &'static str, &'static str), Arc<dyn ErasedAssetProcessPlan>>,
-    >,
-    default_process_plans:
-        RwLock<HashMap<&'static str, (&'static str, &'static str, &'static str)>>,
+    processors: RwLock<HashMap<&'static str, Arc<dyn ErasedProcessor>>>,
+    default_processors: RwLock<HashMap<&'static str, &'static str>>,
     state: async_lock::RwLock<ProcessorState>,
     source_reader: Box<dyn AssetReader>,
     source_writer: Box<dyn AssetWriter>,
@@ -148,7 +141,8 @@ impl AssetProcessor {
             let mut started_processing = false;
             for event in self.data.source_event_receiver.try_iter() {
                 if !started_processing {
-                    self.set_state(ProcessorState::Processing).await;
+                    // TODO: re-enable this after resolving state change signaling issue
+                    // self.set_state(ProcessorState::Processing).await;
                     started_processing = true;
                 }
                 match event {
@@ -254,54 +248,24 @@ impl AssetProcessor {
         }
     }
 
-    pub fn register_process_plan<
-        Source: AssetLoader,
-        Saver: AssetSaver<Asset = Source::Asset>,
-        Destination: AssetLoader,
-    >(
-        &self,
-        saver: Saver,
-    ) {
-        let mut process_plans = self.data.process_plans.write();
-        let process_plan_key = (
-            std::any::type_name::<Source>(),
-            std::any::type_name::<Saver>(),
-            std::any::type_name::<Destination>(),
-        );
-        process_plans.insert(
-            process_plan_key,
-            Arc::new(AssetProcessPlan::<Source, Saver, Destination> {
-                saver,
-                marker: PhantomData,
-            }),
-        );
-        let mut default_process_plans = self.data.default_process_plans.write();
+    pub fn register_processor<P: Process>(&self, processor: P) {
+        let mut process_plans = self.data.processors.write();
+        process_plans.insert(std::any::type_name::<P>(), Arc::new(processor));
+        let mut default_process_plans = self.data.default_processors.write();
         default_process_plans
-            .entry(std::any::type_name::<Source>())
-            .or_insert_with(|| process_plan_key);
+            .entry(std::any::type_name::<P::Asset>())
+            .or_insert(std::any::type_name::<P>());
     }
 
-    // TODO: can this just be a type id?
-    pub fn get_default_process_plan(
-        &self,
-        loader: &str,
-    ) -> Option<Arc<dyn ErasedAssetProcessPlan>> {
-        let default_plans = self.data.default_process_plans.read();
-        let key = default_plans.get(&loader)?;
-        self.data.process_plans.read().get(key).cloned()
+    pub fn get_default_processor(&self, asset_type_name: &str) -> Option<Arc<dyn ErasedProcessor>> {
+        let default_processors = self.data.default_processors.read();
+        let key = default_processors.get(&asset_type_name)?;
+        self.data.processors.read().get(key).cloned()
     }
 
-    pub fn get_process_plan(
-        &self,
-        source_loader: &str,
-        saver: &str,
-        destination_loader: &str,
-    ) -> Option<Arc<dyn ErasedAssetProcessPlan>> {
-        self.data
-            .process_plans
-            .read()
-            .get(&(source_loader, saver, destination_loader))
-            .cloned()
+    pub fn get_processor(&self, processor_type_name: &str) -> Option<Arc<dyn ErasedProcessor>> {
+        let processors = self.data.processors.read();
+        processors.get(processor_type_name).cloned()
     }
 
     /// Populates the initial view of each asset by scanning the source and destination folders.
@@ -411,41 +375,36 @@ impl AssetProcessor {
         infos.finish_processing(asset_path, result).await;
     }
 
-    async fn process_asset_internal(
-        &self,
-        path: &Path,
-    ) -> Result<ProcessResult, ProcessAssetError> {
+    async fn process_asset_internal(&self, path: &Path) -> Result<ProcessResult, ProcessError> {
+        // TODO: check if already processing
         debug!("Processing asset {:?}", path);
         let server = &self.server;
-        let (mut source_meta, meta_bytes, process_plan) =
+        let (mut source_meta, meta_bytes, processor) =
             match self.source_reader().read_meta_bytes(&path).await {
                 Ok(meta_bytes) => {
                     // TODO: handle error
                     let minimal: AssetMetaMinimal = ron::de::from_bytes(&meta_bytes).unwrap();
-                    let process_plan = minimal.processor.as_ref().and_then(|p| {
-                        self.get_process_plan(
-                            &minimal.loader,
-                            &p.saver,
-                            minimal.destination_loader().unwrap(),
-                        )
-                    });
-                    let meta = process_plan
-                        .as_ref()
-                        .map(|p| p.deserialize_meta(&meta_bytes).unwrap())
-                        .unwrap_or_else(|| {
-                            server
-                                .get_erased_asset_loader_with_type_name(&minimal.loader)
-                                .unwrap()
-                                .deserialize_meta(&meta_bytes)
-                                .unwrap()
-                        });
-                    (meta, meta_bytes, process_plan)
+                    let (meta, processor) = match minimal.asset {
+                        AssetActionMinimal::Load { loader } => {
+                            let loader = server.get_asset_loader_with_type_name(&loader)?;
+                            let meta = loader.deserialize_meta(&meta_bytes)?;
+                            (meta, None)
+                        }
+                        AssetActionMinimal::Process { processor } => {
+                            let processor = self
+                                .get_processor(&processor)
+                                .ok_or_else(|| ProcessError::MissingProcessor(processor))?;
+                            let meta = processor.deserialize_meta(&meta_bytes)?;
+                            (meta, Some(processor))
+                        }
+                        AssetActionMinimal::Ignore => return Ok(ProcessResult::Ignored),
+                    };
+                    (meta, meta_bytes, processor)
                 }
                 Err(AssetReaderError::NotFound(_path)) => {
                     let loader = server.get_path_asset_loader(&path)?;
-                    let default_process_plan =
-                        self.get_default_process_plan(ErasedAssetLoader::type_name(&*loader));
-                    let meta = default_process_plan
+                    let processor = self.get_default_processor(loader.asset_type_name());
+                    let meta = processor
                         .as_ref()
                         .map(|p| p.default_meta())
                         .unwrap_or_else(|| loader.default_meta());
@@ -455,9 +414,9 @@ impl AssetProcessor {
                     // TODO: handle error
                     meta_writer.write_all(&meta_bytes).await.unwrap();
                     meta_writer.flush().await.unwrap();
-                    (meta, meta_bytes, default_process_plan)
+                    (meta, meta_bytes, processor)
                 }
-                Err(err) => return Err(ProcessAssetError::ReadAssetMetaError(err)),
+                Err(err) => return Err(ProcessError::ReadAssetMetaError(err)),
             };
 
         // TODO:  check timestamp first for early-out
@@ -507,63 +466,28 @@ impl AssetProcessor {
             info.file_transaction_lock.write_arc()
         };
         // TODO: error handling
-        let mut writer = self.destination_writer().write(&path).await.unwrap();
-        let mut meta_writer = self.destination_writer().write_meta(&path).await.unwrap();
+        let mut writer = self.destination_writer().write(&path).await?;
+        let mut meta_writer = self.destination_writer().write_meta(&path).await?;
+        // NOTE: if processing the asset fails this will produce an "unfinished" log entry, forcing a rebuild on next run.
+        // Directly writing to the asset destination in the processor necessitates this behavior
+        // TODO: this class of failure can be recovered via re-processing + smarter log validation that allows for duplicate transactions in the event of failures
+        {
+            let mut logger = self.data.log.write().await;
+            logger.as_mut().unwrap().begin_path(&path).await.unwrap();
+        }
 
-        if let Some(process_plan) = process_plan {
-            let loader_name = process_plan.source_loader();
-            let loader = server
-                .get_erased_asset_loader_with_type_name(&loader_name)
-                .unwrap();
-            debug!("Loading asset directly in order to process it {:?}", path);
-            let loaded_asset = server
-                .load_with_meta_loader_and_reader(
-                    &asset_path,
-                    source_meta,
-                    &*loader,
-                    &mut asset_bytes.as_slice(),
-                    false,
-                )
+        if let Some(processor) = processor {
+            let context =
+                ProcessContext::new(self, &asset_path, &asset_bytes, &mut new_processed_info);
+            let processed_meta = processor
+                .process(context, source_meta, &mut *writer, new_hash)
                 .await?;
-            for (path, full_hash) in loaded_asset.loader_dependencies.iter() {
-                new_processed_info
-                    .load_dependencies
-                    .push(LoadDependencyInfo {
-                        full_hash: *full_hash,
-
-                        path: path.to_owned(),
-                    })
-            }
-            let full_hash = Self::get_full_hash(
-                new_hash,
-                new_processed_info
-                    .load_dependencies
-                    .iter()
-                    .map(|i| i.full_hash),
-            );
-            new_processed_info.full_hash = full_hash;
-            // TODO: if the process plan fails this will produce an "unfinished" log entry, forcing a rebuild on next run.
-            // Directly writing to the asset file in the process plan necessitates this behavior.
-            {
-                let mut logger = self.data.log.write().await;
-                logger.as_mut().unwrap().begin_path(&path).await.unwrap();
-            }
-            process_plan
-                .process(&mut writer, &loaded_asset)
-                .await
-                .unwrap();
             writer.flush().await.unwrap();
 
-            let mut meta = loaded_asset.meta.unwrap().into_processed().unwrap();
-            *meta.processed_info_mut() = Some(new_processed_info.clone());
-            let meta_bytes = meta.serialize();
+            let meta_bytes = processed_meta.serialize();
             meta_writer.write_all(&meta_bytes).await.unwrap();
             meta_writer.flush().await.unwrap();
         } else {
-            {
-                let mut logger = self.data.log.write().await;
-                logger.as_mut().unwrap().begin_path(&path).await.unwrap();
-            }
             writer.write_all(&asset_bytes).await.unwrap();
             writer.flush().await.unwrap();
             *source_meta.processed_info_mut() = Some(new_processed_info.clone());
@@ -704,9 +628,9 @@ impl AssetProcessorData {
             _source_watcher: source_watcher,
             state: async_lock::RwLock::new(ProcessorState::Initializing),
             log: Default::default(),
-            process_plans: Default::default(),
+            processors: Default::default(),
             asset_infos: Default::default(),
-            default_process_plans: Default::default(),
+            default_processors: Default::default(),
         }
     }
 
@@ -762,22 +686,11 @@ impl AssetProcessorData {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum ProcessAssetError {
-    #[error(transparent)]
-    MissingAssetLoaderForExtension(#[from] MissingAssetLoaderForExtensionError),
-    #[error(transparent)]
-    AssetWriterError(#[from] AssetWriterError),
-    #[error("Failed to read asset metadata {0:?}")]
-    ReadAssetMetaError(AssetReaderError),
-    #[error(transparent)]
-    AssetLoadError(#[from] AssetLoadError),
-}
-
 #[derive(Debug, Clone)]
 pub enum ProcessResult {
     Processed(ProcessedInfo),
     SkippedNotChanged,
+    Ignored,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -879,7 +792,7 @@ impl ProcessorAssetInfos {
     async fn finish_processing(
         &mut self,
         asset_path: AssetPath<'static>,
-        result: Result<ProcessResult, ProcessAssetError>,
+        result: Result<ProcessResult, ProcessError>,
     ) {
         match result {
             Ok(ProcessResult::Processed(processed_info)) => {
@@ -905,6 +818,12 @@ impl ProcessorAssetInfos {
                     self.check_reprocess_queue.push_back(path.path().to_owned());
                 }
             }
+            Ok(ProcessResult::Ignored) => {
+                debug!(
+                    "Ignoring processing of asset {:?} because it was configured to be ignored",
+                    asset_path
+                );
+            }
             Ok(ProcessResult::SkippedNotChanged) => {
                 debug!(
                     "Skipping processing of asset {:?} because it has not changed",
@@ -919,13 +838,13 @@ impl ProcessorAssetInfos {
                 // "block until first pass finished" mode
                 info.update_status(ProcessStatus::Processed).await;
             }
-            Err(ProcessAssetError::MissingAssetLoaderForExtension(_)) => {
+            Err(ProcessError::MissingAssetLoaderForExtension(_)) => {
                 trace!("No loader found for {:?}", asset_path);
             }
             Err(err) => {
                 error!("Failed to process asset {:?}: {:?}", asset_path, err);
                 // if this failed because a dependency could not be loaded, make sure it is reprocessed if that dependency is reprocessed
-                if let ProcessAssetError::AssetLoadError(AssetLoadError::AssetLoaderError {
+                if let ProcessError::AssetLoadError(AssetLoadError::AssetLoaderError {
                     error: AssetLoaderError::Load(loader_error),
                     ..
                 }) = err

@@ -6,7 +6,7 @@ use crate::{
     folder::LoadedFolder,
     io::{AssetReader, AssetReaderError, AssetSourceEvent, AssetWatcher, Reader},
     loader::{AssetLoader, AssetLoaderError, ErasedAssetLoader, LoadContext, LoadedAsset},
-    meta::{AssetMetaDyn, AssetMetaMinimal},
+    meta::{AssetActionMinimal, AssetMetaDyn, AssetMetaMinimal},
     path::AssetPath,
     Asset, AssetEvent, AssetHandleProvider, Assets, ErasedLoadedAsset, Handle, UntypedAssetId,
     UntypedHandle,
@@ -109,7 +109,7 @@ impl AssetServer {
             .insert(handle_provider.type_id, handle_provider);
     }
 
-    pub fn get_erased_asset_loader(
+    pub fn get_asset_loader_with_extension(
         &self,
         extension: &str,
     ) -> Result<Arc<dyn ErasedAssetLoader>, MissingAssetLoaderForExtensionError> {
@@ -122,13 +122,17 @@ impl AssetServer {
             })
     }
 
-    pub fn get_erased_asset_loader_with_type_name(
+    pub fn get_asset_loader_with_type_name(
         &self,
         type_name: &str,
-    ) -> Option<Arc<dyn ErasedAssetLoader>> {
+    ) -> Result<Arc<dyn ErasedAssetLoader>, MissingAssetLoaderForTypeNameError> {
         let loaders = self.data.loaders.read();
         let index = loaders.type_name_to_index.get(type_name).copied();
-        index.map(|index| loaders.values[index].clone())
+        index
+            .map(|index| loaders.values[index].clone())
+            .ok_or_else(|| MissingAssetLoaderForTypeNameError {
+                type_name: type_name.to_string(),
+            })
     }
 
     pub fn get_path_asset_loader<P: AsRef<Path>>(
@@ -152,7 +156,7 @@ impl AssetServer {
         while let Some(idx) = ext.find('.') {
             ext = &ext[idx + 1..];
             exts.push(ext);
-            if let Ok(loader) = self.get_erased_asset_loader(ext) {
+            if let Ok(loader) = self.get_asset_loader_with_extension(ext) {
                 return Ok(loader);
             }
         }
@@ -501,11 +505,20 @@ impl AssetServer {
             Ok(meta_bytes) => {
                 // TODO: this isn't fully minimal yet. we only need the loader
                 let minimal: AssetMetaMinimal = ron::de::from_bytes(&meta_bytes).unwrap();
-                let loader = self
-                    .get_erased_asset_loader_with_type_name(&minimal.loader)
-                    .ok_or_else(|| {
-                        AssetLoadError::MissingAssetLoaderForTypeName(minimal.loader.clone())
-                    })?;
+                let loader_name = match minimal.asset {
+                    AssetActionMinimal::Load { loader } => loader,
+                    AssetActionMinimal::Process { .. } => {
+                        return Err(AssetLoadError::CannotLoadProcessedAsset {
+                            path: asset_path.to_owned(),
+                        })
+                    }
+                    AssetActionMinimal::Ignore => {
+                        return Err(AssetLoadError::CannotLoadIgnoredAsset {
+                            path: asset_path.to_owned(),
+                        })
+                    }
+                };
+                let loader = self.get_asset_loader_with_type_name(&loader_name)?;
                 let meta = loader.deserialize_meta(&meta_bytes).map_err(|e| {
                     AssetLoadError::AssetLoaderError {
                         path: asset_path.to_owned(),
@@ -658,12 +671,16 @@ pub enum AssetLoadError {
     },
     #[error(transparent)]
     MissingAssetLoaderForExtension(#[from] MissingAssetLoaderForExtensionError),
-    #[error("No `AssetLoader` found for {0}")]
-    MissingAssetLoaderForTypeName(String),
+    #[error(transparent)]
+    MissingAssetLoaderForTypeName(#[from] MissingAssetLoaderForTypeNameError),
     #[error(transparent)]
     AssetReaderError(#[from] AssetReaderError),
     #[error("Encountered an error while reading asset metadata bytes")]
     AssetMetaReadError,
+    #[error("Asset '{path}' is configured to be processed. It cannot be loaded directly.")]
+    CannotLoadProcessedAsset { path: AssetPath<'static> },
+    #[error("Asset '{path}' is configured to be ignored. It cannot be loaded.")]
+    CannotLoadIgnoredAsset { path: AssetPath<'static> },
     #[error("Asset '{path}' encountered an error in {loader}: {error}")]
     AssetLoaderError {
         path: AssetPath<'static>,
@@ -677,6 +694,13 @@ pub enum AssetLoadError {
 
 pub struct MissingAssetLoaderForExtensionError {
     extensions: Vec<String>,
+}
+
+#[derive(Error, Debug)]
+#[error("no `AssetLoader` found with the name '{type_name}'")]
+
+pub struct MissingAssetLoaderForTypeNameError {
+    type_name: String,
 }
 
 fn format_missing_asset_ext(exts: &[String]) -> String {
