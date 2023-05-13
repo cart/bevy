@@ -135,34 +135,27 @@ impl AssetServer {
             })
     }
 
-    pub fn get_path_asset_loader<P: AsRef<Path>>(
+    pub fn get_path_asset_loader(
         &self,
-        path: P,
+        path: &AssetPath,
     ) -> Result<Arc<dyn ErasedAssetLoader>, MissingAssetLoaderForExtensionError> {
-        let s = path
-            .as_ref()
-            .file_name()
-            .ok_or(MissingAssetLoaderForExtensionError {
-                extensions: Vec::new(),
-            })?
-            .to_str()
-            .map(|s| s.to_lowercase())
-            .ok_or(MissingAssetLoaderForExtensionError {
-                extensions: Vec::new(),
-            })?;
-
-        let mut exts = Vec::new();
-        let mut ext = s.as_str();
-        while let Some(idx) = ext.find('.') {
-            ext = &ext[idx + 1..];
-            exts.push(ext);
-            if let Ok(loader) = self.get_asset_loader_with_extension(ext) {
+        let full_extension =
+            path.get_full_extension()
+                .ok_or(MissingAssetLoaderForExtensionError {
+                    extensions: Vec::new(),
+                })?;
+        if let Ok(loader) = self.get_asset_loader_with_extension(&full_extension) {
+            return Ok(loader);
+        }
+        for extension in AssetPath::iter_secondary_extensions(&full_extension) {
+            if let Ok(loader) = self.get_asset_loader_with_extension(extension) {
                 return Ok(loader);
             }
         }
-        Err(MissingAssetLoaderForExtensionError {
-            extensions: exts.into_iter().map(String::from).collect(),
-        })
+        let mut extensions = vec![full_extension.clone()];
+        extensions
+            .extend(AssetPath::iter_secondary_extensions(&full_extension).map(|e| e.to_string()));
+        Err(MissingAssetLoaderForExtensionError { extensions })
     }
 
     #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
@@ -530,7 +523,7 @@ impl AssetServer {
                 Ok((meta, loader, reader))
             }
             Err(AssetReaderError::NotFound(_)) => {
-                let loader = self.get_path_asset_loader(asset_path.path())?;
+                let loader = self.get_path_asset_loader(asset_path)?;
                 let meta = loader.default_meta();
                 let reader = self.data.reader.read(asset_path.path()).await?;
                 Ok((meta, loader, reader))

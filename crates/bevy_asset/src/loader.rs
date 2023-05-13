@@ -69,6 +69,8 @@ pub struct LoadDirectError {
 pub enum DeserializeMetaError {
     #[error("Failed to deserialize asset meta: {0:?}")]
     DeserializeSettings(#[from] SpannedError),
+    #[error("Failed to deserialize minimal asset meta: {0:?}")]
+    DeserializeMinimal(SpannedError),
 }
 
 impl<L> ErasedAssetLoader for L

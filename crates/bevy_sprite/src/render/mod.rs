@@ -504,7 +504,7 @@ pub fn queue_sprites(
             AssetEvent::Modified { id } | AssetEvent::Removed { id } => {
                 image_bind_groups.values.remove(id);
             }
-            AssetEvent::LoadedWithDependencies { id } => { /* images don't have dependencies */ }
+            AssetEvent::LoadedWithDependencies { .. } => { /* images don't have dependencies */ }
         };
     }
 

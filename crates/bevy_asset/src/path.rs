@@ -95,6 +95,23 @@ impl<'a> AssetPath<'a> {
                 .map(|value| Cow::Owned(value.to_string())),
         }
     }
+
+    pub fn get_full_extension(&self) -> Option<String> {
+        let file_name = self.path.file_name()?.to_str()?;
+        let index = file_name.find('.')?;
+        let extension = file_name[index + 1..].to_lowercase();
+        Some(extension)
+    }
+
+    pub(crate) fn iter_secondary_extensions(full_extension: &str) -> impl Iterator<Item = &str> {
+        full_extension.chars().enumerate().filter_map(|(i, c)| {
+            if c == '.' {
+                Some(&full_extension[i + 1..])
+            } else {
+                None
+            }
+        })
+    }
 }
 
 /// An unique identifier to an asset path.

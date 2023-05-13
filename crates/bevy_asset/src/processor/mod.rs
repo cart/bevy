@@ -10,7 +10,8 @@ use crate::{
         AssetReaderError, AssetSourceEvent, AssetWatcher, AssetWriter, AssetWriterError,
     },
     meta::{AssetActionMinimal, AssetMetaMinimal, AssetMetaProcessedInfoMinimal, ProcessedInfo},
-    AssetLoadError, AssetLoaderError, AssetPath, AssetServer, LoadDirectError,
+    AssetLoadError, AssetLoaderError, AssetPath, AssetServer, DeserializeMetaError,
+    LoadDirectError,
 };
 use bevy_ecs::prelude::*;
 use bevy_log::{debug, error, trace, warn};
@@ -38,7 +39,8 @@ pub struct AssetProcessorData {
     pub(crate) asset_infos: async_lock::RwLock<ProcessorAssetInfos>,
     log: async_lock::RwLock<Option<ProcessorTransactionLog>>,
     processors: RwLock<HashMap<&'static str, Arc<dyn ErasedProcessor>>>,
-    default_processors: RwLock<HashMap<&'static str, &'static str>>,
+    /// Default processors for file extensions
+    default_processors: RwLock<HashMap<String, &'static str>>,
     state: async_lock::RwLock<ProcessorState>,
     source_reader: Box<dyn AssetReader>,
     source_writer: Box<dyn AssetWriter>,
@@ -251,15 +253,16 @@ impl AssetProcessor {
     pub fn register_processor<P: Process>(&self, processor: P) {
         let mut process_plans = self.data.processors.write();
         process_plans.insert(std::any::type_name::<P>(), Arc::new(processor));
-        let mut default_process_plans = self.data.default_processors.write();
-        default_process_plans
-            .entry(std::any::type_name::<P::Asset>())
-            .or_insert(std::any::type_name::<P>());
     }
 
-    pub fn get_default_processor(&self, asset_type_name: &str) -> Option<Arc<dyn ErasedProcessor>> {
+    pub fn set_default_processor<P: Process>(&self, extension: &str) {
+        let mut default_processors = self.data.default_processors.write();
+        default_processors.insert(extension.to_string(), std::any::type_name::<P>());
+    }
+
+    pub fn get_default_processor(&self, extension: &str) -> Option<Arc<dyn ErasedProcessor>> {
         let default_processors = self.data.default_processors.read();
-        let key = default_processors.get(&asset_type_name)?;
+        let key = default_processors.get(extension)?;
         self.data.processors.read().get(key).cloned()
     }
 
@@ -376,48 +379,57 @@ impl AssetProcessor {
     }
 
     async fn process_asset_internal(&self, path: &Path) -> Result<ProcessResult, ProcessError> {
+        let asset_path = AssetPath::new(path.to_owned(), None);
         // TODO: check if already processing
         debug!("Processing asset {:?}", path);
         let server = &self.server;
-        let (mut source_meta, meta_bytes, processor) =
-            match self.source_reader().read_meta_bytes(&path).await {
-                Ok(meta_bytes) => {
-                    // TODO: handle error
-                    let minimal: AssetMetaMinimal = ron::de::from_bytes(&meta_bytes).unwrap();
-                    let (meta, processor) = match minimal.asset {
-                        AssetActionMinimal::Load { loader } => {
-                            let loader = server.get_asset_loader_with_type_name(&loader)?;
-                            let meta = loader.deserialize_meta(&meta_bytes)?;
-                            (meta, None)
-                        }
-                        AssetActionMinimal::Process { processor } => {
-                            let processor = self
-                                .get_processor(&processor)
-                                .ok_or_else(|| ProcessError::MissingProcessor(processor))?;
-                            let meta = processor.deserialize_meta(&meta_bytes)?;
-                            (meta, Some(processor))
-                        }
-                        AssetActionMinimal::Ignore => return Ok(ProcessResult::Ignored),
-                    };
-                    (meta, meta_bytes, processor)
-                }
-                Err(AssetReaderError::NotFound(_path)) => {
-                    let loader = server.get_path_asset_loader(&path)?;
-                    let processor = self.get_default_processor(loader.asset_type_name());
-                    let meta = processor
-                        .as_ref()
-                        .map(|p| p.default_meta())
-                        .unwrap_or_else(|| loader.default_meta());
-                    let meta_bytes = meta.serialize();
-                    // write meta to source location if it doesn't already exist
-                    let mut meta_writer = self.source_writer().write_meta(&path).await?;
-                    // TODO: handle error
-                    meta_writer.write_all(&meta_bytes).await.unwrap();
-                    meta_writer.flush().await.unwrap();
-                    (meta, meta_bytes, processor)
-                }
-                Err(err) => return Err(ProcessError::ReadAssetMetaError(err)),
-            };
+        let (mut source_meta, meta_bytes, processor) = match self
+            .source_reader()
+            .read_meta_bytes(&path)
+            .await
+        {
+            Ok(meta_bytes) => {
+                let minimal: AssetMetaMinimal = ron::de::from_bytes(&meta_bytes).map_err(|e| {
+                    ProcessError::DeserializeMetaError(DeserializeMetaError::DeserializeMinimal(e))
+                })?;
+                let (meta, processor) = match minimal.asset {
+                    AssetActionMinimal::Load { loader } => {
+                        let loader = server.get_asset_loader_with_type_name(&loader)?;
+                        let meta = loader.deserialize_meta(&meta_bytes)?;
+                        (meta, None)
+                    }
+                    AssetActionMinimal::Process { processor } => {
+                        let processor = self
+                            .get_processor(&processor)
+                            .ok_or_else(|| ProcessError::MissingProcessor(processor))?;
+                        let meta = processor.deserialize_meta(&meta_bytes)?;
+                        (meta, Some(processor))
+                    }
+                    AssetActionMinimal::Ignore => return Ok(ProcessResult::Ignored),
+                };
+                (meta, meta_bytes, processor)
+            }
+            Err(AssetReaderError::NotFound(_path)) => {
+                let (meta, processor) = if let Some(processor) = asset_path
+                    .get_full_extension()
+                    .and_then(|ext| self.get_default_processor(&ext))
+                {
+                    let meta = processor.default_meta();
+                    (meta, Some(processor))
+                } else {
+                    let loader = server.get_path_asset_loader(&asset_path)?;
+                    (loader.default_meta(), None)
+                };
+                let meta_bytes = meta.serialize();
+                // write meta to source location if it doesn't already exist
+                let mut meta_writer = self.source_writer().write_meta(&path).await?;
+                // TODO: handle error
+                meta_writer.write_all(&meta_bytes).await.unwrap();
+                meta_writer.flush().await.unwrap();
+                (meta, meta_bytes, processor)
+            }
+            Err(err) => return Err(ProcessError::ReadAssetMetaError(err)),
+        };
 
         // TODO:  check timestamp first for early-out
         let mut reader = self.source_reader().read(&path).await.unwrap();
@@ -433,7 +445,6 @@ impl AssetProcessor {
             load_dependencies: Vec::new(),
         };
 
-        let asset_path = AssetPath::new(path.to_owned(), None);
         {
             let infos = self.data.asset_infos.read().await;
             if let Some(current_processed_info) = infos

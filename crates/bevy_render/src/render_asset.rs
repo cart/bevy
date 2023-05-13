@@ -168,9 +168,8 @@ fn extract_render_asset<A: RenderAsset>(
                 changed_assets.remove(id);
                 removed.push(*id);
             }
-            AssetEvent::LoadedWithDependencies { id } => {
+            AssetEvent::LoadedWithDependencies { .. } => {
                 // TODO: handle this
-                bevy_log::warn!("LoadedWithDependencies event isn't handled yet");
             }
         }
     }

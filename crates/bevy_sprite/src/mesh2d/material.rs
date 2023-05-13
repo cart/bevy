@@ -466,9 +466,8 @@ fn extract_materials_2d<M: Material2d>(
                 removed.push(*id);
             }
 
-            AssetEvent::LoadedWithDependencies { id } => {
+            AssetEvent::LoadedWithDependencies { .. } => {
                 // TODO: handle this
-                bevy_log::warn!("LoadedWithDependencies event isn't handled yet");
             }
         }
     }

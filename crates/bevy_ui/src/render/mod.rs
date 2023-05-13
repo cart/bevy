@@ -558,9 +558,8 @@ pub fn queue_uinodes(
             AssetEvent::Modified { id } | AssetEvent::Removed { id } => {
                 image_bind_groups.values.remove(id);
             }
-            AssetEvent::LoadedWithDependencies { id } => {
+            AssetEvent::LoadedWithDependencies { .. } => {
                 // TODO: handle this
-                bevy_log::warn!("LoadedWithDependencies event isn't handled yet");
             }
         };
     }

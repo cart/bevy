@@ -306,13 +306,20 @@ impl<A: Asset> Assets<A> {
 
     pub fn remove(&mut self, id: impl Into<AssetId<A>>) -> Option<A> {
         let id: AssetId<A> = id.into();
+        let result = self.remove_untracked(id);
+        if result.is_some() {
+            self.queued_events.push(AssetEvent::Removed { id });
+        }
+        result
+    }
+
+    /// Removes the value without emitting events
+    pub fn remove_untracked(&mut self, id: impl Into<AssetId<A>>) -> Option<A> {
+        let id: AssetId<A> = id.into();
         let result = match id {
             AssetId::Index { index, .. } => self.dense_storage.remove(index),
             AssetId::Uuid { uuid } => self.hash_map.remove(&uuid),
         };
-        if result.is_some() {
-            self.queued_events.push(AssetEvent::Removed { id });
-        }
         result
     }
 

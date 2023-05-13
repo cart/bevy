@@ -581,9 +581,8 @@ pub fn extract_materials<M: Material>(
                 changed_assets.remove(id);
                 removed.push(*id);
             }
-            AssetEvent::LoadedWithDependencies { id } => {
+            AssetEvent::LoadedWithDependencies { .. } => {
                 // TODO: handle this
-                panic!("LoadedWithDependencies event isn't handled yet");
             }
         }
     }
