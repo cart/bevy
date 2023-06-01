@@ -115,37 +115,30 @@ impl<A: Asset> DenseAssetStorage<A> {
     /// Insert the value at the given index. Returns true if a value already exists (and was replaced)
     pub fn insert(&mut self, index: AssetIndex, asset: A) -> bool {
         self.flush();
-        let entry = &mut self.storage[index.index as usize];
-        if let Entry::Some { value, generation } = entry {
-            if *generation == index.generation {
-                let exists = value.is_some();
-                if !exists {
+        match &mut self.storage[index.index as usize] {
+            Entry::Some { value, generation } if *generation == index.generation => {
+                let already_present = value.is_some();
+                if !already_present {
                     self.len += 1;
                 }
                 *value = Some(asset);
-                exists
-            } else {
-                false
+                already_present
             }
-        } else {
-            unreachable!("entries should always be valid after a flush");
+            Entry::Some { .. } => false,
+            Entry::None => unreachable!("entries should always be valid after a flush"),
         }
     }
 
     pub fn remove(&mut self, index: AssetIndex) -> Option<A> {
         self.flush();
         let value = match &mut self.storage[index.index as usize] {
-            Entry::None => return None,
-            Entry::Some { value, generation } => {
-                if *generation == index.generation {
-                    value.take().map(|value| {
-                        self.len -= 1;
-                        value
-                    })
-                } else {
-                    return None;
-                }
+            Entry::Some { value, generation } if *generation == index.generation => {
+                value.take().map(|value| {
+                    self.len -= 1;
+                    value
+                })
             }
+            Entry::None | Entry::Some { .. } => return None,
         };
         self.storage[index.index as usize] = Entry::None;
         self.allocator.recycle(index);
@@ -153,30 +146,16 @@ impl<A: Asset> DenseAssetStorage<A> {
     }
 
     pub fn get(&self, index: AssetIndex) -> Option<&A> {
-        let entry = self.storage.get(index.index as usize)?;
-        match entry {
-            Entry::None => None,
-            Entry::Some { value, generation } => {
-                if *generation == index.generation {
-                    value.as_ref()
-                } else {
-                    None
-                }
-            }
+        match self.storage.get(index.index as usize)? {
+            Entry::Some { value, generation } if *generation == index.generation => value.as_ref(),
+            Entry::None | Entry::Some { .. } => None,
         }
     }
 
     pub fn get_mut(&mut self, index: AssetIndex) -> Option<&mut A> {
-        let entry = self.storage.get_mut(index.index as usize)?;
-        match entry {
-            Entry::None => None,
-            Entry::Some { value, generation } => {
-                if *generation == index.generation {
-                    value.as_mut()
-                } else {
-                    None
-                }
-            }
+        match self.storage.get_mut(index.index as usize)? {
+            Entry::Some { value, generation } if *generation == index.generation => value.as_mut(),
+            Entry::None | Entry::Some { .. } => None,
         }
     }
 
