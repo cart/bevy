@@ -7,8 +7,8 @@ use bevy_render::{
     camera::Camera,
     color::Color,
     extract_resource::ExtractResource,
-    prelude::Projection,
-    primitives::{Aabb, CascadesFrusta, CubemapFrusta, Frustum, HalfSpace, Sphere},
+    prelude::{Mesh, Projection},
+    primitives::{Aabb, AabbSource, CascadesFrusta, CubemapFrusta, Frustum, HalfSpace, Sphere},
     render_resource::BufferBindingType,
     renderer::RenderDevice,
     view::{ComputedVisibility, RenderLayers, VisibleEntities},
@@ -22,6 +22,7 @@ use crate::{
     CLUSTERED_FORWARD_STORAGE_BUFFER_COUNT, CUBE_MAP_FACES, MAX_UNIFORM_BUFFER_POINT_LIGHTS,
     POINT_LIGHT_NEAR_Z,
 };
+use bevy_asset::{Assets, Handle};
 
 /// A light that emits light in all directions from a central point.
 ///
@@ -1911,6 +1912,7 @@ pub fn update_spot_light_frusta(
 }
 
 pub fn check_light_mesh_visibility(
+    meshes: Res<Assets<Mesh>>,
     visible_point_lights: Query<&VisiblePointLights>,
     mut point_lights: Query<(
         &PointLight,
@@ -1941,8 +1943,9 @@ pub fn check_light_mesh_visibility(
             Entity,
             &mut ComputedVisibility,
             Option<&RenderLayers>,
-            Option<&Aabb>,
+            Option<&AabbSource>,
             Option<&GlobalTransform>,
+            Option<&Handle<Mesh>>,
         ),
         (Without<NotShadowCaster>, Without<DirectionalLight>),
     >,
@@ -2002,8 +2005,14 @@ pub fn check_light_mesh_visibility(
 
         let view_mask = maybe_view_mask.copied().unwrap_or_default();
 
-        for (entity, mut computed_visibility, maybe_entity_mask, maybe_aabb, maybe_transform) in
-            &mut visible_entity_query
+        for (
+            entity,
+            mut computed_visibility,
+            maybe_entity_mask,
+            maybe_aabb_source,
+            maybe_transform,
+            maybe_mesh,
+        ) in &mut visible_entity_query
         {
             if !computed_visibility.is_visible_in_hierarchy() {
                 continue;
@@ -2013,6 +2022,8 @@ pub fn check_light_mesh_visibility(
             if !view_mask.intersects(&entity_mask) {
                 continue;
             }
+
+            let maybe_aabb = maybe_aabb_source.and_then(|s| s.get(maybe_mesh, &meshes));
 
             // If we have an aabb and transform, do frustum culling
             if let (Some(aabb), Some(transform)) = (maybe_aabb, maybe_transform) {
@@ -2026,7 +2037,8 @@ pub fn check_light_mesh_visibility(
                         view_frusta.iter().zip(view_visible_entities)
                     {
                         // Disable near-plane culling, as a shadow caster could lie before the near plane.
-                        if !frustum.intersects_obb(aabb, &transform.compute_matrix(), false, true) {
+                        if !frustum.intersects_obb(&aabb, &transform.compute_matrix(), false, true)
+                        {
                             continue;
                         }
 
@@ -2084,8 +2096,9 @@ pub fn check_light_mesh_visibility(
                     entity,
                     mut computed_visibility,
                     maybe_entity_mask,
-                    maybe_aabb,
+                    maybe_aabb_source,
                     maybe_transform,
+                    maybe_mesh,
                 ) in &mut visible_entity_query
                 {
                     if !computed_visibility.is_visible_in_hierarchy() {
@@ -2097,11 +2110,12 @@ pub fn check_light_mesh_visibility(
                         continue;
                     }
 
+                    let maybe_aabb = maybe_aabb_source.and_then(|s| s.get(maybe_mesh, &meshes));
                     // If we have an aabb and transform, do frustum culling
                     if let (Some(aabb), Some(transform)) = (maybe_aabb, maybe_transform) {
                         let model_to_world = transform.compute_matrix();
                         // Do a cheap sphere vs obb test to prune out most meshes outside the sphere of the light
-                        if !light_sphere.intersects_obb(aabb, &model_to_world) {
+                        if !light_sphere.intersects_obb(&aabb, &model_to_world) {
                             continue;
                         }
 
@@ -2109,7 +2123,7 @@ pub fn check_light_mesh_visibility(
                             .iter()
                             .zip(cubemap_visible_entities.iter_mut())
                         {
-                            if frustum.intersects_obb(aabb, &model_to_world, true, true) {
+                            if frustum.intersects_obb(&aabb, &model_to_world, true, true) {
                                 computed_visibility.set_visible_in_view();
                                 visible_entities.entities.push(entity);
                             }
@@ -2148,8 +2162,9 @@ pub fn check_light_mesh_visibility(
                     entity,
                     mut computed_visibility,
                     maybe_entity_mask,
-                    maybe_aabb,
+                    maybe_aabb_source,
                     maybe_transform,
+                    maybe_mesh,
                 ) in visible_entity_query.iter_mut()
                 {
                     if !computed_visibility.is_visible_in_hierarchy() {
@@ -2161,15 +2176,16 @@ pub fn check_light_mesh_visibility(
                         continue;
                     }
 
+                    let maybe_aabb = maybe_aabb_source.and_then(|s| s.get(maybe_mesh, &meshes));
                     // If we have an aabb and transform, do frustum culling
                     if let (Some(aabb), Some(transform)) = (maybe_aabb, maybe_transform) {
                         let model_to_world = transform.compute_matrix();
                         // Do a cheap sphere vs obb test to prune out most meshes outside the sphere of the light
-                        if !light_sphere.intersects_obb(aabb, &model_to_world) {
+                        if !light_sphere.intersects_obb(&aabb, &model_to_world) {
                             continue;
                         }
 
-                        if frustum.intersects_obb(aabb, &model_to_world, true, true) {
+                        if frustum.intersects_obb(&aabb, &model_to_world, true, true) {
                             computed_visibility.set_visible_in_view();
                             visible_entities.entities.push(entity);
                         }

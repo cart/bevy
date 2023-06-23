@@ -39,7 +39,8 @@ use bevy_reflect::{
 use bevy_render::{
     color::Color,
     extract_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
-    primitives::Aabb,
+    prelude::Mesh,
+    primitives::{Aabb, AabbSource},
     render_asset::{PrepareAssetError, RenderAsset, RenderAssetPlugin, RenderAssets},
     render_phase::{PhaseItem, RenderCommand, RenderCommandResult, TrackedRenderPass},
     render_resource::{
@@ -201,30 +202,45 @@ pub struct AabbGizmo {
 }
 
 fn draw_aabbs(
-    query: Query<(Entity, &Aabb, &GlobalTransform, &AabbGizmo)>,
+    query: Query<(
+        Entity,
+        &AabbSource,
+        &GlobalTransform,
+        &AabbGizmo,
+        Option<&Handle<Mesh>>,
+    )>,
+    meshes: Res<Assets<Mesh>>,
     config: Res<GizmoConfig>,
     mut gizmos: Gizmos,
 ) {
-    for (entity, &aabb, &transform, gizmo) in &query {
-        let color = gizmo
-            .color
-            .or(config.aabb.default_color)
-            .unwrap_or_else(|| color_from_entity(entity));
-        gizmos.cuboid(aabb_transform(aabb, transform), color);
+    for (entity, &aabb_source, &transform, gizmo, mesh) in &query {
+        if let Some(aabb) = aabb_source.get(mesh, &meshes) {
+            let color = gizmo
+                .color
+                .or(config.aabb.default_color)
+                .unwrap_or_else(|| color_from_entity(entity));
+            gizmos.cuboid(aabb_transform(aabb, transform), color);
+        }
     }
 }
 
 fn draw_all_aabbs(
-    query: Query<(Entity, &Aabb, &GlobalTransform), Without<AabbGizmo>>,
+    query: Query<
+        (Entity, &AabbSource, &GlobalTransform, Option<&Handle<Mesh>>),
+        Without<AabbGizmo>,
+    >,
+    meshes: Res<Assets<Mesh>>,
     config: Res<GizmoConfig>,
     mut gizmos: Gizmos,
 ) {
-    for (entity, &aabb, &transform) in &query {
-        let color = config
-            .aabb
-            .default_color
-            .unwrap_or_else(|| color_from_entity(entity));
-        gizmos.cuboid(aabb_transform(aabb, transform), color);
+    for (entity, &aabb_source, &transform, mesh) in &query {
+        if let Some(aabb) = aabb_source.get(mesh, &meshes) {
+            let color = config
+                .aabb
+                .default_color
+                .unwrap_or_else(|| color_from_entity(entity));
+            gizmos.cuboid(aabb_transform(aabb, transform), color);
+        }
     }
 }
 

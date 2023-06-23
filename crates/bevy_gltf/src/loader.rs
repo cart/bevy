@@ -306,6 +306,12 @@ async fn load_gltf<'a, 'b>(
                 }
             }
 
+            let bounds = primitive.bounding_box();
+            mesh.set_aabb(Aabb::from_min_max(
+                Vec3::from_slice(&bounds.min),
+                Vec3::from_slice(&bounds.max),
+            ));
+
             let mesh = load_context.set_labeled_asset(&primitive_label, LoadedAsset::new(mesh));
             primitives.push(super::GltfPrimitive {
                 mesh,
@@ -783,7 +789,6 @@ fn load_node(
                 }
 
                 let primitive_label = primitive_label(&mesh, &primitive);
-                let bounds = primitive.bounding_box();
                 let mesh_asset_path =
                     AssetPath::new_ref(load_context.path(), Some(&primitive_label));
                 let material_asset_path =
@@ -808,10 +813,6 @@ fn load_node(
                     // > the accessors of the original primitive.
                     primitive_entity.insert(MeshMorphWeights::new(weights).unwrap());
                 }
-                primitive_entity.insert(Aabb::from_min_max(
-                    Vec3::from_slice(&bounds.min),
-                    Vec3::from_slice(&bounds.max),
-                ));
 
                 if let Some(extras) = primitive.extras() {
                     primitive_entity.insert(super::GltfExtras {

@@ -34,8 +34,7 @@ use bevy_core_pipeline::core_2d::Transparent2d;
 use bevy_ecs::prelude::*;
 use bevy_reflect::TypeUuid;
 use bevy_render::{
-    mesh::Mesh,
-    primitives::Aabb,
+    primitives::{Aabb, AabbSource},
     render_phase::AddRenderCommand,
     render_resource::{Shader, SpecializedRenderPipelines},
     texture::Image,
@@ -104,26 +103,17 @@ impl Plugin for SpritePlugin {
 
 pub fn calculate_bounds_2d(
     mut commands: Commands,
-    meshes: Res<Assets<Mesh>>,
     images: Res<Assets<Image>>,
     atlases: Res<Assets<TextureAtlas>>,
-    meshes_without_aabb: Query<(Entity, &Mesh2dHandle), (Without<Aabb>, Without<NoFrustumCulling>)>,
     sprites_without_aabb: Query<
         (Entity, &Sprite, &Handle<Image>),
-        (Without<Aabb>, Without<NoFrustumCulling>),
+        (Without<AabbSource>, Without<NoFrustumCulling>),
     >,
     atlases_without_aabb: Query<
         (Entity, &TextureAtlasSprite, &Handle<TextureAtlas>),
-        (Without<Aabb>, Without<NoFrustumCulling>),
+        (Without<AabbSource>, Without<NoFrustumCulling>),
     >,
 ) {
-    for (entity, mesh_handle) in &meshes_without_aabb {
-        if let Some(mesh) = meshes.get(&mesh_handle.0) {
-            if let Some(aabb) = mesh.compute_aabb() {
-                commands.entity(entity).insert(aabb);
-            }
-        }
-    }
     for (entity, sprite, texture_handle) in &sprites_without_aabb {
         if let Some(size) = sprite
             .custom_size
@@ -133,7 +123,7 @@ pub fn calculate_bounds_2d(
                 center: (-sprite.anchor.as_vec() * size).extend(0.0).into(),
                 half_extents: (0.5 * size).extend(0.0).into(),
             };
-            commands.entity(entity).insert(aabb);
+            commands.entity(entity).insert(AabbSource::Aabb(aabb));
         }
     }
     for (entity, atlas_sprite, atlas_handle) in &atlases_without_aabb {
@@ -147,7 +137,7 @@ pub fn calculate_bounds_2d(
                 center: (-atlas_sprite.anchor.as_vec() * size).extend(0.0).into(),
                 half_extents: (0.5 * size).extend(0.0).into(),
             };
-            commands.entity(entity).insert(aabb);
+            commands.entity(entity).insert(AabbSource::Aabb(aabb));
         }
     }
 }

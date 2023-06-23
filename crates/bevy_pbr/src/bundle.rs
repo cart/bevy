@@ -7,7 +7,7 @@ use bevy_ecs::{bundle::Bundle, component::Component, prelude::Entity, reflect::R
 use bevy_reflect::{FromReflect, Reflect, ReflectFromReflect};
 use bevy_render::{
     mesh::Mesh,
-    primitives::{CascadesFrusta, CubemapFrusta, Frustum},
+    primitives::{AabbSource, CascadesFrusta, CubemapFrusta, Frustum},
     view::{ComputedVisibility, Visibility, VisibleEntities},
 };
 use bevy_transform::components::{GlobalTransform, Transform};
@@ -27,12 +27,14 @@ pub struct MaterialMeshBundle<M: Material> {
     pub visibility: Visibility,
     /// Algorithmically-computed indication of whether an entity is visible and should be extracted for rendering
     pub computed_visibility: ComputedVisibility,
+    pub aabb_source: AabbSource,
 }
 
 impl<M: Material> Default for MaterialMeshBundle<M> {
     fn default() -> Self {
         Self {
             mesh: Default::default(),
+            aabb_source: Default::default(),
             material: Default::default(),
             transform: Default::default(),
             global_transform: Default::default(),

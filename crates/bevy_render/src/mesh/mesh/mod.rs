@@ -39,6 +39,7 @@ pub struct Mesh {
     indices: Option<Indices>,
     morph_targets: Option<Handle<Image>>,
     morph_target_names: Option<Vec<String>>,
+    aabb: Option<Aabb>,
 }
 
 /// Contains geometry in the form of a mesh.
@@ -133,6 +134,7 @@ impl Mesh {
             primitive_topology,
             attributes: Default::default(),
             indices: None,
+            aabb: None,
             morph_targets: None,
             morph_target_names: None,
         }
@@ -449,6 +451,20 @@ impl Mesh {
         }
 
         None
+    }
+
+    /// Updates the internal AABB (uses the results of [`Mesh::compute_aabb`]).
+    pub fn update_aabb(&mut self) {
+        self.aabb = self.compute_aabb();
+    }
+
+    /// Sets the current [`Aabb`] value.
+    pub fn set_aabb(&mut self, aabb: Aabb) {
+        self.aabb = Some(aabb);
+    }
+
+    pub fn aabb(&self) -> Option<Aabb> {
+        self.aabb
     }
 
     /// Whether this mesh has morph targets.

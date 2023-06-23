@@ -1,11 +1,12 @@
+use crate::mesh::Mesh;
+use bevy_asset::{Assets, Handle};
 use bevy_ecs::{component::Component, prelude::Entity, reflect::ReflectComponent};
 use bevy_math::{Mat4, Vec3, Vec3A, Vec4, Vec4Swizzles};
 use bevy_reflect::{FromReflect, Reflect, ReflectFromReflect};
 use bevy_utils::HashMap;
 
 /// An axis-aligned bounding box.
-#[derive(Component, Clone, Copy, Debug, Default, Reflect, FromReflect)]
-#[reflect(Component)]
+#[derive(Clone, Copy, Debug, Default, Reflect, FromReflect)]
 pub struct Aabb {
     pub center: Vec3A,
     pub half_extents: Vec3A,
@@ -55,6 +56,22 @@ impl From<Sphere> for Aabb {
         Self {
             center: sphere.center,
             half_extents: Vec3A::splat(sphere.radius),
+        }
+    }
+}
+
+#[derive(Component, Clone, Copy, Debug, Default, Reflect, FromReflect)]
+pub enum AabbSource {
+    #[default]
+    Mesh,
+    Aabb(Aabb),
+}
+
+impl AabbSource {
+    pub fn get(&self, handle: Option<&Handle<Mesh>>, meshes: &Assets<Mesh>) -> Option<Aabb> {
+        match self {
+            AabbSource::Mesh => handle.and_then(|h| meshes.get(h).and_then(|m| m.aabb())),
+            AabbSource::Aabb(aabb) => Some(*aabb),
         }
     }
 }

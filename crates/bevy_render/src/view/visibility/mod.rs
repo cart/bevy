@@ -3,7 +3,7 @@ mod render_layers;
 pub use render_layers::*;
 
 use bevy_app::{Plugin, PostUpdate};
-use bevy_asset::{Assets, Handle};
+use bevy_asset::{AssetEvent, Assets, Handle};
 use bevy_ecs::prelude::*;
 use bevy_hierarchy::{Children, Parent};
 use bevy_reflect::{std_traits::ReflectDefault, FromReflect, Reflect, ReflectFromReflect};
@@ -17,8 +17,9 @@ use crate::{
         Projection,
     },
     mesh::Mesh,
-    primitives::{Aabb, Frustum, Sphere},
+    primitives::{Aabb, AabbSource, Frustum, Sphere},
 };
+use bevy_utils::HashSet;
 
 /// User indication of whether an entity is visible. Propagates down the entity hierarchy.
 ///
@@ -255,15 +256,20 @@ impl Plugin for VisibilityPlugin {
 }
 
 pub fn calculate_bounds(
-    mut commands: Commands,
-    meshes: Res<Assets<Mesh>>,
-    without_aabb: Query<(Entity, &Handle<Mesh>), (Without<Aabb>, Without<NoFrustumCulling>)>,
+    mut events: EventReader<AssetEvent<Mesh>>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    for (entity, mesh_handle) in &without_aabb {
-        if let Some(mesh) = meshes.get(mesh_handle) {
-            if let Some(aabb) = mesh.compute_aabb() {
-                commands.entity(entity).insert(aabb);
-            }
+    let modified = |e: &AssetEvent<Mesh>| {
+        if let AssetEvent::Modified { handle } = e {
+            Some(handle.clone_weak())
+        } else {
+            None
+        }
+    };
+    let handles = events.iter().filter_map(modified).collect::<HashSet<_>>();
+    for handle in handles {
+        if let Some(mesh) = meshes.get_mut(&handle) {
+            mesh.update_aabb();
         }
     }
 }
@@ -350,18 +356,20 @@ fn propagate_recursive(
 /// for that view.
 pub fn check_visibility(
     mut thread_queues: Local<ThreadLocal<Cell<Vec<Entity>>>>,
+    meshes: Res<Assets<Mesh>>,
     mut view_query: Query<(&mut VisibleEntities, &Frustum, Option<&RenderLayers>), With<Camera>>,
     mut visible_aabb_query: Query<(
         Entity,
         &mut ComputedVisibility,
         Option<&RenderLayers>,
-        &Aabb,
+        &AabbSource,
         &GlobalTransform,
         Option<&NoFrustumCulling>,
+        Option<&Handle<Mesh>>,
     )>,
     mut visible_no_aabb_query: Query<
         (Entity, &mut ComputedVisibility, Option<&RenderLayers>),
-        Without<Aabb>,
+        Without<AabbSource>,
     >,
 ) {
     for (mut visible_entities, frustum, maybe_view_mask) in &mut view_query {
@@ -373,9 +381,10 @@ pub fn check_visibility(
                 entity,
                 mut computed_visibility,
                 maybe_entity_mask,
-                model_aabb,
+                aabb_source,
                 transform,
                 maybe_no_frustum_culling,
+                maybe_mesh,
             )| {
                 // skip computing visibility for entities that are configured to be hidden. is_visible_in_view has already been set to false
                 // in visibility_propagate_system
@@ -390,17 +399,24 @@ pub fn check_visibility(
 
                 // If we have an aabb and transform, do frustum culling
                 if maybe_no_frustum_culling.is_none() {
+                    let aabb = match aabb_source {
+                        AabbSource::Mesh => maybe_mesh
+                            .and_then(|h| meshes.get(h))
+                            .and_then(|m| m.aabb())
+                            .unwrap_or_else(Aabb::default),
+                        AabbSource::Aabb(aabb) => *aabb,
+                    };
                     let model = transform.compute_matrix();
                     let model_sphere = Sphere {
-                        center: model.transform_point3a(model_aabb.center),
-                        radius: transform.radius_vec3a(model_aabb.half_extents),
+                        center: model.transform_point3a(aabb.center),
+                        radius: transform.radius_vec3a(aabb.half_extents),
                     };
                     // Do quick sphere-based frustum culling
                     if !frustum.intersects_sphere(&model_sphere, false) {
                         return;
                     }
                     // If we have an aabb, do aabb-based frustum culling
-                    if !frustum.intersects_obb(model_aabb, &model, true, false) {
+                    if !frustum.intersects_obb(&aabb, &model, true, false) {
                         return;
                     }
                 }
