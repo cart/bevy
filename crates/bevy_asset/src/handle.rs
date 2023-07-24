@@ -92,12 +92,12 @@ pub struct InternalAssetHandle {
 
 impl Drop for InternalAssetHandle {
     fn drop(&mut self) {
-        if let Err(err) = self.drop_sender.send(DropEvent {
+        // ignore send errors because this means the channel is shut down / the game has
+        // stopped
+        let _ = self.drop_sender.send(DropEvent {
             id: self.id.internal(),
             asset_server_managed: self.asset_server_managed,
-        }) {
-            println!("Failed to send DropEvent for InternalAssetHandle {:?}", err);
-        }
+        });
     }
 }
 

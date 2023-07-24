@@ -15,6 +15,7 @@ impl AssetSaver for CompressedImageSaver {
         writer: &'a mut bevy_asset::io::Writer,
         image: &'a Self::Asset,
         _settings: &'a Self::Settings,
+        ctx: &'a mut ProcessContext,
     ) -> bevy_utils::BoxedFuture<'a, std::result::Result<ImageLoaderSettings, anyhow::Error>> {
         // PERF: this should live inside the future, but CompressorParams and Compressor are not Send / can't be owned by the BoxedFuture (which _is_ Send)
         let mut compressor_params = basis_universal::CompressorParams::new();

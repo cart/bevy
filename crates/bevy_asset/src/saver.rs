@@ -1,3 +1,4 @@
+use crate::processor::ProcessContext;
 use crate::{io::Writer, meta::Settings, Asset, ErasedLoadedAsset};
 use crate::{AssetLoader, LabeledAsset};
 use bevy_utils::{BoxedFuture, HashMap};
@@ -18,6 +19,7 @@ pub trait AssetSaver: Send + Sync + 'static {
         writer: &'a mut Writer,
         asset: SavedAsset<'a, Self::Asset>,
         settings: &'a Self::Settings,
+        ctx: &'a mut ProcessContext,
     ) -> BoxedFuture<'a, Result<<Self::OutputLoader as AssetLoader>::Settings, anyhow::Error>>;
 }
 
@@ -30,6 +32,7 @@ pub trait ErasedAssetSaver: Send + Sync + 'static {
         writer: &'a mut Writer,
         asset: &'a ErasedLoadedAsset,
         settings: &'a dyn Settings,
+        ctx: &'a mut ProcessContext,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>>;
 
     /// The type name of the [`AssetSaver`].
@@ -42,13 +45,14 @@ impl<S: AssetSaver> ErasedAssetSaver for S {
         writer: &'a mut Writer,
         asset: &'a ErasedLoadedAsset,
         settings: &'a dyn Settings,
+        ctx: &'a mut ProcessContext,
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>> {
         Box::pin(async move {
             let settings = settings
                 .downcast_ref::<S::Settings>()
                 .expect("AssetLoader settings should match the loader type");
             let saved_asset = SavedAsset::<S::Asset>::from_loaded(asset).unwrap();
-            self.save(writer, saved_asset, settings).await?;
+            self.save(writer, saved_asset, settings, ctx).await?;
             Ok(())
         })
     }

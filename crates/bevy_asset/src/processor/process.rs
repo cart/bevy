@@ -4,7 +4,7 @@ use crate::{
     processor::AssetProcessor,
     saver::{AssetSaver, SavedAsset},
     AssetLoadError, AssetLoader, AssetPath, DeserializeMetaError, ErasedLoadedAsset,
-    MissingAssetLoaderForExtensionError, MissingAssetLoaderForTypeNameError,
+    MissingAssetLoaderForExtensionError, MissingAssetLoaderForTypeNameError, AssetServer, Handle, LoadDirectError,
 };
 use bevy_utils::BoxedFuture;
 use serde::{Deserialize, Serialize};
@@ -114,7 +114,7 @@ impl<Loader: AssetLoader, Saver: AssetSaver<Asset = Loader::Asset>> Process
             let saved_asset = SavedAsset::<Loader::Asset>::from_loaded(&loaded_asset).unwrap();
             let output_settings = self
                 .saver
-                .save(writer, saved_asset, &settings.saver_settings)
+                .save(writer, saved_asset, &settings.saver_settings, context)
                 .await
                 .map_err(ProcessError::AssetSaveError)?;
             Ok(output_settings)
@@ -244,6 +244,45 @@ impl<'a> ProcessContext<'a> {
                     path: path.to_owned(),
                 });
         }
+        Ok(loaded_asset)
+    }
+
+    pub async fn load_direct<'b>(
+        &mut self,
+        path: impl Into<AssetPath<'b>>,
+    ) -> Result<ErasedLoadedAsset, LoadDirectError> {
+        let path = path.into();
+        let to_error = |e: AssetLoadError| -> LoadDirectError {
+            LoadDirectError {
+                dependency: path.to_owned(),
+                error: e,
+            }
+        };
+        let (meta, loader, mut reader) = self
+            .processor
+            .server
+            .get_meta_loader_and_reader(&path)
+            .await
+            .map_err(to_error)?;
+        let loaded_asset = self
+            .processor
+            .server
+            .load_with_meta_loader_and_reader(
+                &path,
+                meta,
+                &*loader,
+                &mut *reader,
+                false,
+                true, // What would this be?
+            )
+            .await
+            .map_err(to_error)?;
+        let info = loaded_asset
+            .meta
+            .as_ref()
+            .and_then(|m| m.processed_info().as_ref());
+        let hash = info.map(|i| i.full_hash).unwrap_or(Default::default());
+        self.new_processed_info.process_dependencies.push(ProcessDependencyInfo { full_hash: hash, path: path.to_owned() });
         Ok(loaded_asset)
     }
 }

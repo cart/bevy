@@ -32,6 +32,8 @@ pub use loader::*;
 pub use path::*;
 pub use reflect::*;
 pub use server::*;
+pub use anyhow::Error;
+pub use bevy_utils::BoxedFuture;
 
 use crate::{
     io::{processor_gated::ProcessorGatedReader, AssetProvider, AssetProviders},
