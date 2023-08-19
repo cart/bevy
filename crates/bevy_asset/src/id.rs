@@ -239,6 +239,13 @@ impl<A: Asset> From<&UntypedAssetId> for AssetId<A> {
     }
 }
 
+impl<'a, A: Asset> From<&'a AssetId<A>> for AssetId<A> {
+    #[inline]
+    fn from(value: &'a AssetId<A>) -> Self {
+        value.clone()
+    }
+}
+
 /// An "untyped" / "generic-less" [`Asset`] identifier that behaves much like [`AssetId`], but stores the [`Asset`] type
 /// information at runtime instead of compile-time. This increases the size of the type, but it enables storing asset ids
 /// across asset types together and enables comparisons between them.
