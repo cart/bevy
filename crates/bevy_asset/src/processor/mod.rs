@@ -18,7 +18,7 @@ use crate::{
 };
 use bevy_ecs::prelude::*;
 use bevy_log::{debug, error, trace, warn};
-use bevy_tasks::{IoTaskPool, Scope};
+use bevy_tasks::IoTaskPool;
 use bevy_utils::{BoxedFuture, HashMap, HashSet};
 use futures_io::ErrorKind;
 use futures_lite::{AsyncReadExt, AsyncWriteExt, StreamExt};
@@ -159,9 +159,9 @@ impl AssetProcessor {
 
     /// Starts the processor in a background thread.
     pub fn start(_processor: Res<Self>) {
-        #[cfg(target_arch = "wasm32")]
-        error!("Cannot run AssetProcessor on WASM yet.");
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(any(target_arch = "wasm32", not(feature = "multi-threaded")))]
+        error!("Cannot run AssetProcessor in single threaded mode (or WASM) yet.");
+        #[cfg(all(not(target_arch = "wasm32"), feature = "multi-threaded"))]
         {
             let processor = _processor.clone();
             std::thread::spawn(move || {
@@ -177,7 +177,7 @@ impl AssetProcessor {
     /// * Scan the source [`AssetProvider`] and remove any processed "destination" assets that are invalid or no longer exist.
     /// * For each asset in the `source` [`AssetProvider`], kick off a new "process job", which will process the asset
     /// (if the latest version of the asset has not been processed).
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "multi-threaded"))]
     pub fn process_assets(&self) {
         let start_time = std::time::Instant::now();
         debug!("Processing Assets");
@@ -203,10 +203,8 @@ impl AssetProcessor {
             let mut started_processing = false;
 
             for event in self.data.source_event_receiver.try_iter() {
-                println!("{event:?}\n");
                 if !started_processing {
-                    // TODO: re-enable this after resolving state change signaling issue
-                    // self.set_state(ProcessorState::Processing).await;
+                    self.set_state(ProcessorState::Processing).await;
                     started_processing = true;
                 }
 
@@ -220,6 +218,7 @@ impl AssetProcessor {
     }
 
     async fn handle_asset_source_event(&self, event: AssetSourceEvent) {
+        trace!("{event:?}");
         match event {
             AssetSourceEvent::AddedAsset(path)
             | AssetSourceEvent::AddedMeta(path)
@@ -307,9 +306,9 @@ impl AssetProcessor {
 
     async fn handle_added_folder(&self, path: PathBuf) {
         debug!("Folder {:?} was added. Attempting to re-process", path);
-        #[cfg(target_arch = "wasm32")]
-        error!("AddFolder event cannot be handled on WASM yet.");
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(any(target_arch = "wasm32", not(feature = "multi-threaded")))]
+        error!("AddFolder event cannot be handled in single threaded mode (or WASM) yet.");
+        #[cfg(all(not(target_arch = "wasm32"), feature = "multi-threaded"))]
         IoTaskPool::get().scope(|scope| {
             scope.spawn(async move {
                 self.process_assets_internal(scope, path).await.unwrap();
@@ -401,9 +400,10 @@ impl AssetProcessor {
     }
 
     #[allow(unused)]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "multi-threaded"))]
     fn process_assets_internal<'scope>(
         &'scope self,
-        scope: &'scope Scope<'scope, '_, ()>,
+        scope: &'scope bevy_tasks::Scope<'scope, '_, ()>,
         path: PathBuf,
     ) -> bevy_utils::BoxedFuture<'scope, Result<(), AssetReaderError>> {
         Box::pin(async move {
@@ -424,8 +424,7 @@ impl AssetProcessor {
     }
 
     async fn try_reprocessing_queued(&self) {
-        let mut check_reprocess = true;
-        while check_reprocess {
+        loop {
             let mut check_reprocess_queue =
                 std::mem::take(&mut self.data.asset_infos.write().await.check_reprocess_queue);
             IoTaskPool::get().scope(|scope| {
@@ -437,7 +436,9 @@ impl AssetProcessor {
                 }
             });
             let infos = self.data.asset_infos.read().await;
-            check_reprocess = !infos.check_reprocess_queue.is_empty();
+            if infos.check_reprocess_queue.is_empty() {
+                break;
+            }
         }
     }
 
@@ -523,7 +524,7 @@ impl AssetProcessor {
             &mut destination_paths,
         )
         .await
-        .map_err(InitializeError::FailedToReadSourcePaths)?;
+        .map_err(InitializeError::FailedToReadDestinationPaths)?;
 
         for path in &source_paths {
             asset_infos.get_or_insert(AssetPath::new(path.to_owned(), None));
@@ -851,14 +852,14 @@ impl AssetProcessor {
                     .remove_assets_in_directory(Path::new(""))
                     .await
                 {
-                    panic!("Processed assets were in a bad state. To correct this, the asset processor attempted to remove all processed assets and start from scratch. This failed. There is no way to continue. Try restarting, or deleting imported asset state manually. {err}");
+                    panic!("Processed assets were in a bad state. To correct this, the asset processor attempted to remove all processed assets and start from scratch. This failed. There is no way to continue. Try restarting, or deleting imported asset folder manually. {err}");
                 }
             }
         }
         let mut log = self.data.log.write().await;
         *log = match ProcessorTransactionLog::new().await {
             Ok(log) => Some(log),
-            Err(err) => panic!("Failed to initialize asset processor log. This cannot be recovered. Try restarting. If that doesn't work, try deleting processed asset state. {}", err),
+            Err(err) => panic!("Failed to initialize asset processor log. This cannot be recovered. Try restarting. If that doesn't work, try deleting processed asset folder. {}", err),
         };
     }
 }

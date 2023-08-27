@@ -16,7 +16,9 @@ use std::{
 };
 
 pub(crate) fn get_base_path() -> PathBuf {
-    if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+    if let Ok(manifest_dir) = env::var("BEVY_ASSET_ROOT") {
+        PathBuf::from(manifest_dir)
+    } else if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         PathBuf::from(manifest_dir)
     } else {
         env::current_exe()
@@ -209,8 +211,8 @@ impl AssetWriter for FileAssetWriter {
                 async_fs::create_dir_all(parent).await?;
             }
             let file = File::create(&full_path).await?;
-            let reader: Box<Writer> = Box::new(file);
-            Ok(reader)
+            let writer: Box<Writer> = Box::new(file);
+            Ok(writer)
         })
     }
 
@@ -225,8 +227,8 @@ impl AssetWriter for FileAssetWriter {
                 async_fs::create_dir_all(parent).await?;
             }
             let file = File::create(&full_path).await?;
-            let reader: Box<Writer> = Box::new(file);
-            Ok(reader)
+            let writer: Box<Writer> = Box::new(file);
+            Ok(writer)
         })
     }
 

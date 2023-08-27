@@ -7,7 +7,32 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Represents a path to an asset in the file system.
+/// Represents a path to an asset in a "virtual filesystem".
+///
+/// Asset paths consist of two main parts:
+/// * [`AssetPath::path`]: The "virtual filesystem path" pointing to an asset source file.
+/// * [`AssetPath::label`]: An optional "named sub asset". When assets are loaded, they are
+/// allowed to load "sub assets" of any type, which are identified by a named "label".
+///
+/// Asset paths are generally constructed (and visualized) as strings:
+///
+/// ```no_run
+/// # use bevy_asset::{Asset, AssetServer, Handle};
+/// # use bevy_reflect::TypePath;
+/// #
+/// # #[derive(Asset, TypePath, Default)]
+/// # struct Mesh;
+/// #
+/// # #[derive(Asset, TypePath, Default)]
+/// # struct Scene;
+/// #
+/// # let asset_server: AssetServer = panic!();
+/// // This loads the `my_scene.scn` base asset.
+/// let scene: Handle<Scene> = asset_server.load("my_scene.scn");
+///
+/// // This loads the `PlayerMesh` labeled asset from the `my_scene.scn` base asset.
+/// let mesh: Handle<Mesh> = asset_server.load("my_scene.scn#PlayerMesh");
+/// ```
 #[derive(Eq, PartialEq, Hash, Clone, Serialize, Deserialize, Reflect)]
 #[reflect(Debug, PartialEq, Hash, Serialize, Deserialize)]
 pub struct AssetPath<'a> {
@@ -50,25 +75,25 @@ impl<'a> AssetPath<'a> {
         }
     }
 
-    /// Gets the sub-asset label.
+    /// Gets the "sub-asset label".
     #[inline]
     pub fn label(&self) -> Option<&str> {
         self.label.as_ref().map(|label| label.as_ref())
     }
 
-    /// Gets the path to the asset in the filesystem.
+    /// Gets the path to the asset in the "virtual filesystem".
     #[inline]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Gets the path to the asset in the filesystem.
+    /// Gets the path to the asset in the "virtual filesystem" without a label (if a label is currently set).
     #[inline]
     pub fn without_label(&self) -> AssetPath<'_> {
         AssetPath::new_ref(&self.path, None)
     }
 
-    /// Gets the path to the asset in the filesystem.
+    /// Removes a "sub-asset label" from this [`AssetPath`] and returns it, if one was set.
     #[inline]
     pub fn remove_label(&mut self) -> Option<Cow<'a, str>> {
         self.label.take()

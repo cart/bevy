@@ -17,8 +17,8 @@ pub(crate) enum LogEntry {
 /// Prior to processing an asset, we write to the log to indicate it has started
 /// After processing an asset, we write to the log to indicate it has finished.
 /// On startup, the log can be read to determine if any transactions were incomplete.
-// TODO: this should be an interface
-pub(crate) struct ProcessorTransactionLog {
+// TODO: this should be a trait
+pub struct ProcessorTransactionLog {
     log_file: File,
 }
 
