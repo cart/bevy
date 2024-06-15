@@ -1,6 +1,7 @@
 use bevy_utils::all_tuples;
 
 use crate::{
+    event::Event,
     prelude::{Bundle, Trigger},
     system::{System, SystemParam, SystemParamFunction, SystemParamItem},
 };
@@ -8,18 +9,18 @@ use crate::{
 use super::IntoSystem;
 
 /// Implemented for systems that have an [`Observer`] as the first argument.
-pub trait ObserverSystem<E: 'static, B: Bundle>:
+pub trait ObserverSystem<E: Event, B: Bundle>:
     System<In = Trigger<'static, E, B>, Out = ()> + Send + 'static
 {
 }
 
-impl<E: 'static, B: Bundle, T: System<In = Trigger<'static, E, B>, Out = ()> + Send + 'static>
+impl<E: Event, B: Bundle, T: System<In = Trigger<'static, E, B>, Out = ()> + Send + 'static>
     ObserverSystem<E, B> for T
 {
 }
 
 /// Implemented for systems that convert into [`ObserverSystem`].
-pub trait IntoObserverSystem<E: 'static, B: Bundle, M>: Send + 'static {
+pub trait IntoObserverSystem<E: Event, B: Bundle, M>: Send + 'static {
     /// The type of [`System`] that this instance converts into.
     type System: ObserverSystem<E, B>;
 
@@ -27,7 +28,7 @@ pub trait IntoObserverSystem<E: 'static, B: Bundle, M>: Send + 'static {
     fn into_system(this: Self) -> Self::System;
 }
 
-impl<S: IntoSystem<Trigger<'static, E, B>, (), M> + Send + 'static, M, E: 'static, B: Bundle>
+impl<S: IntoSystem<Trigger<'static, E, B>, (), M> + Send + 'static, M, E: Event, B: Bundle>
     IntoObserverSystem<E, B, M> for S
 where
     S::System: ObserverSystem<E, B>,
@@ -42,7 +43,7 @@ where
 macro_rules! impl_system_function {
     ($($param: ident),*) => {
         #[allow(non_snake_case)]
-        impl<E: 'static, B: Bundle, Func: Send + Sync + 'static, $($param: SystemParam),*> SystemParamFunction<fn(Trigger<E, B>, $($param,)*)> for Func
+        impl<E: Event, B: Bundle, Func: Send + Sync + 'static, $($param: SystemParam),*> SystemParamFunction<fn(Trigger<E, B>, $($param,)*)> for Func
         where
         for <'a> &'a mut Func:
                 FnMut(Trigger<E, B>, $($param),*) +
@@ -54,7 +55,7 @@ macro_rules! impl_system_function {
             #[inline]
             fn run(&mut self, input: Trigger<'static, E, B>, param_value: SystemParamItem< ($($param,)*)>) {
                 #[allow(clippy::too_many_arguments)]
-                fn call_inner<E: 'static, B: Bundle, $($param,)*>(
+                fn call_inner<E: Event, B: Bundle, $($param,)*>(
                     mut f: impl FnMut(Trigger<'static, E, B>, $($param,)*),
                     input: Trigger<'static, E, B>,
                     $($param: $param,)*

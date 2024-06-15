@@ -5,7 +5,8 @@ use crate::{
     component::{Component, ComponentId, ComponentTicks, Components, StorageType},
     entity::{Entities, Entity, EntityLocation},
     event::Event,
-    observer::{Observer, Observers},
+    observer::{Observer, ObserverState, Observers},
+    prelude::OnRemove,
     query::Access,
     removal_detection::RemovedComponentEvents,
     storage::Storages,
@@ -1224,7 +1225,12 @@ impl<'w> EntityWorldMut<'w> {
         unsafe {
             deferred_world.trigger_on_remove(archetype, self.entity, archetype.components());
             if archetype.has_remove_observer() {
-                deferred_world.trigger_observers(ON_REMOVE, self.entity, archetype.components());
+                deferred_world.trigger_entity_observers(
+                    ON_REMOVE,
+                    &mut OnRemove,
+                    archetype.components(),
+                    self.entity,
+                );
             }
         }
 
@@ -1415,7 +1421,10 @@ impl<'w> EntityWorldMut<'w> {
     pub fn observe<E: Event, B: Bundle, M>(
         &mut self,
         observer: impl IntoObserverSystem<E, B, M>,
-    ) -> &mut Self {
+    ) -> &mut Self
+    where
+        ObserverState<E::Target>: Component,
+    {
         self.world
             .spawn(Observer::new(observer).with_entity(self.entity));
         self
@@ -1431,7 +1440,12 @@ unsafe fn trigger_on_remove_hooks_and_observers(
 ) {
     deferred_world.trigger_on_remove(archetype, entity, bundle_info.iter_components());
     if archetype.has_remove_observer() {
-        deferred_world.trigger_observers(ON_REMOVE, entity, bundle_info.iter_components());
+        deferred_world.trigger_entity_observers(
+            ON_REMOVE,
+            &mut OnRemove,
+            bundle_info.iter_components(),
+            entity,
+        );
     }
 }
 

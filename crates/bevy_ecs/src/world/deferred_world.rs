@@ -6,7 +6,7 @@ use crate::{
     component::ComponentId,
     entity::Entity,
     event::{Event, EventId, Events, SendBatchIds},
-    observer::{Observers, TriggerTargets},
+    observer::{AsIter, Observers},
     prelude::{Component, QueryState},
     query::{QueryData, QueryFilter},
     system::{Commands, Query, Resource},
@@ -338,44 +338,46 @@ impl<'w> DeferredWorld<'w> {
             }
         }
     }
-
-    /// Triggers all event observers for [`ComponentId`] in target.
-    ///
-    /// # Safety
-    /// Caller must ensure observers listening for `event` can accept ZST pointers
-    #[inline]
-    pub(crate) unsafe fn trigger_observers(
-        &mut self,
-        event: ComponentId,
-        entity: Entity,
-        components: impl Iterator<Item = ComponentId>,
-    ) {
-        Observers::invoke(self.reborrow(), event, entity, components, &mut ());
-    }
-
     /// Triggers all event observers for [`ComponentId`] in target.
     ///
     /// # Safety
     /// Caller must ensure `E` is accessible as the type represented by `event`
     #[inline]
-    pub(crate) unsafe fn trigger_observers_with_data<E>(
+    pub(crate) unsafe fn trigger_observers<E: Event<Target = ()>>(
         &mut self,
         event: ComponentId,
-        entity: Entity,
-        components: impl Iterator<Item = ComponentId>,
         data: &mut E,
+        components: impl Iterator<Item = ComponentId>,
     ) {
-        Observers::invoke(self.reborrow(), event, entity, components, data);
+        Observers::invoke(self.reborrow(), event, data, components);
+    }
+    /// Triggers all event observers for [`ComponentId`] in target.
+    ///
+    /// # Safety
+    /// Caller must ensure `E` is accessible as the type represented by `event`
+    #[inline]
+    pub(crate) unsafe fn trigger_entity_observers<E: Event<Target = Entity>>(
+        &mut self,
+        event: ComponentId,
+        data: &mut E,
+        components: impl Iterator<Item = ComponentId>,
+        entity: Entity,
+    ) {
+        Observers::invoke_entity_target(self.reborrow(), event, data, components, entity);
     }
 
     /// Sends a "global" [`Trigger`] without any targets.
-    pub fn trigger<T: Event>(&mut self, trigger: impl Event) {
+    pub fn trigger<T: Event>(&mut self, trigger: impl Event<Target = ()>) {
         self.commands().trigger(trigger);
     }
 
     /// Sends a [`Trigger`] with the given `targets`.
-    pub fn trigger_targets(&mut self, trigger: impl Event, targets: impl TriggerTargets) {
-        self.commands().trigger_targets(trigger, targets);
+    pub fn trigger_entities(
+        &mut self,
+        trigger: impl Event<Target = Entity>,
+        entities: impl AsIter<Entity>,
+    ) {
+        self.commands().trigger_entities(trigger, entities);
     }
 
     /// Gets an [`UnsafeWorldCell`] containing the underlying world.

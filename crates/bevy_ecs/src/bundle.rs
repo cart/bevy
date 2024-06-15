@@ -14,7 +14,7 @@ use crate::{
     component::{Component, ComponentId, Components, StorageType, Tick},
     entity::{Entities, Entity, EntityLocation},
     observer::Observers,
-    prelude::World,
+    prelude::{OnAdd, OnInsert, World},
     query::DebugCheckedUnwrap,
     storage::{SparseSetIndex, SparseSets, Storages, Table, TableRow},
     world::{unsafe_world_cell::UnsafeWorldCell, ON_ADD, ON_INSERT},
@@ -815,11 +815,21 @@ impl<'w> BundleInserter<'w> {
         unsafe {
             deferred_world.trigger_on_add(new_archetype, entity, add_bundle.added.iter().cloned());
             if new_archetype.has_add_observer() {
-                deferred_world.trigger_observers(ON_ADD, entity, add_bundle.added.iter().cloned());
+                deferred_world.trigger_entity_observers(
+                    ON_ADD,
+                    &mut OnAdd,
+                    add_bundle.added.iter().cloned(),
+                    entity,
+                );
             }
             deferred_world.trigger_on_insert(new_archetype, entity, bundle_info.iter_components());
             if new_archetype.has_insert_observer() {
-                deferred_world.trigger_observers(ON_INSERT, entity, bundle_info.iter_components());
+                deferred_world.trigger_entity_observers(
+                    ON_INSERT,
+                    &mut OnInsert,
+                    bundle_info.iter_components(),
+                    entity,
+                );
             }
         }
 
@@ -932,11 +942,21 @@ impl<'w> BundleSpawner<'w> {
         unsafe {
             deferred_world.trigger_on_add(archetype, entity, bundle_info.iter_components());
             if archetype.has_add_observer() {
-                deferred_world.trigger_observers(ON_ADD, entity, bundle_info.iter_components());
+                deferred_world.trigger_entity_observers(
+                    ON_ADD,
+                    &mut OnAdd,
+                    bundle_info.iter_components(),
+                    entity,
+                );
             }
             deferred_world.trigger_on_insert(archetype, entity, bundle_info.iter_components());
             if archetype.has_insert_observer() {
-                deferred_world.trigger_observers(ON_INSERT, entity, bundle_info.iter_components());
+                deferred_world.trigger_entity_observers(
+                    ON_INSERT,
+                    &mut OnInsert,
+                    bundle_info.iter_components(),
+                    entity,
+                );
             }
         };
 

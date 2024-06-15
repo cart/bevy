@@ -3,10 +3,20 @@ use crate::{
     entity::Entity,
     observer::ObserverState,
 };
+use std::marker::PhantomData;
 
 /// Tracks a list of entity observers for the [`Entity`] [`ObservedBy`] is added to.
-#[derive(Default)]
-pub(crate) struct ObservedBy(pub(crate) Vec<Entity>);
+pub(crate) struct ObservedBy {
+    pub(crate) observer_entities: Vec<Entity>,
+}
+
+impl Default for ObservedBy {
+    fn default() -> Self {
+        Self {
+            observer_entities: Default::default(),
+        }
+    }
+}
 
 impl Component for ObservedBy {
     const STORAGE_TYPE: StorageType = StorageType::SparseSet;
@@ -14,15 +24,15 @@ impl Component for ObservedBy {
     fn register_component_hooks(hooks: &mut ComponentHooks) {
         hooks.on_remove(|mut world, entity, _| {
             let observed_by = {
-                let mut component = world.get_mut::<ObservedBy>(entity).unwrap();
-                std::mem::take(&mut component.0)
+                let mut component = world.get_mut::<Self>(entity).unwrap();
+                std::mem::take(&mut component.observer_entities)
             };
             for e in observed_by {
                 let (total_entities, despawned_watched_entities) = {
                     let Some(mut entity_mut) = world.get_entity_mut(e) else {
                         continue;
                     };
-                    let Some(mut state) = entity_mut.get_mut::<ObserverState>() else {
+                    let Some(mut state) = entity_mut.get_mut::<ObserverState<Entity>>() else {
                         continue;
                     };
                     state.despawned_watched_entities += 1;

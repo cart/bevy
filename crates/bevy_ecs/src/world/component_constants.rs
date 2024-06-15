@@ -10,14 +10,27 @@ pub const ON_INSERT: ComponentId = ComponentId::new(1);
 /// [`ComponentId`] for [`OnRemove`]
 pub const ON_REMOVE: ComponentId = ComponentId::new(2);
 
-/// Trigger emitted when a component is added to an entity.
-#[derive(Event)]
+/// Event triggered when a component is added to an entity.
+#[derive(Component)]
 pub struct OnAdd;
 
-/// Trigger emitted when a component is inserted on to to an entity.
-#[derive(Event)]
+// TODO: make Event target derivable
+impl Event for OnAdd {
+    type Target = Entity;
+}
+
+/// Event triggered when a component is inserted on to to an entity.
+#[derive(Component)]
 pub struct OnInsert;
 
-/// Trigger emitted when a component is removed from an entity.
-#[derive(Event)]
+impl Event for OnInsert {
+    type Target = Entity;
+}
+
+/// Event triggered when a component is removed from an entity.
+#[derive(Component)]
 pub struct OnRemove;
+
+impl Event for OnRemove {
+    type Target = Entity;
+}

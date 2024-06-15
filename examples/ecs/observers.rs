@@ -27,7 +27,7 @@ fn main() {
                     if mine.pos.distance(event.pos) < mine.size + event.radius {
                         // And queue commands, including triggering additional events
                         // Here we trigger the `Explode` event for entity `e`
-                        commands.trigger_targets(Explode, e);
+                        commands.trigger_entities(Explode, e);
                     }
                 }
             },
@@ -64,8 +64,12 @@ struct ExplodeMines {
     radius: f32,
 }
 
-#[derive(Event)]
+#[derive(Component)]
 struct Explode;
+
+impl Event for Explode {
+    type Target = Entity;
+}
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2dBundle::default());

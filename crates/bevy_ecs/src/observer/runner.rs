@@ -10,14 +10,14 @@ use bevy_ptr::PtrMut;
 
 /// Contains [`Observer`] information. This defines how a given observer behaves. It is the
 /// "source of truth" for a given observer entity's behavior.
-pub struct ObserverState {
+pub struct ObserverState<Target> {
     pub(crate) descriptor: ObserverDescriptor,
-    pub(crate) runner: ObserverRunner,
+    pub(crate) runner: ObserverRunner<Target>,
     pub(crate) last_trigger_id: u32,
     pub(crate) despawned_watched_entities: u32,
 }
 
-impl Default for ObserverState {
+impl<Target> Default for ObserverState<Target> {
     fn default() -> Self {
         Self {
             runner: |_, _, _| {},
@@ -28,7 +28,7 @@ impl Default for ObserverState {
     }
 }
 
-impl ObserverState {
+impl<Target> ObserverState<Target> {
     /// Observe the given `event`. This will cause the [`Observer`] to run whenever an event with the given [`ComponentId`]
     /// is triggered.
     pub fn with_event(mut self, event: ComponentId) -> Self {
@@ -58,7 +58,7 @@ impl ObserverState {
     }
 }
 
-impl Component for ObserverState {
+impl Component for ObserverState<()> {
     const STORAGE_TYPE: StorageType = StorageType::SparseSet;
 
     fn register_component_hooks(hooks: &mut ComponentHooks) {
@@ -71,7 +71,7 @@ impl Component for ObserverState {
             let descriptor = std::mem::take(
                 &mut world
                     .entity_mut(entity)
-                    .get_mut::<ObserverState>()
+                    .get_mut::<Self>()
                     .unwrap()
                     .as_mut()
                     .descriptor,
@@ -83,10 +83,35 @@ impl Component for ObserverState {
     }
 }
 
+impl Component for ObserverState<Entity> {
+    const STORAGE_TYPE: StorageType = StorageType::SparseSet;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world, entity, _| {
+            world.commands().add(move |world: &mut World| {
+                world.register_entity_observer(entity);
+            });
+        });
+        hooks.on_remove(|mut world, entity, _| {
+            let descriptor = std::mem::take(
+                &mut world
+                    .entity_mut(entity)
+                    .get_mut::<Self>()
+                    .unwrap()
+                    .as_mut()
+                    .descriptor,
+            );
+            world.commands().add(move |world: &mut World| {
+                world.unregister_entity_observer(entity, descriptor);
+            });
+        });
+    }
+}
+
 /// Type for function that is run when an observer is triggered.
 /// Typically refers to the default runner that runs the system stored in the associated [`ObserverSystemComponent`],
 /// but can be overridden for custom behaviour.
-pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut);
+pub type ObserverRunner<Target> = fn(DeferredWorld, ObserverTrigger<Target>, PtrMut);
 
 /// An [`Observer`] system. Add this [`Component`] to an [`Entity`] to turn it into an "observer".
 ///
@@ -260,8 +285,8 @@ pub type ObserverRunner = fn(DeferredWorld, ObserverTrigger, PtrMut);
 /// serves as the "source of truth" of the observer.
 ///
 /// [`SystemParam`]: crate::system::SystemParam
-pub struct Observer<T: 'static, B: Bundle> {
-    system: BoxedObserverSystem<T, B>,
+pub struct Observer<E: Event, B: Bundle> {
+    system: BoxedObserverSystem<E, B>,
     descriptor: ObserverDescriptor,
 }
 
@@ -304,7 +329,10 @@ impl<E: Event, B: Bundle> Observer<E, B> {
     }
 }
 
-impl<E: Event, B: Bundle> Component for Observer<E, B> {
+impl<E: Event, B: Bundle> Component for Observer<E, B>
+where
+    ObserverState<E::Target>: Component,
+{
     const STORAGE_TYPE: StorageType = StorageType::SparseSet;
     fn register_component_hooks(hooks: &mut ComponentHooks) {
         hooks.on_add(|mut world, entity, _| {
@@ -335,7 +363,9 @@ impl<E: Event, B: Bundle> Component for Observer<E, B> {
 
                 {
                     let mut entity = world.entity_mut(entity);
-                    if let crate::world::Entry::Vacant(entry) = entity.entry::<ObserverState>() {
+                    if let crate::world::Entry::Vacant(entry) =
+                        entity.entry::<ObserverState<E::Target>>()
+                    {
                         entry.insert(ObserverState {
                             descriptor,
                             runner: observer_system_runner::<E, B>,
@@ -353,9 +383,11 @@ pub type BoxedObserverSystem<E = (), B = ()> = Box<dyn ObserverSystem<E, B>>;
 
 fn observer_system_runner<E: Event, B: Bundle>(
     mut world: DeferredWorld,
-    observer_trigger: ObserverTrigger,
+    observer_trigger: ObserverTrigger<E::Target>,
     ptr: PtrMut,
-) {
+) where
+    ObserverState<E::Target>: Component,
+{
     let world = world.as_unsafe_world_cell();
     // SAFETY: Observer was triggered so must still exist in world
     let observer_cell = unsafe {
@@ -366,7 +398,7 @@ fn observer_system_runner<E: Event, B: Bundle>(
     // SAFETY: Observer was triggered so must have an `ObserverState`
     let mut state = unsafe {
         observer_cell
-            .get_mut::<ObserverState>()
+            .get_mut::<ObserverState<E::Target>>()
             .debug_checked_unwrap()
     };
 

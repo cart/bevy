@@ -7,10 +7,12 @@ use crate::{
     component::ComponentId,
     entity::{Entities, Entity},
     event::Event,
-    observer::{Observer, TriggerEvent, TriggerTargets},
+    observer::{AsIter, Observer, ObserverState, TriggerEvent, TriggerEventWithTargets},
+    prelude::Component,
     system::{RunSystemWithInput, SystemId},
-    world::command_queue::RawCommandQueue,
-    world::{Command, CommandQueue, EntityWorldMut, FromWorld, World},
+    world::{
+        command_queue::RawCommandQueue, Command, CommandQueue, EntityWorldMut, FromWorld, World,
+    },
 };
 use bevy_utils::tracing::{error, info};
 pub use parallel_scope::*;
@@ -751,21 +753,35 @@ impl<'w, 's> Commands<'w, 's> {
 
     /// Sends a "global" [`Trigger`] without any targets. This will run any [`Observer`] of the `event` that
     /// isn't scoped to specific targets.
-    pub fn trigger(&mut self, event: impl Event) {
-        self.add(TriggerEvent { event, targets: () });
+    pub fn trigger(&mut self, event: impl Event<Target = ()>) {
+        self.add(TriggerEvent {
+            event,
+            components: std::iter::empty(),
+        });
     }
 
     /// Sends a [`Trigger`] for the given targets. This will run any [`Observer`] of the `event` that
     /// watches those targets.
-    pub fn trigger_targets(&mut self, event: impl Event, targets: impl TriggerTargets) {
-        self.add(TriggerEvent { event, targets });
+    pub fn trigger_entities(
+        &mut self,
+        event: impl Event<Target = Entity>,
+        entities: impl AsIter<Entity>,
+    ) {
+        self.add(TriggerEventWithTargets {
+            event,
+            components: std::iter::empty(),
+            targets: entities,
+        });
     }
 
     /// Spawn an [`Observer`] and returns the [`EntityCommands`] associated with the entity that stores the observer.  
     pub fn observe<E: Event, B: Bundle, M>(
         &mut self,
         observer: impl IntoObserverSystem<E, B, M>,
-    ) -> EntityCommands {
+    ) -> EntityCommands
+    where
+        ObserverState<E::Target>: Component,
+    {
         self.spawn(Observer::new(observer))
     }
 }
@@ -1163,7 +1179,10 @@ impl EntityCommands<'_> {
     pub fn observe<E: Event, B: Bundle, M>(
         &mut self,
         system: impl IntoObserverSystem<E, B, M>,
-    ) -> &mut Self {
+    ) -> &mut Self
+    where
+        ObserverState<E::Target>: Component,
+    {
         self.add(observe(system));
         self
     }
@@ -1327,9 +1346,10 @@ fn log_components(entity: Entity, world: &mut World) {
     info!("Entity {:?}: {:?}", entity, debug_infos);
 }
 
-fn observe<E: Event, B: Bundle, M>(
-    observer: impl IntoObserverSystem<E, B, M>,
-) -> impl EntityCommand {
+fn observe<E: Event, B: Bundle, M>(observer: impl IntoObserverSystem<E, B, M>) -> impl EntityCommand
+where
+    ObserverState<E::Target>: Component,
+{
     move |entity, world: &mut World| {
         if let Some(mut entity) = world.get_entity_mut(entity) {
             entity.observe(observer);

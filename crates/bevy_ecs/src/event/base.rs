@@ -31,7 +31,12 @@ use std::{
     label = "invalid `Event`",
     note = "consider annotating `{Self}` with `#[derive(Event)]`"
 )]
-pub trait Event: Component {}
+pub trait Event: Component {
+    /// The target of this event. This will default to `()` (no target) when derived. This is also commonly [`Entity`].
+    ///
+    /// [`Entity`]: crate::entity::Entity
+    type Target;
+}
 
 /// An `EventId` uniquely identifies an event stored in a specific [`World`].
 ///
