@@ -3,10 +3,10 @@
 pub use bevy_ecs_macros::GetTemplate;
 
 use crate::{
-    bundle::Bundle,
+    bundle::{Bundle, BundleInfo},
     entity::{Entity, EntityPath},
     error::{BevyError, Result},
-    world::EntityWorldMut,
+    world::{EntityWorldMut, World},
 };
 use alloc::{boxed::Box, vec, vec::Vec};
 use bevy_platform::collections::hash_map::Entry;
@@ -98,6 +98,13 @@ impl<T: Clone + Default> GetTemplate for T {
 pub trait ErasedTemplate: Downcast + Send + Sync {
     /// Applies this template to the given `entity`.
     fn apply(&mut self, entity: &mut EntityWorldMut) -> Result<(), BevyError>;
+
+    /// Registers the output bundle of this template with the given `world`.
+    ///
+    /// Returns the [`BundleInfo`] of the registered bundle, or `None` if the template does not output a bundle.
+    fn register_bundle<'a>(&self, _: &'a mut World) -> Option<&'a BundleInfo> {
+        None
+    }
 }
 
 impl_downcast!(ErasedTemplate);
@@ -107,6 +114,10 @@ impl<T: Template<Output: Bundle> + Send + Sync + 'static> ErasedTemplate for T {
         let bundle = self.build(entity)?;
         entity.insert(bundle);
         Ok(())
+    }
+
+    fn register_bundle<'a>(&self, world: &'a mut World) -> Option<&'a BundleInfo> {
+        Some(world.register_bundle::<T::Output>())
     }
 }
 
