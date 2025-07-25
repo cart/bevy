@@ -2,11 +2,13 @@
 
 pub mod prelude {
     pub use crate::{
-        bsn, bsn_list, on, CommandsSpawnScene, LoadScene, PatchGetTemplate, PatchTemplate, Scene,
-        SceneList, ScenePatchInstance, SpawnScene,
+        bsn, bsn_list, on, CommandsSpawnScene, EntityCommandsReconcileScene, LoadScene,
+        PatchGetTemplate, PatchTemplate, ReconcileScene, Scene, SceneList, ScenePatchInstance,
+        SpawnScene,
     };
 }
 
+mod reconcile;
 mod resolved_scene;
 mod scene;
 mod scene_list;
@@ -15,6 +17,7 @@ mod spawn;
 
 pub use bevy_scene2_macros::*;
 
+pub use reconcile::*;
 pub use resolved_scene::*;
 pub use scene::*;
 pub use scene_list::*;
