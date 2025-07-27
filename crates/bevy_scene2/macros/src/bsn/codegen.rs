@@ -78,10 +78,12 @@ impl<const ALLOW_FLAT: bool> Bsn<ALLOW_FLAT> {
                         }
                     }
                     BsnEntry::GetTemplateConstructor(BsnConstructor {type_path, function, args})=> {
+                        // NOTE: The odd turbofish line break below avoids breaking rustfmt
                         quote! {
                             <#type_path as #bevy_scene::PatchGetTemplate>::patch(
                                 move |value| {
-                                    *value = <#type_path as #bevy_ecs::template::GetTemplate>::Template::#function(#args);
+                                    *value = <#type_path as #bevy_ecs::template::GetTemplate>
+                                        ::Template::#function(#args);
                                 }
                             )
                         }
@@ -94,8 +96,13 @@ impl<const ALLOW_FLAT: bool> Bsn<ALLOW_FLAT> {
                     }
                     BsnEntry::RelatedSceneList(BsnRelatedSceneList { scene_list, relationship_path }) => {
                         let scenes = scene_list.0.to_tokens(bevy_scene, bevy_ecs, bevy_asset);
+                        // NOTE: The odd turbofish line breaks below avoid breaking rustfmt
                         quote! {
-                            #bevy_scene::RelatedScenes::<<#relationship_path as #bevy_ecs::relationship::RelationshipTarget>::Relationship, _>::new(
+                            #bevy_scene::RelatedScenes::<
+                                <#relationship_path as #bevy_ecs::relationship::RelationshipTarget>
+                                    ::Relationship,
+                                _
+                            >::new(
                                 #scenes
                             )
                         }
