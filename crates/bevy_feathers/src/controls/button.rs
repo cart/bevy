@@ -100,8 +100,7 @@ pub fn tool_button(props: ButtonProps) -> impl Scene {
         template_value(props.variant)
         template_value(props.corners.to_border_radius(3.0))
         Hovered
-        // TODO: port CursonIcon to GetTemplate
-        // CursorIcon::System(bevy_window::SystemCursorIcon::Pointer)
+        EntityCursor::System(bevy_window::SystemCursorIcon::Pointer)
         TabIndex(0)
         ThemeBackgroundColor(tokens::BUTTON_BG)
         ThemeFontColor(tokens::BUTTON_TEXT)
