@@ -21,7 +21,6 @@ use crate::{
     tokens,
 };
 use bevy_input_focus::tab_navigation::TabIndex;
-use bevy_winit::cursor::CursorIcon;
 
 /// Color variants for buttons. This also functions as a component used by the dynamic styling
 /// system to identify which entities are buttons.
