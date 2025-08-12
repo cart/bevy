@@ -2826,6 +2826,10 @@ name = "bsn"
 path = "examples/scene/bsn.rs"
 
 [[example]]
+name = "bsn_reconcile"
+path = "examples/scene/bsn_reconcile.rs"
+
+[[example]]
 name = "ui_scene"
 path = "examples/scene/ui_scene.rs"
 
