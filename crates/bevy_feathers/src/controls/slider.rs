@@ -69,7 +69,7 @@ impl Default for SliderProps {
         color_space: InterpolationColorSpace::Srgba,
     })])
 )]
-struct SliderStyle;
+struct Slider;
 
 /// Marker for the text
 #[derive(Component, Default, Clone, Reflect)]
@@ -95,7 +95,7 @@ pub fn slider(props: SliderProps) -> impl Scene {
             on_change: {props.on_change.clone()},
             track_click: TrackClick::Drag,
         }
-        SliderStyle
+        Slider
         SliderRange::new(props.min, props.max)
         EntityCursor::System(bevy_window::SystemCursorIcon::EwResize)
         TabIndex(0)
@@ -121,7 +121,7 @@ pub fn slider(props: SliderProps) -> impl Scene {
 fn update_slider_colors(
     mut q_sliders: Query<
         (Has<InteractionDisabled>, &mut BackgroundGradient),
-        (With<SliderStyle>, Or<(Spawned, Added<InteractionDisabled>)>),
+        (With<Slider>, Or<(Spawned, Added<InteractionDisabled>)>),
     >,
     theme: Res<UiTheme>,
 ) {
@@ -160,7 +160,7 @@ fn update_slider_pos(
     mut q_sliders: Query<
         (Entity, &SliderValue, &SliderRange, &mut BackgroundGradient),
         (
-            With<SliderStyle>,
+            With<Slider>,
             Or<(
                 Changed<SliderValue>,
                 Changed<SliderRange>,
