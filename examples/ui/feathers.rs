@@ -252,7 +252,6 @@ fn demo_root() -> impl Scene {
                     ),
                     :color_slider(
                         ColorSliderProps {
-                            value: 0.5,
                             on_change: callback(
                                 |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
                                     color.rgb_color.red = change.value;
@@ -263,7 +262,6 @@ fn demo_root() -> impl Scene {
                     ),
                     :color_slider(
                         ColorSliderProps {
-                            value: 0.5,
                             on_change: callback(
                                 |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
                                     color.rgb_color.green = change.value;
@@ -274,7 +272,6 @@ fn demo_root() -> impl Scene {
                     ),
                     :color_slider(
                         ColorSliderProps {
-                            value: 0.5,
                             on_change: callback(
                                 |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
                                     color.rgb_color.blue = change.value;
@@ -285,7 +282,6 @@ fn demo_root() -> impl Scene {
                     ),
                     :color_slider(
                         ColorSliderProps {
-                            value: 0.5,
                             on_change: callback(
                                 |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
                                     color.rgb_color.alpha = change.value;
@@ -302,7 +298,6 @@ fn demo_root() -> impl Scene {
                     ),
                     :color_slider(
                         ColorSliderProps {
-                            value: 0.5,
                             on_change: callback(
                                 |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
                                     color.hsl_color.hue = change.value;
@@ -313,7 +308,6 @@ fn demo_root() -> impl Scene {
                     ),
                     :color_slider(
                         ColorSliderProps {
-                            value: 0.5,
                             on_change: callback(
                                 |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
                                     color.hsl_color.saturation = change.value;
@@ -324,7 +318,6 @@ fn demo_root() -> impl Scene {
                     ),
                     :color_slider(
                         ColorSliderProps {
-                            value: 0.5,
                             on_change: callback(
                                 |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
                                     color.hsl_color.lightness = change.value;

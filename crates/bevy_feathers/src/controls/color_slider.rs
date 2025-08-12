@@ -1,14 +1,12 @@
 use core::f32::consts::PI;
 
 use bevy_app::{Plugin, PreUpdate};
-use bevy_asset::Handle;
 use bevy_color::{Alpha, Color, Hsla};
 use bevy_core_widgets::{
     CallbackTemplate, CoreSlider, CoreSliderThumb, SliderRange, SliderValue, TrackClick,
     ValueChange,
 };
 use bevy_ecs::{
-    bundle::Bundle,
     component::Component,
     entity::Entity,
     hierarchy::Children,
@@ -25,13 +23,9 @@ use bevy_ui::{
     FlexDirection, Gradient, InterpolationColorSpace, LinearGradient, Node, Outline, PositionType,
     UiRect, UiTransform, Val, Val2, ZIndex,
 };
-use bevy_ui_render::ui_material::MaterialNode;
 
 use crate::{
-    alpha_pattern::{AlphaPattern, AlphaPatternMaterial},
-    cursor::EntityCursor,
-    palette,
-    rounded_corners::RoundedCorners,
+    alpha_pattern::AlphaPattern, cursor::EntityCursor, palette, rounded_corners::RoundedCorners,
 };
 
 const SLIDER_HEIGHT: f32 = 16.0;
@@ -144,8 +138,6 @@ pub struct SliderBaseColor(pub Color);
 
 /// Color slider template properties, passed to [`color_slider`] function.
 pub struct ColorSliderProps {
-    /// Slider current value
-    pub value: f32,
     /// On-change handler
     pub on_change: CallbackTemplate<In<ValueChange<f32>>>,
     /// Which color component we're editing
@@ -155,7 +147,6 @@ pub struct ColorSliderProps {
 impl Default for ColorSliderProps {
     fn default() -> Self {
         Self {
-            value: 0.0,
             on_change: CallbackTemplate::Ignore,
             channel: ColorChannel::Alpha,
         }
@@ -164,7 +155,7 @@ impl Default for ColorSliderProps {
 
 /// A color slider widget.
 #[derive(Component, Default, Clone)]
-#[require(SliderBaseColor(Color::WHITE))]
+#[require(SliderValue, SliderBaseColor(Color::WHITE))]
 pub struct ColorSlider {
     /// Which channel is being edited by this slider.
     pub channel: ColorChannel,
@@ -174,8 +165,38 @@ pub struct ColorSlider {
 #[derive(Component, Default, Clone)]
 struct ColorSliderTrack;
 
+/// Marker for the left/right endcaps
+#[derive(Component, Default, Clone)]
+#[require(BackgroundColor)]
+struct ColorSliderEndCap;
+
+#[derive(Component, Default, Clone)]
+#[require(
+    BackgroundGradient(vec![Gradient::Linear(LinearGradient {
+        angle: PI * 0.5,
+        stops: vec![
+            ColorStop::new(Color::NONE, Val::Percent(0.)),
+            ColorStop::new(Color::NONE, Val::Percent(50.)),
+            ColorStop::new(Color::NONE, Val::Percent(100.)),
+        ],
+        color_space: InterpolationColorSpace::Srgba,
+    })])
+)]
+struct ColorSliderGradient;
+
 /// Marker for the thumb
 #[derive(Component, Default, Clone)]
+#[require(
+    Node {
+        position_type: PositionType::Absolute,
+        left: Val::Percent(0.),
+        top: Val::Percent(50.),
+        width: Val::Px(THUMB_SIZE),
+        height: Val::Px(THUMB_SIZE),
+        border: UiRect::all(Val::Px(2.0)),
+        ..Default::default()
+    }
+)]
 struct ColorSliderThumb;
 
 /// Spawn a new slider widget.
@@ -201,7 +222,6 @@ pub fn color_slider(props: ColorSliderProps) -> impl Scene {
         ColorSlider {
             channel: {props.channel.clone()},
         }
-        SliderValue({props.value})
         template_value(channel_range)
         EntityCursor::System(bevy_window::SystemCursorIcon::Pointer)
         TabIndex(0)
@@ -216,41 +236,24 @@ pub fn color_slider(props: ColorSliderProps) -> impl Scene {
             }
             template_value(RoundedCorners::All.to_border_radius(TRACK_RADIUS))
             ColorSliderTrack
-            AlphaPattern
-            MaterialNode::<AlphaPatternMaterial>(Handle::default())
+            AlphaPattern::default()
             [
                 // Left endcap
                 (
+                    ColorSliderEndCap
                     Node {
                         width: Val::Px({THUMB_SIZE * 0.5}),
                     }
                     template_value(RoundedCorners::Left.to_border_radius(TRACK_RADIUS))
-                    BackgroundColor({palette::X_AXIS})
                 ),
                 // Track with gradient
                 (
                     Node {
                         flex_grow: 1.0,
                     }
-                    BackgroundGradient({vec![Gradient::Linear(LinearGradient {
-                        angle: PI * 0.5,
-                        stops: vec![
-                            ColorStop::new(Color::NONE, Val::Percent(0.)),
-                            ColorStop::new(Color::NONE, Val::Percent(50.)),
-                            ColorStop::new(Color::NONE, Val::Percent(100.)),
-                        ],
-                        color_space: InterpolationColorSpace::Srgba,
-                    })]})
+                    ColorSliderGradient
                     ZIndex(1)
                     [
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: Val::Percent(0.),
-                            top: Val::Percent(50.),
-                            width: Val::Px(THUMB_SIZE),
-                            height: Val::Px(THUMB_SIZE),
-                            border: UiRect::all(Val::Px(2.0)),
-                        }
                         CoreSliderThumb
                         ColorSliderThumb
                         BorderRadius::MAX
@@ -268,11 +271,11 @@ pub fn color_slider(props: ColorSliderProps) -> impl Scene {
                 ),
                 // Right endcap
                 (
+                    ColorSliderEndCap
                     Node {
                         width: Val::Px({THUMB_SIZE * 0.5}),
                     }
                     template_value(RoundedCorners::Right.to_border_radius(TRACK_RADIUS))
-                    BackgroundColor({palette::Z_AXIS})
                 ),
             ]
         ]
