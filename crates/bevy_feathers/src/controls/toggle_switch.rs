@@ -69,10 +69,10 @@ pub fn toggle_switch() -> impl Scene {
         AccessibilityNode(accesskit::Node::new(Role::Switch))
         EntityCursor::System(bevy_window::SystemCursorIcon::Pointer)
         TabIndex(0)
-        [(
+        [
             BorderRadius::all(Val::Px(3.0))
             ToggleSwitchSlide
-        )]
+        ]
     }
 }
 

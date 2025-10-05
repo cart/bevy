@@ -184,7 +184,7 @@ fn update_slider_pos(
     mut q_sliders: Query<
         (Entity, &SliderValue, &SliderRange, &mut BackgroundGradient),
         (
-            With<Slider>,
+            With<SliderStyle>,
             Or<(
                 Changed<SliderValue>,
                 Changed<SliderRange>,

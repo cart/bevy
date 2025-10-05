@@ -98,7 +98,7 @@ pub fn tool_button(props: ButtonProps) -> impl Scene {
             font_size: 14.0,
         }
         template_value(props.variant)
-        template_value(props.corners.to_border_radius(3.0))
+        template_value(props.corners.to_border_radius(4.0))
     }
 }
 
