@@ -26,7 +26,10 @@ pub use spawn::*;
 
 use bevy_app::{App, Plugin, Update};
 use bevy_asset::{AssetApp, AssetPath, AssetServer, Handle};
-use bevy_ecs::{prelude::*, system::IntoObserverSystem, template::Template};
+use bevy_ecs::{
+    lifecycle::HookContext, prelude::*, system::IntoObserverSystem, template::Template,
+    world::DeferredWorld,
+};
 use std::marker::PhantomData;
 
 #[derive(Default)]
@@ -65,16 +68,37 @@ impl LoadScene for AssetServer {
     }
 }
 
+#[derive(Component, Clone)]
+#[component(on_remove = on_handle_remove::<I>)]
+pub struct OnHandle<I: Clone + Send + Sync + 'static>(Entity, PhantomData<I>);
+
+fn on_handle_remove<I: Clone + Send + Sync + 'static>(
+    mut world: DeferredWorld,
+    context: HookContext,
+) {
+    let observer_entity = world.get::<OnHandle<I>>(context.entity).unwrap().0;
+    world.commands().entity(observer_entity).despawn();
+}
+
 pub struct OnTemplate<I, E, B, M>(pub I, pub PhantomData<fn() -> (E, B, M)>);
 
-impl<I: IntoObserverSystem<E, B, M> + Clone, E: EntityEvent, B: Bundle, M: 'static> Template
-    for OnTemplate<I, E, B, M>
+impl<
+        I: IntoObserverSystem<E, B, M> + Sync + Clone,
+        E: EntityEvent,
+        B: Bundle,
+        M: Send + Sync + 'static,
+    > Template for OnTemplate<I, E, B, M>
 {
-    type Output = ();
+    type Output = OnHandle<I>;
 
     fn build(&mut self, entity: &mut EntityWorldMut) -> Result<Self::Output> {
-        entity.observe(self.0.clone());
-        Ok(())
+        if let Some(handle) = entity.get::<OnHandle<I>>() {
+            return Ok(handle.clone());
+        }
+
+        let observer = Observer::new(self.0.clone()).with_entity(entity.id());
+        let observer_entity = entity.world_scope(|world| world.spawn(observer).id());
+        Ok(OnHandle(observer_entity, PhantomData))
     }
 }
 
@@ -82,7 +106,7 @@ impl<
         I: IntoObserverSystem<E, B, M> + Clone + Send + Sync,
         E: EntityEvent,
         B: Bundle,
-        M: 'static,
+        M: Send + Sync + 'static,
     > Scene for OnTemplate<I, E, B, M>
 {
     fn patch(

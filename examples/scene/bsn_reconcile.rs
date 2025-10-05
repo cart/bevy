@@ -97,7 +97,6 @@ fn demo_root(state: &DemoWidgetStates) -> impl Scene {
             } [
                 (
                     button(ButtonProps::default())
-                    // TODO: Make sure observers are not duplicated on reconciliation.
                     on(|_: On<Activate>| {
                         info!("Button clicked!");
                     })
