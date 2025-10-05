@@ -8,27 +8,23 @@
 
 use bevy::{
     color::palettes,
-    core_widgets::{
-        callback, Activate, CoreRadio, CoreRadioGroup, CoreWidgetsPlugins, SliderPrecision,
-        SliderStep, SliderValue, ValueChange,
-    },
     feathers::{
         controls::{
             button, checkbox, color_slider, color_swatch, radio, slider, toggle_switch,
-            ButtonProps, CheckboxProps, ColorChannel, ColorSliderProps, SliderProps,
-            ToggleSwitchProps,
+            ButtonProps, ColorChannel, ColorSliderProps, SliderProps,
         },
         dark_theme::create_dark_theme,
         theme::{ThemeBackgroundColor, ThemedText, UiTheme},
-        tokens, FeathersPlugin,
+        tokens, FeathersPlugins,
     },
-    input_focus::{
-        tab_navigation::{TabGroup, TabNavigationPlugin},
-        InputDispatchPlugin,
-    },
+    input_focus::tab_navigation::TabGroup,
     prelude::*,
     scene2::prelude::{Scene, *},
     ui::Checked,
+    ui_widgets::{
+        checkbox_self_update, slider_self_update, Activate, RadioButton, RadioGroup,
+        SliderPrecision, SliderStep, SliderValue, ValueChange,
+    },
 };
 
 /// A struct to hold the state of various widgets shown in the demo.
@@ -40,13 +36,7 @@ struct DemoWidgetStates {
 
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-            CoreWidgetsPlugins,
-            InputDispatchPlugin,
-            TabNavigationPlugin,
-            FeathersPlugin,
-        ))
+        .add_plugins((DefaultPlugins, FeathersPlugins))
         .insert_resource(UiTheme(create_dark_theme()))
         .insert_resource(DemoWidgetStates {
             controlled_slider_value: 20.0,
@@ -106,15 +96,16 @@ fn demo_root(state: &DemoWidgetStates) -> impl Scene {
                 min_width: Val::Px(200.),
             } [
                 (
-                    :button(ButtonProps {
-                        on_click: callback(|_: In<Activate>| {
-                            info!("Button clicked!");
-                        }),
-                        ..default()
-                    }) [(Text("Click me!") ThemedText)]
+                    button(ButtonProps::default())
+                    // TODO: Make sure observers are not duplicated on reconciliation.
+                    on(|_: On<Activate>| {
+                        info!("Button clicked!");
+                    })
+                    [(Text("Click me!") ThemedText)]
                 ),
                 (
-                    :checkbox(CheckboxProps::default())
+                    checkbox()
+                    on(checkbox_self_update)
                     [(Text("Checkbox") ThemedText)]
                 ),
                 (
@@ -123,47 +114,49 @@ fn demo_root(state: &DemoWidgetStates) -> impl Scene {
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(4.0),
                     }
-                    CoreRadioGroup {
-                        // Update radio button states based on notification from radio group.
-                        on_change: callback(
-                            |ent: In<Activate>, q_radio: Query<Entity, With<CoreRadio>>, mut commands: Commands| {
-                                for radio in q_radio.iter() {
-                                    if radio == ent.0.0 {
-                                        commands.entity(radio).insert(Checked);
-                                    } else {
-                                        commands.entity(radio).remove::<Checked>();
-                                    }
+                    RadioGroup
+                    // Update radio button states based on notification from radio group.
+                    on(
+                        |value_change: On<ValueChange<Entity>>,
+                         q_radio: Query<Entity, With<RadioButton>>,
+                         mut commands: Commands| {
+                            for radio in q_radio.iter() {
+                                if radio == value_change.value {
+                                    commands.entity(radio).insert(Checked);
+                                } else {
+                                    commands.entity(radio).remove::<Checked>();
                                 }
-                            },
-                        ),
-                    }
+                            }
+                        }
+                    )
                     [
-                        :radio [(Text("One") ThemedText)],
-                        :radio [(Text("Two") ThemedText)],
+                        radio() [ (Text("One") ThemedText) ],
+                        radio() [ (Text("Two") ThemedText) ],
                     ]
                 ),
-                :toggle_switch(ToggleSwitchProps::default()),
+                (toggle_switch() on(checkbox_self_update)),
                 Node {
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
                 } [
-                    // Uncontrolled slider (the slider widget owns the state)
+                    // Uncontrolled/self-updating slider (the slider widget owns the state)
                     (
-                        :slider(SliderProps {
+                        slider(SliderProps {
                             max: 1.0,
                             ..default()
                         })
+                        on(slider_self_update)
                         SliderStep(0.1)
                         SliderPrecision(3)
                     ),
                     // Controlled slider (the caller owns the state)
                     (
-                        :slider(SliderProps {
+                        slider(SliderProps {
                             max: 100.0,
-                            on_change: callback(|change: In<ValueChange<f32>>, mut state: ResMut<DemoWidgetStates>| {
-                                state.controlled_slider_value = change.value;
-                            }),
                             ..default()
+                        })
+                        on(|change: On<ValueChange<f32>>, mut state: ResMut<DemoWidgetStates>| {
+                            state.controlled_slider_value = change.value;
                         })
                         SliderValue(controlled_slider_value)
                         SliderStep(10.)
@@ -179,16 +172,15 @@ fn demo_root(state: &DemoWidgetStates) -> impl Scene {
                     ),
                     // Controlled color slider
                     (
-                        :color_slider(
+                        color_slider(
                             ColorSliderProps {
-                                on_change: callback(
-                                    |change: In<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
-                                        color.hsl_color.hue = change.value;
-                                    },
-                                ),
-                                channel: ColorChannel::HslHue
+                                channel: ColorChannel::HslHue,
+                                ..default()
                             }
                         )
+                        on(|change: On<ValueChange<f32>>, mut color: ResMut<DemoWidgetStates>| {
+                            color.hsl_color.hue = change.value;
+                        })
                         SliderValue({hsl_color.hue})
                     ),
                 ]
