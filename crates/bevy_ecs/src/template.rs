@@ -4,7 +4,7 @@ pub use bevy_ecs_macros::GetTemplate;
 
 use crate::{
     bundle::Bundle,
-    entity::{Entity, EntityPath},
+    entity::{Entity, EntityOrPath},
     error::{BevyError, Result},
     world::EntityWorldMut,
 };
@@ -70,16 +70,19 @@ pub struct TemplateTuple<T>(pub T);
 
 all_tuples!(template_impl, 0, 12, T);
 
-impl Template for EntityPath<'static> {
+impl Template for EntityOrPath<'static> {
     type Output = Entity;
 
     fn build(&mut self, entity: &mut EntityWorldMut) -> Result<Self::Output> {
-        Ok(entity.resolve_path(self)?)
+        match self {
+            Self::Entity(entity) => Ok(*entity),
+            Self::Path(path) => Ok(entity.resolve_path(path)?),
+        }
     }
 }
 
 impl GetTemplate for Entity {
-    type Template = EntityPath<'static>;
+    type Template = EntityOrPath<'static>;
 }
 
 impl<T: Clone + Default> Template for T {
