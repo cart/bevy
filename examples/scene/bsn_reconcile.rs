@@ -7,7 +7,7 @@
 //!
 
 use bevy::{
-    color::palettes,
+    color::palettes::tailwind,
     feathers::{
         controls::{
             button, checkbox, color_slider, color_swatch, radio, slider, toggle_switch,
@@ -40,7 +40,7 @@ fn main() {
         .insert_resource(UiTheme(create_dark_theme()))
         .insert_resource(DemoWidgetStates {
             controlled_slider_value: 20.0,
-            hsl_color: palettes::tailwind::AMBER_800.into(),
+            hsl_color: tailwind::AMBER_800.into(),
         })
         .add_systems(Startup, setup)
         .add_systems(Update, reconcile_ui)
@@ -184,6 +184,55 @@ fn demo_root(state: &DemoWidgetStates) -> impl Scene {
                     ),
                 ]
             ],
+
+            :todos
+        ]
+    }
+}
+
+fn todos() -> impl Scene {
+    bsn! {
+        Node::default() [
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(8.0),
+                padding: UiRect::all(Val::Px(8.0)),
+            } [
+                Text("Today"),
+                #A :todo_item("Write BSN"),
+                #B :todo_item("Hot reload it!"),
+                #C :todo_item("Add checkboxes"),
+                #D :todo_item("Try some styling"),
+                #E :todo_item("Move things around"),
+            ],
+
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(8.0),
+                padding: UiRect::all(Val::Px(8.0)),
+            } [
+                Text("Tomorrow"),
+            ]
+        ]
+    }
+}
+
+fn todo_item(title: &'static str) -> impl Scene {
+    bsn! {
+        :checkbox
+        on(checkbox_self_update)
+        Node {
+            column_gap: Val::Px(10.0),
+            padding: UiRect::all(Val::Px(6.0)),
+            border: UiRect::all(Val::Px(1.0)),
+            align_items: AlignItems::Center,
+        }
+        BorderColor::all(tailwind::NEUTRAL_700)
+        BorderRadius::all(Val::Px(5.0))
+        BackgroundColor(tailwind::NEUTRAL_800)
+        [
+            Text(title)
+            TextColor(tailwind::NEUTRAL_100) TextFont { font_size: 16.0 }
         ]
     }
 }
