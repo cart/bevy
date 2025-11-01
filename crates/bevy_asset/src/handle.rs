@@ -5,9 +5,9 @@ use crate::{
 use alloc::sync::Arc;
 use bevy_ecs::{
     error::Result,
-    template::{GetTemplate, Template},
-    world::EntityWorldMut,
+    template::{GetTemplate, Template, TemplateContext},
 };
+use bevy_platform::collections::Equivalent;
 use bevy_reflect::{Reflect, TypePath};
 use core::{
     any::TypeId,
@@ -226,8 +226,8 @@ impl<I: Into<AssetPath<'static>>, T> From<I> for HandleTemplate<T> {
 
 impl<T: Asset> Template for HandleTemplate<T> {
     type Output = Handle<T>;
-    fn build(&mut self, entity: &mut EntityWorldMut) -> Result<Handle<T>> {
-        Ok(entity.resource::<AssetServer>().load(&self.path))
+    fn build(&mut self, context: &mut TemplateContext) -> Result<Handle<T>> {
+        Ok(context.resource::<AssetServer>().load(&self.path))
     }
 }
 
@@ -252,6 +252,13 @@ impl<A: Asset> Hash for Handle<A> {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id().hash(state);
+    }
+}
+
+// Handle uses AssetId when hashing. This enables using AssetId instead of handle with hashsets and hashmaps.
+impl<T: Asset> Equivalent<Handle<T>> for AssetId<T> {
+    fn equivalent(&self, key: &Handle<T>) -> bool {
+        *self == key.id()
     }
 }
 

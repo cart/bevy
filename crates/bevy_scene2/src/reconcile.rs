@@ -42,12 +42,13 @@ use bevy_ecs::{
     error::{warn, Result},
     name::Name,
     system::EntityCommands,
+    template::{EntityScopes, ScopedEntities, TemplateContext},
     world::{EntityWorldMut, Mut, World},
 };
 use bevy_platform::collections::{HashMap, HashSet};
 use bevy_utils::TypeIdMap;
 
-use crate::{ResolvedRelatedScenes, ResolvedScene, Scene, ScenePatch};
+use crate::{PatchContext, ResolvedRelatedScenes, ResolvedScene, Scene, ScenePatch};
 
 /// An identifier for related entities during scene reconciliation.
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
@@ -111,27 +112,40 @@ pub trait ReconcileScene {
     /// See [`crate::reconcile`] for more details on reconciliation.
     ///
     /// Returns an error if any of the templates fail to be applied.
-    fn reconcile_resolved_scene(&mut self, scene: &mut ResolvedScene) -> Result<&mut Self>;
+    fn reconcile_resolved_scene(
+        &mut self,
+        entity_scopes: &EntityScopes,
+        scene: &mut ResolvedScene,
+    ) -> Result<&mut Self>;
 }
 
 impl<'w> ReconcileScene for EntityWorldMut<'w> {
     fn reconcile_scene<S: Scene>(&mut self, scene: S) -> Result<&mut Self> {
         // TODO: Deferred scene resolution
         let mut resolved_scene = ResolvedScene::default();
+        let mut entity_scopes = EntityScopes::default();
         self.world_scope(|world| {
             world.resource_scope(|world, assets: Mut<AssetServer>| {
                 scene.patch(
-                    &assets,
-                    world.resource::<Assets<ScenePatch>>(),
+                    &mut PatchContext {
+                        assets: &assets,
+                        patches: world.resource::<Assets<ScenePatch>>(),
+                        current_scope: entity_scopes.add_scope(),
+                        entity_scopes: &mut entity_scopes,
+                    },
                     &mut resolved_scene,
                 );
             });
         });
 
-        self.reconcile_resolved_scene(&mut resolved_scene)
+        self.reconcile_resolved_scene(&entity_scopes, &mut resolved_scene)
     }
 
-    fn reconcile_resolved_scene(&mut self, scene: &mut ResolvedScene) -> Result<&mut Self> {
+    fn reconcile_resolved_scene(
+        &mut self,
+        entity_scopes: &EntityScopes,
+        scene: &mut ResolvedScene,
+    ) -> Result<&mut Self> {
         // Take the receipt from the targeted entity using core::mem::take to avoid archetype moves
         let mut receipt = self
             .get_mut::<ReconcileReceipt>()
@@ -164,15 +178,26 @@ impl<'w> ReconcileScene for EntityWorldMut<'w> {
         });
 
         // Apply the templates to the entity
-        // TODO: Insert as dynamic bundle to avoid archetype moves
+        // TODO: Insert as dynamic bundle to avoid archetype moves / incorrect hook/observer behavior
         for template in scene.templates.iter_mut() {
-            template.apply(self)?;
+            template.apply(&mut TemplateContext::new(
+                self,
+                &mut ScopedEntities::new(entity_scopes.entity_count()),
+                entity_scopes,
+            ))?;
         }
 
         self.world_scope(|world| -> Result {
             // Reconcile new/updated relationships
             for (type_id, related) in scene.related.iter_mut() {
-                reconcile_related(*type_id, entity_id, related, &mut receipt, world)?;
+                reconcile_related(
+                    *type_id,
+                    entity_id,
+                    related,
+                    &mut receipt,
+                    entity_scopes,
+                    world,
+                )?;
             }
 
             // Despawn any leftover orphans from outdated relationships
@@ -202,6 +227,7 @@ fn reconcile_related(
     target_entity: Entity,
     related: &mut ResolvedRelatedScenes,
     receipt: &mut ReconcileReceipt,
+    entity_scopes: &EntityScopes,
     world: &mut World,
 ) -> Result {
     let mut previous_anchors = receipt.anchors.remove(&type_id).unwrap_or_default();
@@ -262,7 +288,7 @@ fn reconcile_related(
     for (related_scene, entity_id) in related.scenes.iter_mut().zip(ordered_entity_ids.iter()) {
         world
             .entity_mut(*entity_id)
-            .reconcile_resolved_scene(related_scene)?;
+            .reconcile_resolved_scene(entity_scopes, related_scene)?;
     }
 
     Ok(())

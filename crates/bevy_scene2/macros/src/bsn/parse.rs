@@ -179,7 +179,8 @@ impl Parse for BsnSceneListItems {
 impl Parse for BsnSceneListItem {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(if input.peek(Brace) {
-            BsnSceneListItem::Expression(input.parse::<Block>()?)
+            let block = input.parse::<Block>()?;
+            BsnSceneListItem::Expression(block.stmts)
         } else {
             BsnSceneListItem::Scene(input.parse::<Bsn<true>>()?)
         })
@@ -380,6 +381,9 @@ impl Parse for BsnValue {
             BsnValue::Lit(input.parse::<Lit>()?)
         } else if input.peek(Paren) {
             BsnValue::Tuple(input.parse::<BsnTuple>()?)
+        } else if input.peek(Token![#]) {
+            input.parse::<Token![#]>()?;
+            BsnValue::Name(input.parse::<Ident>()?)
         } else {
             return Err(input.error(
                 "BsnValue parse for this input is not supported yet, nor is proper error handling :)"

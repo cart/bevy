@@ -4,7 +4,7 @@ pub mod prelude {
     pub use crate::{
         bsn, bsn_list, on, CommandsSpawnScene, EntityCommandsReconcileScene, LoadScene,
         PatchGetTemplate, PatchTemplate, ReconcileScene, Scene, SceneList, ScenePatchInstance,
-        SpawnScene,
+        SpawnRelatedScenes, SpawnScene,
     };
 }
 
@@ -27,7 +27,10 @@ pub use spawn::*;
 use bevy_app::{App, Plugin, Update};
 use bevy_asset::{AssetApp, AssetPath, AssetServer, Handle};
 use bevy_ecs::{
-    lifecycle::HookContext, prelude::*, system::IntoObserverSystem, template::Template,
+    lifecycle::HookContext,
+    prelude::*,
+    system::IntoObserverSystem,
+    template::{Template, TemplateContext},
     world::DeferredWorld,
 };
 use std::marker::PhantomData;
@@ -40,6 +43,7 @@ impl Plugin for ScenePlugin {
         app.init_resource::<QueuedScenes>()
             .init_resource::<NewScenes>()
             .init_asset::<ScenePatch>()
+            .init_asset::<SceneListPatch>()
             .add_systems(Update, (resolve_scene_patches, spawn_queued).chain())
             .add_observer(on_add_scene_patch_instance);
     }
@@ -91,13 +95,15 @@ impl<
 {
     type Output = OnHandle<I>;
 
-    fn build(&mut self, entity: &mut EntityWorldMut) -> Result<Self::Output> {
-        if let Some(handle) = entity.get::<OnHandle<I>>() {
+    fn build(&mut self, context: &mut TemplateContext) -> Result<Self::Output> {
+        if let Some(handle) = context.entity.get::<OnHandle<I>>() {
             return Ok(handle.clone());
         }
 
-        let observer = Observer::new(self.0.clone()).with_entity(entity.id());
-        let observer_entity = entity.world_scope(|world| world.spawn(observer).id());
+        let observer = Observer::new(self.0.clone()).with_entity(context.entity.id());
+        let observer_entity = context
+            .entity
+            .world_scope(|world| world.spawn(observer).id());
         Ok(OnHandle(observer_entity, PhantomData))
     }
 }
@@ -109,12 +115,7 @@ impl<
         M: Send + Sync + 'static,
     > Scene for OnTemplate<I, E, B, M>
 {
-    fn patch(
-        &self,
-        _assets: &AssetServer,
-        _patches: &bevy_asset::Assets<ScenePatch>,
-        scene: &mut ResolvedScene,
-    ) {
+    fn patch(&self, _context: &mut PatchContext, scene: &mut ResolvedScene) {
         scene.push_template(OnTemplate(self.0.clone(), PhantomData));
     }
 }
