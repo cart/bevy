@@ -200,7 +200,7 @@ fn todos() -> impl Scene {
             } [
                 Text("Today"),
                 #A :todo_item("Write BSN"),
-                #B :todo_item("Hot reload it!"),
+                #B :todo_item("Hot reload it!") DependsOn(#A),
                 #C :todo_item("Add checkboxes"),
                 #D :todo_item("Try some styling"),
                 #E :todo_item("Move things around"),
@@ -216,6 +216,9 @@ fn todos() -> impl Scene {
         ]
     }
 }
+
+#[derive(Component, GetTemplate)]
+struct DependsOn(pub Entity);
 
 fn todo_item(title: &'static str) -> impl Scene {
     bsn! {
@@ -234,5 +237,13 @@ fn todo_item(title: &'static str) -> impl Scene {
             Text(title)
             TextColor(tailwind::NEUTRAL_100) TextFont { font_size: 16.0 }
         ]
+        on(move |add: On<Insert, DependsOn>, query: Query<&DependsOn>, mut previous: Local<Option<Entity>>| {
+            if let Ok(depends_on) = query.get(add.entity)
+                && (previous.is_none() || previous.unwrap() != depends_on.0)
+            {
+                *previous = Some(depends_on.0);
+                info!("'{title}' ({:?}) depends on {:?}", add.entity, depends_on.0);
+            }
+        })
     }
 }
