@@ -81,7 +81,11 @@ fn on_handle_remove<I: Clone + Send + Sync + 'static>(
     context: HookContext,
 ) {
     let observer_entity = world.get::<OnHandle<I>>(context.entity).unwrap().0;
-    world.commands().entity(observer_entity).try_despawn();
+    world.commands().queue(move |world: &mut World| {
+        if world.get_entity(context.entity).is_ok() {
+            world.entity_mut(observer_entity).despawn();
+        }
+    });
 }
 
 pub struct OnTemplate<I, E, B, M>(pub I, pub PhantomData<fn() -> (E, B, M)>);
