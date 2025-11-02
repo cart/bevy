@@ -31,12 +31,20 @@ use bevy_scene2::prelude::*;
 /// Marker for the radio outline
 #[derive(Component, Default, Clone, Reflect)]
 #[reflect(Component, Clone, Default)]
+#[require(ThemeBorderColor(tokens::RADIO_BORDER))]
 struct RadioOutline;
 
 /// Marker for the radio check mark
 #[derive(Component, Default, Clone, Reflect)]
 #[reflect(Component, Clone, Default)]
+#[require(ThemeBackgroundColor(tokens::RADIO_MARK))]
 struct RadioMark;
+
+/// Marker for the radio frame
+#[derive(Component, Default, Clone, Reflect)]
+#[reflect(Component, Clone, Default)]
+#[require(Hovered, ThemeFontColor(tokens::RADIO_TEXT))]
+pub struct RadioFrame;
 
 /// Radio scene function.
 pub fn radio() -> impl Scene {
@@ -49,10 +57,9 @@ pub fn radio() -> impl Scene {
             column_gap: Val::Px(4.0),
         }
         RadioButton
-        Hovered
+        RadioFrame
         EntityCursor::System(bevy_window::SystemCursorIcon::Pointer)
         TabIndex(0)
-        ThemeFontColor(tokens::RADIO_TEXT)
         InheritableFont {
             font: fonts::REGULAR,
             font_size: 14.0,
@@ -68,7 +75,6 @@ pub fn radio() -> impl Scene {
             }
             RadioOutline
             BorderRadius::MAX
-            ThemeBorderColor(tokens::RADIO_BORDER)
             [(
                 // Cheesy checkmark: rotated node with L-shaped border.
                 Node {
@@ -77,7 +83,6 @@ pub fn radio() -> impl Scene {
                 }
                 BorderRadius::MAX
                 RadioMark
-                ThemeBackgroundColor(tokens::RADIO_MARK)
             )]
         )]
     }

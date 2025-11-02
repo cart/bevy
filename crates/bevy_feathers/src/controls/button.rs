@@ -28,6 +28,11 @@ use bevy_input_focus::tab_navigation::TabIndex;
 /// system to identify which entities are buttons.
 #[derive(Component, Default, Clone, Reflect, Debug, PartialEq, Eq)]
 #[reflect(Component, Clone, Default)]
+#[require(
+    Hovered,
+    ThemeBackgroundColor(tokens::BUTTON_BG),
+    ThemeFontColor(tokens::BUTTON_TEXT)
+)]
 pub enum ButtonVariant {
     /// The standard button appearance
     #[default]
@@ -61,11 +66,8 @@ pub fn button(props: ButtonProps) -> impl Scene {
             flex_grow: 1.0,
         }
         Button
-        Hovered
         EntityCursor::System(bevy_window::SystemCursorIcon::Pointer)
         TabIndex(0)
-        ThemeBackgroundColor(tokens::BUTTON_BG)
-        ThemeFontColor(tokens::BUTTON_TEXT)
         template_value(props.variant)
         template_value(props.corners.to_border_radius(4.0))
         InheritableFont {
@@ -89,11 +91,8 @@ pub fn tool_button(props: ButtonProps) -> impl Scene {
             flex_grow: 1.0,
         }
         Button
-        Hovered
         EntityCursor::System(bevy_window::SystemCursorIcon::Pointer)
         TabIndex(0)
-        ThemeBackgroundColor(tokens::BUTTON_BG)
-        ThemeFontColor(tokens::BUTTON_TEXT)
         InheritableFont {
             font: fonts::REGULAR,
             font_size: 14.0,

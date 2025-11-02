@@ -309,7 +309,6 @@ fn demo_root() -> impl Scene {
                 (
                     slider(SliderProps {
                         max: 100.0,
-                        value: 20.0,
                         ..default()
                     })
                     SliderStep(10.)

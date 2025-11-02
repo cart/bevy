@@ -2,11 +2,13 @@
 
 pub mod prelude {
     pub use crate::{
-        bsn, bsn_list, on, CommandsSpawnScene, LoadScene, PatchGetTemplate, PatchTemplate, Scene,
-        SceneList, ScenePatchInstance, SpawnRelatedScenes, SpawnScene,
+        bsn, bsn_list, on, CommandsSpawnScene, EntityCommandsReconcileScene, LoadScene,
+        PatchGetTemplate, PatchTemplate, ReconcileScene, Scene, SceneList, ScenePatchInstance,
+        SpawnRelatedScenes, SpawnScene,
     };
 }
 
+mod reconcile;
 mod resolved_scene;
 mod scene;
 mod scene_list;
@@ -15,6 +17,7 @@ mod spawn;
 
 pub use bevy_scene2_macros::*;
 
+pub use reconcile::*;
 pub use resolved_scene::*;
 pub use scene::*;
 pub use scene_list::*;
@@ -24,9 +27,11 @@ pub use spawn::*;
 use bevy_app::{App, Plugin, Update};
 use bevy_asset::{AssetApp, AssetPath, AssetServer, Handle};
 use bevy_ecs::{
+    lifecycle::HookContext,
     prelude::*,
     system::IntoObserverSystem,
     template::{Template, TemplateContext},
+    world::DeferredWorld,
 };
 use std::marker::PhantomData;
 
@@ -67,16 +72,43 @@ impl LoadScene for AssetServer {
     }
 }
 
+#[derive(Component, Clone)]
+#[component(on_remove = on_handle_remove::<I>)]
+pub struct OnHandle<I: Clone + Send + Sync + 'static>(Entity, PhantomData<I>);
+
+fn on_handle_remove<I: Clone + Send + Sync + 'static>(
+    mut world: DeferredWorld,
+    context: HookContext,
+) {
+    let observer_entity = world.get::<OnHandle<I>>(context.entity).unwrap().0;
+    world.commands().queue(move |world: &mut World| {
+        if world.get_entity(context.entity).is_ok() {
+            world.entity_mut(observer_entity).despawn();
+        }
+    });
+}
+
 pub struct OnTemplate<I, E, B, M>(pub I, pub PhantomData<fn() -> (E, B, M)>);
 
-impl<I: IntoObserverSystem<E, B, M> + Clone, E: EntityEvent, B: Bundle, M: 'static> Template
-    for OnTemplate<I, E, B, M>
+impl<
+        I: IntoObserverSystem<E, B, M> + Sync + Clone,
+        E: EntityEvent,
+        B: Bundle,
+        M: Send + Sync + 'static,
+    > Template for OnTemplate<I, E, B, M>
 {
-    type Output = ();
+    type Output = OnHandle<I>;
 
     fn build(&mut self, context: &mut TemplateContext) -> Result<Self::Output> {
-        context.entity.observe(self.0.clone());
-        Ok(())
+        if let Some(handle) = context.entity.get::<OnHandle<I>>() {
+            return Ok(handle.clone());
+        }
+
+        let observer = Observer::new(self.0.clone()).with_entity(context.entity.id());
+        let observer_entity = context
+            .entity
+            .world_scope(|world| world.spawn(observer).id());
+        Ok(OnHandle(observer_entity, PhantomData))
     }
 }
 
@@ -84,7 +116,7 @@ impl<
         I: IntoObserverSystem<E, B, M> + Clone + Send + Sync,
         E: EntityEvent,
         B: Bundle,
-        M: 'static,
+        M: Send + Sync + 'static,
     > Scene for OnTemplate<I, E, B, M>
 {
     fn patch(&self, _context: &mut PatchContext, scene: &mut ResolvedScene) {

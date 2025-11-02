@@ -29,11 +29,27 @@ use crate::{
 /// Marker for the toggle switch outline
 #[derive(Component, Default, Clone, Reflect)]
 #[reflect(Component, Clone, Default)]
+#[require(
+    Hovered,
+    ThemeBackgroundColor(tokens::SWITCH_BG),
+    ThemeBorderColor(tokens::SWITCH_BORDER)
+)]
 struct ToggleSwitchOutline;
 
 /// Marker for the toggle switch slide
 #[derive(Component, Default, Clone, Reflect)]
 #[reflect(Component, Clone, Default)]
+#[require(
+    ThemeBackgroundColor(tokens::SWITCH_SLIDE),
+    Node {
+        position_type: PositionType::Absolute,
+        left: Val::Percent(0.),
+        top: Val::Px(0.),
+        bottom: Val::Px(0.),
+        width: Val::Percent(50.),
+        ..Default::default()
+    })
+]
 struct ToggleSwitchSlide;
 
 /// Toggle switch scene function.
@@ -50,23 +66,12 @@ pub fn toggle_switch() -> impl Scene {
         Checkbox
         ToggleSwitchOutline
         BorderRadius::all(Val::Px(5.0))
-        ThemeBackgroundColor(tokens::SWITCH_BG)
-        ThemeBorderColor(tokens::SWITCH_BORDER)
         AccessibilityNode(accesskit::Node::new(Role::Switch))
-        Hovered
         EntityCursor::System(bevy_window::SystemCursorIcon::Pointer)
         TabIndex(0)
         [
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Percent(0.),
-                top: Val::Px(0.),
-                bottom: Val::Px(0.),
-                width: Val::Percent(50.),
-            }
             BorderRadius::all(Val::Px(3.0))
             ToggleSwitchSlide
-            ThemeBackgroundColor(tokens::SWITCH_SLIDE)
         ]
     }
 }

@@ -3,7 +3,7 @@
 pub use bevy_ecs_macros::GetTemplate;
 
 use crate::{
-    bundle::Bundle,
+    bundle::{Bundle, BundleInfo},
     entity::{Entity, EntityPath},
     error::{BevyError, Result},
     resource::Resource,
@@ -31,9 +31,9 @@ pub trait Template {
 
 /// The context used to apply the current [`Template`]. This contains a reference to the entity that the template is being
 /// applied to.
-pub struct TemplateContext<'a> {
+pub struct TemplateContext<'w, 'a> {
     /// The current entity the template is being applied to
-    pub entity: &'a mut EntityWorldMut<'a>,
+    pub entity: &'a mut EntityWorldMut<'w>,
     /// The scoped entities mapping for the current template context
     pub scoped_entities: &'a mut ScopedEntities,
     /// The entity scopes for the current template context. This matches
@@ -41,10 +41,10 @@ pub struct TemplateContext<'a> {
     pub entity_scopes: &'a EntityScopes,
 }
 
-impl<'a> TemplateContext<'a> {
+impl<'w, 'a> TemplateContext<'w, 'a> {
     /// Creates a new [`TemplateContext`].
     pub fn new(
-        entity: &'a mut EntityWorldMut<'a>,
+        entity: &'a mut EntityWorldMut<'w>,
         scoped_entities: &'a mut ScopedEntities,
         entity_scopes: &'a EntityScopes,
     ) -> Self {
@@ -127,7 +127,7 @@ impl EntityScopes {
 pub struct ScopedEntities(Vec<Option<Entity>>);
 
 impl ScopedEntities {
-    /// Creates a new [`ScopedEntities`] with the given `size`, intialized to [`None`] (no [`Entity`] assigned).  
+    /// Creates a new [`ScopedEntities`] with the given `size`, intialized to [`None`] (no [`Entity`] assigned).
     pub fn new(size: usize) -> Self {
         Self(vec![None; size])
     }
@@ -160,7 +160,7 @@ impl ScopedEntities {
     }
 }
 
-impl<'a> TemplateContext<'a> {
+impl<'w, 'a> TemplateContext<'w, 'a> {
     /// Retrieves a reference to the given resource `R`.
     pub fn resource<R: Resource>(&self) -> &R {
         self.entity.resource()
@@ -265,6 +265,13 @@ impl GetTemplate for Entity {
 pub trait ErasedTemplate: Downcast + Send + Sync {
     /// Applies this template to the given `entity`.
     fn apply(&mut self, context: &mut TemplateContext) -> Result<(), BevyError>;
+
+    /// Registers the output bundle of this template with the given `world`.
+    ///
+    /// Returns the [`BundleInfo`] of the registered bundle, or `None` if the template does not output a bundle.
+    fn register_bundle<'a>(&self, _: &'a mut World) -> Option<&'a BundleInfo> {
+        None
+    }
 }
 
 impl_downcast!(ErasedTemplate);
@@ -274,6 +281,10 @@ impl<T: Template<Output: Bundle> + Send + Sync + 'static> ErasedTemplate for T {
         let bundle = self.build(context)?;
         context.entity.insert(bundle);
         Ok(())
+    }
+
+    fn register_bundle<'a>(&self, world: &'a mut World) -> Option<&'a BundleInfo> {
+        Some(world.register_bundle::<T::Output>())
     }
 }
 

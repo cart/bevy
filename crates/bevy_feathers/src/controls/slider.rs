@@ -34,8 +34,6 @@ use crate::{
 
 /// Slider template properties, passed to [`slider`] function.
 pub struct SliderProps {
-    /// Slider current value
-    pub value: f32,
     /// Slider minimum value
     pub min: f32,
     /// Slider maximum value
@@ -44,22 +42,31 @@ pub struct SliderProps {
 
 impl Default for SliderProps {
     fn default() -> Self {
-        Self {
-            value: 0.0,
-            min: 0.0,
-            max: 1.0,
-        }
+        Self { min: 0.0, max: 1.0 }
     }
 }
 
 #[derive(Component, Default, Clone, Reflect)]
-#[require(Slider)]
 #[reflect(Component, Clone, Default)]
+#[require(
+    SliderValue,
+    BackgroundGradient(vec![Gradient::Linear(LinearGradient {
+        angle: PI * 0.5,
+        stops: vec![
+            ColorStop::new(Color::NONE, Val::Percent(0.)),
+            ColorStop::new(Color::NONE, Val::Percent(50.)),
+            ColorStop::new(Color::NONE, Val::Percent(50.)),
+            ColorStop::new(Color::NONE, Val::Percent(100.)),
+        ],
+        color_space: InterpolationColorSpace::Srgba,
+    })])
+)]
 struct SliderStyle;
 
 /// Marker for the text
 #[derive(Component, Default, Clone, Reflect)]
 #[reflect(Component, Clone, Default)]
+#[require(Text)]
 struct SliderValueText;
 
 /// Slider scene function.
@@ -80,22 +87,10 @@ pub fn slider(props: SliderProps) -> impl Scene {
             track_click: TrackClick::Drag,
         }
         SliderStyle
-        SliderValue({props.value})
         SliderRange::new(props.min, props.max)
         EntityCursor::System(bevy_window::SystemCursorIcon::EwResize)
         TabIndex(0)
         template_value(RoundedCorners::All.to_border_radius(6.0))
-        // Use a gradient to draw the moving bar
-        BackgroundGradient({vec![Gradient::Linear(LinearGradient {
-            angle: PI * 0.5,
-            stops: vec![
-                ColorStop::new(Color::NONE, Val::Percent(0.)),
-                ColorStop::new(Color::NONE, Val::Percent(50.)),
-                ColorStop::new(Color::NONE, Val::Percent(50.)),
-                ColorStop::new(Color::NONE, Val::Percent(100.)),
-            ],
-            color_space: InterpolationColorSpace::Srgba,
-        })]})
         [(
             // Text container
             Node {
@@ -110,7 +105,7 @@ pub fn slider(props: SliderProps) -> impl Scene {
                 font: fonts::MONO,
                 font_size: 12.0,
             }
-            [(Text::new("10.0") ThemedText SliderValueText)]
+            [(ThemedText SliderValueText)]
         )]
     }
 }

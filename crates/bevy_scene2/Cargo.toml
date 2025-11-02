@@ -15,6 +15,7 @@ bevy_platform = { path = "../bevy_platform", version = "0.17.0-dev" }
 bevy_reflect = { path = "../bevy_reflect", version = "0.17.0-dev" }
 bevy_utils = { path = "../bevy_utils", version = "0.17.0-dev" }
 
+indexmap = { version = "2.5.0", default-features = false }
 variadics_please = "1.0"
 
 [lints]
