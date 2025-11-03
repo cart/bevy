@@ -223,6 +223,8 @@ impl<T: Clone + Default> GetTemplate for T {
 
 /// A [`Template`] reference to an [`Entity`].
 pub enum EntityReference<'a> {
+    /// An already existing [`Entity`]
+    Entity(Entity),
     /// A reference to an entity via an [`EntityPath`]
     Path(EntityPath<'a>),
     /// An entity index within the current [`TemplateContext`], which is defined by a scope
@@ -245,11 +247,18 @@ impl<'a> Default for EntityReference<'a> {
     }
 }
 
+impl<'a> From<Entity> for EntityReference<'a> {
+    fn from(value: Entity) -> Self {
+        Self::Entity(value)
+    }
+}
+
 impl Template for EntityReference<'static> {
     type Output = Entity;
 
     fn build(&mut self, context: &mut TemplateContext) -> Result<Self::Output> {
         Ok(match self {
+            EntityReference::Entity(entity) => *entity,
             EntityReference::Path(entity_path) => context.entity.resolve_path(entity_path)?,
             // unwrap is ok as this is "internals". when implemented correctly this will never panic
             EntityReference::Index { scope, index } => context.get_scoped_entity(*scope, *index),
