@@ -177,7 +177,7 @@ impl<const ALLOW_FLAT: bool> Bsn<ALLOW_FLAT> {
                     let index = entity_refs.get(name.clone());
                     quote! {
                         #bevy_scene::NameEntityReference {
-                            name: Name(#name.into()),
+                            name: #bevy_ecs::name::Name(#name.into()),
                             index: #index,
                         }
                     }
@@ -186,7 +186,7 @@ impl<const ALLOW_FLAT: bool> Bsn<ALLOW_FLAT> {
                     quote! {
                         <#bevy_ecs::name::Name as PatchGetTemplate>::patch(
                             move |value, _context| {
-                                *value = Name({#expr_tokens}.into());
+                                *value = #bevy_ecs::name::Name({#expr_tokens}.into());
                             }
                         )
                     }
