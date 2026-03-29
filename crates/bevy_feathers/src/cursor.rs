@@ -14,9 +14,15 @@ use bevy_ecs::{
 };
 use bevy_picking::{hover::HoverMap, pointer::PointerId, PickingSystems};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
-#[cfg(feature = "custom_cursor")]
-use bevy_window::CustomCursor;
 use bevy_window::{CursorIcon, SystemCursorIcon, Window};
+#[cfg(feature = "custom_cursor")]
+use {
+    bevy_ecs::{
+        error::Result,
+        template::{Template, TemplateContext},
+    },
+    bevy_window::CustomCursor,
+};
 
 /// A resource that specifies the cursor icon to be used when the mouse is not hovering over
 /// any other entity. This is used to set the default cursor icon for the window.
@@ -34,10 +40,41 @@ pub struct DefaultCursor(pub EntityCursor);
 pub enum EntityCursor {
     #[cfg(feature = "custom_cursor")]
     /// Custom cursor image.
-    Custom(CustomCursor),
+    Custom(#[template(CustomCursorTemplate)] CustomCursor),
     #[default]
     /// System provided cursor icon.
     System(SystemCursorIcon),
+}
+
+/// A [`Template`] for [`CustomCursor`] that allows it to be used in `FromTemplate` derives.
+///
+/// This exists because [`CustomCursor`] does not implement [`Default`], which is required
+/// by the blanket [`Template`] implementation.
+///
+/// We don't want to add a `Default` implementation for `CustomCursor`,
+/// because no meaningful default exists.
+#[cfg(feature = "custom_cursor")]
+#[derive(Debug)]
+pub struct CustomCursorTemplate(pub CustomCursor);
+
+#[cfg(feature = "custom_cursor")]
+impl Default for CustomCursorTemplate {
+    fn default() -> Self {
+        Self(CustomCursor::Image(Default::default()))
+    }
+}
+
+#[cfg(feature = "custom_cursor")]
+impl Template for CustomCursorTemplate {
+    type Output = CustomCursor;
+
+    fn build_template(&self, _context: &mut TemplateContext) -> Result<Self::Output> {
+        Ok(self.0.clone())
+    }
+
+    fn clone_template(&self) -> Self {
+        Self(self.0.clone())
+    }
 }
 
 /// A resource used to override any [`EntityCursor`] cursor changes.
