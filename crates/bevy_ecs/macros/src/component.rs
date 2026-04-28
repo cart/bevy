@@ -111,6 +111,8 @@ pub fn derive_resource(input: TokenStream) -> TokenStream {
                 ::core::option::Option::None
             }
         }
+        impl #impl_generics #bevy_ecs_path::component::Spawnable for #struct_name #type_generics #where_clause {
+        }
     });
 
     // Implement the Resource trait.
@@ -325,7 +327,7 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
     };
 
     #[cfg(feature = "scene")]
-    let scene_constructor = {
+    let (scene_constructor, spawnable) = {
         if attrs.scene.is_some() || attrs.scene_props.is_some() {
             use crate::scene::Scene;
 
@@ -341,19 +343,34 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
             register_required.push(quote! {
                 required_components.register_required(|| #bevy_scene::SceneComponent::new::<#struct_name #type_generics>(false));
             });
-            crate::scene::derive_scene_constructor(
-                &ast,
-                &bevy_ecs_path,
-                &bevy_scene,
-                scene,
-                scene_props,
+            (
+                crate::scene::derive_scene_constructor(
+                    &ast,
+                    &bevy_ecs_path,
+                    &bevy_scene,
+                    scene,
+                    scene_props,
+                ),
+                proc_macro2::TokenStream::new(),
             )
         } else {
-            proc_macro2::TokenStream::new()
+            (
+                proc_macro2::TokenStream::new(),
+                quote! {
+                    impl #impl_generics #bevy_ecs_path::component::Spawnable for #struct_name #type_generics #where_clause {
+                    }
+                },
+            )
         }
     };
     #[cfg(not(feature = "scene"))]
-    let scene_constructor = proc_macro2::TokenStream::new();
+    let (scene_constructor, spawnable) = (
+        proc_macro2::TokenStream::new(),
+        quote! {
+            impl #impl_generics #bevy_ecs_path::component::Spawnable for #struct_name #type_generics #where_clause {
+            }
+        },
+    );
 
     // This puts `register_required` before `register_recursive_requires` to ensure that the constructors of _all_ top
     // level components are initialized first, giving them precedence over recursively defined constructors for the same component type
@@ -391,6 +408,8 @@ pub fn derive_component(input: TokenStream) -> TokenStream {
         #relationship_target
 
         #scene_constructor
+
+        #spawnable
     })
 }
 

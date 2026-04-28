@@ -1,7 +1,7 @@
 use bevy_app::{Plugin, PreUpdate};
 use bevy_ecs::{
     bundle::Bundle,
-    component::Component,
+    component::{Component, Spawnable},
     entity::Entity,
     hierarchy::{ChildOf, Children},
     lifecycle::RemovedComponents,
@@ -160,11 +160,11 @@ pub struct ButtonBundleProps {
 ///
 ///  These events can be disabled by adding an [`bevy_ui::InteractionDisabled`] component to the entity
 #[deprecated(since = "0.19.0", note = "Use the button() BSN function")]
-pub fn button_bundle<C: SpawnableList<ChildOf> + Send + Sync + 'static, B: Bundle>(
+pub fn button_bundle<C: SpawnableList<ChildOf> + Send + Sync + 'static, B: Bundle + Spawnable>(
     props: ButtonBundleProps,
     overrides: B,
     children: C,
-) -> impl Bundle {
+) -> impl Bundle + Spawnable {
     (
         Node {
             height: size::ROW_HEIGHT,

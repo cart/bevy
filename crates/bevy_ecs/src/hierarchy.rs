@@ -10,7 +10,7 @@
 use crate::reflect::{ReflectComponent, ReflectFromWorld};
 use crate::{
     bundle::Bundle,
-    component::Component,
+    component::{Component, Spawnable},
     entity::Entity,
     relationship::{RelatedSpawner, RelatedSpawnerCommands},
     system::EntityCommands,
@@ -369,7 +369,7 @@ impl<'w> EntityWorldMut<'w> {
     /// For efficient spawning of multiple children, use [`with_children`].
     ///
     /// [`with_children`]: EntityWorldMut::with_children
-    pub fn with_child(&mut self, bundle: impl Bundle) -> &mut Self {
+    pub fn with_child(&mut self, bundle: impl Bundle + Spawnable) -> &mut Self {
         let parent = self.id();
         self.world_scope(|world| {
             world.spawn((bundle, ChildOf(parent)));

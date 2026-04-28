@@ -14,7 +14,7 @@ use core::any::Any;
 use core::marker::PhantomData;
 
 use crate::{
-    component::{ComponentCloneBehavior, ComponentId, Mutable, StorageType},
+    component::{ComponentCloneBehavior, ComponentId, Mutable, Spawnable, StorageType},
     error::{ErrorContext, ErrorHandler},
     event::EventKey,
     lifecycle::{ComponentHook, HookContext},
@@ -363,6 +363,8 @@ impl Observer {
     }
 }
 
+impl Spawnable for Observer {}
+
 impl Component for Observer {
     const STORAGE_TYPE: StorageType = StorageType::SparseSet;
     type Mutability = Mutable;
@@ -508,6 +510,8 @@ impl ObservedBy {
         &self.0
     }
 }
+
+impl Spawnable for ObservedBy {}
 
 impl Component for ObservedBy {
     const STORAGE_TYPE: StorageType = StorageType::SparseSet;

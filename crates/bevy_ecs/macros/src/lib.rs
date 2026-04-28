@@ -155,6 +155,9 @@ pub fn derive_bundle(input: TokenStream) -> TokenStream {
     };
 
     let dynamic_bundle_impl = quote! {
+        // TODO: THIS SHOULD ONLY BE IMPLEMENTED IF ALL COMPONENTS ARE SPAWNABLE
+        impl #impl_generics #ecs_path::component::Spawnable for #struct_name #ty_generics #where_clause {
+        }
         impl #impl_generics #ecs_path::bundle::DynamicBundle for #struct_name #ty_generics #where_clause {
             type Effect = ();
             #[allow(unused_variables)]

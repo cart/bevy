@@ -1,5 +1,6 @@
 use crate::{
     bundle::Bundle,
+    component::Spawnable,
     entity::{hash_set::EntityHashSet, Entity},
     prelude::Children,
     relationship::{
@@ -15,7 +16,10 @@ use super::OrderedRelationshipSourceCollection;
 
 impl<'w> EntityWorldMut<'w> {
     /// Spawns a entity related to this entity (with the `R` relationship) by taking a bundle
-    pub fn with_related<R: Relationship>(&mut self, bundle: impl Bundle) -> &mut Self {
+    pub fn with_related<R: Relationship + Spawnable>(
+        &mut self,
+        bundle: impl Bundle + Spawnable,
+    ) -> &mut Self {
         let parent = self.id();
         self.world_scope(|world| {
             world.spawn((bundle, R::from(parent)));
@@ -24,7 +28,7 @@ impl<'w> EntityWorldMut<'w> {
     }
 
     /// Spawns entities related to this entity (with the `R` relationship) by taking a function that operates on a [`RelatedSpawner`].
-    pub fn with_related_entities<R: Relationship>(
+    pub fn with_related_entities<R: Relationship + Spawnable>(
         &mut self,
         func: impl FnOnce(&mut RelatedSpawner<R>),
     ) -> &mut Self {
@@ -568,7 +572,7 @@ pub struct RelatedSpawner<'w, R: Relationship> {
     _marker: PhantomData<R>,
 }
 
-impl<'w, R: Relationship> RelatedSpawner<'w, R> {
+impl<'w, R: Relationship + Spawnable> RelatedSpawner<'w, R> {
     /// Creates a new instance that will spawn entities targeting the `target` entity.
     pub fn new(world: &'w mut World, target: Entity) -> Self {
         Self {
@@ -580,7 +584,7 @@ impl<'w, R: Relationship> RelatedSpawner<'w, R> {
 
     /// Spawns an entity with the given `bundle` and an `R` relationship targeting the `target`
     /// entity this spawner was initialized with.
-    pub fn spawn(&mut self, bundle: impl Bundle) -> EntityWorldMut<'_> {
+    pub fn spawn(&mut self, bundle: impl Bundle + Spawnable) -> EntityWorldMut<'_> {
         self.world.spawn((R::from(self.target), bundle))
     }
 

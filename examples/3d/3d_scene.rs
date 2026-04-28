@@ -9,6 +9,33 @@ fn main() {
         .run();
 }
 
+#[derive(Component, Default, Clone)]
+#[component(scene)]
+struct Player;
+
+impl Player {
+    fn scene() -> impl Scene {
+        bsn! {}
+    }
+}
+
+fn setup(world: &mut World) {
+    world.spawn(Player::default());
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /// set up a simple 3D scene
 fn scene() -> impl SceneList {
     bsn_list! [

@@ -11,6 +11,7 @@ pub use constants::*;
 pub use info::*;
 pub use register::*;
 pub use required::*;
+use variadics_please::all_tuples;
 
 use crate::{
     entity::EntityMapper,
@@ -785,3 +786,14 @@ impl<T: Component> FromWorld for InitComponentId<T> {
         }
     }
 }
+
+pub trait Spawnable {}
+
+macro_rules! spawnable_impl {
+    ($($spawnable: ident),*) => {
+        impl<$($spawnable: Spawnable),*> Spawnable for ($($spawnable,)*) {
+        }
+    }
+}
+
+all_tuples!(spawnable_impl, 0, 12, S);

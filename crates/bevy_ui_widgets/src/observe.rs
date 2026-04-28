@@ -6,6 +6,7 @@ use core::{marker::PhantomData, mem};
 
 use bevy_ecs::{
     bundle::{Bundle, DynamicBundle},
+    component::Spawnable,
     event::EntityEvent,
     system::IntoObserverSystem,
 };
@@ -39,6 +40,15 @@ unsafe impl<
         // SAFETY: Empty iterator
         core::iter::empty()
     }
+}
+
+impl<
+        E: EntityEvent,
+        B: Bundle,
+        M: Send + Sync + 'static,
+        I: IntoObserverSystem<E, B, M> + Send + Sync,
+    > Spawnable for AddObserver<E, B, M, I>
+{
 }
 
 impl<E: EntityEvent, B: Bundle, M, I: IntoObserverSystem<E, B, M>> DynamicBundle

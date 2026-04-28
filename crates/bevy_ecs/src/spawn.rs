@@ -4,6 +4,7 @@
 use crate::{
     bundle::{Bundle, DynamicBundle, InsertMode, NoBundleEffect},
     change_detection::MaybeLocation,
+    component::Spawnable,
     entity::Entity,
     relationship::{RelatedSpawner, Relationship, RelationshipHookMode, RelationshipTarget},
     world::{EntityWorldMut, World},
@@ -38,7 +39,7 @@ use variadics_please::all_tuples_enumerated;
 ///     )),
 /// ));
 /// ```
-pub struct Spawn<B: Bundle>(pub B);
+pub struct Spawn<B: Bundle + Spawnable>(pub B);
 
 /// A spawn-able list of changes to a given [`World`] and relative to a given [`Entity`]. This is generally used
 /// for spawning "related" entities, such as children.
@@ -55,7 +56,9 @@ pub trait SpawnableList<R>: Sized {
     fn size_hint(&self) -> usize;
 }
 
-impl<R: Relationship, B: Bundle<Effect: NoBundleEffect>> SpawnableList<R> for Vec<B> {
+impl<R: Relationship + Spawnable, B: Bundle<Effect: NoBundleEffect> + Spawnable> SpawnableList<R>
+    for Vec<B>
+{
     fn spawn(ptr: MovingPtr<'_, Self>, world: &mut World, entity: Entity) {
         let mapped_bundles = ptr.read().into_iter().map(|b| (R::from(entity), b));
         world.spawn_batch(mapped_bundles);
@@ -66,10 +69,10 @@ impl<R: Relationship, B: Bundle<Effect: NoBundleEffect>> SpawnableList<R> for Ve
     }
 }
 
-impl<R: Relationship, B: Bundle> SpawnableList<R> for Spawn<B> {
+impl<R: Relationship + Spawnable, B: Bundle + Spawnable> SpawnableList<R> for Spawn<B> {
     fn spawn(this: MovingPtr<'_, Self>, world: &mut World, entity: Entity) {
         #[track_caller]
-        fn spawn<B: Bundle, R: Relationship>(
+        fn spawn<B: Bundle + Spawnable, R: Relationship + Spawnable>(
             this: MovingPtr<'_, Spawn<B>>,
             world: &mut World,
             entity: Entity,
@@ -118,8 +121,11 @@ impl<R: Relationship, B: Bundle> SpawnableList<R> for Spawn<B> {
 /// ```
 pub struct SpawnIter<I>(pub I);
 
-impl<R: Relationship, I: Iterator<Item = B> + Send + Sync + 'static, B: Bundle> SpawnableList<R>
-    for SpawnIter<I>
+impl<
+        R: Relationship + Spawnable,
+        I: Iterator<Item = B> + Send + Sync + 'static,
+        B: Bundle + Spawnable,
+    > SpawnableList<R> for SpawnIter<I>
 {
     fn spawn(mut this: MovingPtr<'_, Self>, world: &mut World, entity: Entity) {
         for bundle in &mut this.0 {
@@ -154,8 +160,8 @@ impl<R: Relationship, I: Iterator<Item = B> + Send + Sync + 'static, B: Bundle> 
 /// ```
 pub struct SpawnWith<F>(pub F);
 
-impl<R: Relationship, F: FnOnce(&mut RelatedSpawner<R>) + Send + Sync + 'static> SpawnableList<R>
-    for SpawnWith<F>
+impl<R: Relationship + Spawnable, F: FnOnce(&mut RelatedSpawner<R>) + Send + Sync + 'static>
+    SpawnableList<R> for SpawnWith<F>
 {
     fn spawn(this: MovingPtr<'_, Self>, world: &mut World, entity: Entity) {
         world
@@ -201,7 +207,7 @@ impl<I> WithRelated<I> {
     }
 }
 
-impl<R: Relationship, I: Iterator<Item = Entity>> SpawnableList<R> for WithRelated<I> {
+impl<R: Relationship + Spawnable, I: Iterator<Item = Entity>> SpawnableList<R> for WithRelated<I> {
     fn spawn(mut this: MovingPtr<'_, Self>, world: &mut World, entity: Entity) {
         let related = (&mut this.0).collect::<Vec<_>>();
         world.entity_mut(entity).add_related::<R>(&related);
@@ -238,7 +244,7 @@ impl<R: Relationship, I: Iterator<Item = Entity>> SpawnableList<R> for WithRelat
 /// ```
 pub struct WithOneRelated(pub Entity);
 
-impl<R: Relationship> SpawnableList<R> for WithOneRelated {
+impl<R: Relationship + Spawnable> SpawnableList<R> for WithOneRelated {
     fn spawn(this: MovingPtr<'_, Self>, world: &mut World, entity: Entity) {
         world.entity_mut(entity).add_one_related::<R>(this.read().0);
     }
@@ -251,7 +257,7 @@ impl<R: Relationship> SpawnableList<R> for WithOneRelated {
 macro_rules! spawnable_list_impl {
     ($(#[$meta:meta])* $(($index:tt, $list: ident, $alias: ident)),*) => {
         $(#[$meta])*
-        impl<R: Relationship, $($list: SpawnableList<R>),*> SpawnableList<R> for ($($list,)*) {
+        impl<R: Relationship + Spawnable, $($list: SpawnableList<R>),*> SpawnableList<R> for ($($list,)*) {
             #[expect(
                 clippy::allow_attributes,
                 reason = "This is a tuple-related macro; as such, the lints below may not always apply."
@@ -289,13 +295,13 @@ all_tuples_enumerated!(
 /// 2. Spawns a [`SpawnableList`] of related entities with a given [`Relationship`].
 ///
 /// This is intended to be created using [`SpawnRelated`].
-pub struct SpawnRelatedBundle<R: Relationship, L: SpawnableList<R>> {
+pub struct SpawnRelatedBundle<R: Relationship + Spawnable, L: SpawnableList<R>> {
     list: L,
     marker: PhantomData<R>,
 }
 
 // SAFETY: This internally relies on the RelationshipTarget's Bundle implementation, which is sound.
-unsafe impl<R: Relationship, L: SpawnableList<R> + Send + Sync + 'static> Bundle
+unsafe impl<R: Relationship + Spawnable, L: SpawnableList<R> + Send + Sync + 'static> Bundle
     for SpawnRelatedBundle<R, L>
 {
     fn component_ids(
@@ -311,7 +317,12 @@ unsafe impl<R: Relationship, L: SpawnableList<R> + Send + Sync + 'static> Bundle
     }
 }
 
-impl<R: Relationship, L: SpawnableList<R>> DynamicBundle for SpawnRelatedBundle<R, L> {
+impl<R: Relationship + Spawnable, L: SpawnableList<R> + Send + Sync + 'static> Spawnable
+    for SpawnRelatedBundle<R, L>
+{
+}
+
+impl<R: Relationship + Spawnable, L: SpawnableList<R>> DynamicBundle for SpawnRelatedBundle<R, L> {
     type Effect = Self;
 
     unsafe fn get_components(
@@ -361,7 +372,7 @@ pub struct SpawnOneRelated<R: Relationship, B: Bundle> {
     marker: PhantomData<R>,
 }
 
-impl<R: Relationship, B: Bundle> DynamicBundle for SpawnOneRelated<R, B> {
+impl<R: Relationship + Spawnable, B: Bundle + Spawnable> DynamicBundle for SpawnOneRelated<R, B> {
     type Effect = Self;
 
     unsafe fn get_components(
@@ -395,7 +406,7 @@ impl<R: Relationship, B: Bundle> DynamicBundle for SpawnOneRelated<R, B> {
 }
 
 // SAFETY: This internally relies on the RelationshipTarget's Bundle implementation, which is sound.
-unsafe impl<R: Relationship, B: Bundle> Bundle for SpawnOneRelated<R, B> {
+unsafe impl<R: Relationship + Spawnable, B: Bundle + Spawnable> Bundle for SpawnOneRelated<R, B> {
     fn component_ids(
         components: &mut crate::component::ComponentsRegistrator,
     ) -> impl Iterator<Item = crate::component::ComponentId> + use<R, B> {
@@ -409,11 +420,13 @@ unsafe impl<R: Relationship, B: Bundle> Bundle for SpawnOneRelated<R, B> {
     }
 }
 
+impl<R: Relationship + Spawnable, B: Bundle + Spawnable> Spawnable for SpawnOneRelated<R, B> {}
+
 /// [`RelationshipTarget`] methods that create a [`Bundle`] with a [`DynamicBundle::Effect`] that:
 ///
 /// 1. Contains the [`RelationshipTarget`] component, pre-allocated with the necessary space for spawned entities.
 /// 2. Spawns an entity (or a list of entities) that relate to the entity the [`Bundle`] is added to via the [`RelationshipTarget::Relationship`].
-pub trait SpawnRelated: RelationshipTarget {
+pub trait SpawnRelated: RelationshipTarget<Relationship: Spawnable> {
     /// Returns a [`Bundle`] containing this [`RelationshipTarget`] component. It also spawns a [`SpawnableList`] of entities, each related to the bundle's entity
     /// via [`RelationshipTarget::Relationship`]. The [`RelationshipTarget`] (when possible) will pre-allocate space for the related entities.
     ///
@@ -439,7 +452,7 @@ pub trait SpawnRelated: RelationshipTarget {
     fn spawn_one<B: Bundle>(bundle: B) -> SpawnOneRelated<Self::Relationship, B>;
 }
 
-impl<T: RelationshipTarget> SpawnRelated for T {
+impl<T: RelationshipTarget<Relationship: Spawnable>> SpawnRelated for T {
     fn spawn<L: SpawnableList<Self::Relationship>>(
         list: L,
     ) -> SpawnRelatedBundle<Self::Relationship, L> {

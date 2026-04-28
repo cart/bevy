@@ -3,7 +3,7 @@ use bevy_camera::visibility::Visibility;
 use bevy_ecs::{
     bundle::Bundle,
     children,
-    component::Component,
+    component::{Component, Spawnable},
     entity::Entity,
     hierarchy::{ChildOf, Children},
     lifecycle::RemovedComponents,
@@ -130,10 +130,10 @@ struct RadioMark;
 ///
 ///  These events can be disabled by adding an [`bevy_ui::InteractionDisabled`] component to the entity
 #[deprecated(since = "0.19.0", note = "Use the radio() BSN function")]
-pub fn radio_bundle<C: SpawnableList<ChildOf> + Send + Sync + 'static, B: Bundle>(
+pub fn radio_bundle<C: SpawnableList<ChildOf> + Send + Sync + 'static, B: Bundle + Spawnable>(
     overrides: B,
     label: C,
-) -> impl Bundle {
+) -> impl Bundle + Spawnable {
     (
         Node {
             display: Display::Flex,

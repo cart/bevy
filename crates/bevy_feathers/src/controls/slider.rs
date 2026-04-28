@@ -5,7 +5,7 @@ use bevy_color::Color;
 use bevy_ecs::{
     bundle::Bundle,
     children,
-    component::Component,
+    component::{Component, Spawnable},
     entity::Entity,
     hierarchy::Children,
     lifecycle::RemovedComponents,
@@ -131,74 +131,6 @@ impl FeathersSlider {
 #[derive(Component, Default, Clone, Reflect)]
 #[reflect(Component, Clone, Default)]
 struct SliderValueText;
-
-/// Spawn a new slider widget.
-///
-/// # Arguments
-///
-/// * `props` - construction properties for the slider.
-/// * `overrides` - a bundle of components that are merged in with the normal slider components.
-///
-/// # Emitted events
-///
-/// * [`bevy_ui_widgets::ValueChange<f32>`] when the slider value is changed.
-///
-///  These events can be disabled by adding an [`bevy_ui::InteractionDisabled`] component to the entity
-#[deprecated(since = "0.19.0", note = "Use the slider() BSN function")]
-pub fn slider_bundle<B: Bundle>(props: FeathersSliderProps, overrides: B) -> impl Bundle {
-    (
-        Node {
-            height: size::ROW_HEIGHT,
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            padding: UiRect::axes(Val::Px(8.0), Val::Px(0.)),
-            flex_grow: 1.0,
-            border_radius: RoundedCorners::All.to_border_radius(6.0),
-            ..Default::default()
-        },
-        Hovered::default(),
-        Slider {
-            track_click: TrackClick::Drag,
-            orientation: SliderOrientation::Horizontal,
-        },
-        FeathersSlider,
-        SliderValue(props.value),
-        SliderRange::new(props.min, props.max),
-        EntityCursor::System(bevy_window::SystemCursorIcon::EwResize),
-        TabIndex(0),
-        FocusIndicator,
-        // Use a gradient to draw the moving bar
-        BackgroundGradient(vec![Gradient::Linear(LinearGradient {
-            angle: PI * 0.5,
-            stops: vec![
-                ColorStop::new(Color::NONE, Val::Percent(0.)),
-                ColorStop::new(Color::NONE, Val::Percent(50.)),
-                ColorStop::new(Color::NONE, Val::Percent(50.)),
-                ColorStop::new(Color::NONE, Val::Percent(100.)),
-            ],
-            color_space: InterpolationColorSpace::Srgba,
-        })]),
-        overrides,
-        children![(
-            // Text container
-            Node {
-                display: Display::Flex,
-                position_type: PositionType::Absolute,
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..Default::default()
-            },
-            InheritableThemeTextColor(tokens::SLIDER_TEXT),
-            InheritableFont {
-                font_size: size::SMALL_FONT,
-                weight: FontWeight::NORMAL,
-                ..Default::default()
-            },
-            children![(Text::new("10.0"), ThemedText, SliderValueText,)],
-        )],
-    )
-}
 
 fn update_slider_styles(
     mut q_sliders: Query<

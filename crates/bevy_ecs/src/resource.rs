@@ -3,7 +3,7 @@
 use log::warn;
 
 use crate::{
-    component::{Component, ComponentId, Mutable},
+    component::{Component, ComponentId, Mutable, Spawnable},
     entity::Entity,
     lifecycle::HookContext,
     storage::SparseArray,
@@ -84,7 +84,7 @@ use bevy_platform::cell::SyncUnsafeCell;
     label = "invalid `Resource`",
     note = "consider annotating `{Self}` with `#[derive(Resource)]`"
 )]
-pub trait Resource: Component<Mutability = Mutable> {}
+pub trait Resource: Component<Mutability = Mutable> + Spawnable {}
 
 /// A cache that links each `ComponentId` from a resource to the corresponding entity.
 #[derive(Default)]

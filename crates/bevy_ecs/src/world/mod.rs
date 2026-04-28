@@ -46,7 +46,7 @@ use crate::{
     component::{
         Component, ComponentDescriptor, ComponentId, ComponentIds, ComponentInfo, Components,
         ComponentsQueuedRegistrator, ComponentsRegistrator, Mutable, RequiredComponents,
-        RequiredComponentsError,
+        RequiredComponentsError, Spawnable,
     },
     entity::{Entities, Entity, EntityAllocator, EntityNotSpawnedError, SpawnError},
     entity_disabling::DefaultQueryFilters,
@@ -1262,12 +1262,12 @@ impl World {
     /// assert_eq!(position.x, 2.0);
     /// ```
     #[track_caller]
-    pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut<'_> {
+    pub fn spawn<B: Bundle + Spawnable>(&mut self, bundle: B) -> EntityWorldMut<'_> {
         move_as_ptr!(bundle);
         self.spawn_with_caller(bundle, MaybeLocation::caller())
     }
 
-    pub(crate) fn spawn_with_caller<B: Bundle>(
+    pub(crate) fn spawn_with_caller<B: Bundle + Spawnable>(
         &mut self,
         bundle: MovingPtr<'_, B>,
         caller: MaybeLocation,
@@ -1339,7 +1339,7 @@ impl World {
     pub fn spawn_batch<I>(&mut self, iter: I) -> SpawnBatchIter<'_, I::IntoIter>
     where
         I: IntoIterator,
-        I::Item: Bundle<Effect: NoBundleEffect>,
+        I::Item: Bundle<Effect: NoBundleEffect> + Spawnable,
     {
         SpawnBatchIter::new(self, iter.into_iter(), MaybeLocation::caller())
     }

@@ -1,5 +1,6 @@
 use core::marker::PhantomData;
 
+use bevy_ecs::component::Spawnable;
 use bevy_ecs::prelude::*;
 use bevy_input_focus::tab_navigation::TabGroup;
 use bevy_scene::prelude::*;
@@ -109,7 +110,7 @@ pub struct VirtualKeyPressed<T> {
 #[expect(deprecated, reason = "uses the deprecated button_bundle")]
 pub fn virtual_keyboard_bundle<T>(
     keys: impl Iterator<Item = Vec<T>> + Send + Sync + 'static,
-) -> impl Bundle
+) -> impl Bundle + Spawnable
 where
     T: AsRef<str> + Clone + Send + Sync + 'static,
 {
