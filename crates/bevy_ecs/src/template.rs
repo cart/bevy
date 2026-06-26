@@ -4,7 +4,7 @@ pub use bevy_ecs_macros::FromTemplate;
 use core::{hash::Hash, ops::Deref};
 
 use crate::{
-    component::Mutable,
+    component::{Component, Mutable},
     entity::Entity,
     error::{BevyError, Result},
     resource::Resource,
@@ -62,7 +62,7 @@ impl<'a, 'w> TemplateContext<'a, 'w> {
     }
     /// Get the entity associated with the [`SceneEntityReference`], spawning a new one
     /// if this is the first call with this index.
-    pub fn get_entity(&mut self, reference: SceneEntityReference) -> Entity {
+    pub fn get_scene_entity(&mut self, reference: SceneEntityReference) -> Entity {
         self.entity_references.get(
             reference,
             // Safety: only used to create a new Entity
@@ -86,6 +86,11 @@ impl<'a, 'w> TemplateContext<'a, 'w> {
     #[inline]
     pub fn resource_entity<R: Resource>(&self) -> Option<Entity> {
         self.entity.resource_entity::<R>()
+    }
+
+    /// Returns the component for a given `entity`, if it exists.
+    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+        self.entity.world().get::<C>(entity)
     }
 }
 
@@ -453,7 +458,7 @@ impl Template for EntityTemplate {
     fn build_template(&self, context: &mut TemplateContext) -> Result<Self::Output> {
         Ok(match self {
             Self::Entity(entity) => *entity,
-            Self::SceneEntityReference(reference) => context.get_entity(*reference),
+            Self::SceneEntityReference(reference) => context.get_scene_entity(*reference),
             Self::None => {
                 return Err(BevyError::error(
                     "Failed to specify an entity for this EntityTemplate",

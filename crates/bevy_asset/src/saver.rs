@@ -6,18 +6,18 @@
 
 use crate::{
     io::{AssetWriterError, MissingAssetSourceError, MissingAssetWriterError, Writer},
-    meta::{AssetAction, AssetMeta, AssetMetaDyn, Settings},
+    meta::{AssetAction, AssetMeta, AssetMetaDyn, Empty, Settings},
     transformer::TransformedAsset,
-    Asset, AssetContainer, AssetId, AssetLoader, AssetPath, AssetServer, ErasedLoadedAsset, Handle,
-    LabeledAsset, UntypedAssetId, UntypedHandle,
+    Asset, AssetContainer, AssetData, AssetId, AssetLoader, AssetPath, AssetServer,
+    ErasedLoadedAsset, Handle, LabeledAsset, UntypedHandle,
 };
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
 use atomicow::CowArc;
-use bevy_ecs::error::BevyError;
+use bevy_ecs::{entity::Entity, error::BevyError};
 use bevy_platform::collections::{hash_map::Entry, HashMap};
 use bevy_reflect::TypePath;
 use bevy_tasks::{BoxedFuture, ConditionalSendFuture};
-use core::{any::TypeId, borrow::Borrow, ops::Deref};
+use core::{borrow::Borrow, marker::PhantomData, ops::Deref};
 use futures_lite::AsyncWriteExt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -105,7 +105,7 @@ pub struct SavedAsset<'a, 'b, A: Asset> {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    asset_id_to_asset_index: Moo<'b, HashMap<UntypedAssetId, usize>>,
+    entity_to_asset_index: Moo<'b, HashMap<Entity, usize>>,
 }
 
 impl<A: Asset> Deref for SavedAsset<'_, '_, A> {
@@ -121,13 +121,13 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
         value: &'a A,
         labeled_saved_assets: &'b Vec<LabeledSavedAsset<'a>>,
         label_to_asset_index: &'b HashMap<CowArc<'a, str>, usize>,
-        asset_id_to_asset_index: &'b HashMap<UntypedAssetId, usize>,
+        entity_to_asset_index: &'b HashMap<Entity, usize>,
     ) -> Self {
         Self {
             value,
             labeled_assets: Moo::Borrowed(labeled_saved_assets),
             label_to_asset_index: Moo::Borrowed(label_to_asset_index),
-            asset_id_to_asset_index: Moo::Borrowed(asset_id_to_asset_index),
+            entity_to_asset_index: Moo::Borrowed(entity_to_asset_index),
         }
     }
 
@@ -135,7 +135,7 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
         value: &'a A,
         labeled_assets: &'a [LabeledAsset],
         label_to_asset_index: &'a HashMap<CowArc<'static, str>, usize>,
-        asset_id_to_asset_index: &'a HashMap<UntypedAssetId, usize>,
+        entity_to_asset_index: &'a HashMap<Entity, usize>,
     ) -> Self {
         Self {
             value,
@@ -151,7 +151,7 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
                     .map(|(label, &index)| (CowArc::Borrowed(label.borrow()), index))
                     .collect(),
             ),
-            asset_id_to_asset_index: Moo::Borrowed(asset_id_to_asset_index),
+            entity_to_asset_index: Moo::Borrowed(entity_to_asset_index),
         }
     }
 
@@ -162,7 +162,7 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
             value,
             &asset.labeled_assets,
             &asset.label_to_asset_index,
-            &asset.asset_id_to_asset_index,
+            &asset.entity_to_asset_index,
         ))
     }
 
@@ -172,7 +172,7 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
             &asset.value,
             &asset.labeled_assets,
             &asset.label_to_asset_index,
-            &asset.asset_id_to_asset_index,
+            &asset.entity_to_asset_index,
         )
     }
 
@@ -182,7 +182,7 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
             value,
             labeled_assets: Moo::Owned(Vec::default()),
             label_to_asset_index: Moo::Owned(HashMap::default()),
-            asset_id_to_asset_index: Moo::Owned(HashMap::default()),
+            entity_to_asset_index: Moo::Owned(HashMap::default()),
         }
     }
 
@@ -195,7 +195,7 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
             value: self.value,
             labeled_assets: self.labeled_assets,
             label_to_asset_index: self.label_to_asset_index,
-            asset_id_to_asset_index: self.asset_id_to_asset_index,
+            entity_to_asset_index: self.entity_to_asset_index,
         }
     }
 
@@ -227,7 +227,7 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
         &self,
         id: impl Into<AssetId<B>>,
     ) -> Option<SavedAsset<'a, '_, B>> {
-        let index = self.asset_id_to_asset_index.get(&id.into().untyped())?;
+        let index = self.entity_to_asset_index.get(&id.into().entity())?;
         let labeled = &self.labeled_assets[*index];
         labeled.asset.downcast()
     }
@@ -238,9 +238,9 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
     /// [`Into<UntypedAssetId>`].
     pub fn get_erased_labeled_by_id(
         &self,
-        id: impl Into<UntypedAssetId>,
+        entity: impl Into<Entity>,
     ) -> Option<&ErasedSavedAsset<'a, '_>> {
-        let index = self.asset_id_to_asset_index.get(&id.into())?;
+        let index = self.entity_to_asset_index.get(&entity.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
@@ -252,14 +252,11 @@ impl<'a, 'b, A: Asset> SavedAsset<'a, 'b, A> {
         Some(labeled.handle.clone())
     }
 
-    /// Returns the [`Handle`] of the labeled asset with the provided 'label', if it exists and is an asset of type `B`
+    /// Returns the [`Handle`] of the labeled asset with the provided 'label', if it exists
     pub fn get_handle<B: Asset>(&self, label: impl AsRef<str>) -> Option<Handle<B>> {
         let index = self.label_to_asset_index.get(label.as_ref())?;
         let labeled = &self.labeled_assets[*index];
-        if let Ok(handle) = labeled.handle.clone().try_typed::<B>() {
-            return Some(handle);
-        }
-        None
+        Some(labeled.handle.clone().typed_unchecked::<B>())
     }
 
     /// Iterate over all labels for "labeled assets" in the loaded asset
@@ -277,7 +274,7 @@ pub struct ErasedSavedAsset<'a: 'b, 'b> {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    asset_id_to_asset_index: Moo<'b, HashMap<UntypedAssetId, usize>>,
+    entity_to_asset_index: Moo<'b, HashMap<Entity, usize>>,
 }
 
 impl<'a> ErasedSavedAsset<'a, '_> {
@@ -298,7 +295,7 @@ impl<'a> ErasedSavedAsset<'a, '_> {
                     .map(|(label, &index)| (CowArc::Borrowed(label.borrow()), index))
                     .collect(),
             ),
-            asset_id_to_asset_index: Moo::Borrowed(&asset.asset_id_to_asset_index),
+            entity_to_asset_index: Moo::Borrowed(&asset.entity_to_asset_index),
         }
     }
 }
@@ -313,7 +310,7 @@ impl<'a> ErasedSavedAsset<'a, '_> {
             value,
             &self.labeled_assets,
             &self.label_to_asset_index,
-            &self.asset_id_to_asset_index,
+            &self.entity_to_asset_index,
         ))
     }
 }
@@ -350,7 +347,7 @@ pub struct SavedAssetBuilder<'a> {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    asset_id_to_asset_index: HashMap<UntypedAssetId, usize>,
+    entity_to_asset_index: HashMap<Entity, usize>,
     /// The asset path (with no label) that this saved asset is "tied" to.
     ///
     /// All labeled assets will use this asset path (with their substituted labels). Note labeled
@@ -371,7 +368,7 @@ impl<'a> SavedAssetBuilder<'a> {
             asset_path,
             labeled_assets: Default::default(),
             label_to_asset_index: Default::default(),
-            asset_id_to_asset_index: Default::default(),
+            entity_to_asset_index: Default::default(),
         }
     }
 
@@ -391,18 +388,17 @@ impl<'a> SavedAssetBuilder<'a> {
         asset: SavedAsset<'a, 'a, A>,
     ) -> Handle<A> {
         let label = label.into();
-        let handle = Handle::Strong(
-            self.asset_server
-                .read_infos()
-                .handle_providers
-                .get(&TypeId::of::<A>())
-                .expect("asset type has been initialized")
-                .reserve_handle_internal(
-                    false,
-                    Some(self.asset_path.clone().with_label(label.to_string())),
-                    None,
-                ),
-        );
+        let handle = Handle {
+            entity_handle: self
+                .asset_server
+                .data
+                .remote_allocator
+                .alloc_handle_with_data(AssetData {
+                    path: Some(self.asset_path.clone().with_label(label.to_string())),
+                    ..AssetData::new::<A>()
+                }),
+            _marker: PhantomData,
+        };
         self.add_labeled_asset_with_existing_handle(label, asset, handle.clone());
         handle
     }
@@ -438,17 +434,15 @@ impl<'a> SavedAssetBuilder<'a> {
         asset: ErasedSavedAsset<'a, 'a>,
     ) -> UntypedHandle {
         let label = label.into();
-        let handle = UntypedHandle::Strong(
+        let handle = UntypedHandle(
             self.asset_server
-                .read_infos()
-                .handle_providers
-                .get(&asset.value.type_id())
-                .expect("asset type has been initialized")
-                .reserve_handle_internal(
-                    false,
-                    Some(self.asset_path.clone().with_label(label.to_string())),
-                    None,
-                ),
+                .data
+                .remote_allocator
+                .alloc_handle_with_data(AssetData {
+                    path: Some(self.asset_path.clone().with_label(label.to_string())),
+                    type_id_hint: Some(asset.value.type_id()),
+                    ..Default::default()
+                }),
         );
         self.add_labeled_asset_with_existing_handle_erased(label, asset, handle.clone());
         handle
@@ -468,17 +462,17 @@ impl<'a> SavedAssetBuilder<'a> {
             Entry::Occupied(entry) => {
                 let labeled_entry = &mut self.labeled_assets[*entry.get()];
                 if labeled.handle != labeled_entry.handle {
-                    self.asset_id_to_asset_index
-                        .remove(&labeled_entry.handle.id());
-                    self.asset_id_to_asset_index
-                        .insert(labeled.handle.id(), *entry.get());
+                    self.entity_to_asset_index
+                        .remove(&labeled_entry.handle.entity());
+                    self.entity_to_asset_index
+                        .insert(labeled.handle.entity(), *entry.get());
                 }
                 *labeled_entry = labeled;
             }
             Entry::Vacant(entry) => {
                 entry.insert(self.labeled_assets.len());
-                self.asset_id_to_asset_index
-                    .insert(labeled.handle.id(), self.labeled_assets.len());
+                self.entity_to_asset_index
+                    .insert(labeled.handle.entity(), self.labeled_assets.len());
                 self.labeled_assets.push(labeled);
             }
         }
@@ -493,7 +487,7 @@ impl<'a> SavedAssetBuilder<'a> {
             value: asset,
             labeled_assets: Moo::Owned(self.labeled_assets),
             label_to_asset_index: Moo::Owned(self.label_to_asset_index),
-            asset_id_to_asset_index: Moo::Owned(self.asset_id_to_asset_index),
+            entity_to_asset_index: Moo::Owned(self.entity_to_asset_index),
         }
     }
 }
@@ -551,7 +545,7 @@ pub async fn save_using_saver<S: AssetSaver>(
 
     file_writer.flush().await.map_err(AssetWriterError::Io)?;
 
-    let meta = AssetMeta::<S::OutputLoader, ()>::new(AssetAction::Load {
+    let meta = AssetMeta::<S::OutputLoader, Empty>::new(AssetAction::Load {
         loader: S::OutputLoader::type_path().into(),
         settings: loader_settings,
     });
@@ -588,7 +582,7 @@ pub(crate) mod tests {
     use crate::{
         saver::{save_using_saver, AssetSaver, SavedAsset, SavedAssetBuilder},
         tests::{create_app, run_app_until, CoolText, CoolTextLoader, CoolTextRon, SubText},
-        AssetApp, AssetPath, AssetServer, Assets,
+        AssetApp, AssetPath, AssetServer, DirectAssetAccessExt,
     };
 
     fn new_subtext(text: &str) -> SubText {
@@ -696,22 +690,18 @@ pub(crate) mod tests {
             .unwrap();
         }
 
-        let readback = asset_server.load("some/target/path.cool.ron");
+        let readback = asset_server.load::<CoolText>("some/target/path.cool.ron");
         run_app_until(&mut app, |_| {
             asset_server.is_loaded(&readback).then_some(())
         });
 
-        let cool_text = app
-            .world()
-            .resource::<Assets<CoolText>>()
-            .get(&readback)
-            .unwrap();
+        let world = app.world();
+        let cool_text = world.get::<CoolText>(readback.entity()).unwrap();
 
-        let subtexts = app.world().resource::<Assets<SubText>>();
         let mut asset_labels = cool_text
             .sub_texts
             .iter()
-            .map(|handle| subtexts.get(handle).unwrap().text.clone())
+            .map(|handle| world.get::<SubText>(handle.entity()).unwrap().text.clone())
             .collect::<Vec<_>>();
         asset_labels.sort();
         assert_eq!(asset_labels, &["goodbye", "hiya", "idk"]);
@@ -724,14 +714,12 @@ pub(crate) mod tests {
         app.init_asset::<CoolText>()
             .init_asset::<SubText>()
             .register_asset_loader(CoolTextLoader);
+        let world = app.world_mut();
+        let hiya_handle = world.spawn_asset(new_subtext("hiya"));
+        let goodbye_handle = world.spawn_asset(new_subtext("goodbye"));
+        let idk_handle = world.spawn_asset(new_subtext("idk"));
 
-        let mut subtexts = app.world_mut().resource_mut::<Assets<SubText>>();
-        let hiya_handle = subtexts.add(new_subtext("hiya"));
-        let goodbye_handle = subtexts.add(new_subtext("goodbye"));
-        let idk_handle = subtexts.add(new_subtext("idk"));
-
-        let mut cool_texts = app.world_mut().resource_mut::<Assets<CoolText>>();
-        let cool_text_handle = cool_texts.add(CoolText {
+        let cool_text_handle = world.spawn_asset(CoolText {
             text: "wassup".into(),
             sub_texts: vec![
                 hiya_handle.clone(),
@@ -741,28 +729,27 @@ pub(crate) mod tests {
             ..Default::default()
         });
 
-        let subtexts = app.world().resource::<Assets<SubText>>();
-        let cool_texts = app.world().resource::<Assets<CoolText>>();
-        let asset_server = app.world().resource::<AssetServer>().clone();
+        let asset_server = world.resource::<AssetServer>().clone();
         let mut saved_asset_builder =
             SavedAssetBuilder::new(asset_server.clone(), "some/target/path.cool.ron".into());
         saved_asset_builder.add_labeled_asset_with_existing_handle(
             "hiya",
-            SavedAsset::from_asset(subtexts.get(&hiya_handle).unwrap()),
+            SavedAsset::from_asset(world.get::<SubText>(hiya_handle.entity()).unwrap()),
             hiya_handle,
         );
         saved_asset_builder.add_labeled_asset_with_existing_handle(
             "goodbye",
-            SavedAsset::from_asset(subtexts.get(&goodbye_handle).unwrap()),
+            SavedAsset::from_asset(world.get::<SubText>(goodbye_handle.entity()).unwrap()),
             goodbye_handle,
         );
         saved_asset_builder.add_labeled_asset_with_existing_handle(
             "idk",
-            SavedAsset::from_asset(subtexts.get(&idk_handle).unwrap()),
+            SavedAsset::from_asset(world.get::<SubText>(idk_handle.entity()).unwrap()),
             idk_handle,
         );
 
-        let saved_asset = saved_asset_builder.build(cool_texts.get(&cool_text_handle).unwrap());
+        let saved_asset =
+            saved_asset_builder.build(world.get::<CoolText>(cool_text_handle.entity()).unwrap());
         let mut asset_labels = saved_asset
             .label_to_asset_index
             .keys()
@@ -789,22 +776,23 @@ pub(crate) mod tests {
             .unwrap();
         }
 
-        let readback = asset_server.load("some/target/path.cool.ron");
+        let readback = asset_server.load::<CoolText>("some/target/path.cool.ron");
         run_app_until(&mut app, |_| {
             asset_server.is_loaded(&readback).then_some(())
         });
 
-        let cool_text = app
-            .world()
-            .resource::<Assets<CoolText>>()
-            .get(&readback)
-            .unwrap();
+        let cool_text = app.world().get::<CoolText>(readback.entity()).unwrap();
 
-        let subtexts = app.world().resource::<Assets<SubText>>();
         let mut asset_labels = cool_text
             .sub_texts
             .iter()
-            .map(|handle| subtexts.get(handle).unwrap().text.clone())
+            .map(|handle| {
+                app.world()
+                    .get::<SubText>(handle.entity())
+                    .unwrap()
+                    .text
+                    .clone()
+            })
             .collect::<Vec<_>>();
         asset_labels.sort();
         assert_eq!(asset_labels, &["goodbye", "hiya", "idk"]);

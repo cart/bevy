@@ -268,6 +268,12 @@ impl<'w, 's> Commands<'w, 's> {
         Commands::new_from_entities(queue, self.allocator, self.entities)
     }
 
+    /// Returns the current world's [`EntityAllocator`].
+    #[inline]
+    pub fn entity_allocator(&self) -> &EntityAllocator {
+        self.allocator
+    }
+
     /// Returns a [`Commands`] with a smaller lifetime.
     ///
     /// This is useful if you have `&mut Commands` but need `Commands`.

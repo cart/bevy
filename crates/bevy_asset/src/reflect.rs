@@ -1,19 +1,19 @@
-use alloc::{borrow::Cow, boxed::Box, format};
+use alloc::{borrow::Cow, boxed::Box, format, vec::Vec};
 use core::any::{Any, TypeId};
 use serde::{de::Error as _, ser::Error as _, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::warn;
 use uuid::Uuid;
 
-use bevy_ecs::world::{unsafe_world_cell::UnsafeWorldCell, World};
+use bevy_ecs::{entity::Entity, query::With, reflect::ReflectComponent, world::World};
 use bevy_reflect::{
     serde::{ReflectDeserializerProcessor, ReflectSerializerProcessor},
     CreateTypeData, FromReflect, PartialReflect, Reflect, TypeRegistry,
 };
 
 use crate::{
-    Asset, AssetId, AssetPath, AssetServer, Assets, Handle, InvalidGenerationError, LoadContext,
-    UntypedAssetId, UntypedHandle,
+    meta::Empty, Asset, AssetId, AssetPath, AssetServer, DirectAssetAccessExt, Handle, LoadContext,
+    UntypedHandle,
 };
 
 /// Type data for the [`TypeRegistry`] used to operate on reflected [`Asset`]s.
@@ -26,19 +26,9 @@ use crate::{
 #[derive(Clone)]
 pub struct ReflectAsset {
     handle_type_id: TypeId,
-    assets_resource_type_id: TypeId,
-
-    get: fn(&World, UntypedAssetId) -> Option<&dyn Reflect>,
-    // SAFETY:
-    // - may only be called with an [`UnsafeWorldCell`] which can be used to access the corresponding `Assets<T>` resource mutably
-    // - may only be used to access **at most one** access at once
-    get_unchecked_mut: unsafe fn(UnsafeWorldCell<'_>, UntypedAssetId) -> Option<&mut dyn Reflect>,
     add: fn(&mut World, &dyn PartialReflect) -> UntypedHandle,
-    insert:
-        fn(&mut World, UntypedAssetId, &dyn PartialReflect) -> Result<(), InvalidGenerationError>,
-    len: fn(&World) -> usize,
-    ids: for<'w> fn(&'w World) -> Box<dyn Iterator<Item = UntypedAssetId> + 'w>,
-    remove: fn(&mut World, UntypedAssetId) -> Option<Box<dyn Reflect>>,
+    len: fn(&mut World) -> usize,
+    ids: fn(&mut World) -> Vec<Entity>,
 }
 
 impl ReflectAsset {
@@ -47,111 +37,22 @@ impl ReflectAsset {
         self.handle_type_id
     }
 
-    /// The [`TypeId`] of the [`Assets<T>`] resource
-    pub fn assets_resource_type_id(&self) -> TypeId {
-        self.assets_resource_type_id
-    }
-
-    /// Equivalent of [`Assets::get`]
-    pub fn get<'w>(
-        &self,
-        world: &'w World,
-        asset_id: impl Into<UntypedAssetId>,
-    ) -> Option<&'w dyn Reflect> {
-        (self.get)(world, asset_id.into())
-    }
-
-    /// Equivalent of [`Assets::get_mut`]
-    pub fn get_mut<'w>(
-        &self,
-        world: &'w mut World,
-        asset_id: impl Into<UntypedAssetId>,
-    ) -> Option<&'w mut dyn Reflect> {
-        #[expect(
-            unsafe_code,
-            reason = "Use of unsafe `Self::get_unchecked_mut()` function."
-        )]
-        // SAFETY: unique world access
-        unsafe {
-            (self.get_unchecked_mut)(world.as_unsafe_world_cell(), asset_id.into())
-        }
-    }
-
-    /// Equivalent of [`Assets::get_mut`], but works with an [`UnsafeWorldCell`].
-    ///
-    /// Only use this method when you have ensured that you are the *only* one with access to the [`Assets`] resource of the asset type.
-    /// Furthermore, this does *not* allow you to have look up two distinct handles,
-    /// you can only have at most one alive at the same time.
-    /// This means that this is *not allowed*:
-    /// ```no_run
-    /// # use bevy_asset::{ReflectAsset, UntypedHandle};
-    /// # use bevy_ecs::prelude::World;
-    /// # let reflect_asset: ReflectAsset = unimplemented!();
-    /// # let mut world: World = unimplemented!();
-    /// # let handle_1: UntypedHandle = unimplemented!();
-    /// # let handle_2: UntypedHandle = unimplemented!();
-    /// let unsafe_world_cell = world.as_unsafe_world_cell();
-    /// let a = unsafe { reflect_asset.get_unchecked_mut(unsafe_world_cell, &handle_1).unwrap() };
-    /// let b = unsafe { reflect_asset.get_unchecked_mut(unsafe_world_cell, &handle_2).unwrap() };
-    /// // ^ not allowed, two mutable references through the same asset resource, even though the
-    /// // handles are distinct
-    ///
-    /// println!("a = {a:?}, b = {b:?}");
-    /// ```
-    ///
-    /// # Safety
-    /// This method does not prevent you from having two mutable pointers to the same data,
-    /// violating Rust's aliasing rules. To avoid this:
-    /// * Only call this method if you know that the [`UnsafeWorldCell`] may be used to access the corresponding `Assets<T>`
-    /// * Don't call this method more than once in the same scope.
-    #[expect(
-        unsafe_code,
-        reason = "This function calls unsafe code and has safety requirements."
-    )]
-    pub unsafe fn get_unchecked_mut<'w>(
-        &self,
-        world: UnsafeWorldCell<'w>,
-        asset_id: impl Into<UntypedAssetId>,
-    ) -> Option<&'w mut dyn Reflect> {
-        // SAFETY: requirements are deferred to the caller
-        unsafe { (self.get_unchecked_mut)(world, asset_id.into()) }
-    }
-
     /// Equivalent of [`Assets::add`]
     pub fn add(&self, world: &mut World, value: &dyn PartialReflect) -> UntypedHandle {
         (self.add)(world, value)
     }
-    /// Equivalent of [`Assets::insert`]
-    pub fn insert(
-        &self,
-        world: &mut World,
-        asset_id: impl Into<UntypedAssetId>,
-        value: &dyn PartialReflect,
-    ) -> Result<(), InvalidGenerationError> {
-        (self.insert)(world, asset_id.into(), value)
-    }
-
-    /// Equivalent of [`Assets::remove`]
-    pub fn remove(
-        &self,
-        world: &mut World,
-        asset_id: impl Into<UntypedAssetId>,
-    ) -> Option<Box<dyn Reflect>> {
-        (self.remove)(world, asset_id.into())
-    }
-
     /// Equivalent of [`Assets::len`]
-    pub fn len(&self, world: &World) -> usize {
+    pub fn len(&self, world: &mut World) -> usize {
         (self.len)(world)
     }
 
     /// Equivalent of [`Assets::is_empty`]
-    pub fn is_empty(&self, world: &World) -> bool {
+    pub fn is_empty(&self, world: &mut World) -> bool {
         self.len(world) == 0
     }
 
     /// Equivalent of [`Assets::ids`]
-    pub fn ids<'w>(&self, world: &'w World) -> impl Iterator<Item = UntypedAssetId> + 'w {
+    pub fn ids<'w>(&self, world: &'w mut World) -> Vec<Entity> {
         (self.ids)(world)
     }
 }
@@ -160,46 +61,24 @@ impl<A: Asset + FromReflect> CreateTypeData<A> for ReflectAsset {
     fn create_type_data(_input: ()) -> Self {
         ReflectAsset {
             handle_type_id: TypeId::of::<Handle<A>>(),
-            assets_resource_type_id: TypeId::of::<Assets<A>>(),
-            get: |world, asset_id| {
-                let assets = world.resource::<Assets<A>>();
-                let asset = assets.get(asset_id.typed_debug_checked());
-                asset.map(|asset| asset as &dyn Reflect)
-            },
-            get_unchecked_mut: |world, asset_id| {
-                // SAFETY: `get_unchecked_mut` must be called with `UnsafeWorldCell` having access to `Assets<A>`,
-                // and must ensure to only have at most one reference to it live at all times.
-                #[expect(unsafe_code, reason = "Uses `UnsafeWorldCell::get_resource_mut()`.")]
-                let assets = unsafe { world.get_resource_mut::<Assets<A>>().unwrap().into_inner() };
-                let asset = assets.get_mut(asset_id.typed_debug_checked());
-                asset.map(|asset| asset.into_inner() as &mut dyn Reflect)
-            },
             add: |world, value| {
-                let mut assets = world.resource_mut::<Assets<A>>();
                 let value: A = FromReflect::from_reflect(value)
                     .expect("could not call `FromReflect::from_reflect` in `ReflectAsset::add`");
-                assets.add(value).untyped()
+                let handle: Handle<A> = world.spawn_asset(value);
+                handle.untyped()
             },
-            insert: |world, asset_id, value| {
-                let mut assets = world.resource_mut::<Assets<A>>();
-                let value: A = FromReflect::from_reflect(value)
-                    .expect("could not call `FromReflect::from_reflect` in `ReflectAsset::set`");
-                assets.insert(asset_id.typed_debug_checked(), value)
-            },
-            len: |world| {
-                let assets = world.resource::<Assets<A>>();
-                assets.len()
-            },
+            len: |world| world.query_filtered::<(), With<A>>().iter(world).len(),
             ids: |world| {
-                let assets = world.resource::<Assets<A>>();
-                Box::new(assets.ids().map(AssetId::untyped))
-            },
-            remove: |world, asset_id| {
-                let mut assets = world.resource_mut::<Assets<A>>();
-                let value = assets.remove(asset_id.typed_debug_checked());
-                value.map(|value| Box::new(value) as Box<dyn Reflect>)
+                world
+                    .query_filtered::<Entity, With<A>>()
+                    .iter(world)
+                    .collect()
             },
         }
+    }
+
+    fn insert_dependencies(type_registration: &mut bevy_reflect::TypeRegistration) {
+        type_registration.register_type_data::<ReflectComponent, A>();
     }
 }
 
@@ -262,7 +141,7 @@ impl<A: Asset> CreateTypeData<Handle<A>> for ReflectHandle {
                     .downcast_ref::<Handle<A>>()
                     .map(|h| h.clone().untyped())
             },
-            typed: |handle: UntypedHandle| Box::new(handle.typed_debug_checked::<A>()),
+            typed: |handle: UntypedHandle| Box::new(handle.typed_unchecked::<A>()),
         }
     }
 }
@@ -318,23 +197,20 @@ impl ReflectSerializerProcessor for HandleSerializeProcessor {
             handle: &UntypedHandle,
             ephemeral_handle_behavior: EphemeralHandleBehavior,
         ) -> Result<HandleReference, SerializingEphemeralHandleError> {
-            Ok(match &handle {
-                UntypedHandle::Strong(inner) => match &inner.path {
-                    None => {
-                        match ephemeral_handle_behavior {
-                            EphemeralHandleBehavior::Silent => {}
-                            EphemeralHandleBehavior::Warn => {
-                                warn!("Serializing ephemeral handle {handle:?}. Ephemeral handles cannot be deserialized. Replacing with Handle::default");
-                            }
-                            EphemeralHandleBehavior::Error => {
-                                return Err(SerializingEphemeralHandleError(handle.clone()))
-                            }
+            Ok(match handle.path() {
+                None => {
+                    match ephemeral_handle_behavior {
+                        EphemeralHandleBehavior::Silent => {}
+                        EphemeralHandleBehavior::Warn => {
+                            warn!("Serializing ephemeral handle {handle:?}. Ephemeral handles cannot be deserialized. Replacing with Handle::default");
                         }
-                        HandleReference::Uuid(AssetId::<()>::DEFAULT_UUID)
+                        EphemeralHandleBehavior::Error => {
+                            return Err(SerializingEphemeralHandleError(handle.clone()))
+                        }
                     }
-                    Some(path) => HandleReference::Path(path.clone_owned()),
-                },
-                UntypedHandle::Uuid { uuid, .. } => HandleReference::Uuid(*uuid),
+                    HandleReference::Uuid(AssetId::<Empty>::DEFAULT_UUID)
+                }
+                Some(path) => HandleReference::Path(path.clone_owned()),
             })
         }
 
@@ -471,7 +347,7 @@ impl ReflectDeserializerProcessor for HandleDeserializeProcessor<'_> {
                 HandleReference::Path(path) => {
                     self.load_from_path.load_from_path_erased(type_id, path)
                 }
-                HandleReference::Uuid(uuid) => UntypedHandle::Uuid { type_id, uuid },
+                HandleReference::Uuid(uuid) => todo!("Re-add UUID support"),
             })));
         }
 
@@ -488,7 +364,7 @@ impl ReflectDeserializerProcessor for HandleDeserializeProcessor<'_> {
         let type_id = reflect_handle.asset_type_id;
         Ok(Ok(reflect_handle.typed(match handle_reference {
             HandleReference::Path(path) => self.load_from_path.load_from_path_erased(type_id, path),
-            HandleReference::Uuid(uuid) => UntypedHandle::Uuid { type_id, uuid },
+            HandleReference::Uuid(uuid) => todo!("Re-add UUID support"),
         })))
     }
 }
@@ -518,21 +394,20 @@ mod tests {
     use ron::ser::PrettyConfig;
     use serde::de::DeserializeSeed;
     use std::path::Path;
-    use uuid::Uuid;
 
     use crate::{
         tests::{create_app, run_app_until, CoolText, CoolTextLoader, CoolTextRon, SubText},
-        Asset, AssetApp, AssetServer, Assets, DirectAssetAccessExt, EphemeralHandleBehavior,
-        Handle, HandleDeserializeProcessor, HandleSerializeProcessor, LoadedUntypedAsset,
-        ReflectAsset, UntypedHandle,
+        Asset, AssetApp, AssetServer, DirectAssetAccessExt, EphemeralHandleBehavior, Handle,
+        HandleDeserializeProcessor, HandleSerializeProcessor, ReflectAsset, UntypedHandle,
     };
-    use bevy_ecs::reflect::AppTypeRegistry;
+    use bevy_ecs::reflect::{AppTypeRegistry, ReflectComponent};
     use bevy_reflect::{
         serde::{TypedReflectDeserializer, TypedReflectSerializer},
         FromReflect, Reflect, TypePath,
     };
 
     #[derive(Asset, Reflect)]
+    #[reflect(Asset)]
     struct AssetType {
         field: String,
     }
@@ -543,14 +418,20 @@ mod tests {
         app.init_asset::<AssetType>()
             .register_asset_reflect::<AssetType>();
 
-        let reflect_asset = {
+        let (reflect_asset, reflect_component) = {
             let type_registry = app.world().resource::<AppTypeRegistry>();
             let type_registry = type_registry.read();
 
-            type_registry
-                .get_type_data::<ReflectAsset>(TypeId::of::<AssetType>())
-                .unwrap()
-                .clone()
+            (
+                type_registry
+                    .get_type_data::<ReflectAsset>(TypeId::of::<AssetType>())
+                    .unwrap()
+                    .clone(),
+                type_registry
+                    .get_type_data::<ReflectComponent>(TypeId::of::<AssetType>())
+                    .unwrap()
+                    .clone(),
+            )
         };
 
         let value = AssetType {
@@ -559,27 +440,25 @@ mod tests {
 
         let handle = reflect_asset.add(app.world_mut(), &value);
         // struct is a reserved keyword, so we can't use it here
-        let strukt = reflect_asset
-            .get_mut(app.world_mut(), &handle)
-            .unwrap()
-            .reflect_mut()
-            .as_struct()
+        let mut reflect = reflect_component
+            .reflect_mut(app.world_mut().entity_mut(handle.entity()))
             .unwrap();
+        let strukt = reflect.reflect_mut().as_struct().unwrap();
         strukt
             .field_mut("field")
             .unwrap()
             .apply(&String::from("edited"));
 
-        assert_eq!(reflect_asset.len(app.world()), 1);
-        let ids: Vec<_> = reflect_asset.ids(app.world()).collect();
+        assert_eq!(reflect_asset.len(app.world_mut()), 1);
+        let ids: Vec<_> = reflect_asset.ids(app.world_mut());
         assert_eq!(ids.len(), 1);
         let id = ids[0];
 
-        let asset = reflect_asset.get(app.world(), id).unwrap();
+        let asset = reflect_component.reflect(app.world().entity(id)).unwrap();
         assert_eq!(asset.downcast_ref::<AssetType>().unwrap().field, "edited");
 
-        reflect_asset.remove(app.world_mut(), id).unwrap();
-        assert_eq!(reflect_asset.len(app.world()), 0);
+        reflect_component.remove(&mut app.world_mut().entity_mut(id));
+        assert_eq!(reflect_asset.len(app.world_mut()), 0);
     }
 
     fn serialize_as_cool_text(text: &str) -> String {
@@ -601,11 +480,8 @@ mod tests {
         struct Stuff {
             typed: Handle<CoolText>,
             untyped: UntypedHandle,
-            uuid: Handle<OtherAsset>,
             ephemeral: Handle<OtherAsset>,
         }
-
-        let uuid = Uuid::from_u128(123);
 
         // Initial app to serialize a `Stuff` instance.
         let ron_data = {
@@ -626,21 +502,14 @@ mod tests {
             let asset_server = app.world().resource::<AssetServer>().clone();
 
             let untyped = asset_server.load_builder().load_untyped("def.cool.ron");
-            run_app_until(&mut app, |_| asset_server.is_loaded(&untyped).then_some(()));
-            let untyped = app
-                .world()
-                .resource::<Assets<LoadedUntypedAsset>>()
-                .get(&untyped)
-                .unwrap()
-                .handle
-                .clone();
-
-            let ephemeral = app.world_mut().add_asset(OtherAsset);
+            run_app_until(&mut app, |_| {
+                asset_server.is_loaded(untyped.entity()).then_some(())
+            });
+            let ephemeral = app.world_mut().spawn_asset(OtherAsset);
 
             let stuff = Stuff {
                 typed: asset_server.load("abc.cool.ron"),
                 untyped,
-                uuid: uuid.into(),
                 ephemeral,
             };
 
@@ -689,30 +558,26 @@ mod tests {
         )
         .unwrap();
 
-        // The UUID handle matches.
-        assert_eq!(stuff.uuid, Handle::from(uuid));
         // The ephemeral handle was replaced by the default handle.
         assert_eq!(stuff.ephemeral, Handle::default());
 
         // The deserializer should have caused the handles to start loading.
         run_app_until(&mut app, |_| {
-            (asset_server.is_loaded(&stuff.typed) && asset_server.is_loaded(&stuff.untyped))
+            (asset_server.is_loaded(&stuff.typed) && asset_server.is_loaded(stuff.untyped.entity()))
                 .then_some(())
         });
 
         // Make sure that the handles actually do end up with the correct assets.
         assert_eq!(
             app.world()
-                .resource::<Assets<CoolText>>()
-                .get(&stuff.typed)
+                .get::<CoolText>(stuff.typed.entity())
                 .unwrap()
                 .text,
             "hello"
         );
         assert_eq!(
             app.world()
-                .resource::<Assets<CoolText>>()
-                .get(&stuff.untyped.try_typed::<CoolText>().unwrap())
+                .get::<CoolText>(stuff.untyped.entity())
                 .unwrap()
                 .text,
             "world"

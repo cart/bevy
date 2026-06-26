@@ -311,6 +311,7 @@ unsafe impl<A: AsAssetId> QueryFilter for AssetChanged<A> {
 #[cfg(test)]
 #[expect(clippy::print_stdout, reason = "Allowed in tests.")]
 mod tests {
+    use crate::direct_access_ext::AssetCommands;
     use crate::tests::create_app;
     use crate::{AssetEventSystems, Handle};
     use alloc::{vec, vec::Vec};
@@ -318,14 +319,14 @@ mod tests {
     use core::num::NonZero;
     use std::println;
 
-    use crate::{AssetApp, Assets};
+    use crate::AssetApp;
     use bevy_app::{App, AppExit, PostUpdate, Startup, Update};
     use bevy_ecs::schedule::IntoScheduleConfigs;
     use bevy_ecs::{
         component::Component,
         message::MessageWriter,
         resource::Resource,
-        system::{Commands, IntoSystem, Local, Query, Res, ResMut},
+        system::{Commands, IntoSystem, Local, Query, ResMut},
     };
     use bevy_reflect::TypePath;
 
@@ -383,22 +384,22 @@ mod tests {
 
     fn count_update(
         mut counter: ResMut<Counter>,
-        assets: Res<Assets<MyAsset>>,
+        assets: Query<&MyAsset>,
         query: Query<&MyComponent, AssetChanged<MyComponent>>,
     ) {
-        for handle in query.iter() {
-            let asset = assets.get(&handle.0).unwrap();
+        for my_component in query.iter() {
+            let asset = assets.get(my_component.0.entity()).unwrap();
             counter.0[asset.0] += 1;
         }
     }
 
-    fn update_some(mut assets: ResMut<Assets<MyAsset>>, mut run_count: Local<u32>) {
+    fn update_some(mut assets: Query<(Entity, &mut MyAsset)>, mut run_count: Local<u32>) {
         let mut update_index = |i| {
             let id = assets
                 .iter()
                 .find_map(|(h, a)| (a.0 == i).then_some(h))
                 .unwrap();
-            let mut asset = assets.get_mut(id).unwrap();
+            let (_, mut asset) = assets.get_mut(id).unwrap();
             println!("setting new value for {}", asset.0);
             asset.1 = "new_value";
         };
@@ -414,22 +415,22 @@ mod tests {
         *run_count += 1;
     }
 
-    fn add_some(
-        mut assets: ResMut<Assets<MyAsset>>,
-        mut cmds: Commands,
-        mut run_count: Local<u32>,
-    ) {
+    fn add_some(mut cmds: Commands, mut run_count: Local<u32>) {
         match *run_count {
             1 => {
-                cmds.spawn(MyComponent(assets.add(MyAsset(0, "init"))));
+                let asset = cmds.spawn_asset(MyAsset(0, "init"));
+                cmds.spawn(MyComponent(asset));
             }
             0 | 2 => {}
             3 => {
-                cmds.spawn(MyComponent(assets.add(MyAsset(1, "init"))));
-                cmds.spawn(MyComponent(assets.add(MyAsset(2, "init"))));
+                let asset1 = cmds.spawn_asset(MyAsset(1, "init"));
+                let asset2 = cmds.spawn_asset(MyAsset(2, "init"));
+                cmds.spawn(MyComponent(asset1));
+                cmds.spawn(MyComponent(asset2));
             }
             4.. => {
-                cmds.spawn(MyComponent(assets.add(MyAsset(3, "init"))));
+                let asset = cmds.spawn_asset(MyAsset(3, "init"));
+                cmds.spawn(MyComponent(asset));
             }
         };
         *run_count += 1;
@@ -468,18 +469,15 @@ mod tests {
 
         app.init_asset::<MyAsset>()
             .insert_resource(Counter(vec![0, 0]))
-            .add_systems(
-                Startup,
-                |mut cmds: Commands, mut assets: ResMut<Assets<MyAsset>>| {
-                    let asset0 = assets.add(MyAsset(0, "init"));
-                    let asset1 = assets.add(MyAsset(1, "init"));
-                    cmds.spawn(MyComponent(asset0.clone()));
-                    cmds.spawn(MyComponent(asset0));
-                    cmds.spawn(MyComponent(asset1.clone()));
-                    cmds.spawn(MyComponent(asset1.clone()));
-                    cmds.spawn(MyComponent(asset1));
-                },
-            )
+            .add_systems(Startup, |mut cmds: Commands| {
+                let asset0 = cmds.spawn_asset(MyAsset(0, "init"));
+                let asset1 = cmds.spawn_asset(MyAsset(1, "init"));
+                cmds.spawn(MyComponent(asset0.clone()));
+                cmds.spawn(MyComponent(asset0));
+                cmds.spawn(MyComponent(asset1.clone()));
+                cmds.spawn(MyComponent(asset1.clone()));
+                cmds.spawn(MyComponent(asset1));
+            })
             .add_systems(Update, update_some)
             .add_systems(PostUpdate, count_update.after(AssetEventSystems));
 

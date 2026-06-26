@@ -13,6 +13,99 @@ use core::{
 use serde::{de::Visitor, Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+use uuid::Uuid;
+
+#[derive(Clone, PartialEq, Eq, Hash, Reflect)]
+pub enum AssetReference<'a> {
+    Default,
+    Path(AssetPath<'a>),
+    Uuid(Uuid),
+}
+
+impl<'a> AssetReference<'a> {
+    /// This uuid _should_ never be valid. Assigning an asset to it will produce undefined behavior!
+    pub const INVALID_UUID: Uuid = Uuid::from_u128(108428345662029828789348721013522787528);
+
+    pub(crate) fn split(self) -> (Option<AssetPath<'a>>, Option<Uuid>, bool) {
+        match self {
+            AssetReference::Path(asset_path) => (Some(asset_path), None, false),
+            AssetReference::Uuid(uuid) => (None, Some(uuid), false),
+            AssetReference::Default => (None, None, true),
+        }
+    }
+
+    pub fn into_owned(self) -> AssetReference<'static> {
+        match self {
+            AssetReference::Path(asset_path) => AssetReference::Path(asset_path.into_owned()),
+            AssetReference::Uuid(uuid) => AssetReference::Uuid(uuid),
+            AssetReference::Default => AssetReference::Default,
+        }
+    }
+}
+
+impl<'a> Default for AssetReference<'a> {
+    fn default() -> Self {
+        Self::Uuid(Self::INVALID_UUID)
+    }
+}
+
+// This is only implemented for static lifetimes to ensure `Path::clone` does not allocate
+// by ensuring that this is stored as a `CowArc::Static`.
+// Please read https://github.com/bevyengine/bevy/issues/19844 before changing this!
+impl From<&'static str> for AssetReference<'static> {
+    #[inline]
+    fn from(asset_path: &'static str) -> Self {
+        AssetReference::Path(asset_path.into())
+    }
+}
+
+impl<'a> From<&'a String> for AssetReference<'a> {
+    #[inline]
+    fn from(asset_path: &'a String) -> Self {
+        AssetReference::Path(asset_path.into())
+    }
+}
+
+impl<'a> From<AssetPath<'a>> for AssetReference<'a> {
+    #[inline]
+    fn from(value: AssetPath<'a>) -> Self {
+        AssetReference::Path(value)
+    }
+}
+
+impl From<String> for AssetReference<'static> {
+    #[inline]
+    fn from(asset_path: String) -> Self {
+        AssetReference::Path(asset_path.into())
+    }
+}
+
+impl From<&'static Path> for AssetReference<'static> {
+    #[inline]
+    fn from(path: &'static Path) -> Self {
+        AssetReference::Path(path.into())
+    }
+}
+
+impl From<PathBuf> for AssetReference<'static> {
+    #[inline]
+    fn from(path: PathBuf) -> Self {
+        AssetReference::Path(path.into())
+    }
+}
+
+impl From<Uuid> for AssetReference<'static> {
+    #[inline]
+    fn from(value: Uuid) -> Self {
+        AssetReference::Uuid(value)
+    }
+}
+
+impl<'a, 'b> From<&'a AssetPath<'b>> for AssetReference<'b> {
+    fn from(value: &'a AssetPath<'b>) -> Self {
+        AssetReference::Path(value.clone())
+    }
+}
 
 /// Represents a path to an asset in a "virtual filesystem".
 ///

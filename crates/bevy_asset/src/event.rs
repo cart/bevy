@@ -1,5 +1,13 @@
-use crate::{Asset, AssetId, AssetLoadError, AssetPath, UntypedAssetId};
-use bevy_ecs::message::Message;
+use crate::{Asset, AssetId, AssetLoadError, AssetPath};
+use bevy_ecs::{
+    change_detection::DetectChanges,
+    entity::Entity,
+    event::EntityEvent,
+    message::{Message, MessageWriter},
+    query::Changed,
+    system::Query,
+    world::Ref,
+};
 use bevy_reflect::Reflect;
 use core::fmt::Debug;
 
@@ -27,7 +35,7 @@ impl<A: Asset> AssetLoadFailedEvent<A> {
 #[derive(Message, Clone, Debug)]
 pub struct UntypedAssetLoadFailedEvent {
     /// The stable identifier of the asset that failed to load.
-    pub id: UntypedAssetId,
+    pub entity: Entity,
     /// The asset path that was attempted.
     pub path: AssetPath<'static>,
     /// Why the asset failed to load.
@@ -37,7 +45,7 @@ pub struct UntypedAssetLoadFailedEvent {
 impl<A: Asset> From<&AssetLoadFailedEvent<A>> for UntypedAssetLoadFailedEvent {
     fn from(value: &AssetLoadFailedEvent<A>) -> Self {
         UntypedAssetLoadFailedEvent {
-            id: value.id.untyped(),
+            entity: value.id.entity(),
             path: value.path.clone(),
             error: value.error.clone(),
         }
@@ -58,6 +66,18 @@ pub enum AssetEvent<A: Asset> {
     Unused { id: AssetId<A> },
     /// Emitted whenever an [`Asset`] has been fully loaded (including its dependencies and all "recursive dependencies").
     LoadedWithDependencies { id: AssetId<A> },
+}
+
+#[derive(EntityEvent)]
+pub struct LoadedWithDependencies {
+    pub entity: Entity,
+}
+
+#[derive(EntityEvent)]
+pub struct LoadFailed {
+    pub entity: Entity,
+    /// Why the asset failed to load.
+    pub error: AssetLoadError,
 }
 
 impl<A: Asset> AssetEvent<A> {
@@ -127,3 +147,40 @@ impl<A: Asset> PartialEq for AssetEvent<A> {
 }
 
 impl<A: Asset> Eq for AssetEvent<A> {}
+
+pub(crate) fn produce_asset_modified_events<A: Asset>(
+    query: Query<(Entity, Ref<A>), Changed<A>>,
+    mut writer: MessageWriter<AssetEvent<A>>,
+) {
+    writer.write_batch(query.iter().filter_map(|(e, a)| {
+        if a.is_added() {
+            None
+        } else {
+            Some(AssetEvent::Modified { id: e.into() })
+        }
+    }));
+}
+
+pub mod hooks {
+    use bevy_ecs::{lifecycle::HookContext, world::DeferredWorld};
+
+    use crate::{Asset, AssetEvent};
+
+    pub fn on_add<A: Asset>(mut world: DeferredWorld, context: HookContext) {
+        world.write_message(AssetEvent::<A>::Added {
+            id: context.entity.into(),
+        });
+    }
+
+    pub fn on_remove<A: Asset>(mut world: DeferredWorld, context: HookContext) {
+        world.write_message(AssetEvent::<A>::Removed {
+            id: context.entity.into(),
+        });
+    }
+
+    pub fn on_despawn<A: Asset>(mut world: DeferredWorld, context: HookContext) {
+        world.write_message(AssetEvent::<A>::Unused {
+            id: context.entity.into(),
+        });
+    }
+}

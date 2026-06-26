@@ -5,11 +5,11 @@
 //! See [`AssetTransformer`] for details.
 
 use crate::{
-    meta::Settings, Asset, AssetId, ErasedLoadedAsset, Handle, LabeledAsset, UntypedAssetId,
-    UntypedHandle,
+    meta::Settings, Asset, AssetId, ErasedLoadedAsset, Handle, LabeledAsset, UntypedHandle,
 };
 use alloc::{boxed::Box, vec::Vec};
 use atomicow::CowArc;
+use bevy_ecs::entity::Entity;
 use bevy_platform::collections::{hash_map::Entry, HashMap};
 use bevy_reflect::TypePath;
 use bevy_tasks::ConditionalSendFuture;
@@ -54,7 +54,7 @@ pub struct TransformedAsset<A: Asset> {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    pub(crate) asset_id_to_asset_index: HashMap<UntypedAssetId, usize>,
+    pub(crate) entity_to_asset_index: HashMap<Entity, usize>,
 }
 
 impl<A: Asset> Deref for TransformedAsset<A> {
@@ -78,7 +78,7 @@ impl<A: Asset> TransformedAsset<A> {
                 value: *value,
                 labeled_assets: asset.labeled_assets,
                 label_to_asset_index: asset.label_to_asset_index,
-                asset_id_to_asset_index: asset.asset_id_to_asset_index,
+                entity_to_asset_index: asset.entity_to_asset_index,
             });
         }
         None
@@ -90,7 +90,7 @@ impl<A: Asset> TransformedAsset<A> {
             value: asset,
             labeled_assets: self.labeled_assets,
             label_to_asset_index: self.label_to_asset_index,
-            asset_id_to_asset_index: self.asset_id_to_asset_index,
+            entity_to_asset_index: self.entity_to_asset_index,
         }
     }
 
@@ -98,7 +98,7 @@ impl<A: Asset> TransformedAsset<A> {
     pub fn take_labeled_assets<B: Asset>(&mut self, labeled_source: TransformedAsset<B>) {
         self.labeled_assets = labeled_source.labeled_assets;
         self.label_to_asset_index = labeled_source.label_to_asset_index;
-        self.asset_id_to_asset_index = labeled_source.asset_id_to_asset_index;
+        self.entity_to_asset_index = labeled_source.entity_to_asset_index;
     }
 
     /// Retrieves the value of this asset.
@@ -126,7 +126,7 @@ impl<A: Asset> TransformedAsset<A> {
             value,
             labeled_assets: &mut labeled.asset.labeled_assets,
             label_to_asset_index: &mut labeled.asset.label_to_asset_index,
-            asset_id_to_asset_index: &mut labeled.asset.asset_id_to_asset_index,
+            entity_to_asset_index: &mut labeled.asset.entity_to_asset_index,
         })
     }
 
@@ -149,14 +149,14 @@ impl<A: Asset> TransformedAsset<A> {
         &mut self,
         id: impl Into<AssetId<B>>,
     ) -> Option<TransformedSubAsset<'_, B>> {
-        let index = self.asset_id_to_asset_index.get(&id.into().untyped())?;
+        let index = self.entity_to_asset_index.get(&id.into().entity())?;
         let labeled = &mut self.labeled_assets[*index];
         let value = labeled.asset.value.downcast_mut::<B>()?;
         Some(TransformedSubAsset {
             value,
             labeled_assets: &mut labeled.asset.labeled_assets,
             label_to_asset_index: &mut labeled.asset.label_to_asset_index,
-            asset_id_to_asset_index: &mut labeled.asset.asset_id_to_asset_index,
+            entity_to_asset_index: &mut labeled.asset.entity_to_asset_index,
         })
     }
 
@@ -166,9 +166,9 @@ impl<A: Asset> TransformedAsset<A> {
     /// [`Into<UntypedAssetId>`].
     pub fn get_erased_labeled_by_id(
         &self,
-        id: impl Into<UntypedAssetId>,
+        entity: impl Into<Entity>,
     ) -> Option<&ErasedLoadedAsset> {
-        let index = self.asset_id_to_asset_index.get(&id.into())?;
+        let index = self.entity_to_asset_index.get(&entity.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
@@ -192,10 +192,7 @@ impl<A: Asset> TransformedAsset<A> {
     {
         let index = self.label_to_asset_index.get(label)?;
         let labeled = &self.labeled_assets[*index];
-        if let Ok(handle) = labeled.handle.clone().try_typed::<B>() {
-            return Some(handle);
-        }
-        None
+        Some(labeled.handle.clone().typed_unchecked::<B>())
     }
 
     /// Adds `asset` as a labeled sub asset using `label` and `handle`
@@ -213,17 +210,17 @@ impl<A: Asset> TransformedAsset<A> {
             Entry::Occupied(entry) => {
                 let labeled_entry = &mut self.labeled_assets[*entry.get()];
                 if labeled.handle != labeled_entry.handle {
-                    self.asset_id_to_asset_index
-                        .remove(&labeled_entry.handle.id());
-                    self.asset_id_to_asset_index
-                        .insert(labeled.handle.id(), *entry.get());
+                    self.entity_to_asset_index
+                        .remove(&labeled_entry.handle.entity());
+                    self.entity_to_asset_index
+                        .insert(labeled.handle.entity(), *entry.get());
                 }
                 *labeled_entry = labeled;
             }
             Entry::Vacant(entry) => {
                 entry.insert(self.labeled_assets.len());
-                self.asset_id_to_asset_index
-                    .insert(labeled.handle.id(), self.labeled_assets.len());
+                self.entity_to_asset_index
+                    .insert(labeled.handle.entity(), self.labeled_assets.len());
                 self.labeled_assets.push(labeled);
             }
         }
@@ -244,7 +241,7 @@ pub struct TransformedSubAsset<'a, A: Asset> {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    asset_id_to_asset_index: &'a mut HashMap<UntypedAssetId, usize>,
+    entity_to_asset_index: &'a mut HashMap<Entity, usize>,
 }
 
 impl<'a, A: Asset> Deref for TransformedSubAsset<'a, A> {
@@ -268,7 +265,7 @@ impl<'a, A: Asset> TransformedSubAsset<'a, A> {
             value,
             labeled_assets: &mut asset.labeled_assets,
             label_to_asset_index: &mut asset.label_to_asset_index,
-            asset_id_to_asset_index: &mut asset.asset_id_to_asset_index,
+            entity_to_asset_index: &mut asset.entity_to_asset_index,
         })
     }
 
@@ -297,7 +294,7 @@ impl<'a, A: Asset> TransformedSubAsset<'a, A> {
             value,
             labeled_assets: &mut labeled.asset.labeled_assets,
             label_to_asset_index: &mut labeled.asset.label_to_asset_index,
-            asset_id_to_asset_index: &mut labeled.asset.asset_id_to_asset_index,
+            entity_to_asset_index: &mut labeled.asset.entity_to_asset_index,
         })
     }
 
@@ -320,14 +317,14 @@ impl<'a, A: Asset> TransformedSubAsset<'a, A> {
         &mut self,
         id: impl Into<AssetId<B>>,
     ) -> Option<TransformedSubAsset<'_, B>> {
-        let index = self.asset_id_to_asset_index.get(&id.into().untyped())?;
+        let index = self.entity_to_asset_index.get(&id.into().entity())?;
         let labeled = &mut self.labeled_assets[*index];
         let value = labeled.asset.value.downcast_mut::<B>()?;
         Some(TransformedSubAsset {
             value,
             labeled_assets: &mut labeled.asset.labeled_assets,
             label_to_asset_index: &mut labeled.asset.label_to_asset_index,
-            asset_id_to_asset_index: &mut labeled.asset.asset_id_to_asset_index,
+            entity_to_asset_index: &mut labeled.asset.entity_to_asset_index,
         })
     }
 
@@ -337,9 +334,9 @@ impl<'a, A: Asset> TransformedSubAsset<'a, A> {
     /// [`Into<UntypedAssetId>`].
     pub fn get_erased_labeled_by_id(
         &self,
-        id: impl Into<UntypedAssetId>,
+        entity: impl Into<Entity>,
     ) -> Option<&ErasedLoadedAsset> {
-        let index = self.asset_id_to_asset_index.get(&id.into())?;
+        let index = self.entity_to_asset_index.get(&entity.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
@@ -363,10 +360,7 @@ impl<'a, A: Asset> TransformedSubAsset<'a, A> {
     {
         let index = self.label_to_asset_index.get(label)?;
         let labeled = &self.labeled_assets[*index];
-        if let Ok(handle) = labeled.handle.clone().try_typed::<B>() {
-            return Some(handle);
-        }
-        None
+        Some(labeled.handle.clone().typed_unchecked::<B>())
     }
 
     /// Adds `asset` as a labeled sub asset using `label` and `handle`
@@ -384,17 +378,17 @@ impl<'a, A: Asset> TransformedSubAsset<'a, A> {
             Entry::Occupied(entry) => {
                 let labeled_entry = &mut self.labeled_assets[*entry.get()];
                 if labeled.handle != labeled_entry.handle {
-                    self.asset_id_to_asset_index
-                        .remove(&labeled_entry.handle.id());
-                    self.asset_id_to_asset_index
-                        .insert(labeled.handle.id(), *entry.get());
+                    self.entity_to_asset_index
+                        .remove(&labeled_entry.handle.entity());
+                    self.entity_to_asset_index
+                        .insert(labeled.handle.entity(), *entry.get());
                 }
                 *labeled_entry = labeled;
             }
             Entry::Vacant(entry) => {
                 entry.insert(self.labeled_assets.len());
-                self.asset_id_to_asset_index
-                    .insert(labeled.handle.id(), self.labeled_assets.len());
+                self.entity_to_asset_index
+                    .insert(labeled.handle.entity(), self.labeled_assets.len());
                 self.labeled_assets.push(labeled);
             }
         }

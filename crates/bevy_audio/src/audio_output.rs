@@ -2,7 +2,7 @@ use crate::{
     AudioPlayer, Decodable, DefaultSpatialScale, GlobalVolume, PlaybackMode, PlaybackSettings,
     SpatialAudioSink, SpatialListener,
 };
-use bevy_asset::{Asset, Assets};
+use bevy_asset::Asset;
 use bevy_ecs::{prelude::*, system::SystemParam};
 use bevy_math::Vec3;
 use bevy_transform::prelude::GlobalTransform;
@@ -83,8 +83,8 @@ impl<'w, 's> EarPositions<'w, 's> {
 /// data is available, and creates/inserts the sink.
 pub(crate) fn play_queued_audio_system<Source: Asset + Decodable>(
     audio_output: Res<AudioOutput>,
-    audio_sources: Res<Assets<Source>>,
     global_volume: Res<GlobalVolume>,
+    audio_sources: Query<&Source>,
     query_nonplaying: Query<
         (
             Entity,
@@ -107,7 +107,7 @@ pub(crate) fn play_queued_audio_system<Source: Asset + Decodable>(
     let mixer = stream.mixer();
 
     for (entity, source_handle, settings, maybe_emitter_transform) in &query_nonplaying {
-        let Some(audio_source) = audio_sources.get(&source_handle.0) else {
+        let Ok(audio_source) = audio_sources.get(source_handle.0.entity()) else {
             continue;
         };
         // audio data is available (has loaded), begin playback and insert sink component

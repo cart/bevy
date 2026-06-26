@@ -2,33 +2,60 @@
 
 //! Macros for deriving asset traits.
 
+use bevy_ecs_macro_logic::component::{
+    DeriveComponent, HookAttributeKind, StorageAttribute, StorageTy,
+};
 use bevy_macro_utils::{as_member, BevyManifest};
 use proc_macro::{Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Path};
-
-pub(crate) fn bevy_asset_path() -> Path {
-    BevyManifest::shared(|manifest| manifest.get_path("bevy_asset"))
-}
+use syn::{parse_macro_input, parse_quote, Data, DataStruct, DeriveInput, Path};
 
 const DEPENDENCY_ATTRIBUTE: &str = "dependency";
 
 /// Implement the `Asset` trait.
 #[proc_macro_derive(Asset, attributes(dependency))]
 pub fn derive_asset(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input as DeriveInput);
-    let bevy_asset_path: Path = bevy_asset_path();
+    let mut ast = parse_macro_input!(input as DeriveInput);
+    let (bevy_ecs, bevy_asset) = BevyManifest::shared(|manifest| {
+        (
+            manifest.get_path("bevy_ecs"),
+            manifest.get_path("bevy_asset"),
+        )
+    });
+
+    let mut derive_component = match DeriveComponent::parse(&ast, StorageAttribute::Allowed) {
+        Ok(value) => value,
+        Err(e) => return e.into_compile_error().into(),
+    };
+
+    derive_component.on_add.push(HookAttributeKind::Path(
+        parse_quote!(#bevy_asset::hooks::on_add::<Self>),
+    ));
+    derive_component.on_remove.push(HookAttributeKind::Path(
+        parse_quote!(#bevy_asset::hooks::on_remove::<Self>),
+    ));
+    derive_component.on_despawn.push(HookAttributeKind::Path(
+        parse_quote!(#bevy_asset::hooks::on_despawn::<Self>),
+    ));
+
+    let component_impl =
+        match derive_component.impl_component(&mut ast, &bevy_ecs, StorageTy::Table) {
+            Ok(value) => value,
+            Err(err) => return err.into_compile_error().into(),
+        };
 
     let struct_name = &ast.ident;
     let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
-    let dependency_visitor = match derive_dependency_visitor_internal(&ast, &bevy_asset_path) {
+    let dependency_visitor = match derive_dependency_visitor_internal(&ast, &bevy_asset, &bevy_ecs)
+    {
         Ok(dependency_visitor) => dependency_visitor,
         Err(err) => return err.into_compile_error().into(),
     };
 
     TokenStream::from(quote! {
-        impl #impl_generics #bevy_asset_path::Asset for #struct_name #type_generics #where_clause { }
+        impl #impl_generics #bevy_asset::Asset for #struct_name #type_generics #where_clause { }
         #dependency_visitor
+        #component_impl
     })
 }
 
@@ -36,8 +63,13 @@ pub fn derive_asset(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(VisitAssetDependencies, attributes(dependency))]
 pub fn derive_asset_dependency_visitor(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    let bevy_asset_path: Path = bevy_asset_path();
-    match derive_dependency_visitor_internal(&ast, &bevy_asset_path) {
+    let (bevy_ecs, bevy_asset) = BevyManifest::shared(|manifest| {
+        (
+            manifest.get_path("bevy_ecs"),
+            manifest.get_path("bevy_asset"),
+        )
+    });
+    match derive_dependency_visitor_internal(&ast, &bevy_asset, &bevy_ecs) {
         Ok(dependency_visitor) => TokenStream::from(dependency_visitor),
         Err(err) => err.into_compile_error().into(),
     }
@@ -46,6 +78,7 @@ pub fn derive_asset_dependency_visitor(input: TokenStream) -> TokenStream {
 fn derive_dependency_visitor_internal(
     ast: &DeriveInput,
     bevy_asset_path: &Path,
+    bevy_ecs: &Path,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let struct_name = &ast.ident;
     let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
@@ -102,7 +135,7 @@ fn derive_dependency_visitor_internal(
 
     Ok(quote! {
         impl #impl_generics #bevy_asset_path::VisitAssetDependencies for #struct_name #type_generics #where_clause {
-            fn visit_dependencies(&self, #visit: &mut impl ::core::ops::FnMut(#bevy_asset_path::UntypedAssetId)) {
+            fn visit_dependencies(&self, #visit: &mut impl ::core::ops::FnMut(#bevy_ecs::entity::Entity)) {
                 #body
             }
         }

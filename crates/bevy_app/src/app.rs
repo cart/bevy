@@ -131,7 +131,10 @@ impl Default for App {
         );
         app.add_systems(
             crate::Last,
-            bevy_ecs::system::despawn_unused_registered_systems,
+            (
+                bevy_ecs::system::despawn_unused_registered_systems,
+                bevy_ecs::entity::despawn_dropped_entities,
+            ),
         );
         app.add_message::<AppExit>();
 

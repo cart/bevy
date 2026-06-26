@@ -82,10 +82,13 @@
 //! [`Commands`]: crate::system::Commands
 
 mod clone_entities;
+mod entity_handle;
 mod entity_set;
 mod map_entities;
 
 pub use clone_entities::*;
+use crossbeam_channel::Receiver;
+pub use entity_handle::*;
 pub use entity_set::*;
 pub use map_entities::*;
 
@@ -120,7 +123,7 @@ use crate::{
     change_detection::{CheckChangeTicks, MaybeLocation, Tick},
     storage::{SparseSetIndex, TableId, TableRow},
 };
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
 use core::{fmt, hash::Hash, mem, num::NonZero, panic::Location};
 use derive_more::derive::Display;
 use log::warn;
@@ -792,6 +795,36 @@ impl EntityAllocator {
         AllocEntitiesIterator {
             inner: self.inner.alloc_many(count),
         }
+    }
+
+    /// Creates a new handle for the given `entity`. This should only be done if there are no existing handles for the entity.
+    pub fn get_handle(&self, entity: Entity) -> EntityHandle {
+        self.get_handle_with_data(entity, ())
+    }
+
+    /// Creates a new handle for the given `entity`, with the given `data` stored in it.
+    /// This should only be done if there are no existing handles for the entity.
+    pub fn get_handle_with_data<T>(&self, entity: Entity, data: T) -> EntityHandle<T> {
+        EntityHandle(Arc::new(InnerEntityHandle {
+            entity,
+            data,
+            drop_sender: self.inner.handle_drop_sender().clone(),
+        }))
+    }
+
+    /// Allocates a new entity and creates a handle for it.
+    pub fn alloc_handle(&self) -> EntityHandle {
+        self.alloc_handle_with_data(())
+    }
+
+    /// Allocates a new entity and creates a handle for it with the given `data`.
+    pub fn alloc_handle_with_data<T>(&self, data: T) -> EntityHandle<T> {
+        self.get_handle_with_data(self.alloc(), data)
+    }
+
+    /// Returns a receiver of entities whose (inner) handles have been dropped (strong count of 0).
+    pub fn handle_drop_receiver(&self) -> &Receiver<Entity> {
+        self.inner.handle_drop_receiver()
     }
 }
 

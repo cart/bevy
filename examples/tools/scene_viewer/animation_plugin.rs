@@ -117,7 +117,7 @@ fn assign_clips(
             continue;
         };
 
-        let Some(clip_handle) = assets.get_id_handle(clip_id) else {
+        let Some(clip_handle) = assets.get_entity_handle(clip_id) else {
             warn!("Clip {} wasn't loaded.", clip_id);
             continue;
         };

@@ -3,12 +3,13 @@ use crate::{
     SceneDependencies, SceneList,
 };
 use alloc::sync::Arc;
-use bevy_asset::{Asset, AssetServer, Assets, Handle, LoadFromPath, UntypedHandle};
+use bevy_asset::{Asset, AssetServer, Handle, LoadFromPath, UntypedHandle};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     bundle::BundleScratch,
     component::Component,
     entity::Entity,
+    system::Query,
     template::FromTemplate,
     world::{EntityWorldMut, World},
 };
@@ -57,7 +58,7 @@ impl ScenePatch {
     pub fn resolve(
         &mut self,
         assets: &AssetServer,
-        patches: &Assets<ScenePatch>,
+        patches: &Query<&'static ScenePatch>,
     ) -> Result<(), ResolveSceneError> {
         let scene = self.scene.take().ok_or(ResolveSceneError::MissingScene)?;
         self.resolved = Some(Arc::new(ResolvedSceneRoot::resolve(
@@ -121,7 +122,7 @@ pub struct SceneListPatch {
 
     /// The [`ResolvedSceneListRoot`], if exists. This is populated after the scene list and its dependencies have been loaded and resolved.
     // TODO: consider breaking this out to prevent mutating asset events when resolved
-    pub resolved: Option<ResolvedSceneListRoot>,
+    pub resolved: Option<Arc<ResolvedSceneListRoot>>,
 }
 
 impl SceneListPatch {
@@ -146,13 +147,15 @@ impl SceneListPatch {
     pub fn resolve(
         &mut self,
         assets: &AssetServer,
-        patches: &Assets<ScenePatch>,
+        patches: &Query<&ScenePatch>,
     ) -> Result<(), ResolveSceneError> {
         let scene_list = self
             .scene_list
             .take()
             .ok_or(ResolveSceneError::MissingScene)?;
-        self.resolved = Some(ResolvedSceneListRoot::resolve(scene_list, assets, patches)?);
+        self.resolved = Some(Arc::new(ResolvedSceneListRoot::resolve(
+            scene_list, assets, patches,
+        )?));
         Ok(())
     }
 

@@ -1,14 +1,21 @@
 use crate::{
     io::{AssetReaderError, MissingAssetSourceError, MissingProcessedAssetReaderError, Reader},
     loader_builders::NestedLoadBuilder,
-    meta::{AssetHash, AssetMeta, AssetMetaDyn, ProcessedInfo, ProcessedInfoMinimal, Settings},
+    meta::{
+        AssetHash, AssetMeta, AssetMetaDyn, Empty, ProcessedInfo, ProcessedInfoMinimal, Settings,
+    },
     path::AssetPath,
-    Asset, AssetIndex, AssetLoadError, AssetServer, AssetServerMode, Assets, ErasedAssetIndex,
-    Handle, UntypedAssetId, UntypedHandle,
+    Asset, AssetData, AssetLoadError, AssetServer, AssetServerMode, Handle, UntypedHandle,
 };
 use alloc::{boxed::Box, string::ToString, vec::Vec};
 use atomicow::CowArc;
-use bevy_ecs::{error::BevyError, world::World};
+use bevy_ecs::{
+    component::Component,
+    entity::Entity,
+    error::BevyError,
+    lifecycle::HookContext,
+    world::{DeferredWorld, World},
+};
 use bevy_platform::collections::{hash_map::Entry, HashMap, HashSet};
 use bevy_reflect::TypePath;
 use bevy_tasks::{BoxedFuture, ConditionalSendFuture};
@@ -22,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::error;
+use uuid::Uuid;
 
 /// Loads an [`Asset`] from a given byte [`Reader`]. This can accept [`AssetLoader::Settings`], which configure how the [`Asset`]
 /// should be loaded.
@@ -104,12 +112,12 @@ where
     }
 
     fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError> {
-        let meta = AssetMeta::<L, ()>::deserialize(meta)?;
+        let meta = AssetMeta::<L, Empty>::deserialize(meta)?;
         Ok(Box::new(meta))
     }
 
     fn default_meta(&self) -> Box<dyn AssetMetaDyn> {
-        Box::new(AssetMeta::<L, ()>::new(crate::meta::AssetAction::Load {
+        Box::new(AssetMeta::<L, Empty>::new(crate::meta::AssetAction::Load {
             loader: self.type_path().to_string(),
             settings: L::Settings::default(),
         }))
@@ -143,7 +151,7 @@ pub(crate) struct LabeledAsset {
 /// * Loader dependencies: dependencies whose actual asset values are used during the load process
 pub struct LoadedAsset<A: Asset> {
     pub(crate) value: A,
-    pub(crate) dependencies: HashSet<ErasedAssetIndex>,
+    pub(crate) dependencies: HashSet<Entity>,
     pub(crate) loader_dependencies: HashMap<AssetPath<'static>, AssetHash>,
     /// The subassets of this asset.
     pub(crate) labeled_assets: Vec<LabeledAsset>,
@@ -153,18 +161,15 @@ pub struct LoadedAsset<A: Asset> {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    pub(crate) asset_id_to_asset_index: HashMap<UntypedAssetId, usize>,
+    pub(crate) entity_to_asset_index: HashMap<Entity, usize>,
 }
 
 impl<A: Asset> LoadedAsset<A> {
     /// Create a new loaded asset. This will use [`VisitAssetDependencies`](crate::VisitAssetDependencies) to populate `dependencies`.
     pub fn new_with_dependencies(value: A) -> Self {
         let mut dependencies = <HashSet<_>>::default();
-        value.visit_dependencies(&mut |id| {
-            let Ok(asset_index) = id.try_into() else {
-                return;
-            };
-            dependencies.insert(asset_index);
+        value.visit_dependencies(&mut |entity| {
+            dependencies.insert(entity);
         });
         LoadedAsset {
             value,
@@ -172,7 +177,7 @@ impl<A: Asset> LoadedAsset<A> {
             loader_dependencies: HashMap::default(),
             labeled_assets: Default::default(),
             label_to_asset_index: Default::default(),
-            asset_id_to_asset_index: Default::default(),
+            entity_to_asset_index: Default::default(),
         }
     }
 
@@ -198,8 +203,8 @@ impl<A: Asset> LoadedAsset<A> {
     ///
     /// This can be used to get the asset from its handle since `&Handle` implements
     /// [`Into<UntypedAssetId>`].
-    pub fn get_labeled_by_id(&self, id: impl Into<UntypedAssetId>) -> Option<&ErasedLoadedAsset> {
-        let index = self.asset_id_to_asset_index.get(&id.into())?;
+    pub fn get_labeled_by_id(&self, id: impl Into<Entity>) -> Option<&ErasedLoadedAsset> {
+        let index = self.entity_to_asset_index.get(&id.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
@@ -219,7 +224,7 @@ impl<A: Asset> From<A> for LoadedAsset<A> {
 /// A "type erased / boxed" counterpart to [`LoadedAsset`]. This is used in places where the loaded type is not statically known.
 pub struct ErasedLoadedAsset {
     pub(crate) value: Box<dyn AssetContainer>,
-    pub(crate) dependencies: HashSet<ErasedAssetIndex>,
+    pub(crate) dependencies: HashSet<Entity>,
     pub(crate) loader_dependencies: HashMap<AssetPath<'static>, AssetHash>,
     /// The subassets of this asset.
     pub(crate) labeled_assets: Vec<LabeledAsset>,
@@ -229,7 +234,7 @@ pub struct ErasedLoadedAsset {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    pub(crate) asset_id_to_asset_index: HashMap<UntypedAssetId, usize>,
+    pub(crate) entity_to_asset_index: HashMap<Entity, usize>,
 }
 
 impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
@@ -240,7 +245,7 @@ impl<A: Asset> From<LoadedAsset<A>> for ErasedLoadedAsset {
             loader_dependencies: asset.loader_dependencies,
             labeled_assets: asset.labeled_assets,
             label_to_asset_index: asset.label_to_asset_index,
-            asset_id_to_asset_index: asset.asset_id_to_asset_index,
+            entity_to_asset_index: asset.entity_to_asset_index,
         }
     }
 }
@@ -279,8 +284,8 @@ impl ErasedLoadedAsset {
     ///
     /// This can be used to get the asset from its handle since `&Handle` implements
     /// [`Into<UntypedAssetId>`].
-    pub fn get_labeled_by_id(&self, id: impl Into<UntypedAssetId>) -> Option<&ErasedLoadedAsset> {
-        let index = self.asset_id_to_asset_index.get(&id.into())?;
+    pub fn get_labeled_by_entity(&self, id: impl Into<Entity>) -> Option<&ErasedLoadedAsset> {
+        let index = self.entity_to_asset_index.get(&id.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }
@@ -307,7 +312,7 @@ impl ErasedLoadedAsset {
                 loader_dependencies: self.loader_dependencies,
                 labeled_assets: self.labeled_assets,
                 label_to_asset_index: self.label_to_asset_index,
-                asset_id_to_asset_index: self.asset_id_to_asset_index,
+                entity_to_asset_index: self.entity_to_asset_index,
             }),
             Err(value) => {
                 self.value = value;
@@ -317,21 +322,43 @@ impl ErasedLoadedAsset {
     }
 }
 
+#[derive(Component, Default, Clone)]
+#[component(on_remove)]
+pub struct AssetServerAsset;
+
+impl AssetServerAsset {
+    fn on_remove(world: DeferredWorld, context: HookContext) {
+        let server = world.resource::<AssetServer>();
+        let mut infos = server.data.infos.write().unwrap();
+        infos.process_handle_drop(context.entity);
+    }
+}
+
 /// A type erased container for an [`Asset`] value that is capable of inserting the [`Asset`] into a [`World`]'s [`Assets`] collection.
 pub(crate) trait AssetContainer: Downcast + Any + Send + Sync + 'static {
-    fn insert(self: Box<Self>, id: AssetIndex, world: &mut World);
+    fn insert(self: Box<Self>, id: Entity, world: &mut World);
     fn asset_type_name(&self) -> &'static str;
 }
 
 impl_downcast!(AssetContainer);
 
 impl<A: Asset> AssetContainer for A {
-    fn insert(self: Box<Self>, index: AssetIndex, world: &mut World) {
-        // We only ever call this if we know the asset is still alive, so it is fine to unwrap here.
-        world
-            .resource_mut::<Assets<A>>()
-            .insert(index, *self)
-            .expect("the AssetIndex is still valid");
+    fn insert(self: Box<Self>, id: Entity, world: &mut World) {
+        let bundle = (*self, AssetServerAsset);
+        match world.get_entity_mut(id) {
+            Ok(mut entity) => {
+                entity.insert(bundle);
+            }
+            Err(_) => {
+                if let Err(err) = world.spawn_at(id, bundle) {
+                    error!(
+                        "Failed to spawn asset {} at {id}: {}",
+                        core::any::type_name::<A>(),
+                        err
+                    );
+                }
+            }
+        }
     }
 
     fn asset_type_name(&self) -> &'static str {
@@ -383,7 +410,7 @@ pub struct LoadContext<'a> {
     pub(crate) should_load_dependencies: bool,
     populate_hashes: bool,
     asset_path: AssetPath<'static>,
-    pub(crate) dependencies: HashSet<ErasedAssetIndex>,
+    pub(crate) dependencies: HashSet<Entity>,
     /// Direct dependencies used by this loader.
     pub(crate) loader_dependencies: HashMap<AssetPath<'static>, AssetHash>,
     /// Stores the subassets added to this context.
@@ -394,7 +421,7 @@ pub struct LoadContext<'a> {
     ///
     /// This is entirely redundant with [`Self::labeled_assets`], but it allows looking up the
     /// labeled asset by its asset ID.
-    pub(crate) asset_id_to_asset_index: HashMap<UntypedAssetId, usize>,
+    pub(crate) entity_to_asset_index: HashMap<Entity, usize>,
 }
 
 impl<'a> LoadContext<'a> {
@@ -414,7 +441,7 @@ impl<'a> LoadContext<'a> {
             loader_dependencies: HashMap::default(),
             labeled_assets: Default::default(),
             label_to_asset_index: Default::default(),
-            asset_id_to_asset_index: Default::default(),
+            entity_to_asset_index: Default::default(),
         }
     }
 
@@ -509,7 +536,11 @@ impl<'a> LoadContext<'a> {
         let labeled_path = self.asset_path.clone().with_label(label.clone());
         let handle = self
             .asset_server
-            .get_or_create_path_handle(labeled_path, None);
+            .get_or_create_handle(AssetData {
+                path: Some(labeled_path),
+                ..AssetData::new::<A>()
+            })
+            .typed_unchecked();
         let asset = LabeledAsset {
             asset: loaded_asset,
             handle: handle.clone().untyped(),
@@ -526,8 +557,8 @@ impl<'a> LoadContext<'a> {
             }
             Entry::Vacant(entry) => {
                 entry.insert(self.labeled_assets.len());
-                self.asset_id_to_asset_index
-                    .insert(handle.id().untyped(), self.labeled_assets.len());
+                self.entity_to_asset_index
+                    .insert(handle.entity(), self.labeled_assets.len());
                 self.labeled_assets.push(asset);
             }
         }
@@ -539,7 +570,7 @@ impl<'a> LoadContext<'a> {
     /// See [`AssetPath`] for more on labeled assets.
     pub fn has_labeled_asset<'b>(&self, label: impl Into<CowArc<'b, str>>) -> bool {
         let path = self.asset_path.clone().with_label(label.into());
-        !self.asset_server.get_handles_untyped(&path).is_empty()
+        self.asset_server.get_handle_untyped(&path).is_some()
     }
 
     /// "Finishes" this context by populating the final [`Asset`] value.
@@ -550,14 +581,8 @@ impl<'a> LoadContext<'a> {
         // `LoadedAsset`, `ErasedLoadedAsset`, or `LoadContext` (for mutating existing subassets),
         // we should move this to some point after those mutations are not possible. This spot is
         // convenient because we still have access to the static type of `A`.
-        value.visit_dependencies(&mut |asset_id| {
-            let (type_id, index) = match asset_id {
-                UntypedAssetId::Index { type_id, index } => (type_id, index),
-                // UUID assets can't be loaded anyway, so just ignore this ID.
-                UntypedAssetId::Uuid { .. } => return,
-            };
-            self.dependencies
-                .insert(ErasedAssetIndex { index, type_id });
+        value.visit_dependencies(&mut |entity| {
+            self.dependencies.insert(entity);
         });
         LoadedAsset {
             value,
@@ -565,7 +590,7 @@ impl<'a> LoadContext<'a> {
             loader_dependencies: self.loader_dependencies,
             labeled_assets: self.labeled_assets,
             label_to_asset_index: self.label_to_asset_index,
-            asset_id_to_asset_index: self.asset_id_to_asset_index,
+            entity_to_asset_index: self.entity_to_asset_index,
         }
     }
 
@@ -623,11 +648,15 @@ impl<'a> LoadContext<'a> {
         &mut self,
         label: impl Into<CowArc<'b, str>>,
     ) -> Handle<A> {
-        let path = self.asset_path.clone().with_label(label);
-        let handle = self.asset_server.get_or_create_path_handle(path, None);
-        // `get_or_create_path_handle` always returns a Strong variant, so we are safe to unwrap.
-        let index = (&handle).try_into().unwrap();
-        self.dependencies.insert(index);
+        let path = self.asset_path.clone().with_label(label).into_owned();
+        let handle = self
+            .asset_server
+            .get_or_create_handle(AssetData {
+                path: Some(path),
+                ..AssetData::new::<A>()
+            })
+            .typed_unchecked();
+        self.dependencies.insert(handle.entity());
         handle
     }
 
@@ -642,8 +671,8 @@ impl<'a> LoadContext<'a> {
     ///
     /// This can be used to get the asset from its handle since `&Handle` implements
     /// [`Into<UntypedAssetId>`].
-    pub fn get_labeled_by_id(&self, id: impl Into<UntypedAssetId>) -> Option<&ErasedLoadedAsset> {
-        let index = self.asset_id_to_asset_index.get(&id.into())?;
+    pub fn get_labeled_by_id(&self, entity: impl Into<Entity>) -> Option<&ErasedLoadedAsset> {
+        let index = self.entity_to_asset_index.get(&entity.into())?;
         let labeled = &self.labeled_assets[*index];
         Some(&labeled.asset)
     }

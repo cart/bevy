@@ -1,6 +1,6 @@
 use bevy_app::prelude::*;
-use bevy_asset::{Asset, AssetApp as _, AssetId, Assets, Handle};
-use bevy_ecs::template::FromTemplate;
+use bevy_asset::{Asset, AssetApp as _, AssetId, Handle};
+use bevy_ecs::{system::Query, template::FromTemplate};
 use bevy_math::{Rect, URect, UVec2};
 use bevy_platform::collections::HashMap;
 #[cfg(not(feature = "bevy_reflect"))]
@@ -220,8 +220,8 @@ pub struct TextureAtlas {
 
 impl TextureAtlas {
     /// Retrieves the current texture [`URect`] of the sprite sheet according to the section `index`
-    pub fn texture_rect(&self, texture_atlases: &Assets<TextureAtlasLayout>) -> Option<URect> {
-        let atlas = texture_atlases.get(&self.layout)?;
+    pub fn texture_rect(&self, texture_atlases: &Query<&TextureAtlasLayout>) -> Option<URect> {
+        let atlas = texture_atlases.get(self.layout.entity()).ok()?;
         atlas.textures.get(self.index).copied()
     }
 

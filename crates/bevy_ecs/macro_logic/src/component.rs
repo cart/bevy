@@ -30,15 +30,15 @@ pub struct DeriveComponent {
     /// The parsed punctuated list of required components.
     pub requires: Option<Punctuated<Require, Comma>>,
     /// The `on_add` hook.
-    pub on_add: Option<HookAttributeKind>,
+    pub on_add: Vec<HookAttributeKind>,
     /// The `on_insert` hook.
-    pub on_insert: Option<HookAttributeKind>,
+    pub on_insert: Vec<HookAttributeKind>,
     /// The `on_discard` hook.
-    pub on_discard: Option<HookAttributeKind>,
+    pub on_discard: Vec<HookAttributeKind>,
     /// The `on_remove` hook.
-    pub on_remove: Option<HookAttributeKind>,
+    pub on_remove: Vec<HookAttributeKind>,
     /// The `on_despawn` hook.
-    pub on_despawn: Option<HookAttributeKind>,
+    pub on_despawn: Vec<HookAttributeKind>,
     /// The relationship attribute information.
     pub relationship: Option<Relationship>,
     /// The relationship target attribute information.
@@ -58,11 +58,11 @@ impl DeriveComponent {
     pub fn parse(ast: &DeriveInput, storage_attr: StorageAttribute) -> Result<DeriveComponent> {
         let mut attrs = DeriveComponent {
             storage: None,
-            on_add: None,
-            on_insert: None,
-            on_discard: None,
-            on_remove: None,
-            on_despawn: None,
+            on_add: Vec::new(),
+            on_insert: Vec::new(),
+            on_discard: Vec::new(),
+            on_remove: Vec::new(),
+            on_despawn: Vec::new(),
             requires: None,
             relationship: None,
             relationship_target: None,
@@ -90,29 +90,39 @@ impl DeriveComponent {
                         });
                         Ok(())
                     } else if nested.path.is_ident(ON_ADD) {
-                        attrs.on_add = Some(HookAttributeKind::parse(nested.input, || {
-                            parse_quote! { Self::on_add }
-                        })?);
+                        attrs
+                            .on_add
+                            .push(HookAttributeKind::parse(nested.input, || {
+                                parse_quote! { Self::on_add }
+                            })?);
                         Ok(())
                     } else if nested.path.is_ident(ON_INSERT) {
-                        attrs.on_insert = Some(HookAttributeKind::parse(nested.input, || {
-                            parse_quote! { Self::on_insert }
-                        })?);
+                        attrs
+                            .on_insert
+                            .push(HookAttributeKind::parse(nested.input, || {
+                                parse_quote! { Self::on_insert }
+                            })?);
                         Ok(())
                     } else if nested.path.is_ident(ON_DISCARD) {
-                        attrs.on_discard = Some(HookAttributeKind::parse(nested.input, || {
-                            parse_quote! { Self::on_discard }
-                        })?);
+                        attrs
+                            .on_discard
+                            .push(HookAttributeKind::parse(nested.input, || {
+                                parse_quote! { Self::on_discard }
+                            })?);
                         Ok(())
                     } else if nested.path.is_ident(ON_REMOVE) {
-                        attrs.on_remove = Some(HookAttributeKind::parse(nested.input, || {
-                            parse_quote! { Self::on_remove }
-                        })?);
+                        attrs
+                            .on_remove
+                            .push(HookAttributeKind::parse(nested.input, || {
+                                parse_quote! { Self::on_remove }
+                            })?);
                         Ok(())
                     } else if nested.path.is_ident(ON_DESPAWN) {
-                        attrs.on_despawn = Some(HookAttributeKind::parse(nested.input, || {
-                            parse_quote! { Self::on_despawn }
-                        })?);
+                        attrs
+                            .on_despawn
+                            .push(HookAttributeKind::parse(nested.input, || {
+                                parse_quote! { Self::on_despawn }
+                            })?);
                         Ok(())
                     } else if nested.path.is_ident(IMMUTABLE) {
                         attrs.immutable = true;
@@ -167,7 +177,7 @@ impl DeriveComponent {
     ///
     /// Note that this will add Send + Sync + 'static to the where clause
     pub fn impl_component(
-        self,
+        mut self,
         ast: &mut DeriveInput,
         bevy_ecs: &Path,
         default_storage: StorageTy,
@@ -215,41 +225,32 @@ impl DeriveComponent {
 
         let storage = storage_path(bevy_ecs, self.storage.unwrap_or(default_storage));
 
-        let on_add_path = Vec::from_iter(self.on_add.map(|path| path.to_token_stream(bevy_ecs)));
-        let on_remove_path =
-            Vec::from_iter(self.on_remove.map(|path| path.to_token_stream(bevy_ecs)));
-
-        let mut on_insert_path =
-            Vec::from_iter(self.on_insert.map(|path| path.to_token_stream(bevy_ecs)));
-
-        let mut on_discard_path =
-            Vec::from_iter(self.on_discard.map(|path| path.to_token_stream(bevy_ecs)));
-
-        let mut on_despawn_path =
-            Vec::from_iter(self.on_despawn.map(|path| path.to_token_stream(bevy_ecs)));
-
         if relationship.is_some() {
-            on_insert_path.push(quote!(<Self as #bevy_ecs::relationship::Relationship>::on_insert));
-            on_discard_path
-                .push(quote!(<Self as #bevy_ecs::relationship::Relationship>::on_discard));
+            self.on_insert.push(HookAttributeKind::Path(
+                parse_quote!(<Self as #bevy_ecs::relationship::Relationship>::on_insert),
+            ));
+            self.on_discard.push(HookAttributeKind::Path(
+                parse_quote!(<Self as #bevy_ecs::relationship::Relationship>::on_discard),
+            ));
         }
         if let Some(target) = self.relationship_target {
-            on_discard_path
-                .push(quote!(<Self as #bevy_ecs::relationship::RelationshipTarget>::on_discard));
+            self.on_discard.push(HookAttributeKind::Path(
+                parse_quote!(<Self as #bevy_ecs::relationship::RelationshipTarget>::on_discard),
+            ));
             if target.linked_spawn {
-                on_despawn_path.push(
-                    quote!(<Self as #bevy_ecs::relationship::RelationshipTarget>::on_despawn),
-                );
+                self.on_despawn.push(HookAttributeKind::Path(
+                    parse_quote!(<Self as #bevy_ecs::relationship::RelationshipTarget>::on_despawn),
+                ));
             }
         }
 
-        let on_add = hook_register_function_call(bevy_ecs, quote! {on_add}, &on_add_path);
-        let on_insert = hook_register_function_call(bevy_ecs, quote! {on_insert}, &on_insert_path);
+        let on_add = hook_register_function_call(bevy_ecs, quote! {on_add}, &self.on_add);
+        let on_insert = hook_register_function_call(bevy_ecs, quote! {on_insert}, &self.on_insert);
         let on_discard =
-            hook_register_function_call(bevy_ecs, quote! {on_discard}, &on_discard_path);
-        let on_remove = hook_register_function_call(bevy_ecs, quote! {on_remove}, &on_remove_path);
+            hook_register_function_call(bevy_ecs, quote! {on_discard}, &self.on_discard);
+        let on_remove = hook_register_function_call(bevy_ecs, quote! {on_remove}, &self.on_remove);
         let on_despawn =
-            hook_register_function_call(bevy_ecs, quote! {on_despawn}, &on_despawn_path);
+            hook_register_function_call(bevy_ecs, quote! {on_despawn}, &self.on_despawn);
 
         let requires = &self.requires;
         let mut register_required = Vec::with_capacity(self.requires.iter().len());
@@ -677,12 +678,13 @@ fn storage_path(bevy_ecs_path: &Path, ty: StorageTy) -> TokenStream {
 fn hook_register_function_call(
     bevy_ecs_path: &Path,
     hook: TokenStream,
-    functions: &[TokenStream],
+    hooks: &[HookAttributeKind],
 ) -> TokenStream {
-    let hook_function = match functions {
+    let hook_function = match hooks {
         [] => return TokenStream::new(),
-        [single] => single.clone(),
+        [single] => single.to_token_stream(bevy_ecs_path),
         multiple => {
+            let multiple = multiple.iter().map(|h| h.to_token_stream(bevy_ecs_path));
             quote! {
                 |mut world: #bevy_ecs_path::world::DeferredWorld, context: #bevy_ecs_path::lifecycle::HookContext| {
                     #(#multiple(world.reborrow(), context.clone());)*

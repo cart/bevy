@@ -14,7 +14,10 @@ use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 #[cfg(feature = "serialize")]
 use bevy_reflect::{ReflectDeserialize, ReflectSerialize};
 
-use bevy_asset::{uuid_handle, Asset, AssetApp, Assets, Handle, RenderAssetUsages};
+use bevy_asset::{
+    uuid::{uuid, Uuid},
+    Asset, AssetApp, AssetServer, RenderAssetUsages,
+};
 use bevy_color::{Color, ColorToComponents, Gray, LinearRgba, Srgba, Xyza};
 use bevy_ecs::resource::Resource;
 use bevy_math::{AspectRatio, UVec2, UVec3, Vec2};
@@ -173,8 +176,6 @@ impl TextureSrgbViewFormats for TextureFormat {
 /// Like [`Handle<Image>::default`], this is a handle to a fallback image asset.
 /// While that handle points to an opaque white 1 x 1 image, this handle points to a transparent 1 x 1 white image.
 // Number randomly selected by fair WolframAlpha query. Totally arbitrary.
-pub const TRANSPARENT_IMAGE_HANDLE: Handle<Image> =
-    uuid_handle!("d18ad97e-a322-4981-9505-44c59a4b5e46");
 
 /// Adds the [`Image`] as an asset and makes sure that they are extracted and prepared for the GPU.
 pub struct ImagePlugin {
@@ -216,14 +217,11 @@ impl Plugin for ImagePlugin {
         #[cfg(feature = "bevy_reflect")]
         app.register_asset_reflect::<Image>();
 
-        let mut image_assets = app.world_mut().resource_mut::<Assets<Image>>();
-
-        image_assets
-            .insert(&Handle::default(), Image::default())
-            .unwrap();
-        image_assets
-            .insert(&TRANSPARENT_IMAGE_HANDLE, Image::transparent())
-            .unwrap();
+        {
+            let assets = app.world().resource::<AssetServer>();
+            let _ = assets.add_default(Image::default());
+            let _ = assets.add_with_uuid(Image::TRANSPARENT_UUID, Image::transparent());
+        }
 
         #[cfg(feature = "compressed_image_saver")]
         if let Some(processor) = app
@@ -1094,6 +1092,10 @@ impl Default for Image {
 }
 
 impl Image {
+    /// While that handle points to an opaque white 1 x 1 image, this handle points to a transparent 1 x 1 white image.
+    // Number randomly selected by fair WolframAlpha query. Totally arbitrary.
+    pub const TRANSPARENT_UUID: Uuid = uuid!("d18ad97e-a322-4981-9505-44c59a4b5e46");
+
     /// Creates a new image from raw binary data and the corresponding metadata.
     ///
     /// # Panics

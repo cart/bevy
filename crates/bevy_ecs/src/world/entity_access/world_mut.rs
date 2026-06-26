@@ -5,7 +5,10 @@ use crate::{
     },
     change_detection::{ComponentTicks, MaybeLocation, MutUntyped, Tick},
     component::{Component, ComponentId, Components, Mutable, StorageType},
-    entity::{Entity, EntityCloner, EntityClonerBuilder, EntityLocation, OptIn, OptOut},
+    entity::{
+        Entity, EntityCloner, EntityClonerBuilder, EntityHandle, EntityLocation, OptIn, OptOut,
+        WeakEntityHandle,
+    },
     event::{EntityComponentsTrigger, EntityEvent},
     lifecycle::{Despawn, Discard, Remove, DESPAWN, DISCARD, REMOVE},
     observer::IntoEntityObserver,
@@ -2330,6 +2333,27 @@ impl<'w> EntityWorldMut<'w> {
             );
         });
         self
+    }
+
+    /// Retrieves the current handle for this entity, if it exists, and creates a new one if it does not.
+    /// This is tracked using the [`WeakEntityHandle`] component stored on the entity.
+    pub fn handle(&mut self) -> EntityHandle {
+        self.handle_with_data(())
+    }
+
+    /// Retrieves the current handle for this entity with the given `data`, if it exists, and creates a new one if it does not.
+    /// This is tracked using the [`WeakEntityHandle`] component stored on the entity.
+    ///
+    /// Note that if a handle already exists, the passed in `data` will be ignored and the current handle's data will continue to be used.
+    pub fn handle_with_data<T: Send + Sync + 'static>(&mut self, data: T) -> EntityHandle<T> {
+        if let Some(handle) = self.get::<WeakEntityHandle<T>>() {
+            handle.upgrade().expect("Cannot upgrade a weak entity handle to a strong entity handle because it has already been dropped")
+        } else {
+            let allocator = &self.world().entity_allocator;
+            let handle = allocator.get_handle_with_data(self.id(), data);
+            self.insert(handle.weak());
+            handle
+        }
     }
 }
 

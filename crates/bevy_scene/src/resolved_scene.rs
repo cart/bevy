@@ -1,11 +1,12 @@
 use crate::{ResolveContext, ResolveSceneError, Scene, SceneList, ScenePatch};
-use bevy_asset::{AssetId, AssetPath, AssetServer, Assets, Handle, UntypedAssetId};
+use bevy_asset::{AssetId, AssetPath, AssetServer, Handle};
 use bevy_ecs::{
     bundle::{Bundle, BundleScratch, BundleWriter},
     component::{Component, ComponentsRegistrator},
     entity::Entity,
     error::{BevyError, Result},
     relationship::{Relationship, RelationshipTarget},
+    system::Query,
     template::{SceneEntityReference, SceneEntityReferences, Template, TemplateContext},
     world::{EntityWorldMut, World},
 };
@@ -26,7 +27,7 @@ impl ResolvedSceneRoot {
     pub fn resolve(
         scene: Box<dyn Scene>,
         assets: &AssetServer,
-        patches: &Assets<ScenePatch>,
+        patches: &Query<&ScenePatch>,
     ) -> Result<Self, ResolveSceneError> {
         let mut resolved_scene = ResolvedScene::default();
         scene.resolve_box(
@@ -93,7 +94,7 @@ impl ResolvedSceneListRoot {
     pub fn resolve(
         scene_list: Box<dyn SceneList>,
         assets: &AssetServer,
-        patches: &Assets<ScenePatch>,
+        patches: &Query<&ScenePatch>,
     ) -> Result<Self, ResolveSceneError> {
         let mut resolved_scenes = Vec::new();
         scene_list.resolve_list_box(
@@ -232,8 +233,7 @@ impl ResolvedScene {
                 .set(entity_reference, context.entity.id());
         }
         if let Some(cached) = &self.cached {
-            let scene_patches = context.resource::<Assets<ScenePatch>>();
-            let Some(patch) = scene_patches.get(&cached.handle) else {
+            let Some(patch) = context.get::<ScenePatch>(cached.handle.entity()) else {
                 return Err(ApplySceneError::MissingCachedScene {
                     path: cached.handle.path().cloned(),
                     id: cached.handle.id(),
@@ -521,13 +521,13 @@ impl ResolvedScene {
     pub fn include_cached(&mut self, handle: Handle<ScenePatch>) -> Result<(), CachedSceneError> {
         if let Some(cached) = &self.cached {
             return Err(CachedSceneError::MultipleCached {
-                id: cached.handle.id().untyped(),
+                id: cached.handle.entity(),
                 path: cached.handle.path().cloned(),
             });
         }
         if !(self.component_templates.is_empty() && self.related.is_empty()) {
             return Err(CachedSceneError::LateCached {
-                id: handle.id().untyped(),
+                id: handle.entity(),
                 path: handle.path().cloned(),
             });
         }
@@ -559,7 +559,7 @@ pub enum CachedSceneError {
     )]
     MultipleCached {
         /// The asset id of the second cached scene.
-        id: UntypedAssetId,
+        id: Entity,
         /// The path of the second cached scene.
         path: Option<AssetPath<'static>>,
     },
@@ -567,7 +567,7 @@ pub enum CachedSceneError {
     #[error("Attempted to include cached scene (id {id:?}, path: {path:?}), but the resolved scene already has templates. For correctness, the cached scene should always be included first.")]
     LateCached {
         /// The asset id of the cached scene that was included late.
-        id: UntypedAssetId,
+        id: Entity,
         /// The path of the cached scene that was included late.
         path: Option<AssetPath<'static>>,
     },

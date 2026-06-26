@@ -3,7 +3,9 @@ use crate::{
         AssetReaderError, AssetWriterError, MissingAssetWriterError,
         MissingProcessedAssetReaderError, MissingProcessedAssetWriterError, Reader, Writer,
     },
-    meta::{AssetAction, AssetMeta, AssetMetaDyn, ProcessDependencyInfo, ProcessedInfo, Settings},
+    meta::{
+        AssetAction, AssetMeta, AssetMetaDyn, Empty, ProcessDependencyInfo, ProcessedInfo, Settings,
+    },
     processor::AssetProcessor,
     saver::{AssetSaver, SavedAsset},
     transformer::{AssetTransformer, IdentityAssetTransformer, TransformedAsset},
@@ -266,17 +268,18 @@ impl<P: Process> ErasedProcessor for P {
         Box::pin(async move {
             let settings = settings.downcast_ref().ok_or(ProcessError::WrongMetaType)?;
             let loader_settings = <P as Process>::process(self, context, settings, writer).await?;
-            let output_meta: Box<dyn AssetMetaDyn> =
-                Box::new(AssetMeta::<P::OutputLoader, ()>::new(AssetAction::Load {
+            let output_meta: Box<dyn AssetMetaDyn> = Box::new(
+                AssetMeta::<P::OutputLoader, Empty>::new(AssetAction::Load {
                     loader: P::OutputLoader::type_path().to_string(),
                     settings: loader_settings,
-                }));
+                }),
+            );
             Ok(output_meta)
         })
     }
 
     fn deserialize_meta(&self, meta: &[u8]) -> Result<Box<dyn AssetMetaDyn>, DeserializeMetaError> {
-        let meta: AssetMeta<(), P> = ron::de::from_bytes(meta)?;
+        let meta: AssetMeta<Empty, P> = ron::de::from_bytes(meta)?;
         Ok(Box::new(meta))
     }
 
@@ -293,7 +296,7 @@ impl<P: Process> ErasedProcessor for P {
             MetaTypePathKind::Short => P::short_type_path(),
             MetaTypePathKind::Long => P::type_path(),
         };
-        Box::new(AssetMeta::<(), P>::new(AssetAction::Process {
+        Box::new(AssetMeta::<Empty, P>::new(AssetAction::Process {
             processor: type_path.to_string(),
             settings: P::Settings::default(),
         }))

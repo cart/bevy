@@ -1,6 +1,6 @@
-use crate::{Asset, AssetIndex, Handle, UntypedHandle};
-use bevy_reflect::{std_traits::ReflectDefault, Reflect};
-use serde::{Deserialize, Serialize};
+use crate::Asset;
+use bevy_ecs::entity::Entity;
+use bevy_reflect::Reflect;
 use uuid::Uuid;
 
 use core::{
@@ -18,34 +18,20 @@ use thiserror::Error;
 /// For an identifier tied to the lifetime of an asset, see [`Handle`](`crate::Handle`).
 ///
 /// For an "untyped" / "generic-less" id, see [`UntypedAssetId`].
-#[derive(Reflect, Serialize, Deserialize, From)]
-#[reflect(Clone, Default, Debug, PartialEq, Hash)]
-pub enum AssetId<A: Asset> {
-    /// A small / efficient runtime identifier that can be used to efficiently look up an asset stored in [`Assets`]. This is
-    /// the "default" identifier used for assets. The alternative(s) (ex: [`AssetId::Uuid`]) will only be used if assets are
-    /// explicitly registered that way.
-    ///
-    /// [`Assets`]: crate::Assets
-    Index {
-        /// The unstable, opaque index of the asset.
-        index: AssetIndex,
-        /// A marker to store the type information of the asset.
-        #[reflect(ignore, clone)]
-        marker: PhantomData<fn() -> A>,
-    },
-    /// A stable-across-runs / const asset identifier. This will only be used if an asset is explicitly registered in [`Assets`]
-    /// with one.
-    ///
-    /// [`Assets`]: crate::Assets
-    Uuid {
-        /// The UUID provided during asset registration.
-        uuid: Uuid,
-    },
+#[derive(Reflect, From)]
+#[reflect(Clone, Debug, PartialEq, Hash)]
+pub struct AssetId<A: Asset> {
+    /// The entity
+    pub entity: Entity,
+    /// A marker to store the type information of the asset.
+    #[reflect(ignore, clone)]
+    pub(crate) marker: PhantomData<fn() -> A>,
 }
 
 impl<A: Asset> AssetId<A> {
     /// The UUID for the default [`AssetId`]. It is valid to assign a value to this in [`Assets`](crate::Assets)
     /// and by convention (where appropriate) assets should support this pattern.
+    #[deprecated(since = "0.20.0", note = "Use AssetReference::Default")]
     pub const DEFAULT_UUID: Uuid = Uuid::from_u128(200809721996911295814598172825939264631);
 
     /// This asset id _should_ never be valid. Assigning a value to this in [`Assets`](crate::Assets) will
@@ -56,40 +42,9 @@ impl<A: Asset> AssetId<A> {
     )]
     pub const INVALID_UUID: Uuid = Uuid::from_u128(108428345662029828789348721013522787528);
 
-    /// Returns an [`AssetId`] with [`Self::INVALID_UUID`], which _should_ never be assigned to.
-    #[deprecated(
-        since = "0.20.0",
-        note = "Use `Option<AssetId>` if possible. `AssetId::default` may also work, but note that the default can map to a valid asset."
-    )]
     #[inline]
-    pub const fn invalid() -> Self {
-        Self::Uuid {
-            #[expect(deprecated, reason = "deprecated function uses deprecated constant")]
-            uuid: Self::INVALID_UUID,
-        }
-    }
-
-    /// Converts this to an "untyped" / "generic-less" [`Asset`] identifier that stores the type information
-    /// _inside_ the [`UntypedAssetId`].
-    #[inline]
-    pub fn untyped(self) -> UntypedAssetId {
-        self.into()
-    }
-
-    #[inline]
-    fn internal(self) -> InternalAssetId {
-        match self {
-            AssetId::Index { index, .. } => InternalAssetId::Index(index),
-            AssetId::Uuid { uuid } => InternalAssetId::Uuid(uuid),
-        }
-    }
-}
-
-impl<A: Asset> Default for AssetId<A> {
-    fn default() -> Self {
-        AssetId::Uuid {
-            uuid: Self::DEFAULT_UUID,
-        }
+    pub fn entity(&self) -> Entity {
+        self.entity
     }
 }
 
@@ -109,40 +64,26 @@ impl<A: Asset> Display for AssetId<A> {
 
 impl<A: Asset> Debug for AssetId<A> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            AssetId::Index { index, .. } => {
-                write!(
-                    f,
-                    "AssetId<{}>{{ index: {}, generation: {}}}",
-                    core::any::type_name::<A>(),
-                    index.index,
-                    index.generation
-                )
-            }
-            AssetId::Uuid { uuid } => {
-                write!(
-                    f,
-                    "AssetId<{}>{{uuid: {}}}",
-                    core::any::type_name::<A>(),
-                    uuid
-                )
-            }
-        }
+        write!(
+            f,
+            "AssetId<{}>{{ entity: {} }}",
+            core::any::type_name::<A>(),
+            self.entity
+        )
     }
 }
 
 impl<A: Asset> Hash for AssetId<A> {
     #[inline]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.internal().hash(state);
-        TypeId::of::<A>().hash(state);
+        self.entity().hash(state);
     }
 }
 
 impl<A: Asset> PartialEq for AssetId<A> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.internal().eq(&other.internal())
+        self.entity.eq(&other.entity)
     }
 }
 
@@ -156,315 +97,26 @@ impl<A: Asset> PartialOrd for AssetId<A> {
 
 impl<A: Asset> Ord for AssetId<A> {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.internal().cmp(&other.internal())
+        self.entity.cmp(&other.entity)
     }
 }
 
-impl<A: Asset> From<AssetIndex> for AssetId<A> {
+impl<A: Asset> From<Entity> for AssetId<A> {
     #[inline]
-    fn from(value: AssetIndex) -> Self {
-        Self::Index {
-            index: value,
+    fn from(entity: Entity) -> Self {
+        Self {
+            entity,
             marker: PhantomData,
         }
     }
 }
 
-/// An "untyped" / "generic-less" [`Asset`] identifier that behaves much like [`AssetId`], but stores the [`Asset`] type
-/// information at runtime instead of compile-time. This increases the size of the type, but it enables storing asset ids
-/// across asset types together and enables comparisons between them.
-#[derive(Debug, Copy, Clone, Reflect)]
-pub enum UntypedAssetId {
-    /// A small / efficient runtime identifier that can be used to efficiently look up an asset stored in [`Assets`]. This is
-    /// the "default" identifier used for assets. The alternative(s) (ex: [`UntypedAssetId::Uuid`]) will only be used if assets are
-    /// explicitly registered that way.
-    ///
-    /// [`Assets`]: crate::Assets
-    Index {
-        /// An identifier that records the underlying asset type.
-        type_id: TypeId,
-        /// The unstable, opaque index of the asset.
-        index: AssetIndex,
-    },
-    /// A stable-across-runs / const asset identifier. This will only be used if an asset is explicitly registered in [`Assets`]
-    /// with one.
-    ///
-    /// [`Assets`]: crate::Assets
-    Uuid {
-        /// An identifier that records the underlying asset type.
-        type_id: TypeId,
-        /// The UUID provided during asset registration.
-        uuid: Uuid,
-    },
-}
-
-impl UntypedAssetId {
-    /// Converts this to a "typed" [`AssetId`] without checking the stored type to see if it matches the target `A` [`Asset`] type.
-    /// This should only be called if you are _absolutely certain_ the asset type matches the stored type. And even then, you should
-    /// consider using [`UntypedAssetId::typed_debug_checked`] instead.
+impl<A: Asset> Into<Entity> for AssetId<A> {
     #[inline]
-    pub fn typed_unchecked<A: Asset>(self) -> AssetId<A> {
-        match self {
-            UntypedAssetId::Index { index, .. } => AssetId::Index {
-                index,
-                marker: PhantomData,
-            },
-            UntypedAssetId::Uuid { uuid, .. } => AssetId::Uuid { uuid },
-        }
-    }
-
-    /// Converts this to a "typed" [`AssetId`]. When compiled in debug-mode it will check to see if the stored type
-    /// matches the target `A` [`Asset`] type. When compiled in release-mode, this check will be skipped.
-    ///
-    /// # Panics
-    ///
-    /// Panics if compiled in debug mode and the [`TypeId`] of `A` does not match the stored [`TypeId`].
-    #[inline]
-    pub fn typed_debug_checked<A: Asset>(self) -> AssetId<A> {
-        debug_assert_eq!(
-            self.type_id(),
-            TypeId::of::<A>(),
-            "The target AssetId<{}>'s TypeId does not match the TypeId of this UntypedAssetId",
-            core::any::type_name::<A>()
-        );
-        self.typed_unchecked()
-    }
-
-    /// Converts this to a "typed" [`AssetId`].
-    ///
-    /// # Panics
-    ///
-    /// Panics if the [`TypeId`] of `A` does not match the stored type id.
-    #[inline]
-    pub fn typed<A: Asset>(self) -> AssetId<A> {
-        let Ok(id) = self.try_typed() else {
-            panic!(
-                "The target AssetId<{}>'s TypeId does not match the TypeId of this UntypedAssetId",
-                core::any::type_name::<A>()
-            )
-        };
-
-        id
-    }
-
-    /// Try to convert this to a "typed" [`AssetId`].
-    #[inline]
-    pub fn try_typed<A: Asset>(self) -> Result<AssetId<A>, UntypedAssetIdConversionError> {
-        AssetId::try_from(self)
-    }
-
-    /// Returns the stored [`TypeId`] of the referenced [`Asset`].
-    #[inline]
-    pub fn type_id(&self) -> TypeId {
-        match self {
-            UntypedAssetId::Index { type_id, .. } | UntypedAssetId::Uuid { type_id, .. } => {
-                *type_id
-            }
-        }
-    }
-
-    #[inline]
-    fn internal(self) -> InternalAssetId {
-        match self {
-            UntypedAssetId::Index { index, .. } => InternalAssetId::Index(index),
-            UntypedAssetId::Uuid { uuid, .. } => InternalAssetId::Uuid(uuid),
-        }
+    fn into(self) -> Entity {
+        self.entity()
     }
 }
-
-impl Display for UntypedAssetId {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut writer = f.debug_struct("UntypedAssetId");
-        match self {
-            UntypedAssetId::Index { index, type_id } => {
-                writer
-                    .field("type_id", type_id)
-                    .field("index", &index.index)
-                    .field("generation", &index.generation);
-            }
-            UntypedAssetId::Uuid { uuid, type_id } => {
-                writer.field("type_id", type_id).field("uuid", uuid);
-            }
-        }
-        writer.finish()
-    }
-}
-
-impl PartialEq for UntypedAssetId {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.type_id() == other.type_id() && self.internal().eq(&other.internal())
-    }
-}
-
-impl Eq for UntypedAssetId {}
-
-impl Hash for UntypedAssetId {
-    #[inline]
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.internal().hash(state);
-        self.type_id().hash(state);
-    }
-}
-
-impl Ord for UntypedAssetId {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.type_id()
-            .cmp(&other.type_id())
-            .then_with(|| self.internal().cmp(&other.internal()))
-    }
-}
-
-impl PartialOrd for UntypedAssetId {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// An asset id without static or dynamic types associated with it.
-///
-/// This is provided to make implementing traits easier for the many different asset ID types.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, From)]
-enum InternalAssetId {
-    Index(AssetIndex),
-    Uuid(Uuid),
-}
-
-/// An asset index bundled with its (dynamic) type.
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-pub(crate) struct ErasedAssetIndex {
-    pub(crate) index: AssetIndex,
-    pub(crate) type_id: TypeId,
-}
-
-impl ErasedAssetIndex {
-    pub(crate) fn new(index: AssetIndex, type_id: TypeId) -> Self {
-        Self { index, type_id }
-    }
-}
-
-impl Display for ErasedAssetIndex {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ErasedAssetIndex")
-            .field("type_id", &self.type_id)
-            .field("index", &self.index.index)
-            .field("generation", &self.index.generation)
-            .finish()
-    }
-}
-
-// Cross Operations
-
-impl<A: Asset> PartialEq<UntypedAssetId> for AssetId<A> {
-    #[inline]
-    fn eq(&self, other: &UntypedAssetId) -> bool {
-        TypeId::of::<A>() == other.type_id() && self.internal().eq(&other.internal())
-    }
-}
-
-impl<A: Asset> PartialEq<AssetId<A>> for UntypedAssetId {
-    #[inline]
-    fn eq(&self, other: &AssetId<A>) -> bool {
-        other.eq(self)
-    }
-}
-
-impl<A: Asset> PartialOrd<UntypedAssetId> for AssetId<A> {
-    #[inline]
-    fn partial_cmp(&self, other: &UntypedAssetId) -> Option<core::cmp::Ordering> {
-        if TypeId::of::<A>() != other.type_id() {
-            None
-        } else {
-            Some(self.internal().cmp(&other.internal()))
-        }
-    }
-}
-
-impl<A: Asset> PartialOrd<AssetId<A>> for UntypedAssetId {
-    #[inline]
-    fn partial_cmp(&self, other: &AssetId<A>) -> Option<core::cmp::Ordering> {
-        Some(other.partial_cmp(self)?.reverse())
-    }
-}
-
-impl<A: Asset> From<AssetId<A>> for UntypedAssetId {
-    #[inline]
-    fn from(value: AssetId<A>) -> Self {
-        let type_id = TypeId::of::<A>();
-
-        match value {
-            AssetId::Index { index, .. } => UntypedAssetId::Index { type_id, index },
-            AssetId::Uuid { uuid } => UntypedAssetId::Uuid { type_id, uuid },
-        }
-    }
-}
-
-impl<A: Asset> TryFrom<UntypedAssetId> for AssetId<A> {
-    type Error = UntypedAssetIdConversionError;
-
-    #[inline]
-    fn try_from(value: UntypedAssetId) -> Result<Self, Self::Error> {
-        let found = value.type_id();
-        let expected = TypeId::of::<A>();
-
-        match value {
-            UntypedAssetId::Index { index, type_id } if type_id == expected => Ok(AssetId::Index {
-                index,
-                marker: PhantomData,
-            }),
-            UntypedAssetId::Uuid { uuid, type_id } if type_id == expected => {
-                Ok(AssetId::Uuid { uuid })
-            }
-            _ => Err(UntypedAssetIdConversionError::TypeIdMismatch { expected, found }),
-        }
-    }
-}
-
-impl TryFrom<UntypedAssetId> for ErasedAssetIndex {
-    type Error = UuidNotSupportedError;
-
-    fn try_from(asset_id: UntypedAssetId) -> Result<Self, Self::Error> {
-        match asset_id {
-            UntypedAssetId::Index { type_id, index } => Ok(ErasedAssetIndex { index, type_id }),
-            UntypedAssetId::Uuid { .. } => Err(UuidNotSupportedError),
-        }
-    }
-}
-
-impl<A: Asset> TryFrom<&Handle<A>> for ErasedAssetIndex {
-    type Error = UuidNotSupportedError;
-
-    fn try_from(handle: &Handle<A>) -> Result<Self, Self::Error> {
-        match handle {
-            Handle::Strong(handle) => Ok(Self::new(handle.index, handle.type_id)),
-            Handle::Uuid(..) => Err(UuidNotSupportedError),
-        }
-    }
-}
-
-impl TryFrom<&UntypedHandle> for ErasedAssetIndex {
-    type Error = UuidNotSupportedError;
-
-    fn try_from(handle: &UntypedHandle) -> Result<Self, Self::Error> {
-        match handle {
-            UntypedHandle::Strong(handle) => Ok(Self::new(handle.index, handle.type_id)),
-            UntypedHandle::Uuid { .. } => Err(UuidNotSupportedError),
-        }
-    }
-}
-
-impl From<ErasedAssetIndex> for UntypedAssetId {
-    fn from(value: ErasedAssetIndex) -> Self {
-        Self::Index {
-            type_id: value.type_id,
-            index: value.index,
-        }
-    }
-}
-
-#[derive(Error, Debug)]
-#[error("Attempted to create a TypedAssetIndex from a Uuid")]
-pub(crate) struct UuidNotSupportedError;
 
 /// Errors preventing the conversion of to/from an [`UntypedAssetId`] and an [`AssetId`].
 #[derive(Error, Debug, PartialEq, Clone)]
@@ -478,94 +130,4 @@ pub enum UntypedAssetIdConversionError {
         /// The [`TypeId`] of the asset that we are trying to convert from.
         found: TypeId,
     },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    type TestAsset = ();
-
-    const UUID_1: Uuid = Uuid::from_u128(123);
-    const UUID_2: Uuid = Uuid::from_u128(456);
-
-    /// Simple utility to directly hash a value using a fixed hasher
-    fn hash<T: Hash>(data: &T) -> u64 {
-        use core::hash::BuildHasher;
-
-        bevy_platform::hash::FixedHasher.hash_one(data)
-    }
-
-    /// Typed and Untyped `AssetIds` should be equivalent to each other and themselves
-    #[test]
-    fn equality() {
-        let typed = AssetId::<TestAsset>::Uuid { uuid: UUID_1 };
-        let untyped = UntypedAssetId::Uuid {
-            type_id: TypeId::of::<TestAsset>(),
-            uuid: UUID_1,
-        };
-
-        assert_eq!(Ok(typed), AssetId::try_from(untyped));
-        assert_eq!(UntypedAssetId::from(typed), untyped);
-        assert_eq!(typed, untyped);
-    }
-
-    /// Typed and Untyped `AssetIds` should be orderable amongst each other and themselves
-    #[test]
-    fn ordering() {
-        assert!(UUID_1 < UUID_2);
-
-        let typed_1 = AssetId::<TestAsset>::Uuid { uuid: UUID_1 };
-        let typed_2 = AssetId::<TestAsset>::Uuid { uuid: UUID_2 };
-        let untyped_1 = UntypedAssetId::Uuid {
-            type_id: TypeId::of::<TestAsset>(),
-            uuid: UUID_1,
-        };
-        let untyped_2 = UntypedAssetId::Uuid {
-            type_id: TypeId::of::<TestAsset>(),
-            uuid: UUID_2,
-        };
-
-        assert!(typed_1 < typed_2);
-        assert!(untyped_1 < untyped_2);
-
-        assert!(UntypedAssetId::from(typed_1) < untyped_2);
-        assert!(untyped_1 < UntypedAssetId::from(typed_2));
-
-        assert!(AssetId::try_from(untyped_1).unwrap() < typed_2);
-        assert!(typed_1 < AssetId::try_from(untyped_2).unwrap());
-
-        assert!(typed_1 < untyped_2);
-        assert!(untyped_1 < typed_2);
-    }
-
-    /// Typed and Untyped `AssetIds` should be equivalently hashable to each other and themselves
-    #[test]
-    fn hashing() {
-        let typed = AssetId::<TestAsset>::Uuid { uuid: UUID_1 };
-        let untyped = UntypedAssetId::Uuid {
-            type_id: TypeId::of::<TestAsset>(),
-            uuid: UUID_1,
-        };
-
-        assert_eq!(
-            hash(&typed),
-            hash(&AssetId::<TestAsset>::try_from(untyped).unwrap())
-        );
-        assert_eq!(hash(&UntypedAssetId::from(typed)), hash(&untyped));
-        assert_eq!(hash(&typed), hash(&untyped));
-    }
-
-    /// Typed and Untyped `AssetIds` should be interchangeable
-    #[test]
-    fn conversion() {
-        let typed = AssetId::<TestAsset>::Uuid { uuid: UUID_1 };
-        let untyped = UntypedAssetId::Uuid {
-            type_id: TypeId::of::<TestAsset>(),
-            uuid: UUID_1,
-        };
-
-        assert_eq!(Ok(typed), AssetId::try_from(untyped));
-        assert_eq!(UntypedAssetId::from(typed), untyped);
-    }
 }

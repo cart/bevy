@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use bevy_app::{App, TaskPoolPlugin};
-use bevy_ecs::error::BevyError;
+use bevy_ecs::{error::BevyError, world::World};
 use bevy_tasks::BoxedFuture;
 
 use crate::{
@@ -28,6 +28,7 @@ use crate::{
         AssetReader, AssetReaderError, AssetSourceBuilder, AssetSourceBuilders, AssetSourceEvent,
         AssetSourceId, AssetWatcher, PathStream, Reader,
     },
+    meta::Empty,
     processor::{
         AssetProcessor, GetProcessorError, LoadTransformAndSave, LogEntry, Process, ProcessContext,
         ProcessError, ProcessorState, ProcessorTransactionLog, ProcessorTransactionLogFactory,
@@ -46,7 +47,7 @@ use crate::{
 struct MyProcessor<T>(PhantomData<fn() -> T>);
 
 impl<T: TypePath + 'static> Process for MyProcessor<T> {
-    type OutputLoader = ();
+    type OutputLoader = Empty;
     type Settings = ();
 
     async fn process(
@@ -62,7 +63,7 @@ impl<T: TypePath + 'static> Process for MyProcessor<T> {
 #[derive(TypePath)]
 struct Marker;
 
-fn create_empty_asset_processor() -> AssetProcessor {
+fn create_empty_asset_processor(world: &World) -> AssetProcessor {
     let mut sources = AssetSourceBuilders::default();
     // Create an empty asset source so that AssetProcessor is happy.
     let dir = Dir::default();
@@ -72,12 +73,17 @@ fn create_empty_asset_processor() -> AssetProcessor {
         AssetSourceBuilder::new(move || Box::new(memory_reader.clone())),
     );
 
-    AssetProcessor::new(&mut sources, false).0
+    AssetProcessor::new(
+        &mut sources,
+        world.entity_allocator().build_remote_allocator(),
+        false,
+    )
+    .0
 }
 
 #[test]
 fn get_asset_processor_by_name() {
-    let asset_processor = create_empty_asset_processor();
+    let asset_processor = create_empty_asset_processor(&World::new());
     asset_processor.register_processor(MyProcessor::<Marker>(PhantomData));
 
     let long_processor = asset_processor
@@ -96,7 +102,7 @@ fn get_asset_processor_by_name() {
 
 #[test]
 fn missing_processor_returns_error() {
-    let asset_processor = create_empty_asset_processor();
+    let asset_processor = create_empty_asset_processor(&World::new());
 
     let Err(long_processor_err) = asset_processor.get_processor(
         "bevy_asset::processor::tests::MyProcessor<bevy_asset::processor::tests::Marker>",
@@ -132,7 +138,7 @@ mod sneaky {
 
 #[test]
 fn ambiguous_short_path_returns_error() {
-    let asset_processor = create_empty_asset_processor();
+    let asset_processor = create_empty_asset_processor(&World::new());
     asset_processor.register_processor(MyProcessor::<Marker>(PhantomData));
     asset_processor.register_processor(MyProcessor::<sneaky::Marker>(PhantomData));
 

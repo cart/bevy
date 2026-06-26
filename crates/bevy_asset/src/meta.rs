@@ -11,13 +11,14 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
+use bevy_reflect::TypePath;
 use futures_lite::AsyncReadExt;
 
 use crate::{
     io::{AssetReaderError, Reader},
     loader::AssetLoader,
     processor::Process,
-    Asset, AssetPath, DeserializeMetaError, VisitAssetDependencies,
+    Asset, AssetPath, DeserializeMetaError,
 };
 use downcast_rs::{impl_downcast, Downcast};
 use ron::ser::PrettyConfig;
@@ -214,10 +215,13 @@ impl<T: 'static> Settings for T where T: Send + Sync {}
 
 impl_downcast!(Settings);
 
+#[derive(Asset, TypePath)]
+pub struct Empty;
+
 /// The () processor should never be called. This implementation exists to make the meta format nicer to work with.
-impl Process for () {
+impl Process for Empty {
     type Settings = ();
-    type OutputLoader = ();
+    type OutputLoader = Empty;
 
     async fn process(
         &self,
@@ -229,17 +233,9 @@ impl Process for () {
     }
 }
 
-impl Asset for () {}
-
-impl VisitAssetDependencies for () {
-    fn visit_dependencies(&self, _visit: &mut impl FnMut(bevy_asset::UntypedAssetId)) {
-        unreachable!()
-    }
-}
-
 /// The () loader should never be called. This implementation exists to make the meta format nicer to work with.
-impl AssetLoader for () {
-    type Asset = ();
+impl AssetLoader for Empty {
+    type Asset = Empty;
     type Settings = ();
     type Error = std::io::Error;
     async fn load(

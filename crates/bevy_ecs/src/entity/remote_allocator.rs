@@ -40,10 +40,14 @@ use bevy_platform::{
     },
 };
 use core::mem::ManuallyDrop;
+use crossbeam_channel::{Receiver, Sender};
 use log::warn;
 use nonmax::NonMaxU32;
 
-use crate::query::DebugCheckedUnwrap;
+use crate::{
+    entity::{EntityHandle, InnerEntityHandle},
+    query::DebugCheckedUnwrap,
+};
 
 use super::{Entity, EntityIndex, EntitySetIterator};
 
@@ -820,17 +824,22 @@ struct SharedAllocator {
     fresh: FreshAllocator,
     /// Tracks whether or not the primary [`Allocator`] has been closed or not.
     is_closed: AtomicBool,
+    handle_drop_sender: Sender<Entity>,
+    handle_drop_receiver: Receiver<Entity>,
 }
 
 impl SharedAllocator {
     /// Constructs a [`SharedAllocator`]
     fn new() -> Self {
+        let (handle_drop_sender, handle_drop_receiver) = crossbeam_channel::unbounded();
         Self {
             free: FreeList::new(),
             fresh: FreshAllocator {
                 next_entity_index: AtomicU32::new(0),
             },
             is_closed: AtomicBool::new(false),
+            handle_drop_sender,
+            handle_drop_receiver,
         }
     }
 
@@ -969,6 +978,14 @@ impl Allocator {
             }
         }
     }
+
+    pub(super) fn handle_drop_sender(&self) -> &Sender<Entity> {
+        &self.shared.handle_drop_sender
+    }
+
+    pub(super) fn handle_drop_receiver(&self) -> &Receiver<Entity> {
+        &self.shared.handle_drop_receiver
+    }
 }
 
 impl Drop for Allocator {
@@ -1071,6 +1088,31 @@ impl RemoteAllocator {
     /// [`EntityAllocator::has_remote_allocator`](super::EntityAllocator::has_remote_allocator) is a better check for correctness.
     pub fn is_closed(&self) -> bool {
         self.shared.is_closed()
+    }
+
+    /// Creates a new handle for the given `entity`. This should only be done if there are no existing handles for the entity.
+    pub fn get_handle(&self, entity: Entity) -> EntityHandle {
+        self.get_handle_with_data(entity, ())
+    }
+
+    /// Creates a new handle for the given `entity`, with the given `data` stored in it.
+    /// This should only be done if there are no existing handles for the entity.
+    pub fn get_handle_with_data<T>(&self, entity: Entity, data: T) -> EntityHandle<T> {
+        EntityHandle(Arc::new(InnerEntityHandle {
+            entity,
+            data,
+            drop_sender: self.shared.handle_drop_sender.clone(),
+        }))
+    }
+
+    /// Allocates a new entity and creates a handle for it.
+    pub fn alloc_handle(&self) -> EntityHandle {
+        self.alloc_handle_with_data(())
+    }
+
+    /// Allocates a new entity and creates a handle for it with the given `data`.
+    pub fn alloc_handle_with_data<T>(&self, data: T) -> EntityHandle<T> {
+        self.get_handle_with_data(self.alloc(), data)
     }
 }
 

@@ -166,12 +166,11 @@ pub mod prelude {
 
     #[doc(hidden)]
     pub use crate::{
-        asset_value, Asset, AssetApp, AssetEvent, AssetId, AssetMode, AssetPlugin, AssetServer,
-        Assets, DirectAssetAccessExt, Handle, UntypedHandle,
+        asset_value, Asset, AssetApp, AssetCommands, AssetEvent, AssetId, AssetMode, AssetPlugin,
+        AssetServer, DirectAssetAccessExt, Handle, UntypedHandle,
     };
 }
 
-mod assets;
 mod direct_access_ext;
 mod event;
 mod folder;
@@ -184,17 +183,15 @@ mod reflect;
 mod render_asset;
 mod server;
 
-pub use assets::*;
-pub use bevy_asset_macros::{Asset, VisitAssetDependencies};
-use bevy_diagnostic::{Diagnostic, DiagnosticsStore, RegisterDiagnostic};
-pub use direct_access_ext::DirectAssetAccessExt;
+pub use bevy_asset_macros::*;
+pub use direct_access_ext::*;
 pub use event::*;
 pub use folder::*;
 pub use futures_lite::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 pub use handle::*;
 pub use id::*;
 pub use loader::*;
-pub use loader_builders::NestedLoadBuilder;
+pub use loader_builders::*;
 pub use path::*;
 pub use reflect::*;
 pub use render_asset::*;
@@ -203,7 +200,11 @@ pub use server::*;
 pub use uuid;
 
 use crate::{
-    io::{embedded::EmbeddedAssetRegistry, AssetSourceBuilder, AssetSourceBuilders, AssetSourceId},
+    io::{
+        embedded::{EmbeddedAssetRegistry, GetAssetServer},
+        AssetSourceBuilder, AssetSourceBuilders, AssetSourceId,
+    },
+    meta::Empty,
     processor::{AssetProcessor, Process},
 };
 use alloc::{
@@ -214,7 +215,8 @@ use alloc::{
     vec::Vec,
 };
 use bevy_app::{App, Plugin, PostUpdate, PreUpdate};
-use bevy_ecs::{prelude::Component, schedule::common_conditions::resource_exists};
+use bevy_diagnostic::{Diagnostic, DiagnosticsStore, RegisterDiagnostic};
+use bevy_ecs::{entity::Entity, prelude::Component, schedule::common_conditions::resource_exists};
 use bevy_ecs::{
     reflect::AppTypeRegistry,
     schedule::{IntoScheduleConfigs, SystemSet},
@@ -222,7 +224,6 @@ use bevy_ecs::{
 };
 use bevy_platform::collections::{HashMap, HashSet};
 use bevy_reflect::{FromReflect, GetTypeRegistration, Reflect, TypePath};
-use core::any::TypeId;
 use tracing::error;
 
 /// Provides "asset" loading and processing functionality. An [`Asset`] is a "runtime value" that is loaded from an [`AssetSource`],
@@ -367,6 +368,7 @@ impl Plugin for AssetPlugin {
             let watch = self
                 .watch_for_changes_override
                 .unwrap_or(cfg!(feature = "watch"));
+            let entity_handle_provider = app.world().entity_allocator().build_remote_allocator();
             match self.mode {
                 AssetMode::Unprocessed => {
                     let mut builders = app.world_mut().resource_mut::<AssetSourceBuilders>();
@@ -374,6 +376,7 @@ impl Plugin for AssetPlugin {
 
                     app.insert_resource(AssetServer::new_with_meta_check(
                         Arc::new(sources),
+                        entity_handle_provider,
                         AssetServerMode::Unprocessed,
                         self.meta_check.clone(),
                         watch,
@@ -386,11 +389,17 @@ impl Plugin for AssetPlugin {
                         .unwrap_or(cfg!(feature = "asset_processor"));
                     if use_asset_processor {
                         let mut builders = app.world_mut().resource_mut::<AssetSourceBuilders>();
-                        let (processor, sources) = AssetProcessor::new(&mut builders, watch);
+                        // TODO: does AssetProcessor need its own independent entity id space?
+                        let (processor, sources) = AssetProcessor::new(
+                            &mut builders,
+                            entity_handle_provider.clone(),
+                            watch,
+                        );
                         // the main asset server shares loaders with the processor asset server
                         app.insert_resource(AssetServer::new_with_loaders(
                             sources,
                             processor.server().data.loaders.clone(),
+                            entity_handle_provider,
                             AssetServerMode::Processed,
                             AssetMetaCheck::Always,
                             watch,
@@ -403,6 +412,7 @@ impl Plugin for AssetPlugin {
                         let sources = builders.build_sources(false, watch);
                         app.insert_resource(AssetServer::new_with_meta_check(
                             Arc::new(sources),
+                            entity_handle_provider,
                             AssetServerMode::Processed,
                             AssetMetaCheck::Always,
                             watch,
@@ -414,8 +424,7 @@ impl Plugin for AssetPlugin {
         }
         app.insert_resource(embedded)
             .init_asset::<LoadedFolder>()
-            .init_asset::<LoadedUntypedAsset>()
-            .init_asset::<()>()
+            .init_asset::<Empty>()
             .add_message::<UntypedAssetLoadFailedEvent>()
             .configure_sets(
                 PreUpdate,
@@ -451,7 +460,7 @@ impl Plugin for AssetPlugin {
     label = "invalid `Asset`",
     note = "consider annotating `{Self}` with `#[derive(Asset)]`"
 )]
-pub trait Asset: VisitAssetDependencies + TypePath + Send + Sync + 'static {}
+pub trait Asset: VisitAssetDependencies + TypePath + Component {}
 
 /// A trait for components that can be used as asset identifiers, e.g. handle wrappers.
 pub trait AsAssetId: Component {
@@ -468,29 +477,29 @@ pub trait AsAssetId: Component {
 /// Note that this trait is automatically implemented when deriving [`Asset`].
 pub trait VisitAssetDependencies {
     /// Apply the `visit` closure to every asset dependency.
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId));
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity));
 }
 
 impl<A: Asset> VisitAssetDependencies for Handle<A> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
-        visit(self.id().untyped());
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
+        visit(self.entity());
     }
 }
 
 impl VisitAssetDependencies for UntypedHandle {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
-        visit(self.id());
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
+        visit(self.entity());
     }
 }
 
-impl VisitAssetDependencies for UntypedAssetId {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+impl VisitAssetDependencies for Entity {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         visit(*self);
     }
 }
 
 impl<V: VisitAssetDependencies> VisitAssetDependencies for Option<V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         if let Some(dependency) = self {
             dependency.visit_dependencies(visit);
         }
@@ -498,7 +507,7 @@ impl<V: VisitAssetDependencies> VisitAssetDependencies for Option<V> {
 }
 
 impl<V: VisitAssetDependencies, const N: usize> VisitAssetDependencies for [V; N] {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self {
             dependency.visit_dependencies(visit);
         }
@@ -506,7 +515,7 @@ impl<V: VisitAssetDependencies, const N: usize> VisitAssetDependencies for [V; N
 }
 
 impl<V: VisitAssetDependencies> VisitAssetDependencies for [V] {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self {
             dependency.visit_dependencies(visit);
         }
@@ -514,13 +523,13 @@ impl<V: VisitAssetDependencies> VisitAssetDependencies for [V] {
 }
 
 impl<V: VisitAssetDependencies> VisitAssetDependencies for Box<V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         self.as_ref().visit_dependencies(visit);
     }
 }
 
 impl<V: VisitAssetDependencies> VisitAssetDependencies for Vec<V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self {
             dependency.visit_dependencies(visit);
         }
@@ -528,7 +537,7 @@ impl<V: VisitAssetDependencies> VisitAssetDependencies for Vec<V> {
 }
 
 impl<V: VisitAssetDependencies> VisitAssetDependencies for VecDeque<V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self {
             dependency.visit_dependencies(visit);
         }
@@ -536,7 +545,7 @@ impl<V: VisitAssetDependencies> VisitAssetDependencies for VecDeque<V> {
 }
 
 impl<V: VisitAssetDependencies> VisitAssetDependencies for HashSet<V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self {
             dependency.visit_dependencies(visit);
         }
@@ -544,7 +553,7 @@ impl<V: VisitAssetDependencies> VisitAssetDependencies for HashSet<V> {
 }
 
 impl<V: VisitAssetDependencies, K> VisitAssetDependencies for HashMap<K, V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self.values() {
             dependency.visit_dependencies(visit);
         }
@@ -552,7 +561,7 @@ impl<V: VisitAssetDependencies, K> VisitAssetDependencies for HashMap<K, V> {
 }
 
 impl<V: VisitAssetDependencies> VisitAssetDependencies for BTreeSet<V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self {
             dependency.visit_dependencies(visit);
         }
@@ -560,7 +569,7 @@ impl<V: VisitAssetDependencies> VisitAssetDependencies for BTreeSet<V> {
 }
 
 impl<V: VisitAssetDependencies, K> VisitAssetDependencies for BTreeMap<K, V> {
-    fn visit_dependencies(&self, visit: &mut impl FnMut(UntypedAssetId)) {
+    fn visit_dependencies(&self, visit: &mut impl FnMut(Entity)) {
         for dependency in self.values() {
             dependency.visit_dependencies(visit);
         }
@@ -652,38 +661,15 @@ impl AssetApp for App {
         let loader = L::from_world(self.world_mut());
         self.register_asset_loader(loader)
     }
-
     fn init_asset<A: Asset>(&mut self) -> &mut Self {
-        let assets = Assets::<A>::default();
-        self.world()
-            .resource::<AssetServer>()
-            .register_asset(&assets);
-        if self.world().contains_resource::<AssetProcessor>() {
-            let processor = self.world().resource::<AssetProcessor>();
-            // The processor should have its own handle provider separate from the Asset storage
-            // to ensure the id spaces are entirely separate. Not _strictly_ necessary, but
-            // desirable.
-            processor
-                .server()
-                .register_handle_provider(AssetHandleProvider::new(
-                    TypeId::of::<A>(),
-                    Arc::new(AssetIndexAllocator::default()),
-                ));
-        }
-        self.insert_resource(assets)
-            .allow_ambiguous_resource::<Assets<A>>()
-            .add_message::<AssetEvent<A>>()
+        self.get_asset_server().init_asset::<A>();
+        self.add_message::<AssetEvent<A>>()
             .add_message::<AssetLoadFailedEvent<A>>()
+            .allow_ambiguous_component::<A>()
             .register_type::<Handle<A>>()
             .add_systems(
                 PostUpdate,
-                Assets::<A>::asset_events
-                    .run_if(Assets::<A>::asset_events_condition)
-                    .in_set(AssetEventSystems),
-            )
-            .add_systems(
-                PreUpdate,
-                Assets::<A>::track_assets.in_set(AssetTrackingSystems),
+                produce_asset_modified_events::<A>.in_set(AssetEventSystems),
             )
     }
 
@@ -738,7 +724,7 @@ mod tests {
         },
         loader::{AssetLoader, LoadContext},
         Asset, AssetApp, AssetEvent, AssetId, AssetLoadError, AssetLoadFailedEvent, AssetPath,
-        AssetPlugin, AssetServer, Assets, InvalidGenerationError, LoadState, LoadedAsset,
+        AssetPlugin, AssetReference, AssetServer, DirectAssetAccessExt, LoadState, LoadedAsset,
         UnapprovedPathMode, UntypedHandle, VisitAssetDependencies, WriteDefaultMetaError,
     };
     use alloc::{
@@ -769,6 +755,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::path::{Path, PathBuf};
     use thiserror::Error;
+    use uuid::Uuid;
 
     #[derive(Asset, Debug, Default, Reflect)]
     pub struct CoolText {
@@ -986,10 +973,6 @@ mod tests {
 
     const LARGE_ITERATION_COUNT: usize = 10000;
 
-    fn get<A: Asset>(world: &World, id: AssetId<A>) -> Option<&A> {
-        world.resource::<Assets<A>>().get(id)
-    }
-
     fn get_started_load_count(world: &World) -> usize {
         world
             .resource::<DiagnosticsStore>()
@@ -1028,43 +1011,43 @@ mod tests {
 
         let a_path = "a.cool.ron";
         let a_ron = r#"
-(
-    text: "a",
-    dependencies: [
-        "foo/b.cool.ron",
-        "c.cool.ron",
-    ],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "a",
+        dependencies: [
+            "foo/b.cool.ron",
+            "c.cool.ron",
+        ],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
         let b_path = "foo/b.cool.ron";
         let b_ron = r#"
-(
-    text: "b",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "b",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
 
         let c_path = "c.cool.ron";
         let c_ron = r#"
-(
-    text: "c",
-    dependencies: [
-        "d.cool.ron",
-    ],
-    embedded_dependencies: ["a.cool.ron", "foo/b.cool.ron"],
-    sub_texts: ["hello"],
-)"#;
+    (
+        text: "c",
+        dependencies: [
+            "d.cool.ron",
+        ],
+        embedded_dependencies: ["a.cool.ron", "foo/b.cool.ron"],
+        sub_texts: ["hello"],
+    )"#;
 
         let d_path = "d.cool.ron";
         let d_ron = r#"
-(
-    text: "d",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "d",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
 
         dir.insert_asset_text(Path::new(a_path), a_ron);
         dir.insert_asset_text(Path::new(b_path), b_ron);
@@ -1091,7 +1074,7 @@ mod tests {
         assert_eq!(get_started_load_count(app.world()), 1);
 
         {
-            let a_text = get::<CoolText>(app.world(), a_id);
+            let a_text = app.world().get::<CoolText>(a_id.entity());
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert!(a_text.is_none(), "a's asset should not exist yet");
             assert!(a_load.is_loading());
@@ -1103,7 +1086,7 @@ mod tests {
         // Dependencies are still gated so they should not be loaded yet
         gate_opener.open(a_path);
         run_app_until(&mut app, |world| {
-            let a_text = get::<CoolText>(world, a_id)?;
+            let a_text = world.get::<CoolText>(a_id.entity())?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.dependencies.len(), 2);
@@ -1111,17 +1094,17 @@ mod tests {
             assert!(a_deps.is_loading());
             assert!(a_rec_deps.is_loading());
 
-            let b_id = a_text.dependencies[0].id();
-            let b_text = get::<CoolText>(world, b_id);
-            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
+            let b_entity = a_text.dependencies[0].entity();
+            let b_text = world.get::<CoolText>(b_entity);
+            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_entity).unwrap();
             assert!(b_text.is_none(), "b component should not exist yet");
             assert!(b_load.is_loading());
             assert!(b_deps.is_loading());
             assert!(b_rec_deps.is_loading());
 
-            let c_id = a_text.dependencies[1].id();
-            let c_text = get::<CoolText>(world, c_id);
-            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
+            let c_entity = a_text.dependencies[1].entity();
+            let c_text = world.get::<CoolText>(c_entity);
+            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_entity).unwrap();
             assert!(c_text.is_none(), "c component should not exist yet");
             assert!(c_load.is_loading());
             assert!(c_deps.is_loading());
@@ -1134,25 +1117,25 @@ mod tests {
         // "c" should not be loaded yet
         gate_opener.open(b_path);
         run_app_until(&mut app, |world| {
-            let a_text = get::<CoolText>(world, a_id)?;
-            let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
+            let a_text = world.get::<CoolText>(a_id.entity())?;
+            let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id.entity()).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.dependencies.len(), 2);
             assert!(a_load.is_loaded());
             assert!(a_deps.is_loading());
             assert!(a_rec_deps.is_loading());
 
-            let b_id = a_text.dependencies[0].id();
-            let b_text = get::<CoolText>(world, b_id)?;
-            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
+            let b_entity = a_text.dependencies[0].entity();
+            let b_text = world.get::<CoolText>(b_entity)?;
+            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_entity).unwrap();
             assert_eq!(b_text.text, "b");
             assert!(b_load.is_loaded());
             assert!(b_deps.is_loaded());
             assert!(b_rec_deps.is_loaded());
 
-            let c_id = a_text.dependencies[1].id();
-            let c_text = get::<CoolText>(world, c_id);
-            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
+            let c_entity = a_text.dependencies[1].entity();
+            let c_text = world.get::<CoolText>(c_entity);
+            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_entity).unwrap();
             assert!(c_text.is_none(), "c component should not exist yet");
             assert!(c_load.is_loading());
             assert!(c_deps.is_loading());
@@ -1169,7 +1152,7 @@ mod tests {
         gate_opener.open(a_path);
         gate_opener.open(b_path);
         run_app_until(&mut app, |world| {
-            let a_text = get::<CoolText>(world, a_id)?;
+            let a_text = world.get::<CoolText>(a_id.entity())?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.embedded, "");
@@ -1177,7 +1160,7 @@ mod tests {
             assert!(a_load.is_loaded());
 
             let b_id = a_text.dependencies[0].id();
-            let b_text = get::<CoolText>(world, b_id)?;
+            let b_text = world.get::<CoolText>(b_id.entity())?;
             let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
             assert_eq!(b_text.text, "b");
             assert_eq!(b_text.embedded, "");
@@ -1186,7 +1169,7 @@ mod tests {
             assert!(b_rec_deps.is_loaded());
 
             let c_id = a_text.dependencies[1].id();
-            let c_text = get::<CoolText>(world, c_id)?;
+            let c_text = world.get::<CoolText>(c_id.entity())?;
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
             assert_eq!(c_text.text, "c");
             assert_eq!(c_text.embedded, "ab");
@@ -1200,8 +1183,9 @@ mod tests {
                 "c rec deps should not be loaded yet because d has not loaded"
             );
 
-            let sub_text_id = c_text.sub_texts[0].id();
-            let sub_text = get::<SubText>(world, sub_text_id)
+            let sub_text_id = c_text.sub_texts[0].entity();
+            let sub_text = world
+                .get::<SubText>(sub_text_id)
                 .expect("subtext should exist if c exists. it came from the same loader");
             assert_eq!(sub_text.text, "hello");
             let (sub_text_load, sub_text_deps, sub_text_rec_deps) =
@@ -1211,7 +1195,7 @@ mod tests {
             assert!(sub_text_rec_deps.is_loaded());
 
             let d_id = c_text.dependencies[0].id();
-            let d_text = get::<CoolText>(world, d_id);
+            let d_text = world.get::<CoolText>(d_id.entity());
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
             assert!(d_text.is_none(), "d component should not exist yet");
             assert!(d_load.is_loading());
@@ -1233,16 +1217,17 @@ mod tests {
 
         gate_opener.open(d_path);
         run_app_until(&mut app, |world| {
-            let a_text = get::<CoolText>(world, a_id)?;
-            let (_a_load, _a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
-            let c_id = a_text.dependencies[1].id();
-            let c_text = get::<CoolText>(world, c_id)?;
+            let a_text = world.get::<CoolText>(a_id.entity())?;
+            let (_a_load, _a_deps, a_rec_deps) =
+                asset_server.get_load_states(a_id.entity()).unwrap();
+            let c_id = a_text.dependencies[1].entity();
+            let c_text = world.get::<CoolText>(c_id)?;
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
             assert_eq!(c_text.text, "c");
             assert_eq!(c_text.embedded, "ab");
 
-            let d_id = c_text.dependencies[0].id();
-            let d_text = get::<CoolText>(world, d_id)?;
+            let d_id = c_text.dependencies[0].entity();
+            let d_text = world.get::<CoolText>(d_id)?;
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
             assert_eq!(d_text.text, "d");
             assert_eq!(d_text.embedded, "");
@@ -1265,8 +1250,7 @@ mod tests {
         assert_eq!(get_started_load_count(app.world()), 6);
 
         {
-            let mut texts = app.world_mut().resource_mut::<Assets<CoolText>>();
-            let mut a = texts.get_mut(a_id).unwrap();
+            let mut a = app.world_mut().get_mut::<CoolText>(a_id.entity()).unwrap();
             a.text = "Changed".to_string();
         }
 
@@ -1274,14 +1258,14 @@ mod tests {
 
         app.update();
         assert_eq!(
-            app.world().resource::<Assets<CoolText>>().len(),
+            app.world_mut().query::<&CoolText>().iter(app.world()).len(),
             0,
             "CoolText asset entities should be despawned when no more handles exist"
         );
         app.update();
         // this requires a second update because the parent asset was freed in the previous app.update()
         assert_eq!(
-            app.world().resource::<Assets<SubText>>().len(),
+            app.world_mut().query::<&SubText>().iter(app.world()).len(),
             0,
             "SubText asset entities should be despawned when no more handles exist"
         );
@@ -1289,14 +1273,17 @@ mod tests {
         let id_results = app.world_mut().remove_resource::<IdResults>().unwrap();
         let expected_events = vec![
             AssetEvent::Added { id: a_id },
+            AssetEvent::Added {
+                id: id_results.b_id,
+            },
             AssetEvent::LoadedWithDependencies {
                 id: id_results.b_id,
             },
             AssetEvent::Added {
-                id: id_results.b_id,
+                id: id_results.c_id,
             },
             AssetEvent::Added {
-                id: id_results.c_id,
+                id: id_results.d_id,
             },
             AssetEvent::LoadedWithDependencies {
                 id: id_results.d_id,
@@ -1305,9 +1292,6 @@ mod tests {
                 id: id_results.c_id,
             },
             AssetEvent::LoadedWithDependencies { id: a_id },
-            AssetEvent::Added {
-                id: id_results.d_id,
-            },
             AssetEvent::Modified { id: a_id },
             AssetEvent::Unused { id: a_id },
             AssetEvent::Removed { id: a_id },
@@ -1334,49 +1318,108 @@ mod tests {
     }
 
     #[test]
+    fn add_with_uuid() {
+        let (mut app, _dir) = create_app();
+        app.init_asset::<CoolText>();
+        let uuid = Uuid::from_u128(123);
+        let handle = app.world().resource::<AssetServer>().add_with_uuid(
+            uuid,
+            CoolText {
+                text: "Hello".into(),
+                ..Default::default()
+            },
+        );
+        app.update();
+        let world = app.world();
+        let text = world.get::<CoolText>(handle.entity()).unwrap();
+        assert_eq!(text.text, "Hello");
+        let handle2 = world.resource::<AssetServer>().load::<CoolText>(uuid);
+        assert_eq!(handle, handle2);
+    }
+
+    #[test]
+    fn add_default() {
+        let (mut app, _dir) = create_app();
+        app.init_asset::<CoolText>();
+        let handle = app.world().resource::<AssetServer>().add_default(CoolText {
+            text: "Hello".into(),
+            ..Default::default()
+        });
+        app.update();
+        let world = app.world();
+        let text = world.get::<CoolText>(handle.entity()).unwrap();
+        assert_eq!(text.text, "Hello");
+        let handle2 = world
+            .resource::<AssetServer>()
+            .load::<CoolText>(AssetReference::Default);
+        assert_eq!(handle, handle2);
+    }
+
+    #[test]
+    fn asset_observer_early() {
+        let (mut app, _dir) = create_app();
+        app.init_asset::<CoolText>();
+        let handle = app.world().resource::<AssetServer>().add(CoolText {
+            text: "Hello".into(),
+            ..Default::default()
+        });
+        let add_tracker = Arc::new(Mutex::new(false));
+        let cloned_tracker = add_tracker.clone();
+        app.world_mut()
+            .spawn_empty_at(handle.entity())
+            .unwrap()
+            .observe(move |_: On<Add, CoolText>| {
+                *cloned_tracker.lock().unwrap() = true;
+            });
+
+        app.update();
+        assert!(*add_tracker.lock().unwrap());
+    }
+
+    #[test]
     fn failure_load_states() {
         let dir = Dir::default();
 
         let a_path = "a.cool.ron";
         let a_ron = r#"
-(
-    text: "a",
-    dependencies: [
-        "b.cool.ron",
-        "c.cool.ron",
-    ],
-    embedded_dependencies: [],
-    sub_texts: []
-)"#;
+    (
+        text: "a",
+        dependencies: [
+            "b.cool.ron",
+            "c.cool.ron",
+        ],
+        embedded_dependencies: [],
+        sub_texts: []
+    )"#;
         let b_path = "b.cool.ron";
         let b_ron = r#"
-(
-    text: "b",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: []
-)"#;
+    (
+        text: "b",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: []
+    )"#;
 
         let c_path = "c.cool.ron";
         let c_ron = r#"
-(
-    text: "c",
-    dependencies: [
-        "d.cool.ron",
-    ],
-    embedded_dependencies: [],
-    sub_texts: []
-)"#;
+    (
+        text: "c",
+        dependencies: [
+            "d.cool.ron",
+        ],
+        embedded_dependencies: [],
+        sub_texts: []
+    )"#;
 
         let d_path = "d.cool.ron";
         let d_ron = r#"
-(
-    text: "d",
-    dependencies: [],
-    OH NO THIS ASSET IS MALFORMED
-    embedded_dependencies: [],
-    sub_texts: []
-)"#;
+    (
+        text: "d",
+        dependencies: [],
+        OH NO THIS ASSET IS MALFORMED
+        embedded_dependencies: [],
+        sub_texts: []
+    )"#;
 
         dir.insert_asset_text(Path::new(a_path), a_ron);
         dir.insert_asset_text(Path::new(b_path), b_ron);
@@ -1415,19 +1458,19 @@ mod tests {
         gate_opener.open(d_path);
 
         run_app_until(&mut app, |world| {
-            let a_text = get::<CoolText>(world, a_id)?;
+            let a_text = world.get::<CoolText>(a_id.entity())?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
 
             let b_id = a_text.dependencies[0].id();
-            let b_text = get::<CoolText>(world, b_id)?;
+            let b_text = world.get::<CoolText>(b_id.entity())?;
             let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
 
             let c_id = a_text.dependencies[1].id();
-            let c_text = get::<CoolText>(world, c_id)?;
+            let c_text = world.get::<CoolText>(c_id.entity())?;
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
 
             let d_id = c_text.dependencies[0].id();
-            let d_text = get::<CoolText>(world, d_id);
+            let d_text = world.get::<CoolText>(d_id.entity());
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
 
             if !d_load.is_failed() {
@@ -1475,33 +1518,33 @@ mod tests {
     fn dependency_load_states() {
         let a_path = "a.cool.ron";
         let a_ron = r#"
-(
-    text: "a",
-    dependencies: [
-        "b.cool.ron",
-        "c.cool.ron",
-    ],
-    embedded_dependencies: [],
-    sub_texts: []
-)"#;
+    (
+        text: "a",
+        dependencies: [
+            "b.cool.ron",
+            "c.cool.ron",
+        ],
+        embedded_dependencies: [],
+        sub_texts: []
+    )"#;
         let b_path = "b.cool.ron";
         let b_ron = r#"
-(
-    text: "b",
-    dependencies: [],
-    MALFORMED
-    embedded_dependencies: [],
-    sub_texts: []
-)"#;
+    (
+        text: "b",
+        dependencies: [],
+        MALFORMED
+        embedded_dependencies: [],
+        sub_texts: []
+    )"#;
 
         let c_path = "c.cool.ron";
         let c_ron = r#"
-(
-    text: "c",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: []
-)"#;
+    (
+        text: "c",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: []
+    )"#;
 
         let dir = Dir::default();
         dir.insert_asset_text(Path::new(a_path), a_ron);
@@ -1520,7 +1563,7 @@ mod tests {
 
         gate_opener.open(a_path);
         run_app_until(&mut app, |world| {
-            let _a_text = get::<CoolText>(world, a_id)?;
+            let _a_text = world.get::<CoolText>(a_id.entity())?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert!(a_load.is_loaded());
             assert!(a_deps.is_loading());
@@ -1532,7 +1575,7 @@ mod tests {
 
         gate_opener.open(b_path);
         run_app_until(&mut app, |world| {
-            let a_text = get::<CoolText>(world, a_id)?;
+            let a_text = world.get::<CoolText>(a_id.entity())?;
             let b_id = a_text.dependencies[0].id();
 
             let (b_load, _b_deps, _b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
@@ -1552,10 +1595,10 @@ mod tests {
 
         gate_opener.open(c_path);
         run_app_until(&mut app, |world| {
-            let a_text = get::<CoolText>(world, a_id)?;
+            let a_text = world.get::<CoolText>(a_id.entity())?;
             let c_id = a_text.dependencies[1].id();
             // wait until c loads
-            let _c_text = get::<CoolText>(world, c_id)?;
+            let _c_text = world.get::<CoolText>(c_id.entity())?;
 
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert!(a_load.is_loaded());
@@ -1574,12 +1617,13 @@ mod tests {
     }
 
     const SIMPLE_TEXT: &str = r#"
-(
-    text: "dep",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "dep",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
+
     #[test]
     fn keep_gotten_strong_handles() {
         let dir = Dir::default();
@@ -1594,15 +1638,14 @@ mod tests {
 
         let id = {
             let handle = {
-                let mut texts = app.world_mut().resource_mut::<Assets<CoolText>>();
-                let handle = texts.add(CoolText::default());
-                texts.get_strong_handle(handle.id()).unwrap()
+                let handle = app.world_mut().spawn_asset(CoolText::default());
+                handle.clone()
             };
 
             app.update();
 
             {
-                let text = app.world().resource::<Assets<CoolText>>().get(&handle);
+                let text = app.world().get::<CoolText>(handle.entity());
                 assert!(text.is_some());
             }
             handle.id()
@@ -1610,7 +1653,7 @@ mod tests {
         // handle is dropped
         app.update();
         assert!(
-            app.world().resource::<Assets<CoolText>>().get(id).is_none(),
+            app.world().get::<CoolText>(id.entity()).is_none(),
             "asset has no handles, so it should have been dropped last update"
         );
     }
@@ -1634,8 +1677,7 @@ mod tests {
 
         let id = {
             let handle = {
-                let mut texts = app.world_mut().resource_mut::<Assets<CoolText>>();
-                texts.add(CoolText {
+                app.world_mut().spawn_asset(CoolText {
                     text: hello.clone(),
                     embedded: empty.clone(),
                     dependencies: vec![],
@@ -1646,11 +1688,7 @@ mod tests {
             app.update();
 
             {
-                let text = app
-                    .world()
-                    .resource::<Assets<CoolText>>()
-                    .get(&handle)
-                    .unwrap();
+                let text = app.world().get::<CoolText>(handle.entity()).unwrap();
                 assert_eq!(text.text, hello);
             }
             handle.id()
@@ -1658,7 +1696,7 @@ mod tests {
         // handle is dropped
         app.update();
         assert!(
-            app.world().resource::<Assets<CoolText>>().get(id).is_none(),
+            app.world().get::<CoolText>(id.entity()).is_none(),
             "asset has no handles, so it should have been dropped last update"
         );
         // remove event is emitted
@@ -1687,13 +1725,11 @@ mod tests {
             dependencies: vec![dep_handle.clone()],
             sub_texts: Vec::new(),
         };
-        let a_handle = app.world().resource::<AssetServer>().load_asset(a);
+        let a_handle = app.world().resource::<AssetServer>().add(a);
 
         // load_asset does not count as a load.
         assert_eq!(get_started_load_count(app.world()), 1);
 
-        app.update();
-        // TODO: ideally it doesn't take two updates for the added event to emit
         app.update();
 
         let events = core::mem::take(&mut app.world_mut().resource_mut::<StoredEvents>().0);
@@ -1708,6 +1744,9 @@ mod tests {
                 continue;
             }
             let expected_events = vec![
+                AssetEvent::Added {
+                    id: dep_handle.id(),
+                },
                 AssetEvent::LoadedWithDependencies {
                     id: dep_handle.id(),
                 },
@@ -1721,10 +1760,7 @@ mod tests {
 
         app.update();
         let events = core::mem::take(&mut app.world_mut().resource_mut::<StoredEvents>().0);
-        let expected_events = vec![AssetEvent::Added {
-            id: dep_handle.id(),
-        }];
-        assert_eq!(events, expected_events);
+        assert!(events.is_empty());
     }
 
     #[test]
@@ -1733,32 +1769,32 @@ mod tests {
 
         let a_path = "text/a.cool.ron";
         let a_ron = r#"
-(
-    text: "a",
-    dependencies: [
-        "b.cool.ron",
-    ],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "a",
+        dependencies: [
+            "b.cool.ron",
+        ],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
         let b_path = "b.cool.ron";
         let b_ron = r#"
-(
-    text: "b",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "b",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
 
         let c_path = "text/c.cool.ron";
         let c_ron = r#"
-(
-    text: "c",
-    dependencies: [
-    ],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "c",
+        dependencies: [
+        ],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
         dir.insert_asset_text(Path::new(a_path), a_ron);
         dir.insert_asset_text(Path::new(b_path), b_ron);
         dir.insert_asset_text(Path::new(c_path), c_ron);
@@ -1785,13 +1821,11 @@ mod tests {
         run_app_until(&mut app, |world| {
             let events = world.resource::<Messages<AssetEvent<LoadedFolder>>>();
             let asset_server = world.resource::<AssetServer>();
-            let loaded_folders = world.resource::<Assets<LoadedFolder>>();
-            let cool_texts = world.resource::<Assets<CoolText>>();
             for event in cursor.read(events) {
                 if let AssetEvent::LoadedWithDependencies { id } = event
                     && *id == handle.id()
                 {
-                    let loaded_folder = loaded_folders.get(&handle).unwrap();
+                    let loaded_folder = world.get::<LoadedFolder>(handle.entity()).unwrap();
                     let a_handle: Handle<CoolText> =
                         asset_server.get_handle("text/a.cool.ron").unwrap();
                     let c_handle: Handle<CoolText> =
@@ -1800,9 +1834,9 @@ mod tests {
                     let mut found_a = false;
                     let mut found_c = false;
                     for asset_handle in &loaded_folder.handles {
-                        if asset_handle.id() == a_handle.id().untyped() {
+                        if asset_handle.entity() == a_handle.entity() {
                             found_a = true;
-                        } else if asset_handle.id() == c_handle.id().untyped() {
+                        } else if asset_handle.entity() == c_handle.entity() {
                             found_c = true;
                         }
                     }
@@ -1810,9 +1844,11 @@ mod tests {
                     assert!(found_c);
                     assert_eq!(loaded_folder.handles.len(), 2);
 
-                    let a_text = cool_texts.get(&a_handle).unwrap();
-                    let b_text = cool_texts.get(&a_text.dependencies[0]).unwrap();
-                    let c_text = cool_texts.get(&c_handle).unwrap();
+                    let a_text = world.get::<CoolText>(a_handle.entity()).unwrap();
+                    let b_text = world
+                        .get::<CoolText>(a_text.dependencies[0].entity())
+                        .unwrap();
+                    let c_text = world.get::<CoolText>(c_handle.entity()).unwrap();
 
                     assert_eq!("a", a_text.text);
                     assert_eq!("b", b_text.text);
@@ -1902,12 +1938,12 @@ mod tests {
 
         let a_path = "text/a.cool.ron";
         let a_ron = r#"
-(
-    text: "a",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "a",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
 
         let dir = Dir::default();
         dir.insert_asset_text(Path::new(a_path), a_ron);
@@ -1954,8 +1990,7 @@ mod tests {
             match tracker.finished_asset {
                 Some(asset_id) => {
                     assert_eq!(asset_id, a_id);
-                    let assets = world.resource::<Assets<CoolText>>();
-                    let result = assets.get(asset_id).unwrap();
+                    let result = world.get::<CoolText>(asset_id.entity()).unwrap();
                     assert_eq!(result.text, "a");
                     Some(())
                 }
@@ -1969,7 +2004,7 @@ mod tests {
         let mut app = create_app().0;
         app.init_asset::<CoolText>();
 
-        fn uses_assets(_asset: ResMut<Assets<CoolText>>) {}
+        fn uses_assets(_asset: Query<&mut CoolText>) {}
         app.add_systems(Update, (uses_assets, uses_assets));
         app.edit_schedule(Update, |s| {
             s.set_build_settings(ScheduleBuildSettings {
@@ -1990,11 +2025,11 @@ mod tests {
         dir.insert_asset_text(
             Path::new("a.cool.ron"),
             r#"(
-    text: "b",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: ["A"],
-)"#,
+        text: "b",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: ["A"],
+    )"#,
         );
         dir.insert_asset_text(Path::new("empty.txt"), "");
 
@@ -2122,12 +2157,12 @@ mod tests {
         let dir = Dir::default();
         let a_path = "../a.cool.ron";
         let a_ron = r#"
-(
-    text: "a",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#;
+    (
+        text: "a",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#;
 
         dir.insert_asset_text(Path::new(a_path), a_ron);
 
@@ -2202,35 +2237,6 @@ mod tests {
 
         // Make sure this asset actually loads.
         run_app_until(&mut app, |_| asset_server.is_loaded(&handle).then_some(()));
-    }
-
-    #[test]
-    fn insert_dropped_handle_returns_error() {
-        let mut app = create_app().0;
-
-        app.init_asset::<TestAsset>();
-
-        let handle = app.world().resource::<Assets<TestAsset>>().reserve_handle();
-        // We still have the asset ID, but we've dropped the handle so the asset is no longer live.
-        let asset_id = handle.id();
-        drop(handle);
-
-        // Allow `Assets` to detect the dropped handle.
-        app.world_mut()
-            .run_system_cached(Assets::<TestAsset>::track_assets)
-            .unwrap();
-
-        let AssetId::Index { index, .. } = asset_id else {
-            unreachable!("Reserving a handle always produces an index");
-        };
-
-        // Try to insert an asset into the dropped handle's spot. This should not panic.
-        assert_eq!(
-            app.world_mut()
-                .resource_mut::<Assets<TestAsset>>()
-                .insert(asset_id, TestAsset),
-            Err(InvalidGenerationError::Removed { index })
-        );
     }
 
     /// A loader that notifies a sender when the loader has started, and blocks on a receiver to
@@ -2425,11 +2431,11 @@ mod tests {
         dir.insert_asset_text(
             Path::new("abc.cool.ron"),
             r#"(
-    text: "a",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#,
+        text: "a",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#,
         );
 
         app.init_asset::<CoolText>()
@@ -2445,8 +2451,8 @@ mod tests {
             assert_eq!(
                 messages,
                 [
-                    AssetEvent::LoadedWithDependencies { id: handle.id() },
                     AssetEvent::Added { id: handle.id() },
+                    AssetEvent::LoadedWithDependencies { id: handle.id() },
                 ]
             );
             Some(())
@@ -2503,11 +2509,11 @@ mod tests {
         dir.insert_asset_text(
             Path::new("abc.cool.ron"),
             r#"(
-    text: "a",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: [],
-)"#,
+        text: "a",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: [],
+    )"#,
         );
         source_events
             .send_blocking(AssetSourceEvent::AddedAsset(PathBuf::from("abc.cool.ron")))
@@ -2597,8 +2603,8 @@ mod tests {
 
         run_app_until(&mut app, |world| {
             let (Some(asset_1), Some(asset_2)) = (
-                world.resource::<Assets<U8Asset>>().get(&handle_1),
-                world.resource::<Assets<U8Asset>>().get(&handle_2),
+                world.get::<U8Asset>(handle_1.entity()),
+                world.get::<U8Asset>(handle_2.entity()),
             ) else {
                 return None;
             };
@@ -2698,40 +2704,27 @@ mod tests {
 
         // Wait for the asset to load.
         run_app_until(&mut app, |world| {
-            world
-                .resource::<Assets<TestAsset>>()
-                .get(&original_handle)
-                .map(|_| ())
+            world.get::<TestAsset>(original_handle.entity()).map(|_| ())
         });
 
         assert_eq!(get_started_load_count(app.world()), 1);
 
         // Get a new strong handle from the original handle's ID.
         let new_handle = app
-            .world_mut()
-            .resource_mut::<Assets<TestAsset>>()
-            .get_strong_handle(original_handle.id())
+            .world()
+            .resource::<AssetServer>()
+            .get_id_handle(original_handle.id())
             .unwrap();
 
         // Drop the original handle. This should still leave the asset alive.
         drop(original_handle);
 
         app.update();
-        assert!(app
-            .world()
-            .resource::<Assets<TestAsset>>()
-            .get(&new_handle)
-            .is_some());
+        assert!(app.world().get::<TestAsset>(new_handle.entity()).is_some());
 
         let _other_handle: Handle<TestAsset> = asset_server.load("test.txt");
         app.update();
-        // The asset server should **not** have started a new load, since the asset is still alive.
-
-        // Due to https://github.com/bevyengine/bevy/issues/20651, we do get a second load. Once
-        // #20651 is fixed, we should swap these asserts.
-        //
-        // assert_eq!(get_started_load_count(app.world()), 1);
-        assert_eq!(get_started_load_count(app.world()), 2);
+        assert_eq!(get_started_load_count(app.world()), 1);
     }
 
     #[test]
@@ -2814,13 +2807,10 @@ mod tests {
         let immediate_handle: Handle<ImmediateNested> = server.load("a.immediate");
 
         run_app_until(&mut app, |world| {
-            let immediate_assets = world.resource::<Assets<ImmediateNested>>();
-            let immediate = immediate_assets.get(&immediate_handle)?;
+            let immediate = world.get::<ImmediateNested>(immediate_handle.entity())?;
 
             let test_asset_handle = immediate.0.clone();
-            world
-                .resource::<Assets<TestAsset>>()
-                .get(&test_asset_handle)?;
+            world.get::<TestAsset>(test_asset_handle.entity())?;
 
             // The immediate asset is loaded, and the asset it got from its immediate load is also
             // loaded.
@@ -2948,8 +2938,7 @@ mod tests {
 
         let dep_handle: Handle<TestAsset> = app
             .world()
-            .resource::<Assets<AssetWithDep>>()
-            .get(&subasset_handle)
+            .get::<AssetWithDep>(subasset_handle.entity())
             .unwrap()
             .dep
             .clone();
@@ -3001,18 +2990,18 @@ mod tests {
     impl From<&AssetLoadError> for TestAssetLoadError {
         fn from(value: &AssetLoadError) -> TestAssetLoadError {
             match value {
-                AssetLoadError::RequestedHandleTypeMismatch (err) => Self::RequestedHandleTypeMismatch {
-                    requested: err.requested,
-                    actual_asset_name: err.actual_asset_name,
-                },
-                AssetLoadError::MissingAssetLoader { .. } => Self::MissingAssetLoader,
-                AssetLoadError::AssetReaderError(AssetReaderError::NotFound(_)) => {
-                    Self::AssetReaderErrorNotFound
+                    AssetLoadError::RequestedHandleTypeMismatch (err) => Self::RequestedHandleTypeMismatch {
+                        requested: err.requested,
+                        actual_asset_name: err.actual_asset_name,
+                    },
+                    AssetLoadError::MissingAssetLoader { .. } => Self::MissingAssetLoader,
+                    AssetLoadError::AssetReaderError(AssetReaderError::NotFound(_)) => {
+                        Self::AssetReaderErrorNotFound
+                    }
+                    AssetLoadError::AssetLoaderError { .. } => Self::AssetLoaderError,
+                    AssetLoadError::MissingLabel { .. } => Self::MissingLabel,
+                    _ => panic!("TestAssetLoadError's From<&AssetLoaderError> is missing a case for AssetLoadError \"{:?}\".", value),
                 }
-                AssetLoadError::AssetLoaderError { .. } => Self::AssetLoaderError,
-                AssetLoadError::MissingLabel { .. } => Self::MissingLabel,
-                _ => panic!("TestAssetLoadError's From<&AssetLoaderError> is missing a case for AssetLoadError \"{:?}\".", value),
-            }
         }
     }
 
@@ -3037,12 +3026,12 @@ mod tests {
         dir.insert_asset_text(
             Path::new("test.cool.ron"),
             r#"
-(
-    text: "test",
-    dependencies: [],
-    embedded_dependencies: [],
-    sub_texts: ["subasset"],
-)"#,
+    (
+        text: "test",
+        dependencies: [],
+        embedded_dependencies: [],
+        sub_texts: ["subasset"],
+    )"#,
         );
 
         dir.insert_asset_text(Path::new("malformed.cool.ron"), "MALFORMED");
@@ -3172,10 +3161,7 @@ mod tests {
                 asset_server.load_builder().override_unapproved().load(path),
                 Handle::<TestAsset>::default()
             );
-            assert_eq!(
-                asset_server.load_builder().load_untyped(path),
-                Handle::default()
-            );
+            todo!("test load_untyped()");
             assert!(matches!(
                 block_on(asset_server.load_builder().load_untyped_async(path)),
                 Err(AssetLoadError::EmptyPath(reported_path)) if AssetPath::from(path) == reported_path
@@ -3265,15 +3251,14 @@ mod tests {
 
         let folder = app
             .world()
-            .resource::<Assets<LoadedFolder>>()
-            .get(&folder_handle)
+            .get::<LoadedFolder>(folder_handle.entity())
             .unwrap();
         assert_eq!(folder.handles.len(), 2);
         let mut handles = folder
             .handles
             .iter()
             .cloned()
-            .map(UntypedHandle::typed::<CoolText>)
+            .map(UntypedHandle::typed_unchecked::<CoolText>)
             .collect::<Vec<_>>();
         // Sort the handles so we know abc is first and def is second.
         handles.sort_by_key(|handle| handle.path().unwrap().path().to_path_buf());
@@ -3281,9 +3266,20 @@ mod tests {
         let abc_handle = handles[0].clone();
         let def_handle = handles[1].clone();
 
-        let cool_texts = app.world().resource::<Assets<CoolText>>();
-        assert_eq!(cool_texts.get(&abc_handle).unwrap().text, "abc");
-        assert_eq!(cool_texts.get(&def_handle).unwrap().text, "def");
+        assert_eq!(
+            app.world()
+                .get::<CoolText>(abc_handle.entity())
+                .unwrap()
+                .text,
+            "abc"
+        );
+        assert_eq!(
+            app.world()
+                .get::<CoolText>(def_handle.entity())
+                .unwrap()
+                .text,
+            "def"
+        );
 
         // Before doing any hot reloading stuff, clear out any AssetEvent messages.
         app.world_mut()
@@ -3310,18 +3306,14 @@ mod tests {
             }
             None
         });
-
-        let folder = app
-            .world()
-            .resource::<Assets<LoadedFolder>>()
-            .get(&folder_handle)
-            .unwrap();
+        let world = app.world();
+        let folder = world.get::<LoadedFolder>(folder_handle.entity()).unwrap();
         assert_eq!(folder.handles.len(), 3);
         let mut handles = folder
             .handles
             .iter()
             .cloned()
-            .map(UntypedHandle::typed::<CoolText>)
+            .map(UntypedHandle::typed_unchecked::<CoolText>)
             .collect::<Vec<_>>();
         // Sort the handles so we know the order is abc, def, and ghi.
         handles.sort_by_key(|handle| handle.path().unwrap().path().to_path_buf());
@@ -3333,9 +3325,17 @@ mod tests {
         assert_eq!(new_abc_handle, abc_handle);
         assert_eq!(new_def_handle, def_handle);
 
-        let cool_texts = app.world().resource::<Assets<CoolText>>();
-        assert_eq!(cool_texts.get(&new_abc_handle).unwrap().text, "abc");
-        assert_eq!(cool_texts.get(&new_def_handle).unwrap().text, "def");
-        assert_eq!(cool_texts.get(&new_ghi_handle).unwrap().text, "ghi");
+        assert_eq!(
+            world.get::<CoolText>(new_abc_handle.entity()).unwrap().text,
+            "abc"
+        );
+        assert_eq!(
+            world.get::<CoolText>(new_def_handle.entity()).unwrap().text,
+            "def"
+        );
+        assert_eq!(
+            world.get::<CoolText>(new_ghi_handle.entity()).unwrap().text,
+            "ghi"
+        );
     }
 }

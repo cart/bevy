@@ -51,13 +51,13 @@ use crate::{
     },
     meta::{
         get_asset_hash, get_full_asset_hash, AssetAction, AssetActionMinimal, AssetHash, AssetMeta,
-        AssetMetaDyn, AssetMetaMinimal, ProcessedInfo, ProcessedInfoMinimal,
+        AssetMetaDyn, AssetMetaMinimal, Empty, ProcessedInfo, ProcessedInfoMinimal,
     },
     AssetLoadError, AssetMetaCheck, AssetPath, AssetServer, AssetServerMode, DeserializeMetaError,
     MissingAssetLoaderForExtensionError, UnapprovedPathMode, WriteDefaultMetaError,
 };
 use alloc::{borrow::ToOwned, boxed::Box, string::String, sync::Arc, vec, vec::Vec};
-use bevy_ecs::prelude::*;
+use bevy_ecs::{entity::RemoteAllocator, prelude::*};
 use bevy_platform::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::{PoisonError, RwLock},
@@ -159,6 +159,7 @@ impl AssetProcessor {
     /// Creates a new [`AssetProcessor`] instance.
     pub fn new(
         sources: &mut AssetSourceBuilders,
+        remote_allocator: RemoteAllocator,
         watch_processed: bool,
     ) -> (Self, Arc<AssetSources>) {
         let state = Arc::new(ProcessingState::new());
@@ -170,6 +171,7 @@ impl AssetProcessor {
         // The asset processor uses its own asset server with its own id space
         let server = AssetServer::new_with_meta_check(
             sources.clone(),
+            remote_allocator,
             AssetServerMode::Processed,
             AssetMetaCheck::Always,
             false,
@@ -412,7 +414,8 @@ impl AssetProcessor {
                     pending_tasks -= 1;
                     if pending_tasks == 0 {
                         // clean up metadata in asset server
-                        self.server.write_infos().consume_handle_drop_events();
+                        // TODO: Leaking here probably isn't ok
+                        // self.server.write_infos().consume_handle_drop_events();
                         self.data
                             .processing_state
                             .set_state(ProcessorState::Finished)
@@ -1087,7 +1090,7 @@ impl AssetProcessor {
                         Ok(loader) => (loader.default_meta(), None),
                         Err(MissingAssetLoaderForExtensionError { .. }) => {
                             let meta: Box<dyn AssetMetaDyn> =
-                                Box::new(AssetMeta::<(), ()>::new(AssetAction::Ignore));
+                                Box::new(AssetMeta::<Empty, Empty>::new(AssetAction::Ignore));
                             (meta, None)
                         }
                     }
