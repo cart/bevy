@@ -34,6 +34,7 @@ use crate::{
         BoxedSystem, Deferred, IntoSystem, RegisteredSystem, SystemId, SystemInput,
         SystemParamValidationError,
     },
+    template::Template,
     world::{
         command_queue::RawCommandQueue, unsafe_world_cell::UnsafeWorldCell, CommandQueue,
         EntityWorldMut, FromWorld, World,
@@ -410,6 +411,24 @@ impl<'w, 's> Commands<'w, 's> {
             world
                 .spawn_at_with_caller(entity, bundle, caller)
                 .map(|_| ())
+        });
+        self.entity(entity)
+    }
+
+    #[track_caller]
+    pub fn spawn_template<T: Template<Output = B> + Send + Sync + 'static, B: Bundle>(
+        &mut self,
+        template: T,
+    ) -> EntityCommands<'_> {
+        let entity = self.allocator.alloc();
+        let caller = MaybeLocation::caller();
+        self.queue(move |world: &mut World| {
+            world
+                .spawn_empty_at_with_caller(entity, caller)
+                .unwrap()
+                .insert_template(template)
+                // TODO: log error
+                .unwrap();
         });
         self.entity(entity)
     }

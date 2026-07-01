@@ -1661,6 +1661,16 @@ impl<'w> EntityWorldMut<'w> {
     pub fn build_template<T: Template>(&mut self, template: &T) -> crate::error::Result<T::Output> {
         self.template_context(|context| template.build_template(context))
     }
+    ///
+    /// Builds the given template using a [`TemplateContext`] generated for this entity.
+    pub fn insert_template<T: Template<Output = B>, B: Bundle>(
+        &mut self,
+        template: T,
+    ) -> crate::error::Result<&mut Self> {
+        let template = self.build_template(&template)?;
+        self.insert(template);
+        Ok(self)
+    }
 
     /// This despawns this entity if it is currently spawned, storing the new [`EntityGeneration`](crate::entity::EntityGeneration) in [`Self::entity`] but not freeing it.
     pub(crate) fn despawn_no_free_with_caller(&mut self, caller: MaybeLocation) {

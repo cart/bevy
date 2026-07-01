@@ -45,7 +45,7 @@ use crate::{
     },
     entity::{Entities, Entity, EntityAllocator, EntityNotSpawnedError, SpawnError},
     entity_disabling::DefaultQueryFilters,
-    error::{ErrorHandler, FallbackErrorHandler},
+    error::{BevyError, ErrorHandler, FallbackErrorHandler},
     lifecycle::{ComponentHooks, RemovedComponentMessages, ADD, DESPAWN, DISCARD, INSERT, REMOVE},
     message::{Message, MessageId, Messages, WriteBatchIds},
     observer::Observers,
@@ -56,6 +56,7 @@ use crate::{
     schedule::{Schedule, ScheduleLabel, Schedules},
     storage::{NonSendData, Storages},
     system::Commands,
+    template::Template,
     world::{
         command_queue::RawCommandQueue,
         error::{
@@ -1241,6 +1242,16 @@ impl World {
     pub fn spawn<B: Bundle>(&mut self, bundle: B) -> EntityWorldMut<'_> {
         move_as_ptr!(bundle);
         self.spawn_with_caller(bundle, MaybeLocation::caller())
+    }
+
+    #[track_caller]
+    pub fn spawn_template<T: Template<Output = B>, B: Bundle>(
+        &mut self,
+        template: T,
+    ) -> Result<EntityWorldMut<'_>, BevyError> {
+        let mut entity = self.spawn_empty();
+        entity.insert_template(template)?;
+        Ok(entity)
     }
 
     pub(crate) fn spawn_with_caller<B: Bundle>(
