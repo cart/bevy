@@ -8,15 +8,16 @@ use core::{
 use std::io;
 
 use bevy_asset::{
-    io::Reader, Asset, AssetEvent, AssetId, AssetLoader, AssetPath, Assets, Handle, LoadContext,
+    io::Reader, Asset, AssetEvent, AssetId, AssetLoader, AssetPath, Handle, LoadContext,
 };
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     component::Component,
+    entity::Entity,
     message::MessageReader,
     reflect::ReflectComponent,
     resource::Resource,
-    system::{Res, ResMut},
+    system::{Query, Res, ResMut},
     template::FromTemplate,
 };
 use bevy_platform::collections::HashMap;
@@ -54,23 +55,23 @@ use crate::{AnimationClip, AnimationTargetId};
 /// For example, consider the following graph:
 ///
 /// ```text
-/// ┌────────────┐                                      
-/// │            │                                      
-/// │    Idle    ├─────────────────────┐                
-/// │            │                     │                
-/// └────────────┘                     │                
-///                                    │                
+/// ┌────────────┐
+/// │            │
+/// │    Idle    ├─────────────────────┐
+/// │            │                     │
+/// └────────────┘                     │
+///                                    │
 /// ┌────────────┐                     │  ┌────────────┐
 /// │            │                     │  │            │
 /// │    Run     ├──┐                  ├──┤    Root    │
 /// │            │  │  ┌────────────┐  │  │            │
 /// └────────────┘  │  │   Blend    │  │  └────────────┘
-///                 ├──┤            ├──┘                
-/// ┌────────────┐  │  │    0.5     │                   
-/// │            │  │  └────────────┘                   
-/// │    Walk    ├──┘                                   
-/// │            │                                      
-/// └────────────┘                                      
+///                 ├──┤            ├──┘
+/// ┌────────────┐  │  │    0.5     │
+/// │            │  │  └────────────┘
+/// │    Walk    ├──┘
+/// │            │
+/// └────────────┘
 /// ```
 ///
 /// In this case, assuming that Idle, Run, and Walk are all playing with weight
@@ -136,6 +137,13 @@ pub struct AnimationGraph {
 )]
 #[reflect(Component, Default, Clone)]
 pub struct AnimationGraphHandle(pub Handle<AnimationGraph>);
+
+impl Into<Entity> for &AnimationGraphHandle {
+    #[inline]
+    fn into(self) -> Entity {
+        self.0.entity()
+    }
+}
 
 impl From<AnimationGraphHandle> for AssetId<AnimationGraph> {
     fn from(handle: AnimationGraphHandle) -> Self {
@@ -851,7 +859,7 @@ pub struct NonPathHandleError;
 /// for quick evaluation of that graph's animations.
 pub(crate) fn thread_animation_graphs(
     mut threaded_animation_graphs: ResMut<ThreadedAnimationGraphs>,
-    animation_graphs: Res<Assets<AnimationGraph>>,
+    animation_graphs: Query<&AnimationGraph>,
     mut animation_graph_asset_events: MessageReader<AssetEvent<AnimationGraph>>,
 ) {
     for animation_graph_asset_event in animation_graph_asset_events.read() {
@@ -860,7 +868,7 @@ pub(crate) fn thread_animation_graphs(
             | AssetEvent::Modified { id }
             | AssetEvent::LoadedWithDependencies { id } => {
                 // Fetch the animation graph.
-                let Some(animation_graph) = animation_graphs.get(id) else {
+                let Ok(animation_graph) = animation_graphs.get(id) else {
                     continue;
                 };
 

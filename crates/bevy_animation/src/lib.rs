@@ -38,7 +38,7 @@ use crate::{
 };
 
 use bevy_app::{AnimationSystems, App, Plugin, PostUpdate};
-use bevy_asset::{Asset, AssetApp, AssetEventSystems, Assets};
+use bevy_asset::{Asset, AssetApp, AssetEventSystems};
 use bevy_ecs::{prelude::*, resource::IsResource, world::EntityMutExcept};
 use bevy_math::FloatOrd;
 use bevy_platform::{collections::HashMap, hash::NoOpHash};
@@ -988,13 +988,13 @@ impl AnimationPlayer {
 /// A system that triggers untargeted animation events for the currently-playing animations.
 fn trigger_untargeted_animation_events(
     mut commands: Commands,
-    clips: Res<Assets<AnimationClip>>,
-    graphs: Res<Assets<AnimationGraph>>,
+    clips: Query<&AnimationClip>,
+    graphs: Query<&AnimationGraph>,
     players: Query<(Entity, &AnimationPlayer, &AnimationGraphHandle)>,
 ) {
     for (entity, player, graph_id) in &players {
         // The graph might not have loaded yet. Safely bail.
-        let Some(graph) = graphs.get(graph_id) else {
+        let Ok(graph) = graphs.get(graph_id) else {
             return;
         };
 
@@ -1009,7 +1009,7 @@ fn trigger_untargeted_animation_events(
                     AnimationNodeType::Clip(handle) => Some(handle),
                     AnimationNodeType::Blend | AnimationNodeType::Add => None,
                 })
-                .and_then(|id| clips.get(id))
+                .and_then(|id| clips.get(id).ok())
             else {
                 continue;
             };
@@ -1030,15 +1030,15 @@ fn trigger_untargeted_animation_events(
 /// A system that advances the time for all playing animations.
 pub fn advance_animations(
     time: Res<Time>,
-    animation_clips: Res<Assets<AnimationClip>>,
-    animation_graphs: Res<Assets<AnimationGraph>>,
+    animation_clips: Query<&AnimationClip>,
+    animation_graphs: Query<&AnimationGraph>,
     mut players: Query<(&mut AnimationPlayer, &AnimationGraphHandle)>,
 ) {
     let delta_seconds = time.delta_secs();
     players
         .par_iter_mut()
         .for_each(|(mut player, graph_handle)| {
-            let Some(animation_graph) = animation_graphs.get(graph_handle) else {
+            let Ok(animation_graph) = animation_graphs.get(graph_handle) else {
                 return;
             };
 
@@ -1056,7 +1056,7 @@ pub fn advance_animations(
                     // Tick the animation if necessary.
                     if !active_animation.paused
                         && let AnimationNodeType::Clip(ref clip_handle) = node.node_type
-                        && let Some(clip) = animation_clips.get(clip_handle)
+                        && let Ok(clip) = animation_clips.get(clip_handle)
                     {
                         active_animation.update(delta_seconds, clip.duration);
                     }
@@ -1081,8 +1081,8 @@ pub type AnimationEntityMut<'w, 's> = EntityMutExcept<
 /// according to the currently-playing animations.
 pub fn animate_targets(
     par_commands: ParallelCommands,
-    clips: Res<Assets<AnimationClip>>,
-    graphs: Res<Assets<AnimationGraph>>,
+    clips: Query<&AnimationClip>,
+    graphs: Query<&AnimationGraph>,
     threaded_animation_graphs: Res<ThreadedAnimationGraphs>,
     players: Query<(&AnimationPlayer, &AnimationGraphHandle)>,
     mut targets: Query<
@@ -1110,7 +1110,7 @@ pub fn animate_targets(
                 };
 
             // The graph might not have loaded yet. Safely bail.
-            let Some(animation_graph) = graphs.get(animation_graph_id) else {
+            let Ok(animation_graph) = graphs.get(animation_graph_id) else {
                 return;
             };
 
@@ -1200,7 +1200,7 @@ pub fn animate_targets(
                             continue;
                         }
 
-                        let Some(clip) = clips.get(animation_clip_handle) else {
+                        let Ok(clip) = clips.get(animation_clip_handle) else {
                             continue;
                         };
 

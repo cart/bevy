@@ -1,8 +1,8 @@
 use alloc::borrow::Cow;
+use bevy_ecs::system::Query;
 
 use core::hash::BuildHasher;
 
-use bevy_asset::Assets;
 use bevy_color::Color;
 use bevy_ecs::{
     component::Component, entity::Entity, reflect::ReflectComponent, resource::Resource,
@@ -56,7 +56,7 @@ impl TextPipeline {
     /// Negative or 0.0 font sizes will not be laid out.
     pub fn update_buffer<'a>(
         &mut self,
-        fonts: &Assets<Font>,
+        fonts: &Query<&Font>,
         text_spans: impl Iterator<
             Item = (
                 Entity,
@@ -249,7 +249,7 @@ impl TextPipeline {
     pub fn create_text_measure<'a>(
         &mut self,
         entity: Entity,
-        fonts: &Assets<Font>,
+        fonts: &Query<&Font>,
         text_spans: impl Iterator<
             Item = (
                 Entity,
@@ -305,7 +305,7 @@ impl TextPipeline {
         &mut self,
         layout_info: &mut TextLayoutInfo,
         font_atlas_set: &mut FontAtlasSet,
-        textures: &mut Assets<Image>,
+        textures: &mut Query<&mut Image>,
         computed: &mut ComputedTextBlock,
         scale_cx: &mut ScaleCx,
         bounds: TextBounds,
@@ -426,14 +426,14 @@ impl TextPipeline {
 /// Resolve a [`TextFont`]'s [`FontSource`] to a font family.
 pub fn resolve_font_source<'a>(
     text_font: &'a TextFont,
-    fonts: &'a Assets<Font>,
+    fonts: &'a Query<&Font>,
 ) -> Result<FontFamily<'a>, TextError> {
     Ok(match &text_font.font {
         FontSource::Handle(handle) => {
             FontFamily::Single(parley::FontFamilyName::Named(Cow::Borrowed(
                 fonts
-                    .get(handle.id())
-                    .ok_or(TextError::NoSuchFont)?
+                    .get(handle)
+                    .map_err(|_| TextError::NoSuchFont)?
                     .alias
                     .as_str(),
             )))

@@ -1,4 +1,5 @@
-use bevy_asset::{Assets, Handle, RenderAssetUsages};
+use bevy_asset::{AssetCommands, Handle, RenderAssetUsages};
+use bevy_ecs::system::{Commands, Query};
 use bevy_image::{prelude::*, ImageSampler, ToExtents};
 use bevy_math::{UVec2, Vec2};
 use bevy_platform::collections::HashMap;
@@ -39,11 +40,7 @@ pub struct FontAtlas {
 
 impl FontAtlas {
     /// Create a new [`FontAtlas`] with the given size, adding it to the appropriate asset collections.
-    pub fn new(
-        textures: &mut Assets<Image>,
-        size: UVec2,
-        font_smoothing: FontSmoothing,
-    ) -> FontAtlas {
+    pub fn new(commands: &mut Commands, size: UVec2, font_smoothing: FontSmoothing) -> FontAtlas {
         let mut image = Image::new_fill(
             size.to_extents(),
             TextureDimension::D2,
@@ -55,7 +52,7 @@ impl FontAtlas {
         if font_smoothing == FontSmoothing::None {
             image.sampler = ImageSampler::nearest();
         }
-        let texture = textures.add(image);
+        let texture = commands.spawn_asset(image);
         Self {
             texture_atlas: TextureAtlasLayout::new_empty(size),
             glyph_to_atlas_index: HashMap::default(),
@@ -87,7 +84,7 @@ impl FontAtlas {
     /// modified.
     pub fn add_glyph(
         &mut self,
-        textures: &mut Assets<Image>,
+        textures: &mut Query<&mut Image>,
         key: GlyphCacheKey,
         texture: &Image,
         offset: Vec2,
@@ -95,7 +92,7 @@ impl FontAtlas {
     ) -> Result<(), TextError> {
         let mut atlas_texture = textures
             .get_mut(&self.texture)
-            .ok_or(TextError::MissingAtlasTexture)?;
+            .map_err(|_| TextError::MissingAtlasTexture)?;
 
         if let Ok(glyph_index) = self.dynamic_texture_atlas_builder.add_texture(
             &mut self.texture_atlas,
@@ -131,7 +128,7 @@ impl core::fmt::Debug for FontAtlas {
 /// Adds the given subpixel-offset glyph to the given font atlases
 pub fn add_glyph_to_atlas(
     font_atlases: &mut Vec<FontAtlas>,
-    textures: &mut Assets<Image>,
+    textures: &mut Query<&mut Image>,
     scaler: &mut Scaler,
     font_smoothing: FontSmoothing,
     glyph_id: u16,

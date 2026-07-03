@@ -191,7 +191,7 @@ impl WorldSceneExt for World {
         let mut query = SystemState::<Query<&ScenePatch>>::new(self);
         let assets = self.resource::<AssetServer>();
         let mut patch = ScenePatch::load(assets, scene);
-        patch.resolve(assets, &query.get(self).unwrap());
+        patch.resolve(assets, &query.get(self).unwrap())?;
         patch.spawn(self)
     }
 

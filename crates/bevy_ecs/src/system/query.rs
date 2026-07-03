@@ -1574,8 +1574,11 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
     ///
     /// - [`get_mut`](Self::get_mut) to get a mutable query item.
     #[inline]
-    pub fn get(&self, entity: Entity) -> Result<ROQueryItem<'_, 's, D>, QueryEntityError> {
-        self.as_readonly().get_inner(entity)
+    pub fn get(
+        &self,
+        entity: impl Into<Entity>,
+    ) -> Result<ROQueryItem<'_, 's, D>, QueryEntityError> {
+        self.as_readonly().get_inner(entity.into())
     }
 
     /// Returns the read-only query items for the given array of [`Entity`].
@@ -1710,8 +1713,11 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
     ///
     /// - [`get`](Self::get) to get a read-only query item.
     #[inline]
-    pub fn get_mut(&mut self, entity: Entity) -> Result<D::Item<'_, 's>, QueryEntityError> {
-        self.reborrow().get_inner(entity)
+    pub fn get_mut(
+        &mut self,
+        entity: impl Into<Entity>,
+    ) -> Result<D::Item<'_, 's>, QueryEntityError> {
+        self.reborrow().get_inner(entity.into())
     }
 
     /// Returns the query item for the given [`Entity`].
@@ -2239,7 +2245,8 @@ impl<'w, 's, D: QueryData, F: QueryFilter> Query<'w, 's, D, F> {
     /// # bevy_ecs::system::assert_is_system(targeting_system);
     /// ```
     #[inline]
-    pub fn contains(&self, entity: Entity) -> bool {
+    pub fn contains(&self, entity: impl Into<Entity>) -> bool {
+        let entity = entity.into();
         // If the query data matches every entity, then `as_nop()` can safely
         // skip the cost of initializing the fetch for data that won't be used.
         if D::IS_ARCHETYPAL {

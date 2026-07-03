@@ -2,8 +2,8 @@ use crate::mesh::Mesh;
 use bevy_asset::{AsAssetId, AssetEvent, AssetId, Handle};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
-    change_detection::DetectChangesMut, component::Component, message::MessageReader,
-    reflect::ReflectComponent, system::Query, template::FromTemplate,
+    change_detection::DetectChangesMut, component::Component, entity::Entity,
+    message::MessageReader, reflect::ReflectComponent, system::Query, template::FromTemplate,
 };
 use bevy_platform::{collections::HashSet, hash::FixedHasher};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
@@ -43,6 +43,13 @@ use derive_more::derive::From;
 #[reflect(Component, Default, Clone, PartialEq)]
 #[require(Transform)]
 pub struct Mesh2d(pub Handle<Mesh>);
+
+impl Into<Entity> for &Mesh2d {
+    #[inline]
+    fn into(self) -> Entity {
+        self.entity()
+    }
+}
 
 impl From<Mesh2d> for AssetId<Mesh> {
     fn from(mesh: Mesh2d) -> Self {
@@ -100,6 +107,13 @@ impl AsAssetId for Mesh2d {
 #[reflect(Component, Default, Clone, PartialEq)]
 #[require(Transform)]
 pub struct Mesh3d(pub Handle<Mesh>);
+
+impl Into<Entity> for &Mesh3d {
+    #[inline]
+    fn into(self) -> Entity {
+        self.entity()
+    }
+}
 
 impl From<Mesh3d> for AssetId<Mesh> {
     fn from(mesh: Mesh3d) -> Self {

@@ -1074,7 +1074,7 @@ mod tests {
         assert_eq!(get_started_load_count(app.world()), 1);
 
         {
-            let a_text = app.world().get::<CoolText>(a_id.entity());
+            let a_text = app.world().get::<CoolText>(a_id);
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert!(a_text.is_none(), "a's asset should not exist yet");
             assert!(a_load.is_loading());
@@ -1086,7 +1086,7 @@ mod tests {
         // Dependencies are still gated so they should not be loaded yet
         gate_opener.open(a_path);
         run_app_until(&mut app, |world| {
-            let a_text = world.get::<CoolText>(a_id.entity())?;
+            let a_text = world.get::<CoolText>(a_id)?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.dependencies.len(), 2);
@@ -1094,17 +1094,17 @@ mod tests {
             assert!(a_deps.is_loading());
             assert!(a_rec_deps.is_loading());
 
-            let b_entity = a_text.dependencies[0].entity();
-            let b_text = world.get::<CoolText>(b_entity);
-            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_entity).unwrap();
+            let b_handle = &a_text.dependencies[0];
+            let b_text = world.get::<CoolText>(b_handle);
+            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_handle).unwrap();
             assert!(b_text.is_none(), "b component should not exist yet");
             assert!(b_load.is_loading());
             assert!(b_deps.is_loading());
             assert!(b_rec_deps.is_loading());
 
-            let c_entity = a_text.dependencies[1].entity();
-            let c_text = world.get::<CoolText>(c_entity);
-            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_entity).unwrap();
+            let c_handle = &a_text.dependencies[1];
+            let c_text = world.get::<CoolText>(c_handle);
+            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_handle).unwrap();
             assert!(c_text.is_none(), "c component should not exist yet");
             assert!(c_load.is_loading());
             assert!(c_deps.is_loading());
@@ -1117,25 +1117,25 @@ mod tests {
         // "c" should not be loaded yet
         gate_opener.open(b_path);
         run_app_until(&mut app, |world| {
-            let a_text = world.get::<CoolText>(a_id.entity())?;
-            let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id.entity()).unwrap();
+            let a_text = world.get::<CoolText>(a_id)?;
+            let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.dependencies.len(), 2);
             assert!(a_load.is_loaded());
             assert!(a_deps.is_loading());
             assert!(a_rec_deps.is_loading());
 
-            let b_entity = a_text.dependencies[0].entity();
-            let b_text = world.get::<CoolText>(b_entity)?;
-            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_entity).unwrap();
+            let b_handle = &a_text.dependencies[0];
+            let b_text = world.get::<CoolText>(b_handle)?;
+            let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_handle).unwrap();
             assert_eq!(b_text.text, "b");
             assert!(b_load.is_loaded());
             assert!(b_deps.is_loaded());
             assert!(b_rec_deps.is_loaded());
 
-            let c_entity = a_text.dependencies[1].entity();
-            let c_text = world.get::<CoolText>(c_entity);
-            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_entity).unwrap();
+            let c_handle = &a_text.dependencies[1];
+            let c_text = world.get::<CoolText>(c_handle);
+            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_handle).unwrap();
             assert!(c_text.is_none(), "c component should not exist yet");
             assert!(c_load.is_loading());
             assert!(c_deps.is_loading());
@@ -1152,7 +1152,7 @@ mod tests {
         gate_opener.open(a_path);
         gate_opener.open(b_path);
         run_app_until(&mut app, |world| {
-            let a_text = world.get::<CoolText>(a_id.entity())?;
+            let a_text = world.get::<CoolText>(a_id)?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert_eq!(a_text.text, "a");
             assert_eq!(a_text.embedded, "");
@@ -1160,7 +1160,7 @@ mod tests {
             assert!(a_load.is_loaded());
 
             let b_id = a_text.dependencies[0].id();
-            let b_text = world.get::<CoolText>(b_id.entity())?;
+            let b_text = world.get::<CoolText>(b_id)?;
             let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
             assert_eq!(b_text.text, "b");
             assert_eq!(b_text.embedded, "");
@@ -1169,7 +1169,7 @@ mod tests {
             assert!(b_rec_deps.is_loaded());
 
             let c_id = a_text.dependencies[1].id();
-            let c_text = world.get::<CoolText>(c_id.entity())?;
+            let c_text = world.get::<CoolText>(c_id)?;
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
             assert_eq!(c_text.text, "c");
             assert_eq!(c_text.embedded, "ab");
@@ -1183,7 +1183,7 @@ mod tests {
                 "c rec deps should not be loaded yet because d has not loaded"
             );
 
-            let sub_text_id = c_text.sub_texts[0].entity();
+            let sub_text_id = &c_text.sub_texts[0];
             let sub_text = world
                 .get::<SubText>(sub_text_id)
                 .expect("subtext should exist if c exists. it came from the same loader");
@@ -1195,7 +1195,7 @@ mod tests {
             assert!(sub_text_rec_deps.is_loaded());
 
             let d_id = c_text.dependencies[0].id();
-            let d_text = world.get::<CoolText>(d_id.entity());
+            let d_text = world.get::<CoolText>(d_id);
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
             assert!(d_text.is_none(), "d component should not exist yet");
             assert!(d_load.is_loading());
@@ -1217,18 +1217,17 @@ mod tests {
 
         gate_opener.open(d_path);
         run_app_until(&mut app, |world| {
-            let a_text = world.get::<CoolText>(a_id.entity())?;
-            let (_a_load, _a_deps, a_rec_deps) =
-                asset_server.get_load_states(a_id.entity()).unwrap();
-            let c_id = a_text.dependencies[1].entity();
-            let c_text = world.get::<CoolText>(c_id)?;
-            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
+            let a_text = world.get::<CoolText>(a_id)?;
+            let (_a_load, _a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
+            let c_handle = &a_text.dependencies[1];
+            let c_text = world.get::<CoolText>(c_handle)?;
+            let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_handle).unwrap();
             assert_eq!(c_text.text, "c");
             assert_eq!(c_text.embedded, "ab");
 
-            let d_id = c_text.dependencies[0].entity();
-            let d_text = world.get::<CoolText>(d_id)?;
-            let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
+            let d_handle = &c_text.dependencies[0];
+            let d_text = world.get::<CoolText>(d_handle)?;
+            let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_handle).unwrap();
             assert_eq!(d_text.text, "d");
             assert_eq!(d_text.embedded, "");
 
@@ -1250,7 +1249,7 @@ mod tests {
         assert_eq!(get_started_load_count(app.world()), 6);
 
         {
-            let mut a = app.world_mut().get_mut::<CoolText>(a_id.entity()).unwrap();
+            let mut a = app.world_mut().get_mut::<CoolText>(a_id).unwrap();
             a.text = "Changed".to_string();
         }
 
@@ -1331,7 +1330,7 @@ mod tests {
         );
         app.update();
         let world = app.world();
-        let text = world.get::<CoolText>(handle.entity()).unwrap();
+        let text = world.get::<CoolText>(&handle).unwrap();
         assert_eq!(text.text, "Hello");
         let handle2 = world.resource::<AssetServer>().load::<CoolText>(uuid);
         assert_eq!(handle, handle2);
@@ -1347,7 +1346,7 @@ mod tests {
         });
         app.update();
         let world = app.world();
-        let text = world.get::<CoolText>(handle.entity()).unwrap();
+        let text = world.get::<CoolText>(&handle).unwrap();
         assert_eq!(text.text, "Hello");
         let handle2 = world
             .resource::<AssetServer>()
@@ -1366,7 +1365,7 @@ mod tests {
         let add_tracker = Arc::new(Mutex::new(false));
         let cloned_tracker = add_tracker.clone();
         app.world_mut()
-            .spawn_empty_at(handle.entity())
+            .spawn_empty_at(&handle)
             .unwrap()
             .observe(move |_: On<Add, CoolText>| {
                 *cloned_tracker.lock().unwrap() = true;
@@ -1458,19 +1457,19 @@ mod tests {
         gate_opener.open(d_path);
 
         run_app_until(&mut app, |world| {
-            let a_text = world.get::<CoolText>(a_id.entity())?;
+            let a_text = world.get::<CoolText>(a_id)?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
 
             let b_id = a_text.dependencies[0].id();
-            let b_text = world.get::<CoolText>(b_id.entity())?;
+            let b_text = world.get::<CoolText>(b_id)?;
             let (b_load, b_deps, b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
 
             let c_id = a_text.dependencies[1].id();
-            let c_text = world.get::<CoolText>(c_id.entity())?;
+            let c_text = world.get::<CoolText>(c_id)?;
             let (c_load, c_deps, c_rec_deps) = asset_server.get_load_states(c_id).unwrap();
 
             let d_id = c_text.dependencies[0].id();
-            let d_text = world.get::<CoolText>(d_id.entity());
+            let d_text = world.get::<CoolText>(d_id);
             let (d_load, d_deps, d_rec_deps) = asset_server.get_load_states(d_id).unwrap();
 
             if !d_load.is_failed() {
@@ -1563,7 +1562,7 @@ mod tests {
 
         gate_opener.open(a_path);
         run_app_until(&mut app, |world| {
-            let _a_text = world.get::<CoolText>(a_id.entity())?;
+            let _a_text = world.get::<CoolText>(a_id)?;
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert!(a_load.is_loaded());
             assert!(a_deps.is_loading());
@@ -1575,7 +1574,7 @@ mod tests {
 
         gate_opener.open(b_path);
         run_app_until(&mut app, |world| {
-            let a_text = world.get::<CoolText>(a_id.entity())?;
+            let a_text = world.get::<CoolText>(a_id)?;
             let b_id = a_text.dependencies[0].id();
 
             let (b_load, _b_deps, _b_rec_deps) = asset_server.get_load_states(b_id).unwrap();
@@ -1595,10 +1594,10 @@ mod tests {
 
         gate_opener.open(c_path);
         run_app_until(&mut app, |world| {
-            let a_text = world.get::<CoolText>(a_id.entity())?;
+            let a_text = world.get::<CoolText>(a_id)?;
             let c_id = a_text.dependencies[1].id();
             // wait until c loads
-            let _c_text = world.get::<CoolText>(c_id.entity())?;
+            let _c_text = world.get::<CoolText>(c_id)?;
 
             let (a_load, a_deps, a_rec_deps) = asset_server.get_load_states(a_id).unwrap();
             assert!(a_load.is_loaded());
@@ -1645,7 +1644,7 @@ mod tests {
             app.update();
 
             {
-                let text = app.world().get::<CoolText>(handle.entity());
+                let text = app.world().get::<CoolText>(&handle);
                 assert!(text.is_some());
             }
             handle.id()
@@ -1653,7 +1652,7 @@ mod tests {
         // handle is dropped
         app.update();
         assert!(
-            app.world().get::<CoolText>(id.entity()).is_none(),
+            app.world().get::<CoolText>(id).is_none(),
             "asset has no handles, so it should have been dropped last update"
         );
     }
@@ -1688,7 +1687,7 @@ mod tests {
             app.update();
 
             {
-                let text = app.world().get::<CoolText>(handle.entity()).unwrap();
+                let text = app.world().get::<CoolText>(&handle).unwrap();
                 assert_eq!(text.text, hello);
             }
             handle.id()
@@ -1696,7 +1695,7 @@ mod tests {
         // handle is dropped
         app.update();
         assert!(
-            app.world().get::<CoolText>(id.entity()).is_none(),
+            app.world().get::<CoolText>(id).is_none(),
             "asset has no handles, so it should have been dropped last update"
         );
         // remove event is emitted
@@ -1825,7 +1824,7 @@ mod tests {
                 if let AssetEvent::LoadedWithDependencies { id } = event
                     && *id == handle.id()
                 {
-                    let loaded_folder = world.get::<LoadedFolder>(handle.entity()).unwrap();
+                    let loaded_folder = world.get::<LoadedFolder>(&handle).unwrap();
                     let a_handle: Handle<CoolText> =
                         asset_server.get_handle("text/a.cool.ron").unwrap();
                     let c_handle: Handle<CoolText> =
@@ -1834,9 +1833,9 @@ mod tests {
                     let mut found_a = false;
                     let mut found_c = false;
                     for asset_handle in &loaded_folder.handles {
-                        if asset_handle.entity() == a_handle.entity() {
+                        if asset_handle == &a_handle {
                             found_a = true;
-                        } else if asset_handle.entity() == c_handle.entity() {
+                        } else if asset_handle == &c_handle {
                             found_c = true;
                         }
                     }
@@ -1844,11 +1843,9 @@ mod tests {
                     assert!(found_c);
                     assert_eq!(loaded_folder.handles.len(), 2);
 
-                    let a_text = world.get::<CoolText>(a_handle.entity()).unwrap();
-                    let b_text = world
-                        .get::<CoolText>(a_text.dependencies[0].entity())
-                        .unwrap();
-                    let c_text = world.get::<CoolText>(c_handle.entity()).unwrap();
+                    let a_text = world.get::<CoolText>(&a_handle).unwrap();
+                    let b_text = world.get::<CoolText>(&a_text.dependencies[0]).unwrap();
+                    let c_text = world.get::<CoolText>(&c_handle).unwrap();
 
                     assert_eq!("a", a_text.text);
                     assert_eq!("b", b_text.text);
@@ -1990,7 +1987,7 @@ mod tests {
             match tracker.finished_asset {
                 Some(asset_id) => {
                     assert_eq!(asset_id, a_id);
-                    let result = world.get::<CoolText>(asset_id.entity()).unwrap();
+                    let result = world.get::<CoolText>(asset_id).unwrap();
                     assert_eq!(result.text, "a");
                     Some(())
                 }
@@ -2603,8 +2600,8 @@ mod tests {
 
         run_app_until(&mut app, |world| {
             let (Some(asset_1), Some(asset_2)) = (
-                world.get::<U8Asset>(handle_1.entity()),
-                world.get::<U8Asset>(handle_2.entity()),
+                world.get::<U8Asset>(&handle_1),
+                world.get::<U8Asset>(&handle_2),
             ) else {
                 return None;
             };
@@ -2704,7 +2701,7 @@ mod tests {
 
         // Wait for the asset to load.
         run_app_until(&mut app, |world| {
-            world.get::<TestAsset>(original_handle.entity()).map(|_| ())
+            world.get::<TestAsset>(&original_handle).map(|_| ())
         });
 
         assert_eq!(get_started_load_count(app.world()), 1);
@@ -2720,7 +2717,7 @@ mod tests {
         drop(original_handle);
 
         app.update();
-        assert!(app.world().get::<TestAsset>(new_handle.entity()).is_some());
+        assert!(app.world().get::<TestAsset>(&new_handle).is_some());
 
         let _other_handle: Handle<TestAsset> = asset_server.load("test.txt");
         app.update();
@@ -2807,10 +2804,10 @@ mod tests {
         let immediate_handle: Handle<ImmediateNested> = server.load("a.immediate");
 
         run_app_until(&mut app, |world| {
-            let immediate = world.get::<ImmediateNested>(immediate_handle.entity())?;
+            let immediate = world.get::<ImmediateNested>(&immediate_handle)?;
 
             let test_asset_handle = immediate.0.clone();
-            world.get::<TestAsset>(test_asset_handle.entity())?;
+            world.get::<TestAsset>(&test_asset_handle)?;
 
             // The immediate asset is loaded, and the asset it got from its immediate load is also
             // loaded.
@@ -2938,7 +2935,7 @@ mod tests {
 
         let dep_handle: Handle<TestAsset> = app
             .world()
-            .get::<AssetWithDep>(subasset_handle.entity())
+            .get::<AssetWithDep>(&subasset_handle)
             .unwrap()
             .dep
             .clone();
@@ -3249,10 +3246,7 @@ mod tests {
                 .then_some(())
         });
 
-        let folder = app
-            .world()
-            .get::<LoadedFolder>(folder_handle.entity())
-            .unwrap();
+        let folder = app.world().get::<LoadedFolder>(&folder_handle).unwrap();
         assert_eq!(folder.handles.len(), 2);
         let mut handles = folder
             .handles
@@ -3267,17 +3261,11 @@ mod tests {
         let def_handle = handles[1].clone();
 
         assert_eq!(
-            app.world()
-                .get::<CoolText>(abc_handle.entity())
-                .unwrap()
-                .text,
+            app.world().get::<CoolText>(&abc_handle).unwrap().text,
             "abc"
         );
         assert_eq!(
-            app.world()
-                .get::<CoolText>(def_handle.entity())
-                .unwrap()
-                .text,
+            app.world().get::<CoolText>(&def_handle).unwrap().text,
             "def"
         );
 
@@ -3307,7 +3295,7 @@ mod tests {
             None
         });
         let world = app.world();
-        let folder = world.get::<LoadedFolder>(folder_handle.entity()).unwrap();
+        let folder = world.get::<LoadedFolder>(&folder_handle).unwrap();
         assert_eq!(folder.handles.len(), 3);
         let mut handles = folder
             .handles
@@ -3325,17 +3313,8 @@ mod tests {
         assert_eq!(new_abc_handle, abc_handle);
         assert_eq!(new_def_handle, def_handle);
 
-        assert_eq!(
-            world.get::<CoolText>(new_abc_handle.entity()).unwrap().text,
-            "abc"
-        );
-        assert_eq!(
-            world.get::<CoolText>(new_def_handle.entity()).unwrap().text,
-            "def"
-        );
-        assert_eq!(
-            world.get::<CoolText>(new_ghi_handle.entity()).unwrap().text,
-            "ghi"
-        );
+        assert_eq!(world.get::<CoolText>(&new_abc_handle).unwrap().text, "abc");
+        assert_eq!(world.get::<CoolText>(&new_def_handle).unwrap().text, "def");
+        assert_eq!(world.get::<CoolText>(&new_ghi_handle).unwrap().text, "ghi");
     }
 }

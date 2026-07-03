@@ -101,6 +101,12 @@ impl<A: Asset> Ord for AssetId<A> {
     }
 }
 
+impl<A: Asset> Into<Entity> for &AssetId<A> {
+    fn into(self) -> Entity {
+        self.entity()
+    }
+}
+
 impl<A: Asset> From<Entity> for AssetId<A> {
     #[inline]
     fn from(entity: Entity) -> Self {

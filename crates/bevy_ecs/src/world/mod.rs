@@ -1134,8 +1134,11 @@ impl World {
 
     /// A faster version of [`spawn_at`](Self::spawn_at) for the empty bundle.
     #[track_caller]
-    pub fn spawn_empty_at(&mut self, entity: Entity) -> Result<EntityWorldMut<'_>, SpawnError> {
-        self.spawn_empty_at_with_caller(entity, MaybeLocation::caller())
+    pub fn spawn_empty_at(
+        &mut self,
+        entity: impl Into<Entity>,
+    ) -> Result<EntityWorldMut<'_>, SpawnError> {
+        self.spawn_empty_at_with_caller(entity.into(), MaybeLocation::caller())
     }
 
     pub(crate) fn spawn_empty_at_with_caller(
@@ -1348,8 +1351,8 @@ impl World {
     /// assert_eq!(position.x, 0.0);
     /// ```
     #[inline]
-    pub fn get<T: Component>(&self, entity: Entity) -> Option<&T> {
-        self.get_entity(entity).ok()?.get()
+    pub fn get<T: Component>(&self, entity: impl Into<Entity>) -> Option<&T> {
+        self.get_entity(entity.into()).ok()?.get()
     }
 
     /// Retrieves a mutable reference to the given `entity`'s [`Component`] of the given type.
@@ -1371,9 +1374,9 @@ impl World {
     #[inline]
     pub fn get_mut<T: Component<Mutability = Mutable>>(
         &mut self,
-        entity: Entity,
+        entity: impl Into<Entity>,
     ) -> Option<Mut<'_, T>> {
-        self.get_entity_mut(entity).ok()?.into_mut()
+        self.get_entity_mut(entity.into()).ok()?.into_mut()
     }
 
     /// Temporarily removes a [`Component`] `T` from the provided [`Entity`] and
@@ -1580,8 +1583,8 @@ impl World {
     /// ```
     #[track_caller]
     #[inline]
-    pub fn despawn(&mut self, entity: Entity) -> bool {
-        if let Err(error) = self.despawn_with_caller(entity, MaybeLocation::caller()) {
+    pub fn despawn(&mut self, entity: impl Into<Entity>) -> bool {
+        if let Err(error) = self.despawn_with_caller(entity.into(), MaybeLocation::caller()) {
             warn!("{error}");
             false
         } else {

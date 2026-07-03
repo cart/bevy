@@ -1,13 +1,13 @@
 use crate::FontCx;
 use crate::FontSource;
 use crate::TextFont;
-use bevy_asset::Asset;
-use bevy_asset::AssetId;
-use bevy_asset::Assets;
-use bevy_ecs::change_detection::DetectChangesMut;
-use bevy_ecs::system::Local;
-use bevy_ecs::system::Query;
-use bevy_ecs::system::ResMut;
+use bevy_asset::{Asset, AssetId};
+use bevy_ecs::entity::Entity;
+use bevy_ecs::query::With;
+use bevy_ecs::{
+    change_detection::DetectChangesMut,
+    system::{Local, Query, ResMut},
+};
 use bevy_platform::collections::HashSet;
 use bevy_reflect::TypePath;
 use parley::fontique::Blob;
@@ -49,7 +49,9 @@ impl Font {
 /// Font asset changes are track locally instead of waiting for asset events. Text layout also builds the atlas images, and waiting for asset events would
 /// delay the image updates by a frame.
 pub fn load_font_assets_into_font_collection(
-    mut fonts: ResMut<Assets<Font>>,
+    // TODO: make it possible + cheap to access entities from queries without explicitly asking for them
+    font_entities: Query<Entity, With<Font>>,
+    mut fonts: Query<&mut Font>,
     mut loaded_fonts: Local<HashSet<AssetId<Font>>>,
     mut font_cx: ResMut<FontCx>,
     mut text_font_query: Query<&mut TextFont>,
@@ -59,10 +61,14 @@ pub fn load_font_assets_into_font_collection(
         // If any font asset has been removed, clear the font collection and queue the remaining fonts to be reinserted into the collection.
         font_cx.collection.clear();
         loaded_fonts.clear();
-        loaded_fonts.extend(fonts.ids());
+        loaded_fonts.extend(font_entities.iter().map::<AssetId<Font>, _>(|id| id.into()));
         loaded_fonts.iter().copied().collect()
     } else {
-        fonts.ids().filter(|id| loaded_fonts.insert(*id)).collect()
+        font_entities
+            .iter()
+            .map(|id| id.into())
+            .filter(|id| loaded_fonts.insert(*id))
+            .collect()
     };
 
     if new_asset_ids.is_empty() && !font_removed {
@@ -71,9 +77,10 @@ pub fn load_font_assets_into_font_collection(
 
     let mut new_family_ids = Vec::new();
     for asset_id in &new_asset_ids {
-        let font = fonts
-            .get_mut_untracked(*asset_id)
+        let mut font = fonts
+            .get_mut(asset_id)
             .expect("Each AssetId should have a corresponding asset");
+        let font = font.bypass_change_detection();
 
         font.alias = format!("asset_id:{asset_id:?}");
 
@@ -142,30 +149,27 @@ pub fn load_font_assets_into_font_collection(
 #[cfg(test)]
 mod tests {
     use bevy_app::{App, Update};
-    use bevy_asset::Assets;
+    use bevy_asset::{AssetApp, AssetPlugin, DirectAssetAccessExt};
 
     use super::*;
 
     #[test]
     fn font_asset_registration_and_cleanup() {
         let mut app = App::new();
-        app.init_resource::<Assets<Font>>()
+        app.add_plugins(AssetPlugin::default())
+            .init_asset::<Font>()
             .init_resource::<FontCx>()
             .add_systems(Update, load_font_assets_into_font_collection);
 
-        let font_handle = app
-            .world_mut()
-            .resource_mut::<Assets<Font>>()
-            .add(Font::from_bytes(
-                include_bytes!("FiraMono-subset.ttf").to_vec(),
-            ));
+        let font_handle = app.world_mut().spawn_asset(Font::from_bytes(
+            include_bytes!("FiraMono-subset.ttf").to_vec(),
+        ));
 
         app.update();
         let world = app.world_mut();
 
         let font_alias = world
-            .resource::<Assets<Font>>()
-            .get(&font_handle)
+            .get::<Font>(&font_handle)
             .expect("The font asset was just added above.")
             .alias
             .clone();
@@ -181,9 +185,7 @@ mod tests {
             .family_id(&font_alias)
             .is_some());
 
-        world
-            .resource_mut::<Assets<Font>>()
-            .remove(font_handle.id());
+        world.despawn(&font_handle);
 
         app.update();
         let world = app.world_mut();

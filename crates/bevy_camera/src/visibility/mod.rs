@@ -44,7 +44,7 @@ pub use render_layers::*;
 
 use bevy_app::{Plugin, PostUpdate, ValidateParentHasComponentPlugin};
 use bevy_asset::prelude::AssetChanged;
-use bevy_asset::{AssetEventSystems, Assets};
+use bevy_asset::AssetEventSystems;
 use bevy_ecs::{prelude::*, VariantDefaults};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_transform::{components::GlobalTransform, TransformSystems};
@@ -556,7 +556,7 @@ pub struct NoAutoAabb;
 /// This system is used in system set [`VisibilitySystems::CalculateBounds`].
 pub fn calculate_bounds(
     mut commands: Commands,
-    meshes: Res<Assets<Mesh>>,
+    meshes: Query<&Mesh>,
     new_aabb: Query<
         (Entity, &Mesh3d),
         (
@@ -575,7 +575,7 @@ pub fn calculate_bounds(
     >,
 ) {
     for (entity, mesh_handle) in &new_aabb {
-        if let Some(mesh) = meshes.get(mesh_handle)
+        if let Ok(mesh) = meshes.get(mesh_handle)
             && let Some(aabb) = mesh.get_aabb()
         {
             commands.entity(entity).try_insert(aabb);
@@ -585,7 +585,7 @@ pub fn calculate_bounds(
     update_aabb
         .par_iter_mut()
         .for_each(|(mesh_handle, mut old_aabb)| {
-            if let Some(aabb) = meshes.get(mesh_handle).and_then(MeshAabb::get_aabb) {
+            if let Some(aabb) = meshes.get(mesh_handle).ok().and_then(MeshAabb::get_aabb) {
                 *old_aabb = aabb;
             }
         });
@@ -594,8 +594,8 @@ pub fn calculate_bounds(
 // Update the `Aabb` component of all skinned mesh entities with a `DynamicSkinnedMeshBounds`
 // component.
 fn update_skinned_mesh_bounds(
-    inverse_bindposes_assets: Res<Assets<SkinnedMeshInverseBindposes>>,
-    mesh_assets: Res<Assets<Mesh>>,
+    inverse_bindposes_assets: Query<&SkinnedMeshInverseBindposes>,
+    mesh_assets: Query<&Mesh>,
     mut mesh_entities: Query<
         (&mut Aabb, &Mesh3d, &SkinnedMesh, Option<&GlobalTransform>),
         With<DynamicSkinnedMeshBounds>,
@@ -605,9 +605,9 @@ fn update_skinned_mesh_bounds(
     mesh_entities
         .par_iter_mut()
         .for_each(|(mut aabb, mesh, skinned_mesh, world_from_entity)| {
-            if let Some(inverse_bindposes_asset) =
+            if let Ok(inverse_bindposes_asset) =
                 inverse_bindposes_assets.get(&skinned_mesh.inverse_bindposes)
-                && let Some(mesh_asset) = mesh_assets.get(mesh)
+                && let Ok(mesh_asset) = mesh_assets.get(mesh)
                 && let Ok(skinned_aabb) = entity_aabb_from_skinned_mesh_bounds(
                     &joint_entities,
                     mesh_asset,
