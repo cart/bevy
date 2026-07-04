@@ -583,9 +583,9 @@ mod white_furnace_solid_color_light {
 
         // Create a pure white cubemap
         let white_cubemap = create_white_cubemap(256);
-        let white_cubemap_handle = images.add(white_cubemap);
+        let white_cubemap_handle = commands.spawn_asset(white_cubemap);
 
-        let mut solid_color_light = EnvironmentMapLight::solid_color(&mut images, Color::WHITE);
+        let mut solid_color_light = EnvironmentMapLight::solid_color(&mut commands, Color::WHITE);
         solid_color_light.intensity = 500.0;
 
         // camera

@@ -4,12 +4,8 @@ use alloc::{borrow::Cow, sync::Arc};
 use bevy_asset::{Asset, AssetEvent, AssetId, Handle};
 use bevy_color::{ColorToComponents, Gray, LinearRgba};
 use bevy_ecs::{
-    component::Component,
-    lifecycle::HookContext,
-    message::MessageReader,
-    system::{Res, ResMut},
-    template::FromTemplate,
-    world::DeferredWorld,
+    component::Component, lifecycle::HookContext, message::MessageReader, system::Query,
+    template::FromTemplate, world::DeferredWorld,
 };
 use bevy_image::Image;
 use bevy_math::curve::{FunctionCurve, Interval, SampleAutoCurve};
@@ -547,12 +543,12 @@ impl Default for PhaseFunction {
 /// Resolves [`PhaseFunction::ChromaticTexture`] to [`PhaseFunction::ChromaticCurve`] when the image loads.
 pub fn extract_chromatic_phase_textures(
     mut reader: MessageReader<AssetEvent<Image>>,
-    images: Res<bevy_asset::Assets<Image>>,
-    mut scattering_media: ResMut<bevy_asset::Assets<ScatteringMedium>>,
+    images: Query<&Image>,
+    mut scattering_media: Query<&mut ScatteringMedium>,
 ) {
     let extract_ids: HashSet<AssetId<Image>> = scattering_media
         .iter()
-        .flat_map(|(_, m)| m.terms.iter())
+        .flat_map(|m| m.terms.iter())
         .filter_map(|t| {
             let PhaseFunction::ChromaticTexture(h) = &t.phase else {
                 return None;
@@ -569,7 +565,7 @@ pub fn extract_chromatic_phase_textures(
             continue;
         }
 
-        let Some(image) = images.get(*id) else {
+        let Ok(image) = images.get(*id) else {
             continue;
         };
         if image.texture_descriptor.format != TextureFormat::Rgba32Float {
@@ -597,7 +593,7 @@ pub fn extract_chromatic_phase_textures(
 
         let new_phase = PhaseFunction::from_chromatic_curve(curve);
 
-        for (_id, medium) in scattering_media.iter_mut() {
+        for mut medium in scattering_media.iter_mut() {
             for term in medium.terms.iter_mut() {
                 if let PhaseFunction::ChromaticTexture(handle) = &term.phase
                     && handle.id() == *id

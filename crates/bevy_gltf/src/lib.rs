@@ -58,7 +58,7 @@
 //! fn spawn_gltf_objects(
 //!     mut commands: Commands,
 //!     helmet_scene: Res<HelmetScene>,
-//!     gltf_assets: Res<Assets<Gltf>>,
+//!     gltf_assets: Query<&Gltf>,
 //!     mut loaded: Local<bool>,
 //! ) {
 //!     // Only do this once
@@ -66,7 +66,7 @@
 //!         return;
 //!     }
 //!     // Wait until the scene is loaded
-//!     let Some(gltf) = gltf_assets.get(&helmet_scene.0) else {
+//!     let Ok(gltf) = gltf_assets.get(&helmet_scene.0) else {
 //!         return;
 //!     };
 //!     *loaded = true;
