@@ -7,6 +7,7 @@ use syn::{
 };
 
 const TEMPLATE_DEFAULT_ATTRIBUTE: &str = "default";
+const TEMPLATE_MANUAL_DEFAULT_ATTRIBUTE: &str = "manual_default";
 const TEMPLATE_ATTRIBUTE: &str = "template";
 const BUILT_IN_ATTRIBUTE: &str = "built_in";
 
@@ -21,6 +22,23 @@ pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
 
     let is_pub = matches!(ast.vis, syn::Visibility::Public(_));
     let maybe_pub = if is_pub { quote!(pub) } else { quote!() };
+    let mut is_manual_default = false;
+    for attr in ast
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident(TEMPLATE_ATTRIBUTE))
+    {
+        if let Err(e) = attr.parse_nested_meta(|meta| match meta.path.get_ident() {
+            Some(ident) if ident == TEMPLATE_MANUAL_DEFAULT_ATTRIBUTE => {
+                is_manual_default = true;
+                Ok(())
+            }
+            Some(ident) => Err(meta.error(format!("unsupported attribute: {ident}"))),
+            None => Err(meta.error("expected identifier")),
+        }) {
+            return e.to_compile_error().into();
+        }
+    }
 
     let template = match &ast.data {
         Data::Struct(data_struct) => {
@@ -35,6 +53,17 @@ pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
                 template_field_clones,
                 ..
             } = result;
+            let template_default = (!is_manual_default).then(|| {
+               quote!{
+                   impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
+                       fn default() -> Self {
+                           Self {
+                               #(#template_field_defaults,)*
+                           }
+                       }
+                   }
+               }
+            });
             match &data_struct.fields {
                 Fields::Named(_) => {
                     quote! {
@@ -57,17 +86,22 @@ pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
                                 }
                             }
                         }
+                        #template_default
 
-                        impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
-                            fn default() -> Self {
-                                Self {
-                                    #(#template_field_defaults,)*
-                                }
-                            }
-                        }
                     }
                 }
                 Fields::Unnamed(_) => {
+                    let template_default = (!is_manual_default).then(|| {
+                        quote!{
+                            impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
+                                fn default() -> Self {
+                                    Self (
+                                        #(#template_field_defaults,)*
+                                    )
+                                }
+                            }
+                        }
+                    });
                     quote! {
                         #[allow(missing_docs)]
                         #maybe_pub struct #template_ident #impl_generics (
@@ -89,16 +123,17 @@ pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
                             }
                         }
 
-                        impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
-                            fn default() -> Self {
-                                Self (
-                                    #(#template_field_defaults,)*
-                                )
-                            }
-                        }
+                        #template_default
                     }
                 }
                 Fields::Unit => {
+                    let template_default = (!is_manual_default).then(|| quote!{
+                        impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
+                            fn default() -> Self {
+                                Self
+                            }
+                        }
+                    });
                     quote! {
                         #[allow(missing_docs)]
                         #maybe_pub struct #template_ident;
@@ -114,11 +149,7 @@ pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
                             }
                         }
 
-                        impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
-                            fn default() -> Self {
-                                Self
-                            }
-                        }
+                        #template_default
                     }
                 }
             }
@@ -271,6 +302,14 @@ pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
                 panic!("Deriving Template for enums requires picking a default variant using #[default]");
             }
 
+            let template_default = (!is_manual_default).then(|| quote! {
+                impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
+                    fn default() -> Self {
+                        #variant_default_ident
+                    }
+                }
+            });
+
             quote! {
                 #[allow(missing_docs)]
                 #maybe_pub enum #template_ident #type_generics #where_clause {
@@ -296,11 +335,7 @@ pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl #impl_generics #FQDefault for #template_ident #type_generics #where_clause {
-                    fn default() -> Self {
-                        #variant_default_ident
-                    }
-                }
+                #template_default
             }
         }
         Data::Union(_) => panic!("Union types are not supported yet."),

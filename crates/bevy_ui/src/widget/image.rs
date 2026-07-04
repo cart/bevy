@@ -2,7 +2,7 @@ use crate::{
     ComputedUiRenderTargetInfo, ContentSize, Measure, MeasureArgs, Node, NodeMeasure, ResolvedAxis,
     VisualBox,
 };
-use bevy_asset::{AsAssetId, AssetId, Handle};
+use bevy_asset::{AsAssetId, AssetId, Handle, HandleTemplate};
 use bevy_color::Color;
 use bevy_ecs::prelude::*;
 use bevy_image::prelude::*;
@@ -13,6 +13,7 @@ use taffy::{MaybeMath, ResolveOrZero};
 
 /// A UI Node that renders an image.
 #[derive(Component, Clone, Debug, Reflect, FromTemplate)]
+#[template(manual_default)]
 #[reflect(Component, Default, Debug, Clone)]
 #[require(Node, ImageNodeSize)]
 pub struct ImageNode {
@@ -44,6 +45,24 @@ pub struct ImageNode {
     pub visual_box: VisualBox,
 }
 
+impl Default for ImageNodeTemplate {
+    fn default() -> Self {
+        Self {
+            // This should be white because the tint is multiplied with the image,
+            // so if you set an actual image with default tint you'd want its original colors
+            color: Color::WHITE,
+            texture_atlas: Default::default(),
+            // This texture needs to be transparent by default, to avoid covering the background color
+            image: Image::TRANSPARENT_UUID.into(),
+            flip_x: false,
+            flip_y: false,
+            rect: None,
+            image_mode: NodeImageMode::Auto,
+            visual_box: VisualBox::ContentBox,
+        }
+    }
+}
+
 impl Default for ImageNode {
     /// A transparent 1x1 image with a solid white tint.
     ///
@@ -59,7 +78,7 @@ impl Default for ImageNode {
             color: Color::WHITE,
             texture_atlas: None,
             // This texture needs to be transparent by default, to avoid covering the background color
-            image: TRANSPARENT_IMAGE_HANDLE,
+            image: todo!("Remove Handle::default"),
             flip_x: false,
             flip_y: false,
             rect: None,
