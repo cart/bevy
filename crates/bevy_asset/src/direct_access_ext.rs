@@ -102,7 +102,11 @@ impl<'w, 's> AssetCommands for Commands<'w, 's> {
         let entity_handle = self
             .entity_allocator()
             .alloc_handle_with_data(AssetData::new::<A>());
-        self.spawn((asset, entity_handle.weak()));
+        let entity = entity_handle.0.entity;
+        let weak = entity_handle.weak();
+        self.queue(move |world: &mut World| {
+            world.spawn_at(entity, (asset, weak)).unwrap();
+        });
         entity_handle.into()
     }
 }
