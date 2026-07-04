@@ -2,7 +2,7 @@ use crate::{
     ComputedUiRenderTargetInfo, ContentSize, Measure, MeasureArgs, Node, NodeMeasure, ResolvedAxis,
     VisualBox,
 };
-use bevy_asset::{AsAssetId, AssetId, Handle, HandleTemplate};
+use bevy_asset::{AsAssetId, AssetId, Handle};
 use bevy_color::Color;
 use bevy_ecs::prelude::*;
 use bevy_image::prelude::*;

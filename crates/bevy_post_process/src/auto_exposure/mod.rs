@@ -1,5 +1,5 @@
 use bevy_app::prelude::*;
-use bevy_asset::{embedded_asset, AssetApp, AssetServer, Handle};
+use bevy_asset::{embedded_asset, AssetApp, AssetServer};
 use bevy_ecs::prelude::*;
 use bevy_render::{
     diagnostic::RecordDiagnostics,

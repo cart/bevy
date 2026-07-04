@@ -36,14 +36,14 @@ use bevy_ui::{
 };
 
 use bevy_app::prelude::*;
-use bevy_asset::{AssetEvent, AssetId, Assets};
+use bevy_asset::{AssetEvent, AssetId, AssetReference, AssetServer};
 use bevy_color::{Alpha, ColorToComponents, LinearRgba};
 use bevy_core_pipeline::schedule::{Core2d, Core2dSystems, Core3d, Core3dSystems};
 use bevy_core_pipeline::upscaling::upscaling;
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::IntoScheduleConfigs;
 use bevy_ecs::system::SystemParam;
-use bevy_image::{prelude::*, TRANSPARENT_IMAGE_HANDLE};
+use bevy_image::prelude::*;
 use bevy_math::{Affine2, FloatOrd, Mat4, Rect, UVec4, Vec2};
 use bevy_render::{
     render_asset::RenderAssets,
@@ -389,6 +389,7 @@ impl ExtractedUiNodes {
 pub fn extract_uinode_background_colors(
     mut commands: Commands,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
+    asset_server: Extract<Res<AssetServer>>,
     uinode_query: Extract<
         Query<(
             Entity,
@@ -404,6 +405,7 @@ pub fn extract_uinode_background_colors(
     >,
     camera_map: Extract<UiCameraMap>,
 ) {
+    let default_image = asset_server.load(AssetReference::Default);
     let mut camera_mapper = camera_map.get_mapper();
 
     for (
@@ -436,7 +438,7 @@ pub fn extract_uinode_background_colors(
                 render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                 z_order: stack_index.0 as f32 + stack_z_offsets::BACKGROUND_COLOR,
                 clip: clip.map(|clip| clip.clip),
-                image: AssetId::default(),
+                image: default_image.id(),
                 extracted_camera_entity,
                 transform: transform.into(),
                 item: ExtractedUiItem::Node {
@@ -463,7 +465,7 @@ pub fn extract_uinode_background_colors(
                 render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                 z_order: stack_index.0 as f32 + stack_z_offsets::BACKGROUND_COLOR,
                 clip: clip.map(|clip| clip.clip),
-                image: AssetId::default(),
+                image: default_image.id(),
                 extracted_camera_entity,
                 transform: transform.into(),
                 item: ExtractedUiItem::Node {
@@ -525,7 +527,7 @@ pub fn extract_uinode_images(
         // Skip invisible images
         if !inherited_visibility.get()
             || image.color.is_fully_transparent()
-            || image.image.id() == TRANSPARENT_IMAGE_HANDLE.id()
+            || image.image.uuid() == Some(Image::TRANSPARENT_UUID)
             || image.image_mode.uses_slices()
             || visual_box.size().cmple(Vec2::ZERO).any()
         {
@@ -600,6 +602,7 @@ pub fn extract_uinode_images(
 
 pub fn extract_uinode_borders(
     mut commands: Commands,
+    asset_server: Extract<Res<AssetServer>>,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     uinode_query: Extract<
         Query<(
@@ -616,7 +619,7 @@ pub fn extract_uinode_borders(
     >,
     camera_map: Extract<UiCameraMap>,
 ) {
-    let image = AssetId::<Image>::default();
+    let default_image = asset_server.load(AssetReference::Default);
     let mut camera_mapper = camera_map.get_mapper();
 
     for (
@@ -679,7 +682,7 @@ pub fn extract_uinode_borders(
 
                 extracted_uinodes.uinodes.push(ExtractedUiNode {
                     z_order: stack_index.0 as f32 + stack_z_offsets::BORDER,
-                    image,
+                    image: default_image.id(),
                     clip: maybe_clip.map(|clip| clip.clip),
                     extracted_camera_entity,
                     transform: transform.into(),
@@ -712,7 +715,7 @@ pub fn extract_uinode_borders(
             extracted_uinodes.uinodes.push(ExtractedUiNode {
                 z_order: stack_index.0 as f32 + stack_z_offsets::BORDER,
                 render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
-                image,
+                image: default_image.id(),
                 clip: maybe_clip.map(|clip| clip.clip),
                 extracted_camera_entity,
                 transform: transform.into(),
@@ -1097,6 +1100,7 @@ pub fn extract_text_sections(
 
 pub fn extract_text_shadows(
     mut commands: Commands,
+    asset_server: Extract<Res<AssetServer>>,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     uinode_query: Extract<
         Query<(
@@ -1116,6 +1120,7 @@ pub fn extract_text_shadows(
     text_decoration_query: Extract<Query<(Has<Strikethrough>, Has<Underline>)>>,
     camera_map: Extract<UiCameraMap>,
 ) {
+    let default_image = asset_server.load(AssetReference::Default);
     let mut start = extracted_uinodes.glyphs.len();
     let mut end = start + 1;
 
@@ -1214,7 +1219,7 @@ pub fn extract_text_shadows(
                     z_order: stack_index.0 as f32 + stack_z_offsets::TEXT,
                     render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                     clip,
-                    image: AssetId::default(),
+                    image: default_image.id(),
                     extracted_camera_entity,
                     transform: node_transform
                         * Affine2::from_translation(run.strikethrough_position()),
@@ -1240,7 +1245,7 @@ pub fn extract_text_shadows(
                     z_order: stack_index.0 as f32 + stack_z_offsets::TEXT,
                     render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                     clip,
-                    image: AssetId::default(),
+                    image: default_image.id(),
                     extracted_camera_entity,
                     transform: node_transform * Affine2::from_translation(run.underline_position()),
                     item: ExtractedUiItem::Node {
@@ -1265,6 +1270,7 @@ pub fn extract_text_shadows(
 
 pub fn extract_text_decorations(
     mut commands: Commands,
+    asset_server: Extract<Res<AssetServer>>,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     uinode_query: Extract<
         Query<(
@@ -1290,6 +1296,7 @@ pub fn extract_text_decorations(
     >,
     camera_map: Extract<UiCameraMap>,
 ) {
+    let default_image = asset_server.load(AssetReference::Default);
     let mut camera_mapper = camera_map.get_mapper();
     for (
         entity,
@@ -1352,7 +1359,7 @@ pub fn extract_text_decorations(
                     z_order: stack_index.0 as f32 + stack_z_offsets::TEXT,
                     render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                     clip,
-                    image: AssetId::default(),
+                    image: default_image.id(),
                     extracted_camera_entity,
                     transform: transform * Affine2::from_translation(run.bounds.center()),
                     item: ExtractedUiItem::Node {
@@ -1382,7 +1389,7 @@ pub fn extract_text_decorations(
                     z_order: stack_index.0 as f32 + stack_z_offsets::TEXT_STRIKETHROUGH,
                     render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                     clip,
-                    image: AssetId::default(),
+                    image: default_image.id(),
                     extracted_camera_entity,
                     transform: transform * Affine2::from_translation(run.strikethrough_position()),
                     item: ExtractedUiItem::Node {
@@ -1412,7 +1419,7 @@ pub fn extract_text_decorations(
                     z_order: stack_index.0 as f32 + stack_z_offsets::TEXT_STRIKETHROUGH,
                     render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                     clip,
-                    image: AssetId::default(),
+                    image: default_image.id(),
                     extracted_camera_entity,
                     transform: transform * Affine2::from_translation(run.underline_position()),
                     item: ExtractedUiItem::Node {
@@ -1574,6 +1581,7 @@ pub struct ImageNodeBindGroups {
 
 pub fn prepare_uinodes(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
     pipeline_cache: Res<PipelineCache>,
@@ -1587,6 +1595,7 @@ pub fn prepare_uinodes(
     events: Res<SpriteAssetEvents>,
     mut previous_len: Local<usize>,
 ) {
+    let default_image = asset_server.load(AssetReference::Default);
     // If an image has changed, the GpuImage has (probably) changed
     for event in &events.images {
         match event {
@@ -1634,8 +1643,8 @@ pub fn prepare_uinodes(
 
                 if batch_image_handle.is_none()
                     || existing_batch.is_none()
-                    || (batch_image_handle != Some(AssetId::default())
-                        && extracted_uinode.image != AssetId::default()
+                    || (batch_image_handle != Some(default_image.id())
+                        && extracted_uinode.image != default_image.id()
                         && batch_image_handle != Some(extracted_uinode.image))
                 {
                     if let Some(gpu_image) = gpu_images.get(extracted_uinode.image) {
@@ -1668,8 +1677,8 @@ pub fn prepare_uinodes(
                     } else {
                         continue;
                     }
-                } else if batch_image_handle == Some(AssetId::default())
-                    && extracted_uinode.image != AssetId::default()
+                } else if batch_image_handle == Some(default_image.id())
+                    && extracted_uinode.image != default_image.id()
                 {
                     if let Some(ref mut existing_batch) = existing_batch
                         && let Some(gpu_image) = gpu_images.get(extracted_uinode.image)
@@ -1706,7 +1715,7 @@ pub fn prepare_uinodes(
                         rect,
                         color,
                     } => {
-                        let mut flags = if extracted_uinode.image != AssetId::default() {
+                        let mut flags = if extracted_uinode.image != default_image.id() {
                             shader_flags::TEXTURED
                         } else {
                             shader_flags::UNTEXTURED

@@ -1,7 +1,12 @@
 use crate::Node;
 use bevy_asset::{Asset, AssetId, Handle};
 use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::{component::Component, reflect::ReflectComponent, template::FromTemplate};
+use bevy_ecs::{
+    component::{Component, Mutable},
+    entity::Entity,
+    reflect::ReflectComponent,
+    template::FromTemplate,
+};
 use bevy_reflect::{prelude::ReflectDefault, Reflect};
 use bevy_render::{
     extract_component::ExtractComponent,
@@ -99,7 +104,9 @@ use derive_more::derive::From;
 ///
 /// }
 /// ```
-pub trait UiMaterial: AsBindGroup + Asset + Clone + Sized {
+pub trait UiMaterial:
+    AsBindGroup + Asset + Component<Mutability = Mutable> + Clone + Sized
+{
     /// Returns this materials vertex shader. If [`ShaderRef::Default`] is returned, the default UI
     /// vertex shader will be used.
     fn vertex_shader() -> ShaderRef {
@@ -178,6 +185,13 @@ where
 #[reflect(Component, Default)]
 #[require(Node)]
 pub struct MaterialNode<M: UiMaterial>(pub Handle<M>);
+
+impl<M: UiMaterial> Into<Entity> for &MaterialNode<M> {
+    #[inline]
+    fn into(self) -> Entity {
+        self.entity()
+    }
+}
 
 impl<M: UiMaterial> Default for MaterialNode<M> {
     fn default() -> Self {

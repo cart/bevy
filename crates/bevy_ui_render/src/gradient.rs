@@ -337,6 +337,7 @@ fn compute_color_stops(
 
 pub fn extract_gradients(
     mut commands: Commands,
+    asset_server: Extract<Res<AssetServer>>,
     mut extracted_gradients: ResMut<ExtractedGradients>,
     mut extracted_color_stops: ResMut<ExtractedColorStops>,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
@@ -357,6 +358,7 @@ pub fn extract_gradients(
 ) {
     let mut camera_mapper = camera_map.get_mapper();
     let mut sorted_stops = vec![];
+    let default_image = asset_server.load(AssetReference::Default);
 
     for (
         entity,
@@ -398,7 +400,7 @@ pub fn extract_gradients(
                                 NodeType::Rect | NodeType::Inverted => stack_z_offsets::GRADIENT,
                                 NodeType::Border(_) => stack_z_offsets::BORDER_GRADIENT,
                             },
-                        image: AssetId::default(),
+                        image: default_image.id(),
                         clip: clip.map(|clip| clip.clip),
                         extracted_camera_entity,
                         transform: transform.into(),

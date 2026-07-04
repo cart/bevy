@@ -12,7 +12,6 @@
 
 use crate::{Anchor, Sprite};
 use bevy_app::prelude::*;
-use bevy_asset::prelude::*;
 use bevy_camera::{
     visibility::{RenderLayers, ViewVisibility},
     Camera, Projection, RenderTarget,

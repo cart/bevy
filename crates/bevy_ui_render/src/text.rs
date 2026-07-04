@@ -1,4 +1,4 @@
-use bevy_asset::AssetId;
+use bevy_asset::{AssetReference, AssetServer};
 use bevy_camera::visibility::InheritedVisibility;
 use bevy_color::Alpha;
 use bevy_ecs::prelude::*;
@@ -18,6 +18,7 @@ use crate::{
 
 pub fn extract_text_cursor(
     mut commands: Commands,
+    asset_server: Extract<Res<AssetServer>>,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     text_node_query: Extract<
         Query<(
@@ -37,6 +38,7 @@ pub fn extract_text_cursor(
     input_focus: Extract<Option<Res<InputFocus>>>,
 ) {
     let mut camera_mapper = camera_map.get_mapper();
+    let default_image = asset_server.load(AssetReference::Default);
 
     for (
         entity,
@@ -140,7 +142,7 @@ pub fn extract_text_cursor(
                     render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                     z_order: stack_index.0 as f32 + stack_z_offsets::TEXT_SELECTION,
                     clip,
-                    image: AssetId::default(),
+                    image: default_image.id(),
                     extracted_camera_entity,
                     transform: transform * Affine2::from_translation(selection.center()),
                     item: ExtractedUiItem::Node {
@@ -169,7 +171,7 @@ pub fn extract_text_cursor(
                 render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                 z_order: stack_index.0 as f32 + stack_z_offsets::TEXT_CURSOR,
                 clip,
-                image: AssetId::default(),
+                image: default_image.id(),
                 extracted_camera_entity,
                 transform: transform * Affine2::from_translation(cursor_rect.center()),
                 item: ExtractedUiItem::Node {
@@ -193,6 +195,7 @@ pub fn extract_text_cursor(
 
 pub fn extract_preedit_underlines(
     mut commands: Commands,
+    asset_server: Extract<Res<AssetServer>>,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     text_node_query: Extract<
         Query<
@@ -214,6 +217,7 @@ pub fn extract_preedit_underlines(
     camera_map: Extract<UiCameraMap>,
 ) {
     let mut camera_mapper = camera_map.get_mapper();
+    let default_image = asset_server.load(AssetReference::Default);
 
     for (
         entity,
@@ -262,7 +266,7 @@ pub fn extract_preedit_underlines(
                 render_entity: commands.spawn(TemporaryRenderEntity::default()).id(),
                 z_order: stack_index.0 as f32 + stack_z_offsets::TEXT_STRIKETHROUGH,
                 clip,
-                image: AssetId::default(),
+                image: default_image.id(),
                 extracted_camera_entity,
                 transform: transform * Affine2::from_translation(rect.center()),
                 item: ExtractedUiItem::Node {

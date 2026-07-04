@@ -1,7 +1,7 @@
 use crate::{
     ExtractedSlice, ExtractedSlices, ExtractedSprite, ExtractedSpriteKind, ExtractedSprites,
 };
-use bevy_asset::{AssetId, AssetReference, AssetServer};
+use bevy_asset::{AssetReference, AssetServer};
 use bevy_camera::visibility::ViewVisibility;
 use bevy_color::LinearRgba;
 use bevy_ecs::{

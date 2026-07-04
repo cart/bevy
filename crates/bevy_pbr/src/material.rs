@@ -16,7 +16,6 @@ use bevy_core_pipeline::{
 };
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::change_detection::Tick;
-use bevy_ecs::component::Mutable;
 use bevy_ecs::system::SystemParam;
 use bevy_ecs::{
     prelude::*,
@@ -1591,7 +1590,7 @@ where
 }
 
 // orphan rules T_T
-impl<M: Material + Component<Mutability = Mutable>> ErasedRenderAsset for MeshMaterial3d<M>
+impl<M: Material> ErasedRenderAsset for MeshMaterial3d<M>
 where
     M::Data: PartialEq + Eq + Hash + Clone,
 {

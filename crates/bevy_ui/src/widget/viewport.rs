@@ -9,7 +9,7 @@ use bevy_ecs::{
     entity::Entity,
     query::{Changed, Or},
     reflect::ReflectComponent,
-    system::{Query, ResMut},
+    system::Query,
 };
 #[cfg(feature = "bevy_picking")]
 use bevy_ecs::{

@@ -4,7 +4,8 @@ use super::ExtractedUiNodes;
 use super::NodeType;
 use super::UiCameraMap;
 use crate::shader_flags;
-use bevy_asset::AssetId;
+use bevy_asset::AssetReference;
+use bevy_asset::AssetServer;
 use bevy_camera::visibility::InheritedVisibility;
 use bevy_color::Hsla;
 use bevy_color::LinearRgba;
@@ -171,6 +172,7 @@ impl From<UiDebugOptions> for GlobalUiDebugOptions {
 
 pub fn extract_debug_overlay(
     mut commands: Commands,
+    asset_server: Extract<Res<AssetServer>>,
     debug_options: Extract<Res<GlobalUiDebugOptions>>,
     mut extracted_uinodes: ResMut<ExtractedUiNodes>,
     uinode_query: Extract<
@@ -189,6 +191,7 @@ pub fn extract_debug_overlay(
     camera_map: Extract<UiCameraMap>,
 ) {
     let mut camera_mapper = camera_map.get_mapper();
+    let default_image = asset_server.load(AssetReference::Default);
 
     for (entity, uinode, stack_index, transform, visibility, maybe_clip, computed_target, debug) in
         &uinode_query
@@ -224,7 +227,7 @@ pub fn extract_debug_overlay(
                 clip: maybe_clip
                     .filter(|_| !debug_options.show_clipped)
                     .map(|clip| clip.clip),
-                image: AssetId::default(),
+                image: default_image.id(),
                 extracted_camera_entity,
                 transform: transform * Affine2::from_translation(rect.center()),
                 item: ExtractedUiItem::Node {
