@@ -41,16 +41,14 @@ impl DerefMut for GizmoAsset {
 /// # use bevy_color::palettes::css::*;
 /// # use bevy_utils::default;
 /// # use bevy_math::prelude::*;
-/// fn system(
-///     mut commands: Commands,
-///     mut gizmo_assets: ResMut<Assets<GizmoAsset>>,
-/// ) {
+/// fn system(mut commands: Commands) {
 ///     let mut gizmo = GizmoAsset::default();
 ///
 ///     gizmo.sphere(Vec3::ZERO, 1., RED);
 ///
+///     let handle = commands.spawn_asset(gizmo);
 ///     commands.spawn(Gizmo {
-///         handle: gizmo_assets.add(gizmo),
+///         handle,
 ///         line_config: GizmoLineConfig {
 ///             width: 4.,
 ///             ..default()

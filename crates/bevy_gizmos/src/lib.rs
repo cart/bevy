@@ -79,13 +79,10 @@ pub mod prelude {
 }
 
 use bevy_app::{App, FixedFirst, FixedLast, Last, Plugin, RunFixedMainLoop};
-use bevy_asset::{Asset, AssetApp, Assets, Handle};
+use bevy_asset::{Asset, AssetApp, AssetCommands, Handle};
 use bevy_color::{Color, Oklcha};
 use bevy_ecs::{
-    prelude::Entity,
-    resource::Resource,
-    schedule::{IntoScheduleConfigs, SystemSet},
-    system::{Res, ResMut},
+    prelude::Entity, resource::Resource, schedule::{IntoScheduleConfigs, SystemSet}, system::{Commands, Query, Res, ResMut},
 };
 use bevy_reflect::TypePath;
 
@@ -287,7 +284,8 @@ pub struct GizmoMeshSystems;
 ///
 /// This also clears the default `GizmoStorage`.
 fn update_gizmo_meshes<Config: GizmoConfigGroup>(
-    mut gizmo_assets: ResMut<Assets<GizmoAsset>>,
+    mut commands: Commands,
+    mut gizmo_assets: Query<&mut GizmoAsset>,
     mut handles: ResMut<GizmoHandles>,
     mut storage: ResMut<GizmoStorage<Config, ()>>,
 ) {
@@ -314,7 +312,7 @@ fn update_gizmo_meshes<Config: GizmoConfigGroup>(
                 },
             };
 
-            *handle = Some(gizmo_assets.add(gizmo));
+            *handle = Some(commands.spawn_asset(gizmo));
         }
     }
 }
