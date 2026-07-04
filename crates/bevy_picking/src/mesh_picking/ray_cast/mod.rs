@@ -17,7 +17,7 @@ use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use intersections::*;
 pub use intersections::{ray_aabb_intersection_3d, ray_mesh_intersection, RayMeshHit};
 
-use bevy_asset::{Assets, Handle};
+use bevy_asset::Handle;
 use bevy_ecs::{prelude::*, system::lifetimeless::Read, system::SystemParam};
 use bevy_math::FloatOrd;
 use bevy_transform::components::GlobalTransform;
@@ -172,7 +172,7 @@ type MeshFilter = Or<(With<Mesh3d>, With<Mesh2d>, With<SimplifiedMesh>)>;
 #[derive(SystemParam)]
 pub struct MeshRayCast<'w, 's> {
     #[doc(hidden)]
-    pub meshes: Res<'w, Assets<Mesh>>,
+    pub meshes: Query<'w, 's, &Mesh>,
     #[doc(hidden)]
     pub hits: Local<'s, Vec<(FloatOrd, (Entity, RayMeshHit))>>,
     #[doc(hidden)]
@@ -278,7 +278,7 @@ impl<'w, 's> MeshRayCast<'w, 's> {
                 }
 
                 // Does the mesh handle resolve?
-                let Some(mesh) = self.meshes.get(mesh_handle) else {
+                let Ok(mesh) = self.meshes.get(mesh_handle) else {
                     return;
                 };
 
