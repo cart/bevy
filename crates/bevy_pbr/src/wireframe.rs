@@ -8,7 +8,7 @@ use crate::{
 use bevy_app::{App, Plugin, PostUpdate, Startup};
 use bevy_asset::{
     embedded_asset, load_embedded_asset, prelude::AssetChanged, AsAssetId, Asset, AssetApp,
-    AssetEventSystems, AssetId, AssetServer, Assets, Handle, UntypedAssetId,
+    AssetCommands, AssetEventSystems, AssetId, AssetServer, Handle,
 };
 use bevy_camera::{visibility::ViewVisibility, Camera, Camera3d};
 use bevy_color::{Color, ColorToComponents};
@@ -281,7 +281,7 @@ pub struct Wireframe3dBatchSetKey {
     pub pipeline: CachedRenderPipelineId,
 
     /// The wireframe material asset ID.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
 
     /// The function used to draw.
     pub draw_function: DrawFunctionId,
@@ -297,7 +297,7 @@ pub struct Wireframe3dBatchSetKey {
     /// For the wide wireframe path, the mesh asset ID ensures all draws in one
     /// batch set share the same vertex-pull params uniform. `None` for the thin
     /// path, which doesn't need per-mesh bind groups.
-    pub mesh_asset_id: Option<UntypedAssetId>,
+    pub mesh_asset_entity: Option<Entity>,
 }
 
 impl PhaseItemBatchSetKey for Wireframe3dBatchSetKey {
@@ -312,7 +312,7 @@ impl PhaseItemBatchSetKey for Wireframe3dBatchSetKey {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Wireframe3dBinKey {
     /// The wireframe mesh asset ID.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
 }
 
 pub struct SetWireframe3dThinImmediates;
@@ -1028,23 +1028,19 @@ pub fn extract_wireframe_materials(
     }
 }
 
-fn setup_global_wireframe_material(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<WireframeMaterial>>,
-    config: Res<WireframeConfig>,
-) {
-    commands.insert_resource(GlobalWireframeMaterial {
-        handle: materials.add(WireframeMaterial {
-            color: config.default_color,
-            line_width: config.default_line_width,
-            topology: config.default_topology,
-        }),
+fn setup_global_wireframe_material(mut commands: Commands, config: Res<WireframeConfig>) {
+    let handle = commands.spawn_asset(WireframeMaterial {
+        color: config.default_color,
+        line_width: config.default_line_width,
+        topology: config.default_topology,
     });
+    commands.insert_resource(GlobalWireframeMaterial { handle });
 }
 
 fn wireframe_config_changed(
+    mut commands: Commands,
     config: Res<WireframeConfig>,
-    mut materials: ResMut<Assets<WireframeMaterial>>,
+    mut materials: Query<&mut WireframeMaterial>,
     global_material: Res<GlobalWireframeMaterial>,
     mut per_entity_wireframes: Query<
         (
@@ -1056,7 +1052,7 @@ fn wireframe_config_changed(
         With<Wireframe>,
     >,
 ) {
-    if let Some(mut mat) = materials.get_mut(&global_material.handle) {
+    if let Ok(mut mat) = materials.get_mut(&global_material.handle) {
         mat.color = config.default_color;
         mat.line_width = config.default_line_width;
         mat.topology = config.default_topology;
@@ -1066,7 +1062,7 @@ fn wireframe_config_changed(
         if handle.0 == global_material.handle {
             continue;
         }
-        handle.0 = materials.add(WireframeMaterial {
+        handle.0 = commands.spawn_asset(WireframeMaterial {
             color: maybe_color.map(|c| c.color).unwrap_or(config.default_color),
             line_width: maybe_width
                 .map(|w| w.width)
@@ -1077,7 +1073,7 @@ fn wireframe_config_changed(
 }
 
 fn wireframe_color_changed(
-    mut materials: ResMut<Assets<WireframeMaterial>>,
+    mut commands: Commands,
     mut colors_changed: Query<
         (
             &mut Mesh3dWireframe,
@@ -1090,7 +1086,7 @@ fn wireframe_color_changed(
     config: Res<WireframeConfig>,
 ) {
     for (mut handle, wireframe_color, maybe_width, maybe_topology) in &mut colors_changed {
-        handle.0 = materials.add(WireframeMaterial {
+        handle.0 = commands.spawn_asset(WireframeMaterial {
             color: wireframe_color.color,
             line_width: maybe_width
                 .map(|w| w.width)
@@ -1101,7 +1097,7 @@ fn wireframe_color_changed(
 }
 
 fn wireframe_line_width_changed(
-    mut materials: ResMut<Assets<WireframeMaterial>>,
+    mut commands: Commands,
     mut widths_changed: Query<
         (
             &mut Mesh3dWireframe,
@@ -1114,7 +1110,7 @@ fn wireframe_line_width_changed(
     config: Res<WireframeConfig>,
 ) {
     for (mut handle, wireframe_width, maybe_color, maybe_topology) in &mut widths_changed {
-        handle.0 = materials.add(WireframeMaterial {
+        handle.0 = commands.spawn_asset(WireframeMaterial {
             color: maybe_color.map(|c| c.color).unwrap_or(config.default_color),
             line_width: wireframe_width.width,
             topology: maybe_topology.copied().unwrap_or(config.default_topology),
@@ -1123,7 +1119,7 @@ fn wireframe_line_width_changed(
 }
 
 fn wireframe_topology_changed(
-    mut materials: ResMut<Assets<WireframeMaterial>>,
+    mut commands: Commands,
     mut topology_changed: Query<
         (
             &mut Mesh3dWireframe,
@@ -1136,7 +1132,7 @@ fn wireframe_topology_changed(
     config: Res<WireframeConfig>,
 ) {
     for (mut handle, topology, maybe_color, maybe_width) in &mut topology_changed {
-        handle.0 = materials.add(WireframeMaterial {
+        handle.0 = commands.spawn_asset(WireframeMaterial {
             color: maybe_color.map(|c| c.color).unwrap_or(config.default_color),
             line_width: maybe_width
                 .map(|w| w.width)
@@ -1150,7 +1146,6 @@ fn wireframe_topology_changed(
 /// for any mesh with a [`NoWireframe`] component.
 fn apply_wireframe_material(
     mut commands: Commands,
-    mut materials: ResMut<Assets<WireframeMaterial>>,
     wireframes: Query<
         (
             Entity,
@@ -1177,7 +1172,7 @@ fn apply_wireframe_material(
             maybe_color,
             maybe_width,
             maybe_topology,
-            &mut materials,
+            &mut commands,
             &global_material,
             &config,
         );
@@ -1203,7 +1198,6 @@ fn apply_global_wireframe_material(
     >,
     meshes_with_global_material: Query<Entity, (WireframeFilter, With<Mesh3dWireframe>)>,
     global_material: Res<GlobalWireframeMaterial>,
-    mut materials: ResMut<Assets<WireframeMaterial>>,
 ) {
     if config.global {
         let mut material_to_spawn = vec![];
@@ -1212,7 +1206,7 @@ fn apply_global_wireframe_material(
                 maybe_color,
                 maybe_width,
                 maybe_topology,
-                &mut materials,
+                &mut commands,
                 &global_material,
                 &config,
             );
@@ -1233,12 +1227,12 @@ fn get_wireframe_material(
     maybe_color: Option<&WireframeColor>,
     maybe_width: Option<&WireframeLineWidth>,
     maybe_topology: Option<&WireframeTopology>,
-    wireframe_materials: &mut Assets<WireframeMaterial>,
+    commands: &mut Commands,
     global_material: &GlobalWireframeMaterial,
     config: &WireframeConfig,
 ) -> Handle<WireframeMaterial> {
     if maybe_color.is_some() || maybe_width.is_some() || maybe_topology.is_some() {
-        wireframe_materials.add(WireframeMaterial {
+        commands.spawn_asset(WireframeMaterial {
             color: maybe_color.map(|c| c.color).unwrap_or(config.default_color),
             line_width: maybe_width
                 .map(|w| w.width)
@@ -1616,11 +1610,11 @@ fn queue_wireframes(
                 continue;
             };
             let bin_key = Wireframe3dBinKey {
-                asset_id: mesh_instance.mesh_asset_id().untyped(),
+                asset_entity: mesh_instance.mesh_asset_id().untyped(),
             };
             let batch_set_key = Wireframe3dBatchSetKey {
                 pipeline: pipeline_id,
-                asset_id: wireframe_instance.untyped(),
+                asset_entity: wireframe_instance.untyped(),
                 draw_function,
                 slabs: MeshSlabs {
                     vertex_slab_id: vertex_slab,
@@ -1632,7 +1626,7 @@ fn queue_wireframes(
                     // IndirectParametersIndexed.
                     index_slab_id: if is_wide { None } else { index_slab },
                 },
-                mesh_asset_id: if is_wide {
+                mesh_asset_entity: if is_wide {
                     Some(mesh_instance.mesh_asset_id().untyped())
                 } else {
                     None

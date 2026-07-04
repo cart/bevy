@@ -3,7 +3,7 @@ use crate::{
     meshlet::asset::MeshletAabb, MaterialBindingId, MeshFlags, MeshTransforms, MeshUniform,
     PreviousGlobalTransform, RenderMaterialBindings, RenderMaterialInstances,
 };
-use bevy_asset::{AssetEvent, AssetServer, Assets, UntypedAssetId};
+use bevy_asset::{AssetEvent, AssetServer, Assets};
 use bevy_camera::visibility::RenderLayers;
 use bevy_ecs::{
     entity::{Entities, Entity, EntityHashMap},
@@ -43,7 +43,7 @@ pub struct InstanceManager {
     /// Next material ID available.
     next_material_id: u32,
     /// Map of material asset to material ID.
-    material_id_lookup: HashMap<UntypedAssetId, u32>,
+    material_id_lookup: HashMap<Entity, u32>,
     /// Set of material IDs used in the scene.
     material_ids_present_in_scene: HashSet<u32>,
 }

@@ -4,7 +4,7 @@ use crate::material_bind_groups::{
 use crate::*;
 use alloc::sync::Arc;
 use bevy_asset::prelude::AssetChanged;
-use bevy_asset::{Asset, AssetEventSystems, AssetId, AssetServer, UntypedAssetId};
+use bevy_asset::{Asset, AssetEventSystems, AssetId, AssetServer};
 use bevy_camera::visibility::ViewVisibility;
 use bevy_core_pipeline::core_3d::TransparentSortingInfo3d;
 use bevy_core_pipeline::deferred::{AlphaMask3dDeferred, Opaque3dDeferred};
@@ -16,6 +16,7 @@ use bevy_core_pipeline::{
 };
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::change_detection::Tick;
+use bevy_ecs::component::Mutable;
 use bevy_ecs::system::SystemParam;
 use bevy_ecs::{
     prelude::*,
@@ -614,11 +615,11 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetMaterialBindGroup<I> 
             return RenderCommandResult::Skip;
         };
         let Some(material_bind_group_allocator) =
-            material_bind_group_allocators.get(&material_instance.asset_id.type_id())
+            material_bind_group_allocators.get(&material_instance.asset_entity.type_id())
         else {
             return RenderCommandResult::Skip;
         };
-        let Some(material) = materials.get(material_instance.asset_id) else {
+        let Some(material) = materials.get(material_instance.asset_entity) else {
             return RenderCommandResult::Skip;
         };
         let Some(material_bind_group) = material_bind_group_allocator.get(material.binding.group)
@@ -652,20 +653,20 @@ impl RenderMaterialInstances {
     /// Meshes almost always have materials, but in very specific circumstances
     /// involving custom pipelines they won't. (See the
     /// `specialized_mesh_pipelines` example.)
-    pub(crate) fn mesh_material(&self, entity: MainEntity) -> Option<UntypedAssetId> {
+    pub(crate) fn mesh_material(&self, entity: MainEntity) -> Option<Entity> {
         self.instances
             .get(&entity)
-            .map(|instance| instance.asset_id)
+            .map(|instance| instance.asset_entity)
     }
 }
 
 /// The material associated with a single mesh instance in the main world.
 ///
-/// Note that this uses an [`UntypedAssetId`] and isn't generic over the
+/// Note that this uses an [`Entity`] and isn't generic over the
 /// material type, for simplicity.
 pub struct RenderMaterialInstance {
     /// The material asset.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
     /// The [`RenderMaterialInstances::current_change_tick`] at which this
     /// material instance was last modified.
     pub last_change_tick: Tick,
@@ -752,7 +753,7 @@ fn extract_mesh_materials<M: Material>(
             material_instances.instances.insert(
                 entity.into(),
                 RenderMaterialInstance {
-                    asset_id: material.id().untyped(),
+                    asset_entity: material.id().entity,
                     last_change_tick,
                 },
             );
@@ -1086,7 +1087,7 @@ pub(crate) fn specialize_material_meshes(
                 let Some(mesh) = render_meshes.get(mesh_instance.mesh_asset_id()) else {
                     continue;
                 };
-                let Some(material) = render_materials.get(material_instance.asset_id) else {
+                let Some(material) = render_materials.get(material_instance.asset_entity) else {
                     view_pending_mesh_material_queues
                         .current_frame
                         .insert((*render_entity, *visible_entity));
@@ -1138,7 +1139,7 @@ pub(crate) fn specialize_material_meshes(
                     mesh_key,
                     layout: mesh.layout.clone(),
                     properties: material.properties.clone(),
-                    material_type_id: material_instance.asset_id.type_id(),
+                    material_type_id: material_instance.asset_entity.type_id(),
                 });
             }
         }
@@ -1269,7 +1270,7 @@ pub fn queue_material_meshes(
                     .insert((*render_entity, *visible_entity));
                 continue;
             };
-            let Some(material) = render_materials.get(material_instance.asset_id) else {
+            let Some(material) = render_materials.get(material_instance.asset_entity) else {
                 view_pending_mesh_material_queues
                     .current_frame
                     .insert((*render_entity, *visible_entity));
@@ -1502,7 +1503,7 @@ pub struct ShadowsDepthOnlyDrawFunction;
 /// `M` type parameter, so it can be used in untyped contexts like
 /// [`crate::render::mesh::collect_meshes_for_gpu_building`].
 #[derive(Resource, Default, Deref, DerefMut)]
-pub struct RenderMaterialBindings(HashMap<UntypedAssetId, MaterialBindingId>);
+pub struct RenderMaterialBindings(HashMap<Entity, MaterialBindingId>);
 
 /// Data prepared for a [`Material`] instance.
 pub struct PreparedMaterial {
@@ -1582,7 +1583,7 @@ where
 }
 
 // orphan rules T_T
-impl<M: Material> ErasedRenderAsset for MeshMaterial3d<M>
+impl<M: Material + Component<Mutability = Mutable>> ErasedRenderAsset for MeshMaterial3d<M>
 where
     M::Data: PartialEq + Eq + Hash + Clone,
 {
@@ -1800,7 +1801,7 @@ where
             Self::Param,
         >,
     ) {
-        let Some(material_binding_id) = render_material_bindings.remove(&source_asset.untyped())
+        let Some(material_binding_id) = render_material_bindings.remove(&source_asset.entity())
         else {
             return;
         };

@@ -5,7 +5,7 @@ use crate::{
 use bevy_app::{App, Plugin, PostUpdate, Startup, Update};
 use bevy_asset::{
     embedded_asset, load_embedded_asset, prelude::AssetChanged, AsAssetId, Asset, AssetApp,
-    AssetEventSystems, AssetId, AssetServer, Assets, Handle, UntypedAssetId,
+    AssetCommands, AssetEventSystems, AssetId, AssetServer, Handle,
 };
 use bevy_camera::{visibility::ViewVisibility, Camera, Camera2d};
 use bevy_color::{Color, ColorToComponents};
@@ -245,7 +245,7 @@ pub struct Wireframe2dBatchSetKey {
     pub pipeline: CachedRenderPipelineId,
 
     /// The wireframe material asset ID.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
 
     /// The function used to draw.
     pub draw_function: DrawFunctionId,
@@ -274,7 +274,7 @@ impl PhaseItemBatchSetKey for Wireframe2dBatchSetKey {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Wireframe2dBinKey {
     /// The wireframe mesh asset ID.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
 }
 
 pub struct SetWireframe2dImmediates;
@@ -540,40 +540,35 @@ pub fn extract_wireframe_materials(
     }
 }
 
-fn setup_global_wireframe_material(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<Wireframe2dMaterial>>,
-    config: Res<Wireframe2dConfig>,
-) {
+fn setup_global_wireframe_material(mut commands: Commands, config: Res<Wireframe2dConfig>) {
     // Create the handle used for the global material
-    commands.insert_resource(GlobalWireframeMaterial {
-        handle: materials.add(Wireframe2dMaterial {
-            color: config.default_color,
-        }),
+    let handle = commands.spawn_asset(Wireframe2dMaterial {
+        color: config.default_color,
     });
+    commands.insert_resource(GlobalWireframeMaterial { handle });
 }
 
 /// Updates the wireframe material of all entities without a [`Wireframe2dColor`] or without a [`Wireframe2d`] component
 fn global_color_changed(
     config: Res<Wireframe2dConfig>,
-    mut materials: ResMut<Assets<Wireframe2dMaterial>>,
+    mut materials: Query<&mut Wireframe2dMaterial>,
     global_material: Res<GlobalWireframeMaterial>,
 ) {
-    if let Some(mut global_material) = materials.get_mut(&global_material.handle) {
+    if let Ok(mut global_material) = materials.get_mut(&global_material.handle) {
         global_material.color = config.default_color;
     }
 }
 
 /// Updates the wireframe material when the color in [`Wireframe2dColor`] changes
 fn wireframe_color_changed(
-    mut materials: ResMut<Assets<Wireframe2dMaterial>>,
+    mut commands: Commands,
     mut colors_changed: Query<
         (&mut Mesh2dWireframe, &Wireframe2dColor),
         (With<Wireframe2d>, Changed<Wireframe2dColor>),
     >,
 ) {
     for (mut handle, wireframe_color) in &mut colors_changed {
-        handle.0 = materials.add(Wireframe2dMaterial {
+        handle.0 = commands.spawn_asset(Wireframe2dMaterial {
             color: wireframe_color.color,
         });
     }
@@ -583,7 +578,6 @@ fn wireframe_color_changed(
 /// for any mesh with a [`NoWireframe2d`] component.
 fn apply_wireframe_material(
     mut commands: Commands,
-    mut materials: ResMut<Assets<Wireframe2dMaterial>>,
     wireframes: Query<
         (Entity, Option<&Wireframe2dColor>),
         (With<Wireframe2d>, Without<Mesh2dWireframe>),
@@ -600,7 +594,7 @@ fn apply_wireframe_material(
 
     let mut material_to_spawn = vec![];
     for (e, maybe_color) in &wireframes {
-        let material = get_wireframe_material(maybe_color, &mut materials, &global_material);
+        let material = get_wireframe_material(maybe_color, &mut commands, &global_material);
         material_to_spawn.push((e, Mesh2dWireframe(material)));
     }
     commands.try_insert_batch(material_to_spawn);
@@ -618,12 +612,11 @@ fn apply_global_wireframe_material(
     >,
     meshes_with_global_material: Query<Entity, (WireframeFilter, With<Mesh2dWireframe>)>,
     global_material: Res<GlobalWireframeMaterial>,
-    mut materials: ResMut<Assets<Wireframe2dMaterial>>,
 ) {
     if config.global {
         let mut material_to_spawn = vec![];
         for (e, maybe_color) in &meshes_without_material {
-            let material = get_wireframe_material(maybe_color, &mut materials, &global_material);
+            let material = get_wireframe_material(maybe_color, &mut commands, &global_material);
             // We only add the material handle but not the Wireframe component
             // This makes it easy to detect which mesh is using the global material and which ones are user specified
             material_to_spawn.push((e, Mesh2dWireframe(material)));
@@ -639,11 +632,11 @@ fn apply_global_wireframe_material(
 /// Gets a handle to a wireframe material with a fallback on the default material
 fn get_wireframe_material(
     maybe_color: Option<&Wireframe2dColor>,
-    wireframe_materials: &mut Assets<Wireframe2dMaterial>,
+    commands: &mut Commands,
     global_material: &GlobalWireframeMaterial,
 ) -> Handle<Wireframe2dMaterial> {
     if let Some(wireframe_color) = maybe_color {
-        wireframe_materials.add(Wireframe2dMaterial {
+        commands.spawn_asset(Wireframe2dMaterial {
             color: wireframe_color.color,
         })
     } else {
@@ -914,11 +907,11 @@ fn queue_wireframes(
                 continue;
             };
             let bin_key = Wireframe2dBinKey {
-                asset_id: mesh_instance.mesh_asset_id.untyped(),
+                asset_entity: mesh_instance.mesh_asset_id.entity,
             };
             let batch_set_key = Wireframe2dBatchSetKey {
                 pipeline: pipeline_id,
-                asset_id: wireframe_instance.untyped(),
+                asset_entity: wireframe_instance.entity,
                 draw_function: draw_wireframe,
                 vertex_slab,
                 index_slab,

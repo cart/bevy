@@ -1,6 +1,5 @@
 use crate::*;
 use alloc::sync::Arc;
-use bevy_asset::UntypedAssetId;
 use bevy_camera::primitives::{
     face_index_to_name, CascadesFrusta, CubeMapFace, CubemapFrusta, Frustum, CUBE_MAP_FACES,
 };
@@ -2403,7 +2402,7 @@ pub(crate) fn specialize_shadows(
                         .insert((*render_entity, *visible_entity));
                     continue;
                 };
-                let Some(material) = render_materials.get(material_instance.asset_id) else {
+                let Some(material) = render_materials.get(material_instance.asset_entity) else {
                     view_pending_shadow_queues
                         .current_frame
                         .insert((*render_entity, *visible_entity));
@@ -2454,7 +2453,7 @@ pub(crate) fn specialize_shadows(
                     mesh_key,
                     layout: mesh.layout.clone(),
                     properties: material.properties.clone(),
-                    material_type_id: material_instance.asset_id.type_id(),
+                    material_type_id: material_instance.asset_entity.type_id(),
                 });
             }
         }
@@ -2604,7 +2603,7 @@ pub fn queue_shadows(
             else {
                 continue;
             };
-            let Some(material) = render_materials.get(material_instance.asset_id) else {
+            let Some(material) = render_materials.get(material_instance.asset_entity) else {
                 // We couldn't fetch the material, probably because the
                 // material hasn't been loaded yet. Add the entity to the
                 // list of pending shadows and bail.
@@ -2637,7 +2636,7 @@ pub fn queue_shadows(
             shadow_phase.add(
                 batch_set_key,
                 ShadowBinKey {
-                    asset_id: mesh_instance.mesh_asset_id().into(),
+                    asset_entity: mesh_instance.mesh_asset_id().into(),
                 },
                 (*render_entity, *main_entity),
                 mesh_instance.current_uniform_index,
@@ -2700,7 +2699,7 @@ impl PhaseItemBatchSetKey for ShadowBatchSetKey {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShadowBinKey {
     /// The object.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
 }
 
 impl PhaseItem for Shadow {

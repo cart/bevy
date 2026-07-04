@@ -3,7 +3,7 @@ use bevy_ecs::{
     entity::Entity,
     query::{Added, Changed, Or},
     schedule::IntoScheduleConfigs,
-    system::{Commands, Local, Query, ResMut},
+    system::{Commands, Local, Query},
 };
 
 use bevy_asset::{AssetCommands, Handle};

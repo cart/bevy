@@ -1109,7 +1109,7 @@ pub(crate) fn specialize_prepass_material_meshes(
                         .insert((*render_entity, *visible_entity));
                     continue;
                 };
-                let Some(material) = render_materials.get(material_instance.asset_id) else {
+                let Some(material) = render_materials.get(material_instance.asset_entity) else {
                     view_pending_prepass_mesh_material_queues
                         .current_frame
                         .insert((*render_entity, *visible_entity));
@@ -1203,7 +1203,7 @@ pub(crate) fn specialize_prepass_material_meshes(
                     mesh_key,
                     layout: mesh.layout.clone(),
                     properties: material.properties.clone(),
-                    material_type_id: material_instance.asset_id.type_id(),
+                    material_type_id: material_instance.asset_entity.type_id(),
                 });
             }
         }
@@ -1389,7 +1389,7 @@ pub fn queue_prepass_material_meshes(
                     .insert((*render_entity, *visible_entity));
                 continue;
             };
-            let Some(material) = render_materials.get(material_instance.asset_id) else {
+            let Some(material) = render_materials.get(material_instance.asset_entity) else {
                 view_pending_prepass_mesh_material_queues
                     .current_frame
                     .insert((*render_entity, *visible_entity));
