@@ -1,10 +1,16 @@
 //! Add methods on `World` to simplify loading assets when all
 //! you have is a `World`.
 
-use bevy_ecs::{system::Commands, world::World};
+use bevy_ecs::{
+    component::{Component, Mutable},
+    system::Commands,
+    world::{Mut, World},
+};
 use uuid::Uuid;
 
-use crate::{meta::Settings, Asset, AssetData, AssetReference, AssetServer, Handle, LoadBuilder};
+use crate::{
+    meta::Settings, Asset, AssetData, AssetId, AssetReference, AssetServer, Handle, LoadBuilder,
+};
 
 /// An extension trait for methods for working with assets directly from a [`World`].
 pub trait DirectAssetAccessExt {
@@ -19,6 +25,23 @@ pub trait DirectAssetAccessExt {
 
     /// Reserves an asset handle of type `A`.
     fn reserve_asset_handle<A: Asset>(&mut self) -> Handle<A>;
+
+    /// Gets an asset from its [`AssetId`].
+    ///
+    /// This function also accepts [`&Handle`].
+    ///
+    /// [`&Handle`]: Handle
+    fn get_asset<A: Asset>(&self, id: impl Into<AssetId<A>>) -> Option<&A>;
+
+    /// Gets an asset mutably from its [`AssetId`].
+    ///
+    /// This function also accepts [`&Handle`].
+    ///
+    /// [`&Handle`]: Handle
+    fn get_asset_mut<A: Asset + Component<Mutability = Mutable>>(
+        &mut self,
+        id: impl Into<AssetId<A>>,
+    ) -> Option<Mut<'_, A>>;
 
     /// Load an asset similarly to [`AssetServer::load`].
     fn load_asset<'a, A: Asset>(&self, path: impl Into<AssetReference<'a>>) -> Handle<A>;
@@ -59,6 +82,17 @@ impl DirectAssetAccessExt for World {
         self.spawn_empty()
             .handle_with_data(AssetData::new::<A>())
             .into()
+    }
+
+    fn get_asset<A: Asset>(&self, id: impl Into<AssetId<A>>) -> Option<&A> {
+        self.get_entity(id.into().entity).ok()?.get::<A>()
+    }
+
+    fn get_asset_mut<A: Asset + Component<Mutability = Mutable>>(
+        &mut self,
+        id: impl Into<AssetId<A>>,
+    ) -> Option<Mut<'_, A>> {
+        self.get_entity_mut(id.into().entity).ok()?.into_mut::<A>()
     }
 
     /// Load an asset similarly to [`AssetServer::load`].
