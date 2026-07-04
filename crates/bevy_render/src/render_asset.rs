@@ -3,11 +3,13 @@ use crate::{
     RenderStartup, RenderSystems, Res,
 };
 use bevy_app::{App, Plugin, SubApp};
-use bevy_asset::{Asset, AssetEvent, AssetId, Assets, RenderAssetUsages};
+use bevy_asset::{Asset, AssetEvent, AssetId, RenderAssetUsages};
 use bevy_ecs::{
+    change_detection::DetectChangesMut,
+    component::{Component, Mutable},
     prelude::{Commands, IntoScheduleConfigs, Local, MessageReader, ResMut, Resource},
     schedule::{ScheduleConfigs, SystemSet},
-    system::{ScheduleSystem, StaticSystemParam, SystemParam, SystemParamItem, SystemState},
+    system::{Query, ScheduleSystem, StaticSystemParam, SystemParam, SystemParamItem, SystemState},
     world::{FromWorld, Mut},
 };
 use bevy_log::{debug, error};
@@ -46,7 +48,7 @@ pub enum AssetExtractionError {
 /// is transformed into its GPU-representation of type [`RenderAsset`].
 pub trait RenderAsset: Send + Sync + 'static + Sized {
     /// The representation of the asset in the "main world".
-    type SourceAsset: Asset + Clone;
+    type SourceAsset: Asset + Component<Mutability = Mutable> + Clone;
 
     /// Specifies all ECS data required by [`RenderAsset::prepare_asset`].
     ///
@@ -242,7 +244,7 @@ impl<A: RenderAsset> RenderAssets<A> {
 struct CachedExtractRenderAssetSystemState<A: RenderAsset> {
     state: SystemState<(
         MessageReader<'static, 'static, AssetEvent<A::SourceAsset>>,
-        ResMut<'static, Assets<A::SourceAsset>>,
+        Query<'static, 'static, &'static mut A::SourceAsset>,
         Option<Res<'static, RenderAssets<A>>>,
     )>,
 }
@@ -331,11 +333,12 @@ pub(crate) fn extract_render_asset<A: RenderAsset>(
             }
 
             for id in needs_extracting.drain() {
-                if let Some(asset) = assets.get(id) {
+                if let Ok(asset) = assets.get(id) {
                     let asset_usage = A::asset_usage(asset);
                     if asset_usage.contains(RenderAssetUsages::RENDER_WORLD) {
                         if asset_usage == RenderAssetUsages::RENDER_WORLD {
-                            if let Some(asset) = assets.get_mut_untracked(id) {
+                            if let Ok(mut asset) = assets.get_mut(id) {
+                                let asset = asset.bypass_change_detection();
                                 let previous_asset = maybe_render_assets.as_ref().and_then(|render_assets| render_assets.get(id));
                                 match A::take_gpu_data(asset, previous_asset) {
                                     Ok(gpu_data_asset) => {

@@ -18,7 +18,7 @@ use crate::{
 };
 
 use bevy_app::{App, Plugin, PostStartup, PostUpdate};
-use bevy_asset::{AssetEvent, AssetEventSystems, AssetId, Assets};
+use bevy_asset::{AssetEvent, AssetEventSystems, AssetId};
 use bevy_camera::{
     primitives::Frustum,
     visibility::{self, RenderLayers, VisibleEntities},
@@ -211,7 +211,7 @@ pub trait NormalizedRenderTargetExt {
     fn get_render_target_info<'a>(
         &self,
         resolutions: impl IntoIterator<Item = (Entity, &'a Window)>,
-        images: &Assets<Image>,
+        images: &Query<&Image>,
         manual_texture_views: &ManualTextureViews,
     ) -> Result<RenderTargetInfo, MissingRenderTargetInfoError>;
 
@@ -268,7 +268,7 @@ impl NormalizedRenderTargetExt for NormalizedRenderTarget {
     fn get_render_target_info<'a>(
         &self,
         resolutions: impl IntoIterator<Item = (Entity, &'a Window)>,
-        images: &Assets<Image>,
+        images: &Query<&Image>,
         manual_texture_views: &ManualTextureViews,
     ) -> Result<RenderTargetInfo, MissingRenderTargetInfoError> {
         match self {
@@ -284,6 +284,7 @@ impl NormalizedRenderTargetExt for NormalizedRenderTarget {
                 }),
             NormalizedRenderTarget::Image(image_target) => images
                 .get(&image_target.handle)
+                .ok()
                 .map(|image| RenderTargetInfo {
                     physical_size: image.size(),
                     scale_factor: image_target.scale_factor,
@@ -355,7 +356,7 @@ pub fn camera_system(
     mut image_asset_event_reader: MessageReader<AssetEvent<Image>>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
     windows: Query<(Entity, &Window)>,
-    images: Res<Assets<Image>>,
+    images: Query<&Image>,
     manual_texture_views: Res<ManualTextureViews>,
     mut cameras: Query<(&mut Camera, &RenderTarget, &mut Projection)>,
 ) -> Result<(), BevyError> {
