@@ -110,8 +110,8 @@ fn update_cursors(
     mut commands: Commands,
     windows: Query<(Entity, Ref<CursorIcon>), With<Window>>,
     #[cfg(feature = "custom_cursor")] cursor_cache: Res<WinitCustomCursorCache>,
-    #[cfg(feature = "custom_cursor")] images: Res<Assets<Image>>,
-    #[cfg(feature = "custom_cursor")] texture_atlases: Res<Assets<TextureAtlasLayout>>,
+    #[cfg(feature = "custom_cursor")] images: Query<&Image>,
+    #[cfg(feature = "custom_cursor")] texture_atlases: Query<&TextureAtlasLayout>,
     mut queue: Local<EntityHashSet>,
 ) {
     for (entity, cursor) in windows.iter() {
@@ -143,7 +143,7 @@ fn update_cursors(
                 if cursor_cache.0.contains_key(&cache_key) {
                     CursorSource::CustomCached(cache_key)
                 } else {
-                    let Some(image) = images.get(handle) else {
+                    let Ok(image) = images.get(handle) else {
                         tracing::warn!(
                             "Cursor image {handle:?} is not loaded yet and couldn't be used. Trying again next frame."
                         );

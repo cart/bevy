@@ -404,7 +404,7 @@ fn queue_custom_mesh_pipeline(
                 // For this example we can use the mesh asset id as the bin key,
                 // but you can use any asset_id as a key
                 Opaque3dBinKey {
-                    asset_id: mesh_instance.mesh_asset_id().into(),
+                    asset_entity: mesh_instance.mesh_asset_id().into(),
                 },
                 (*render_entity, *visible_entity),
                 mesh_instance.current_uniform_index,

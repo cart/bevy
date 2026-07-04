@@ -367,8 +367,8 @@ type UpdateImageFilter = (With<Node>, Without<crate::prelude::Text>);
 
 /// Updates content size of the node based on the image provided
 pub fn update_image_content_size_system(
-    textures: Res<Assets<Image>>,
-    atlases: Res<Assets<TextureAtlasLayout>>,
+    textures: Query<&Image>,
+    atlases: Query<&TextureAtlasLayout>,
     mut query: Query<
         (
             &mut ContentSize,
@@ -396,7 +396,7 @@ pub fn update_image_content_size_system(
                 .map(|rect| rect.size().as_uvec2())
                 .or_else(|| match &image.texture_atlas {
                     Some(atlas) => atlas.texture_rect(&atlases).map(|t| t.size()),
-                    None => textures.get(&image.image).map(Image::size),
+                    None => textures.get(&image.image).ok().map(Image::size),
                 })
         {
             // Update only if size or scale factor has changed to avoid needless layout calculations

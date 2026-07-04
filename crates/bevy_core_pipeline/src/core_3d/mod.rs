@@ -48,7 +48,6 @@ pub use main_opaque_pass_3d_node::*;
 pub use main_transparent_pass_3d_node::*;
 
 use bevy_app::{App, Plugin, PostUpdate};
-use bevy_asset::UntypedAssetId;
 use bevy_color::LinearRgba;
 use bevy_ecs::{entity::EntityHash, prelude::*};
 use bevy_image::ToExtents;
@@ -229,7 +228,7 @@ pub struct Opaque3dBinKey {
     ///
     /// Normally, this is the ID of the mesh, but for non-mesh items it might be
     /// the ID of another type of asset.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
 }
 
 impl PhaseItem for Opaque3d {

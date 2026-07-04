@@ -38,7 +38,6 @@ pub mod prelude {
     };
 }
 
-use bevy_asset::Assets;
 use bevy_camera::{
     primitives::{Aabb, MeshAabb},
     visibility::NoFrustumCulling,
@@ -109,9 +108,9 @@ impl Plugin for SpritePlugin {
 /// Used in system set [`VisibilitySystems::CalculateBounds`].
 pub fn calculate_bounds_2d(
     mut commands: Commands,
-    meshes: Res<Assets<Mesh>>,
-    images: Res<Assets<Image>>,
-    atlases: Res<Assets<TextureAtlasLayout>>,
+    meshes: Query<&Mesh>,
+    images: Query<&Image>,
+    atlases: Query<&TextureAtlasLayout>,
     new_mesh_aabb: Query<
         (Entity, &Mesh2d),
         (
@@ -151,7 +150,7 @@ pub fn calculate_bounds_2d(
 ) {
     // New meshes require inserting a component
     for (entity, mesh_handle) in &new_mesh_aabb {
-        if let Some(mesh) = meshes.get(mesh_handle)
+        if let Ok(mesh) = meshes.get(mesh_handle)
             && let Some(aabb) = mesh.get_aabb()
         {
             commands.entity(entity).try_insert(aabb);
@@ -162,7 +161,7 @@ pub fn calculate_bounds_2d(
     update_mesh_aabb
         .par_iter_mut()
         .for_each(|(mesh_handle, mut aabb)| {
-            if let Some(new_aabb) = meshes.get(mesh_handle).and_then(MeshAabb::get_aabb) {
+            if let Some(new_aabb) = meshes.get(mesh_handle).ok().and_then(MeshAabb::get_aabb) {
                 aabb.set_if_neq(new_aabb);
             }
         });
@@ -174,7 +173,7 @@ pub fn calculate_bounds_2d(
             .or_else(|| sprite.rect.map(|rect| rect.size()))
             .or_else(|| match &sprite.texture_atlas {
                 // We default to the texture size for regular sprites
-                None => images.get(&sprite.image).map(Image::size_f32),
+                None => images.get(&sprite.image).ok().map(Image::size_f32),
                 // We default to the drawn rect for atlas sprites
                 Some(atlas) => atlas
                     .texture_rect(&atlases)
@@ -214,8 +213,8 @@ pub fn calculate_bounds_2d(
 // inside the vertex shader which isn't recognized by calculate_aabb().
 fn calculate_bounds_2d_sprite_mesh(
     mut commands: Commands,
-    images: Res<Assets<Image>>,
-    atlases: Res<Assets<TextureAtlasLayout>>,
+    images: Query<&Image>,
+    atlases: Query<&TextureAtlasLayout>,
     new_sprite_aabb: Query<
         (Entity, &SpriteMesh, &Anchor),
         (
@@ -240,7 +239,7 @@ fn calculate_bounds_2d_sprite_mesh(
             .or_else(|| sprite.rect.map(|rect| rect.size()))
             .or_else(|| match &sprite.texture_atlas {
                 // We default to the texture size for regular sprites
-                None => images.get(&sprite.image).map(Image::size_f32),
+                None => images.get(&sprite.image).ok().map(Image::size_f32),
                 // We default to the drawn rect for atlas sprites
                 Some(atlas) => atlas
                     .texture_rect(&atlases)
@@ -276,6 +275,7 @@ fn calculate_bounds_2d_sprite_mesh(
 #[cfg(test)]
 mod test {
     use super::*;
+    use bevy_asset::DirectAssetAccessExt;
     use bevy_math::{Rect, Vec2, Vec3A};
 
     #[test]
@@ -283,14 +283,8 @@ mod test {
         // Setup app
         let mut app = App::new();
 
-        // Add resources and get handle to image
-        let mut image_assets = Assets::<Image>::default();
-        let image_handle = image_assets.add(Image::default());
-        app.insert_resource(image_assets);
-        let mesh_assets = Assets::<Mesh>::default();
-        app.insert_resource(mesh_assets);
-        let texture_atlas_assets = Assets::<TextureAtlasLayout>::default();
-        app.insert_resource(texture_atlas_assets);
+        // Add image to get a handle.
+        let image_handle = app.world_mut().spawn_asset(Image::default());
 
         // Add system
         app.add_systems(Update, calculate_bounds_2d);
@@ -321,14 +315,8 @@ mod test {
         // Setup app
         let mut app = App::new();
 
-        // Add resources and get handle to image
-        let mut image_assets = Assets::<Image>::default();
-        let image_handle = image_assets.add(Image::default());
-        app.insert_resource(image_assets);
-        let mesh_assets = Assets::<Mesh>::default();
-        app.insert_resource(mesh_assets);
-        let texture_atlas_assets = Assets::<TextureAtlasLayout>::default();
-        app.insert_resource(texture_atlas_assets);
+        // Add image to get a handle.
+        let image_handle = app.world_mut().spawn_asset(Image::default());
 
         // Add system
         app.add_systems(Update, calculate_bounds_2d);
@@ -384,14 +372,8 @@ mod test {
         // Setup app
         let mut app = App::new();
 
-        // Add resources and get handle to image
-        let mut image_assets = Assets::<Image>::default();
-        let image_handle = image_assets.add(Image::default());
-        app.insert_resource(image_assets);
-        let mesh_assets = Assets::<Mesh>::default();
-        app.insert_resource(mesh_assets);
-        let texture_atlas_assets = Assets::<TextureAtlasLayout>::default();
-        app.insert_resource(texture_atlas_assets);
+        // Add image to get a handle.
+        let image_handle = app.world_mut().spawn_asset(Image::default());
 
         // Add system
         app.add_systems(Update, calculate_bounds_2d);

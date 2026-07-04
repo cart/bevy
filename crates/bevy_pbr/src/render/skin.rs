@@ -1,6 +1,6 @@
 use core::mem::{self, size_of};
 
-use bevy_asset::{prelude::AssetChanged, Assets};
+use bevy_asset::prelude::AssetChanged;
 use bevy_camera::visibility::ViewVisibility;
 use bevy_ecs::prelude::*;
 use bevy_math::Mat4;
@@ -282,7 +282,7 @@ pub fn extract_skins(
             )>,
         >,
     >,
-    skinned_mesh_inverse_bindposes: Extract<Res<Assets<SkinnedMeshInverseBindposes>>>,
+    skinned_mesh_inverse_bindposes: Extract<Query<&SkinnedMeshInverseBindposes>>,
     changed_transforms: Extract<Query<(Entity, &GlobalTransform), Changed<GlobalTransform>>>,
     joints: Extract<Query<&GlobalTransform>>,
     mut removed_skinned_meshes_query: Extract<RemovedComponents<SkinnedMesh>>,
@@ -334,7 +334,7 @@ fn add_or_delete_skins(
             AssetChanged<SkinnedMesh>,
         )>,
     >,
-    skinned_mesh_inverse_bindposes: &Assets<SkinnedMeshInverseBindposes>,
+    skinned_mesh_inverse_bindposes: &Query<&SkinnedMeshInverseBindposes>,
     joints: &Query<&GlobalTransform>,
 ) {
     // Find every skinned mesh that changed one of (1) visibility; (2) joint
@@ -376,7 +376,7 @@ fn extract_joints_for_skin(
             AssetChanged<SkinnedMesh>,
         )>,
     >,
-    skinned_mesh_inverse_bindposes: &Assets<SkinnedMeshInverseBindposes>,
+    skinned_mesh_inverse_bindposes: &Query<&SkinnedMeshInverseBindposes>,
     changed_transforms: &Query<(Entity, &GlobalTransform), Changed<GlobalTransform>>,
 ) {
     // If we initialized the skin this frame, we already populated all
@@ -389,7 +389,7 @@ fn extract_joints_for_skin(
     let Some(skin_uniform_info) = skin_uniforms.skin_uniform_info.get(&skin_entity) else {
         return;
     };
-    let Some(skinned_mesh_inverse_bindposes) =
+    let Ok(skinned_mesh_inverse_bindposes) =
         skinned_mesh_inverse_bindposes.get(&skin.inverse_bindposes)
     else {
         return;
@@ -418,7 +418,7 @@ fn add_skin(
     skinned_mesh_entity: MainEntity,
     skinned_mesh: &SkinnedMesh,
     skin_uniforms: &mut SkinUniforms,
-    skinned_mesh_inverse_bindposes: &Assets<SkinnedMeshInverseBindposes>,
+    skinned_mesh_inverse_bindposes: &Query<&SkinnedMeshInverseBindposes>,
     joints: &Query<&GlobalTransform>,
 ) {
     // Allocate space for the joints.
@@ -446,8 +446,9 @@ fn add_skin(
             .collect(),
     };
 
-    let skinned_mesh_inverse_bindposes =
-        skinned_mesh_inverse_bindposes.get(&skinned_mesh.inverse_bindposes);
+    let skinned_mesh_inverse_bindposes = skinned_mesh_inverse_bindposes
+        .get(&skinned_mesh.inverse_bindposes)
+        .ok();
 
     for (joint_index, &joint) in skinned_mesh.joints.iter().enumerate() {
         // Calculate the initial joint matrix.

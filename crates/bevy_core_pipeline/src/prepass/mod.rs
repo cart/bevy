@@ -36,7 +36,6 @@ pub use background_motion_vectors::{
 use core::ops::Range;
 
 use crate::deferred::{DEFERRED_LIGHTING_PASS_ID_FORMAT, DEFERRED_PREPASS_FORMAT};
-use bevy_asset::UntypedAssetId;
 use bevy_ecs::prelude::*;
 use bevy_math::Mat4;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
@@ -233,7 +232,7 @@ impl PhaseItemBatchSetKey for OpaqueNoLightmap3dBatchSetKey {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OpaqueNoLightmap3dBinKey {
     /// The ID of the asset.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
 }
 
 impl PhaseItem for Opaque3dPrepass {

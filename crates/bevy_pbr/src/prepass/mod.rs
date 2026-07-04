@@ -1416,7 +1416,7 @@ pub fn queue_prepass_material_meshes(
                                 slabs: mesh_slabs,
                             },
                             OpaqueNoLightmap3dBinKey {
-                                asset_id: mesh_instance.mesh_asset_id().into(),
+                                asset_entity: mesh_instance.mesh_asset_id().into(),
                             },
                             (*render_entity, *visible_entity),
                             mesh_instance.current_uniform_index,
@@ -1443,7 +1443,7 @@ pub fn queue_prepass_material_meshes(
                                 slabs: mesh_slabs,
                             },
                             OpaqueNoLightmap3dBinKey {
-                                asset_id: mesh_instance.mesh_asset_id().into(),
+                                asset_entity: mesh_instance.mesh_asset_id().into(),
                             },
                             (*render_entity, *visible_entity),
                             mesh_instance.current_uniform_index,
@@ -1464,7 +1464,7 @@ pub fn queue_prepass_material_meshes(
                                 slabs: mesh_slabs,
                             },
                             OpaqueNoLightmap3dBinKey {
-                                asset_id: mesh_instance.mesh_asset_id().into(),
+                                asset_entity: mesh_instance.mesh_asset_id().into(),
                             },
                             (*render_entity, *visible_entity),
                             mesh_instance.current_uniform_index,
@@ -1482,7 +1482,7 @@ pub fn queue_prepass_material_meshes(
                                 slabs: mesh_slabs,
                             },
                             OpaqueNoLightmap3dBinKey {
-                                asset_id: mesh_instance.mesh_asset_id().into(),
+                                asset_entity: mesh_instance.mesh_asset_id().into(),
                             },
                             (*render_entity, *visible_entity),
                             mesh_instance.current_uniform_index,

@@ -3,7 +3,6 @@ mod main_transparent_pass_2d_node;
 
 use core::ops::Range;
 
-use bevy_asset::UntypedAssetId;
 use bevy_camera::{Camera, Camera2d};
 use bevy_ecs::entity::EntityHash;
 use bevy_image::ToExtents;
@@ -122,7 +121,7 @@ pub struct Opaque2dBinKey {
     ///
     /// Normally, this is the ID of the mesh, but for non-mesh items it might be
     /// the ID of another type of asset.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
     /// The ID of a bind group specific to the material.
     pub material_bind_group_id: Option<BindGroupId>,
 }
@@ -236,7 +235,7 @@ pub struct AlphaMask2dBinKey {
     ///
     /// Normally, this is the ID of the mesh, but for non-mesh items it might be
     /// the ID of another type of asset.
-    pub asset_id: UntypedAssetId,
+    pub asset_entity: Entity,
     /// The ID of a bind group specific to the material.
     pub material_bind_group_id: Option<BindGroupId>,
 }

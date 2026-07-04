@@ -300,7 +300,7 @@ fn queue_custom_phase_item(
                     slabs: MeshSlabs::default(),
                 },
                 Opaque3dBinKey {
-                    asset_id: AssetId::<Mesh>::default().untyped(),
+                    asset_entity: AssetId::<Mesh>::default().untyped(),
                 },
                 (*render_entity, *main_entity),
                 InputUniformIndex::default(),

@@ -992,7 +992,7 @@ pub fn queue_material2d_meshes<M: Material2d>(
                     let bin_key = Opaque2dBinKey {
                         pipeline: pipeline_id,
                         draw_function: material_2d.properties.draw_function_id,
-                        asset_id: mesh_instance.mesh_asset_id.into(),
+                        asset_entity: mesh_instance.mesh_asset_id.into(),
                         material_bind_group_id: material_2d.get_bind_group_id().0,
                     };
                     opaque_phase.add(
@@ -1009,7 +1009,7 @@ pub fn queue_material2d_meshes<M: Material2d>(
                     let bin_key = AlphaMask2dBinKey {
                         pipeline: pipeline_id,
                         draw_function: material_2d.properties.draw_function_id,
-                        asset_id: mesh_instance.mesh_asset_id.into(),
+                        asset_entity: mesh_instance.mesh_asset_id.into(),
                         material_bind_group_id: material_2d.get_bind_group_id().0,
                     };
                     alpha_mask_phase.add(

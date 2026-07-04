@@ -1,7 +1,9 @@
-use bevy_asset::{Assets, Handle};
+use bevy_asset::Handle;
 use bevy_camera::visibility::{Visibility, VisibilityClass};
 use bevy_color::Color;
-use bevy_ecs::{component::Component, reflect::ReflectComponent, template::FromTemplate};
+use bevy_ecs::{
+    component::Component, reflect::ReflectComponent, system::Query, template::FromTemplate,
+};
 use bevy_image::{Image, TextureAtlas, TextureAtlasLayout};
 use bevy_math::{Rect, UVec2, Vec2};
 use bevy_reflect::{std_traits::ReflectDefault, PartialReflect, Reflect};
@@ -103,8 +105,8 @@ impl SpriteMesh {
         &self,
         point_relative_to_sprite: Vec2,
         anchor: Anchor,
-        images: &Assets<Image>,
-        texture_atlases: &Assets<TextureAtlasLayout>,
+        images: &Query<&Image>,
+        texture_atlases: &Query<&TextureAtlasLayout>,
     ) -> Result<Vec2, Vec2> {
         let image_size = images
             .get(&self.image)

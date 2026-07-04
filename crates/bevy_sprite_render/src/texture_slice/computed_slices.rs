@@ -1,5 +1,5 @@
 use crate::{ExtractedSlice, TextureAtlasLayout};
-use bevy_asset::{AssetEvent, Assets};
+use bevy_asset::AssetEvent;
 use bevy_ecs::prelude::*;
 use bevy_image::Image;
 use bevy_math::{Rect, Vec2};
@@ -56,19 +56,19 @@ impl ComputedTextureSlices {
 #[must_use]
 fn compute_sprite_slices(
     sprite: &Sprite,
-    images: &Assets<Image>,
-    atlas_layouts: &Assets<TextureAtlasLayout>,
+    images: &Query<&Image>,
+    atlas_layouts: &Query<&TextureAtlasLayout>,
 ) -> Option<ComputedTextureSlices> {
     let (image_size, texture_rect) = match &sprite.texture_atlas {
         Some(a) => {
-            let layout = atlas_layouts.get(&a.layout)?;
+            let layout = atlas_layouts.get(&a.layout).ok()?;
             (
                 layout.size.as_vec2(),
                 layout.textures.get(a.index)?.as_rect(),
             )
         }
         None => {
-            let image = images.get(&sprite.image)?;
+            let image = images.get(&sprite.image).ok()?;
             let size = Vec2::new(
                 image.texture_descriptor.size.width as f32,
                 image.texture_descriptor.size.height as f32,
@@ -109,8 +109,8 @@ fn compute_sprite_slices(
 pub(crate) fn compute_slices_on_asset_event(
     mut commands: Commands,
     mut events: MessageReader<AssetEvent<Image>>,
-    images: Res<Assets<Image>>,
-    atlas_layouts: Res<Assets<TextureAtlasLayout>>,
+    images: Query<&Image>,
+    atlas_layouts: Query<&TextureAtlasLayout>,
     sprites: Query<(Entity, &Sprite)>,
 ) {
     // We store the asset ids of added/modified image assets
@@ -141,8 +141,8 @@ pub(crate) fn compute_slices_on_asset_event(
 /// System reacting to changes on the [`Sprite`] component to compute the sprite slices
 pub(crate) fn compute_slices_on_sprite_change(
     mut commands: Commands,
-    images: Res<Assets<Image>>,
-    atlas_layouts: Res<Assets<TextureAtlasLayout>>,
+    images: Query<&Image>,
+    atlas_layouts: Query<&TextureAtlasLayout>,
     changed_sprites: Query<(Entity, &Sprite), Changed<Sprite>>,
 ) {
     for (entity, sprite) in &changed_sprites {

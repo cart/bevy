@@ -260,7 +260,7 @@ impl Measure for TextMeasure {
 ///   color changes. This can be expensive, particularly for large blocks of text, and the [`bypass_change_detection`](bevy_ecs::change_detection::DetectChangesMut::bypass_change_detection)
 ///   method should be called when only changing the `Text`'s colors.
 pub fn measure_text_system(
-    fonts: Res<Assets<Font>>,
+    fonts: Query<&Font>,
     mut text_query: Query<
         (
             Entity,

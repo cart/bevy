@@ -1,6 +1,7 @@
 use bevy_app::prelude::*;
 use bevy_asset::{
-    embedded_asset, load_embedded_asset, AssetServer, Assets, Handle, RenderAssetUsages,
+    embedded_asset, load_embedded_asset, AssetServer, DirectAssetAccessExt, Handle,
+    RenderAssetUsages,
 };
 use bevy_camera::Camera;
 use bevy_ecs::prelude::*;
@@ -49,29 +50,30 @@ impl Plugin for TonemappingPlugin {
         embedded_asset!(app, "tonemapping.wgsl");
 
         if !app.world().is_resource_added::<TonemappingLuts>() {
-            let mut images = app.world_mut().resource_mut::<Assets<Image>>();
-
             #[cfg(feature = "tonemapping_luts")]
             let tonemapping_luts = {
+                let blender_filmic = app.world_mut().spawn_asset(setup_tonemapping_lut_image(
+                    include_bytes!("luts/Blender_-11_12.ktx2"),
+                    ImageType::Extension("ktx2"),
+                ));
+                let agx = app.world_mut().spawn_asset(setup_tonemapping_lut_image(
+                    include_bytes!("luts/AgX-default_contrast.ktx2"),
+                    ImageType::Extension("ktx2"),
+                ));
+                let tony_mc_mapface = app.world_mut().spawn_asset(setup_tonemapping_lut_image(
+                    include_bytes!("luts/tony_mc_mapface.ktx2"),
+                    ImageType::Extension("ktx2"),
+                ));
                 TonemappingLuts {
-                    blender_filmic: images.add(setup_tonemapping_lut_image(
-                        include_bytes!("luts/Blender_-11_12.ktx2"),
-                        ImageType::Extension("ktx2"),
-                    )),
-                    agx: images.add(setup_tonemapping_lut_image(
-                        include_bytes!("luts/AgX-default_contrast.ktx2"),
-                        ImageType::Extension("ktx2"),
-                    )),
-                    tony_mc_mapface: images.add(setup_tonemapping_lut_image(
-                        include_bytes!("luts/tony_mc_mapface.ktx2"),
-                        ImageType::Extension("ktx2"),
-                    )),
+                    blender_filmic,
+                    agx,
+                    tony_mc_mapface,
                 }
             };
 
             #[cfg(not(feature = "tonemapping_luts"))]
             let tonemapping_luts = {
-                let placeholder = images.add(lut_placeholder());
+                let placeholder = app.world_mut().spawn_asset(lut_placeholder());
                 TonemappingLuts {
                     blender_filmic: placeholder.clone(),
                     agx: placeholder.clone(),

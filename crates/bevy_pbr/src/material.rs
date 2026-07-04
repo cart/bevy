@@ -1341,7 +1341,7 @@ pub fn queue_material_meshes(
                             .map(|index| *index),
                     };
                     let bin_key = Opaque3dBinKey {
-                        asset_id: mesh_instance.mesh_asset_id().into(),
+                        asset_entity: mesh_instance.mesh_asset_id().into(),
                     };
                     opaque_phase.add(
                         batch_set_key,
@@ -1369,7 +1369,7 @@ pub fn queue_material_meshes(
                         slabs: mesh_slabs,
                     };
                     let bin_key = OpaqueNoLightmap3dBinKey {
-                        asset_id: mesh_instance.mesh_asset_id().into(),
+                        asset_entity: mesh_instance.mesh_asset_id().into(),
                     };
                     alpha_mask_phase.add(
                         batch_set_key,
