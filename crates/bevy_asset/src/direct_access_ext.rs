@@ -14,9 +14,11 @@ pub trait DirectAssetAccessExt {
 
     /// Insert an asset similarly to [`Assets::add`].
     fn spawn_asset<A: Asset>(&mut self, asset: A) -> Handle<A>;
-    ///
     /// Insert an asset similarly to [`Assets::add`].
     fn spawn_asset_with_uuid<A: Asset>(&mut self, uuid: Uuid, asset: impl Into<A>) -> Handle<A>;
+
+    /// Reserves an asset handle of type `A`.
+    fn reserve_asset_handle<A: Asset>(&mut self) -> Handle<A>;
 
     /// Load an asset similarly to [`AssetServer::load`].
     fn load_asset<'a, A: Asset>(&self, path: impl Into<AssetReference<'a>>) -> Handle<A>;
@@ -51,6 +53,12 @@ impl DirectAssetAccessExt for World {
             ..AssetData::new::<A>()
         });
         entity_handle.into()
+    }
+
+    fn reserve_asset_handle<A: Asset>(&mut self) -> Handle<A> {
+        self.spawn_empty()
+            .handle_with_data(AssetData::new::<A>())
+            .into()
     }
 
     /// Load an asset similarly to [`AssetServer::load`].

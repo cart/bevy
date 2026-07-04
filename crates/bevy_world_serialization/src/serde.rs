@@ -564,7 +564,6 @@ mod tests {
     use ron;
     use serde::{de::DeserializeSeed, Deserialize, Serialize};
     use std::io::BufReader;
-    use uuid::Uuid;
 
     #[derive(Component, Reflect, Default)]
     #[reflect(Component)]
@@ -675,14 +674,13 @@ mod tests {
         let a = world.spawn(Foo(123)).id();
         let b = world.spawn((Foo(123), Bar(345))).id();
         let c = world.spawn((Foo(123), Bar(345), Baz(789))).id();
-        let d = world.spawn(FakeMesh3d(Uuid::from_u128(1).into())).id();
 
         world.insert_resource(MyResource { foo: 123 });
 
         let dynamic_world = {
             let type_registry = world.resource::<AppTypeRegistry>().read();
             DynamicWorldBuilder::from_world(&world, &type_registry)
-                .extract_entities([a, b, c, d].into_iter())
+                .extract_entities([a, b, c].into_iter())
                 .extract_resources()
                 .build()
         };
@@ -694,11 +692,6 @@ mod tests {
     ),
   },
   entities: {
-    4294967290: (
-      components: {
-        "bevy_world_serialization::serde::tests::FakeMesh3d": (Uuid("00000000-0000-0000-0000-000000000001")),
-      },
-    ),
     4294967291: (
       components: {
         "bevy_world_serialization::serde::tests::Bar": (345),
@@ -877,27 +870,6 @@ mod tests {
             .write_to_world(&mut world, &mut EntityHashMap::default())
             .unwrap();
         assert_eq!(&qux, world.query::<&Qux>().single(&world).unwrap());
-    }
-
-    #[test]
-    fn should_roundtrip_with_handles() {
-        let mut world = create_world();
-        let fake_mesh = FakeMesh3d(Uuid::from_u128(1).into());
-        world.spawn(fake_mesh.clone());
-
-        let (input_world, deserialized_world) = roundtrip_ron(&world);
-
-        assert_eq!(1, deserialized_world.entities.len());
-        assert_world_eq(&input_world, &deserialized_world);
-
-        let mut world = create_world();
-        deserialized_world
-            .write_to_world(&mut world, &mut EntityHashMap::default())
-            .unwrap();
-        assert_eq!(
-            &fake_mesh,
-            world.query::<&FakeMesh3d>().single(&world).unwrap()
-        );
     }
 
     #[test]

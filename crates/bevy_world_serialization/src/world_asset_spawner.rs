@@ -1,5 +1,5 @@
 use crate::{DynamicWorld, DynamicWorldRoot, WorldAsset};
-use bevy_asset::{AssetEvent, AssetId, Assets, Handle};
+use bevy_asset::{AssetEvent, AssetId, Handle};
 use bevy_ecs::{
     entity::{Entity, EntityHashMap},
     event::EntityEvent,
@@ -299,13 +299,17 @@ impl WorldInstanceSpawner {
         id: AssetId<DynamicWorld>,
         entity_map: &mut EntityHashMap<Entity>,
     ) -> Result<(), WorldInstanceSpawnError> {
-        world.resource_scope(|world, dynamic_worlds: Mut<Assets<DynamicWorld>>| {
-            let dynamic_world = dynamic_worlds
-                .get(id)
-                .ok_or(WorldInstanceSpawnError::NonExistentDynamicWorld { id })?;
-
-            dynamic_world.write_to_world(world, entity_map)
-        })
+        let dynamic_world = world
+            .entity_mut(id.entity)
+            .take::<DynamicWorld>()
+            .ok_or(WorldInstanceSpawnError::NonExistentDynamicWorld { id })?;
+        dynamic_world.write_to_world_with(
+            world,
+            entity_map,
+            &world.resource::<AppTypeRegistry>().clone().read(),
+        )?;
+        world.entity_mut(id.entity).insert(dynamic_world);
+        Ok(())
     }
 
     /// Immediately spawns a new instance of the provided world asset.
@@ -338,17 +342,17 @@ impl WorldInstanceSpawner {
         id: AssetId<WorldAsset>,
         entity_map: &mut EntityHashMap<Entity>,
     ) -> Result<(), WorldInstanceSpawnError> {
-        world.resource_scope(|world, world_assets: Mut<Assets<WorldAsset>>| {
-            let world_asset = world_assets
-                .get(id)
-                .ok_or(WorldInstanceSpawnError::NonExistentWorldAsset { id })?;
-
-            world_asset.write_to_world_with(
-                world,
-                entity_map,
-                &world.resource::<AppTypeRegistry>().clone(),
-            )
-        })
+        let world_asset = world
+            .entity_mut(id.entity)
+            .take::<WorldAsset>()
+            .ok_or(WorldInstanceSpawnError::NonExistentWorldAsset { id })?;
+        world_asset.write_to_world_with(
+            world,
+            entity_map,
+            &world.resource::<AppTypeRegistry>().clone(),
+        )?;
+        world.entity_mut(id.entity).insert(world_asset);
+        Ok(())
     }
 
     /// Iterate through all instances of the provided worlds and update those immediately.
@@ -721,7 +725,7 @@ pub fn world_instance_spawner(
 #[cfg(test)]
 mod tests {
     use bevy_app::App;
-    use bevy_asset::{AssetPlugin, AssetServer, Handle};
+    use bevy_asset::{AssetPlugin, AssetServer, DirectAssetAccessExt, Handle};
     use bevy_ecs::{
         component::Component,
         hierarchy::Children,
@@ -737,7 +741,6 @@ mod tests {
     use super::*;
     use crate::{DynamicWorld, WorldInstanceSpawner};
     use bevy_app::ScheduleRunnerPlugin;
-    use bevy_asset::Assets;
     use bevy_ecs::{
         entity::Entity,
         prelude::{AppTypeRegistry, World},
@@ -768,10 +771,7 @@ mod tests {
             &world,
             &app.world().resource::<AppTypeRegistry>().read(),
         );
-        let dynamic_world_handle = app
-            .world_mut()
-            .resource_mut::<Assets<DynamicWorld>>()
-            .add(dynamic_world);
+        let dynamic_world_handle = app.world_mut().spawn_asset(dynamic_world);
 
         // spawn the world as a child of `entity` using `DynamicWorldRoot`
         let entity = app
@@ -821,7 +821,6 @@ mod tests {
         let atr = AppTypeRegistry::default();
         atr.write().register::<A>();
         world.insert_resource(atr);
-        world.insert_resource(Assets::<DynamicWorld>::default());
 
         // start test
         world.spawn(A(42));
@@ -841,9 +840,7 @@ mod tests {
                 .build()
         };
 
-        let dynamic_world_id = world
-            .resource_mut::<Assets<DynamicWorld>>()
-            .add(dynamic_world);
+        let dynamic_world_id = world.spawn_asset(dynamic_world);
         let instance_id = world_asset_spawner
             .spawn_dynamic_sync(&mut world, &dynamic_world_id)
             .unwrap();
@@ -1124,10 +1121,7 @@ mod tests {
             .add_children(&[child0, child1, child2]);
 
         let world_asset = WorldAsset::new(asset_world);
-        let handle = app
-            .world_mut()
-            .resource_mut::<Assets<WorldAsset>>()
-            .add(world_asset);
+        let handle = app.world_mut().spawn_asset(world_asset);
 
         let spawned = app.world_mut().spawn(WorldAssetRoot(handle.clone())).id();
 
