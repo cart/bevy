@@ -462,9 +462,9 @@ impl<'w, 's> Commands<'w, 's> {
     /// - [`get_entity`](Self::get_entity) for the fallible version.
     #[inline]
     #[track_caller]
-    pub fn entity(&mut self, entity: Entity) -> EntityCommands<'_> {
+    pub fn entity(&mut self, entity: impl Into<Entity>) -> EntityCommands<'_> {
         EntityCommands {
-            entity,
+            entity: entity.into(),
             commands: self.reborrow(),
         }
     }

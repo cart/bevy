@@ -2,7 +2,6 @@ use core::hash::BuildHasher;
 use core::time::Duration;
 
 use crate::{ComputedNode, ComputedUiRenderTargetInfo, ContentSize, NodeMeasure};
-use bevy_asset::Assets;
 
 use bevy_ecs::{
     change_detection::{DetectChanges, DetectChangesMut},
@@ -73,7 +72,7 @@ pub fn update_editable_text_content_size(
         Ref<ComputedUiRenderTargetInfo>,
         &mut ContentSize,
     )>,
-    fonts: Res<Assets<Font>>,
+    fonts: Query<&Font>,
     mut font_cx: ResMut<FontCx>,
     rem_size: Res<RemSize>,
 ) {
@@ -161,7 +160,7 @@ pub fn update_editable_text_content_size(
 /// Syncs each [`EditableText`] entity's [`PlainEditor`](parley::PlainEditor)
 /// style properties to match its [`TextFont`], [`LineHeight`], and [`TextLayout`] components.
 pub fn update_editable_text_styles(
-    fonts: Res<Assets<Font>>,
+    fonts: Query<&Font>,
     mut editable_text_query: Query<(
         &mut EditableText,
         Ref<TextFont>,
@@ -261,7 +260,7 @@ pub fn update_editable_text_layout(
     mut layout_cx: ResMut<LayoutCx>,
     mut scale_cx: ResMut<ScaleCx>,
     mut font_atlas_set: ResMut<FontAtlasSet>,
-    mut textures: ResMut<Assets<Image>>,
+    mut textures: Query<&mut Image>,
     mut input_field_query: Query<(
         Entity,
         &TextFont,
@@ -369,7 +368,7 @@ pub fn update_editable_text_layout(
                                         .build();
                                     add_glyph_to_atlas(
                                         font_atlases,
-                                        textures.as_mut(),
+                                        &mut textures,
                                         &mut scaler,
                                         text_font.font_smoothing,
                                         glyph.id as u16,

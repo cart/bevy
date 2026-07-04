@@ -17,7 +17,7 @@ use bevy_ecs::{
     message::MessageReader,
     reflect::ReflectComponent,
     resource::Resource,
-    system::{Query, Res, ResMut},
+    system::{Query, ResMut},
     template::FromTemplate,
 };
 use bevy_platform::collections::HashMap;

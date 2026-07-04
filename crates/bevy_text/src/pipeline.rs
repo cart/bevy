@@ -1,5 +1,6 @@
 use alloc::borrow::Cow;
-use bevy_ecs::system::Query;
+use bevy_ecs::system::{Commands, Query};
+use bevy_platform::collections::HashMap;
 
 use core::hash::BuildHasher;
 
@@ -19,7 +20,6 @@ use parley::{
 };
 use swash::FontRef;
 
-use crate::TextBrush;
 use crate::{
     add_glyph_to_atlas,
     error::TextError,
@@ -29,6 +29,7 @@ use crate::{
     Justify, LetterSpacing, LineBreak, LineHeight, PositionedGlyph, TextBounds, TextEntity,
     TextFont, TextLayout,
 };
+use crate::{DeferredFontAtlas, TextBrush};
 
 struct TextSectionView<'a> {
     index: usize,
@@ -305,7 +306,9 @@ impl TextPipeline {
         &mut self,
         layout_info: &mut TextLayoutInfo,
         font_atlas_set: &mut FontAtlasSet,
+        deferred_font_atlas_set: &mut HashMap<FontAtlasKey, Vec<DeferredFontAtlas>>,
         textures: &mut Query<&mut Image>,
+        commands: &mut Commands,
         computed: &mut ComputedTextBlock,
         scale_cx: &mut ScaleCx,
         bounds: TextBounds,
@@ -352,9 +355,11 @@ impl TextPipeline {
                         };
 
                         let font_atlases = font_atlas_set.entry(font_atlas_key).or_default();
-
+                        let deferred_font_atlases =
+                            deferred_font_atlas_set.entry(font_atlas_key).or_default();
                         let atlas_info = match get_glyph_atlas_info(
                             font_atlases,
+                            deferred_font_atlases,
                             crate::GlyphCacheKey { glyph_id },
                         ) {
                             Some(info) => info,
@@ -375,7 +380,9 @@ impl TextPipeline {
                                 }
                                 add_glyph_to_atlas(
                                     font_atlases,
+                                    deferred_font_atlases,
                                     textures,
+                                    commands,
                                     maybe_scaler.as_mut().unwrap(),
                                     font_smoothing,
                                     glyph_id,
