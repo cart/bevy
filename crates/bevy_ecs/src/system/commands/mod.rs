@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 pub mod command;
 pub mod entity_command;
 

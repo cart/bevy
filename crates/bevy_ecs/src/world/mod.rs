@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Defines the [`World`] and APIs for accessing it directly.
 
 pub(crate) mod command_queue;

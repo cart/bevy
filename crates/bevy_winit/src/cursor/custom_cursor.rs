@@ -1,5 +1,5 @@
-use bevy_asset::{AssetId, Assets};
-use bevy_ecs::resource::Resource;
+use bevy_asset::AssetId;
+use bevy_ecs::{resource::Resource, system::Query};
 use bevy_image::{Image, TextureAtlas, TextureAtlasLayout};
 use bevy_math::{ops, Rect, URect, UVec2, Vec2};
 use bevy_platform::collections::HashMap;
@@ -34,7 +34,7 @@ pub enum CustomCursorCacheKey {
 /// always set to `true` when a [`TextureAtlas`] is used.
 #[inline(always)]
 pub(crate) fn calculate_effective_rect(
-    texture_atlas_layouts: &Assets<TextureAtlasLayout>,
+    texture_atlas_layouts: &Query<&TextureAtlasLayout>,
     image: &Image,
     texture_atlas: &Option<TextureAtlas>,
     rect: &Option<URect>,

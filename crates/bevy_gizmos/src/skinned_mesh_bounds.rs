@@ -1,7 +1,6 @@
 //! A module adding debug visualization of [`DynamicSkinnedMeshBounds`].
 
 use bevy_app::{Plugin, PostUpdate};
-use bevy_asset::Assets;
 use bevy_camera::visibility::DynamicSkinnedMeshBounds;
 use bevy_color::Color;
 use bevy_ecs::{

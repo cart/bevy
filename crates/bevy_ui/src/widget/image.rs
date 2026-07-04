@@ -2,10 +2,10 @@ use crate::{
     ComputedUiRenderTargetInfo, ContentSize, Measure, MeasureArgs, Node, NodeMeasure, ResolvedAxis,
     VisualBox,
 };
-use bevy_asset::{AsAssetId, AssetId, Assets, Handle};
+use bevy_asset::{AsAssetId, AssetId, Handle};
 use bevy_color::Color;
 use bevy_ecs::prelude::*;
-use bevy_image::{prelude::*, TRANSPARENT_IMAGE_HANDLE};
+use bevy_image::prelude::*;
 use bevy_math::{Rect, UVec2, Vec2};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_sprite::TextureSlicer;
@@ -381,7 +381,7 @@ pub fn update_image_content_size_system(
 ) {
     for (mut content_size, image, mut image_size, computed_target) in &mut query {
         if !matches!(image.image_mode, NodeImageMode::Auto)
-            || image.image.id() == TRANSPARENT_IMAGE_HANDLE.id()
+            || image.image.uuid() == Some(Image::TRANSPARENT_UUID)
         {
             if image.is_changed() {
                 // Remove any existing measure.

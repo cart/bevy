@@ -8,7 +8,7 @@ use bevy_ecs::{
     component::Component,
     entity::Entity,
     reflect::ReflectComponent,
-    system::{Local, Query, Res, ResMut},
+    system::{Commands, Local, Query, Res, ResMut},
     world::Ref,
 };
 use bevy_image::prelude::*;
@@ -89,7 +89,7 @@ pub fn update_editable_text_content_size(
         let font_size = text_font.font_size.eval(target.logical_size(), rem_size.0);
 
         let width = editable_text.visible_width.and_then(|visible_width| {
-            let resolved_font = resolve_font_source(&text_font, fonts.as_ref()).ok()?;
+            let resolved_font = resolve_font_source(&text_font, &fonts).ok()?;
             let font_context = &mut font_cx.context;
             let mut query = font_context
                 .collection
@@ -193,7 +193,7 @@ pub fn update_editable_text_styles(
         }
 
         if text_font.is_changed() {
-            let Ok(resolved_font) = resolve_font_source(&text_font, fonts.as_ref()) else {
+            let Ok(resolved_font) = resolve_font_source(&text_font, &fonts) else {
                 continue;
             };
 
@@ -256,6 +256,7 @@ pub fn update_editable_text_styles(
 /// it to [`TextLayoutInfo`] for rendering and picking.
 /// Adds required glyphs to the texture atlas
 pub fn update_editable_text_layout(
+    mut commands: Commands,
     mut font_cx: ResMut<FontCx>,
     mut layout_cx: ResMut<LayoutCx>,
     mut scale_cx: ResMut<ScaleCx>,
@@ -277,6 +278,7 @@ pub fn update_editable_text_layout(
     time: Res<Time<Real>>,
 ) {
     *cursor_timer += time.delta();
+    let mut deferred_font_atlases = Vec::new();
 
     for (
         entity,
@@ -347,6 +349,7 @@ pub fn update_editable_text_layout(
                                     font_atlas_set.entry(font_atlas_key).or_default();
                                 let Ok(atlas_info) = get_glyph_atlas_info(
                                     font_atlases,
+                                    &deferred_font_atlases,
                                     GlyphCacheKey {
                                         glyph_id: glyph.id as u16,
                                     },
@@ -368,7 +371,9 @@ pub fn update_editable_text_layout(
                                         .build();
                                     add_glyph_to_atlas(
                                         font_atlases,
+                                        &mut deferred_font_atlases,
                                         &mut textures,
+                                        &mut commands,
                                         &mut scaler,
                                         text_font.font_smoothing,
                                         glyph.id as u16,

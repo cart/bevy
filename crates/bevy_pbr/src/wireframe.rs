@@ -1610,11 +1610,11 @@ fn queue_wireframes(
                 continue;
             };
             let bin_key = Wireframe3dBinKey {
-                asset_entity: mesh_instance.mesh_asset_id().untyped(),
+                asset_entity: mesh_instance.mesh_asset_id().entity(),
             };
             let batch_set_key = Wireframe3dBatchSetKey {
                 pipeline: pipeline_id,
-                asset_entity: wireframe_instance.untyped(),
+                asset_entity: wireframe_instance.entity(),
                 draw_function,
                 slabs: MeshSlabs {
                     vertex_slab_id: vertex_slab,
@@ -1627,7 +1627,7 @@ fn queue_wireframes(
                     index_slab_id: if is_wide { None } else { index_slab },
                 },
                 mesh_asset_entity: if is_wide {
-                    Some(mesh_instance.mesh_asset_id().untyped())
+                    Some(mesh_instance.mesh_asset_id().entity())
                 } else {
                     None
                 },

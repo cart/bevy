@@ -4,9 +4,7 @@ use crate::{
 };
 use bevy_app::{App, Plugin, PostUpdate};
 use bevy_asset::prelude::AssetChanged;
-use bevy_asset::{
-    AsAssetId, Asset, AssetApp, AssetEventSystems, AssetId, AssetServer, Handle, UntypedAssetId,
-};
+use bevy_asset::{AsAssetId, Asset, AssetApp, AssetEventSystems, AssetId, AssetServer, Handle};
 use bevy_camera::visibility::ViewVisibility;
 use bevy_core_pipeline::{
     core_2d::{
@@ -15,6 +13,7 @@ use bevy_core_pipeline::{
     tonemapping::Tonemapping,
 };
 use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::component::Mutable;
 use bevy_ecs::{
     prelude::*,
     system::{
@@ -133,7 +132,9 @@ pub const MATERIAL_2D_BIND_GROUP_INDEX: usize = 2;
 /// @group(2) @binding(1) var color_texture: texture_2d<f32>;
 /// @group(2) @binding(2) var color_sampler: sampler;
 /// ```
-pub trait Material2d: AsBindGroup + Asset + Clone + Sized {
+pub trait Material2d:
+    AsBindGroup + Asset + Component<Mutability = Mutable> + Clone + Sized
+{
     /// Returns this material's vertex shader. If [`ShaderRef::Default`] is returned, the default mesh vertex shader
     /// will be used.
     fn vertex_shader() -> ShaderRef {
@@ -1062,10 +1063,10 @@ pub fn queue_material2d_meshes<M: Material2d>(
 pub struct Material2dBindGroupId(pub Option<BindGroupId>);
 
 #[derive(Resource, Default, Deref, DerefMut)]
-pub struct RenderMaterial2dBindGroupIds(HashMap<UntypedAssetId, Material2dBindGroupId>);
+pub struct RenderMaterial2dBindGroupIds(HashMap<Entity, Material2dBindGroupId>);
 
 #[derive(Resource, Default, Deref, DerefMut)]
-pub struct RenderMaterial2dIds(MainEntityHashMap<UntypedAssetId>);
+pub struct RenderMaterial2dIds(MainEntityHashMap<Entity>);
 
 /// Common [`Material2d`] properties, calculated for a specific material instance.
 pub struct Material2dProperties {

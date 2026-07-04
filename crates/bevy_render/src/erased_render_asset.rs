@@ -42,7 +42,7 @@ pub struct AssetExtractionSystems;
 /// is transformed into its GPU-representation of type [`ErasedRenderAsset`].
 pub trait ErasedRenderAsset: Send + Sync + 'static {
     /// The representation of the asset in the "main world".
-    type SourceAsset: Asset + Component<Mutability = Mutable> + Clone;
+    type SourceAsset: Asset + Clone;
     /// The target representation of the asset in the "render world".
     type ErasedAsset: Send + Sync + 'static + Sized;
 

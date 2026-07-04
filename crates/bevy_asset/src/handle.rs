@@ -70,10 +70,19 @@ impl<A: Asset> Handle<A> {
         self.entity_handle.id()
     }
 
+    pub fn is_default(&self) -> bool {
+        self.entity_handle.is_default
+    }
+
     /// Returns the path if this is (1) a strong handle and (2) the asset has a path
     #[inline]
     pub fn path(&self) -> Option<&AssetPath<'static>> {
         self.entity_handle.path.as_ref()
+    }
+
+    #[inline]
+    pub fn uuid(&self) -> Option<Uuid> {
+        self.entity_handle.uuid
     }
 
     #[inline]

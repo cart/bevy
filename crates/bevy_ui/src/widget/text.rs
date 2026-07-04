@@ -2,7 +2,6 @@ use crate::{
     ComputedNode, ComputedUiRenderTargetInfo, ContentSize, FixedMeasure, Measure, MeasureArgs,
     Node, NodeMeasure,
 };
-use bevy_asset::Assets;
 use bevy_color::Color;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
@@ -11,7 +10,7 @@ use bevy_ecs::{
     entity::Entity,
     query::With,
     reflect::ReflectComponent,
-    system::{Query, Res, ResMut},
+    system::{Commands, Query, Res, ResMut},
     world::Ref,
 };
 use bevy_image::prelude::*;
@@ -305,7 +304,7 @@ pub fn measure_text_system(
 
         match text_pipeline.create_text_measure(
             entity,
-            fonts.as_ref(),
+            &fonts,
             text_reader.iter(entity),
             computed_target.scale_factor,
             &block,
@@ -356,7 +355,8 @@ pub fn measure_text_system(
 /// [`ResMut<Assets<Image>>`](Assets<Image>) -- This system only adds new [`Image`] assets.
 /// It does not modify or observe existing ones. The exception is when adding new glyphs to a [`bevy_text::FontAtlas`].
 pub fn text_system(
-    mut textures: ResMut<Assets<Image>>,
+    mut commands: Commands,
+    mut textures: Query<&mut Image>,
     mut font_atlas_set: ResMut<FontAtlasSet>,
     mut text_pipeline: ResMut<TextPipeline>,
     mut text_query: Query<(
@@ -369,6 +369,7 @@ pub fn text_system(
     )>,
     mut scale_cx: ResMut<ScaleCx>,
 ) {
+    let mut deferred_font_atlas_set = Default::default();
     for (node, block, mut text_layout_info, mut text_flags, mut computed, hinting) in
         &mut text_query
     {
@@ -389,7 +390,9 @@ pub fn text_system(
             match text_pipeline.update_text_layout_info(
                 &mut text_layout_info,
                 &mut font_atlas_set,
+                &mut deferred_font_atlas_set,
                 &mut textures,
+                &mut commands,
                 &mut computed,
                 &mut scale_cx,
                 physical_node_size,

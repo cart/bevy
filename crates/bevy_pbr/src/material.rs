@@ -619,7 +619,9 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetMaterialBindGroup<I> 
         else {
             return RenderCommandResult::Skip;
         };
-        let Some(material) = materials.get(material_instance.asset_entity) else {
+        let Some(material) =
+            materials.get(material_instance.asset_entity, material_instance.asset_type)
+        else {
             return RenderCommandResult::Skip;
         };
         let Some(material_bind_group) = material_bind_group_allocator.get(material.binding.group)
@@ -667,6 +669,7 @@ impl RenderMaterialInstances {
 pub struct RenderMaterialInstance {
     /// The material asset.
     pub asset_entity: Entity,
+    pub asset_type: TypeId,
     /// The [`RenderMaterialInstances::current_change_tick`] at which this
     /// material instance was last modified.
     pub last_change_tick: Tick,
@@ -754,6 +757,7 @@ fn extract_mesh_materials<M: Material>(
                 entity.into(),
                 RenderMaterialInstance {
                     asset_entity: material.id().entity,
+                    asset_type: TypeId::of::<M>(),
                     last_change_tick,
                 },
             );
@@ -1087,7 +1091,9 @@ pub(crate) fn specialize_material_meshes(
                 let Some(mesh) = render_meshes.get(mesh_instance.mesh_asset_id()) else {
                     continue;
                 };
-                let Some(material) = render_materials.get(material_instance.asset_entity) else {
+                let Some(material) = render_materials
+                    .get(material_instance.asset_entity, material_instance.asset_type)
+                else {
                     view_pending_mesh_material_queues
                         .current_frame
                         .insert((*render_entity, *visible_entity));
@@ -1270,7 +1276,9 @@ pub fn queue_material_meshes(
                     .insert((*render_entity, *visible_entity));
                 continue;
             };
-            let Some(material) = render_materials.get(material_instance.asset_entity) else {
+            let Some(material) =
+                render_materials.get(material_instance.asset_entity, material_instance.asset_type)
+            else {
                 view_pending_mesh_material_queues
                     .current_frame
                     .insert((*render_entity, *visible_entity));

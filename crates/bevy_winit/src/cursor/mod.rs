@@ -6,8 +6,6 @@ pub use custom_cursor::*;
 
 use crate::{converters::convert_system_cursor_icon, state::WinitAppRunnerState, WINIT_WINDOWS};
 use bevy_app::{App, Last, Plugin};
-#[cfg(feature = "custom_cursor")]
-use bevy_asset::Assets;
 use bevy_ecs::{entity::EntityHashSet, prelude::*, system::SystemState};
 #[cfg(feature = "custom_cursor")]
 use bevy_image::{Image, TextureAtlasLayout};

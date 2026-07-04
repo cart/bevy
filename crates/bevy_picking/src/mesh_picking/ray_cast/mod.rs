@@ -172,7 +172,7 @@ type MeshFilter = Or<(With<Mesh3d>, With<Mesh2d>, With<SimplifiedMesh>)>;
 #[derive(SystemParam)]
 pub struct MeshRayCast<'w, 's> {
     #[doc(hidden)]
-    pub meshes: Query<'w, 's, &Mesh>,
+    pub meshes: Query<'w, 's, &'static Mesh>,
     #[doc(hidden)]
     pub hits: Local<'s, Vec<(FloatOrd, (Entity, RayMeshHit))>>,
     #[doc(hidden)]

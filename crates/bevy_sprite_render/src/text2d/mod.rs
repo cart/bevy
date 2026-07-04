@@ -1,13 +1,13 @@
 use crate::{
     ExtractedSlice, ExtractedSlices, ExtractedSprite, ExtractedSpriteKind, ExtractedSprites,
 };
-use bevy_asset::AssetId;
+use bevy_asset::{AssetId, AssetReference, AssetServer};
 use bevy_camera::visibility::ViewVisibility;
 use bevy_color::LinearRgba;
 use bevy_ecs::{
     entity::Entity,
     query::Has,
-    system::{Commands, Query, ResMut},
+    system::{Commands, Query, Res, ResMut},
 };
 use bevy_math::{Vec2, Vec3};
 use bevy_render::sync_world::TemporaryRenderEntity;
@@ -25,6 +25,7 @@ pub fn extract_text2d_sprite(
     mut commands: Commands,
     mut extracted_sprites: ResMut<ExtractedSprites>,
     mut extracted_slices: ResMut<ExtractedSlices>,
+    asset_server: Extract<Res<AssetServer>>,
     text2d_query: Extract<
         Query<(
             Entity,
@@ -51,6 +52,7 @@ pub fn extract_text2d_sprite(
 ) {
     let mut start = extracted_slices.slices.len();
     let mut end = start + 1;
+    let default_image = asset_server.load(AssetReference::Default);
 
     for (
         main_entity,
@@ -97,7 +99,7 @@ pub fn extract_text2d_sprite(
                 render_entity,
                 transform,
                 color: text_background_color.0.into(),
-                image_handle_id: AssetId::default(),
+                image_handle_id: default_image.id(),
                 flip_x: false,
                 flip_y: true,
                 kind: ExtractedSpriteKind::Single {
@@ -172,7 +174,7 @@ pub fn extract_text2d_sprite(
                         render_entity,
                         transform,
                         color,
-                        image_handle_id: AssetId::default(),
+                        image_handle_id: default_image.id(),
                         flip_x: false,
                         flip_y: false,
                         kind: ExtractedSpriteKind::Single {
@@ -194,7 +196,7 @@ pub fn extract_text2d_sprite(
                         render_entity,
                         transform,
                         color,
-                        image_handle_id: AssetId::default(),
+                        image_handle_id: default_image.id(),
                         flip_x: false,
                         flip_y: false,
                         kind: ExtractedSpriteKind::Single {
@@ -293,7 +295,7 @@ pub fn extract_text2d_sprite(
                     render_entity,
                     transform,
                     color,
-                    image_handle_id: AssetId::default(),
+                    image_handle_id: default_image.id(),
                     flip_x: false,
                     flip_y: false,
                     kind: ExtractedSpriteKind::Single {
@@ -321,7 +323,7 @@ pub fn extract_text2d_sprite(
                     render_entity,
                     transform,
                     color,
-                    image_handle_id: AssetId::default(),
+                    image_handle_id: default_image.id(),
                     flip_x: false,
                     flip_y: false,
                     kind: ExtractedSpriteKind::Single {
