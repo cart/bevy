@@ -337,6 +337,14 @@ pub fn update_text2d_layout(
             Ok(()) => {}
         }
     }
+
+    for (font_atlas_key, deferred_font_atlas) in deferred_font_atlas_set {
+        font_atlas_set.entry(font_atlas_key).or_default().extend(
+            deferred_font_atlas
+                .into_iter()
+                .map(|deferred| deferred.to_font_atlas(&mut commands)),
+        );
+    }
 }
 
 /// System calculating and inserting an [`Aabb`] component to entities with some
