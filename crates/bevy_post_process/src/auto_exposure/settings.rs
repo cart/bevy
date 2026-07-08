@@ -25,7 +25,8 @@ use bevy_utils::default;
 ///
 /// **Auto Exposure requires compute shaders and is not compatible with WebGL2.**
 #[derive(Component, Clone, Reflect, ExtractComponent, FromTemplate)]
-#[reflect(Component, Default, Clone)]
+#[template(manual_default)]
+#[reflect(Component, Clone)]
 #[require(Hdr)]
 pub struct AutoExposure {
     /// The range of exposure values for the histogram.
@@ -33,12 +34,14 @@ pub struct AutoExposure {
     /// Pixel values below this range will be ignored, and pixel values above this range will be
     /// clamped in the sense that they will count towards the highest bin in the histogram.
     /// The default value is `-8.0..=8.0`.
+    #[template(RangeInclusive<f32>)]
     pub range: RangeInclusive<f32>,
 
     /// The portion of the histogram to consider when metering.
     ///
     /// By default, the darkest 10% and the brightest 10% of samples are ignored,
     /// so the default value is `0.10..=0.90`.
+    #[template(RangeInclusive<f32>)]
     pub filter: RangeInclusive<f32>,
 
     /// The speed at which the exposure adapts from dark to bright scenes, in F-stops per second.
@@ -90,7 +93,7 @@ pub struct AutoExposure {
     pub compensation_curve: Handle<AutoExposureCompensationCurve>,
 }
 
-impl Default for AutoExposure {
+impl Default for AutoExposureTemplate {
     fn default() -> Self {
         Self {
             range: -8.0..=8.0,

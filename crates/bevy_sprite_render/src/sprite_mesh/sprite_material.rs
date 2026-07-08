@@ -2,6 +2,7 @@ use core::f32;
 
 use bevy_app::Plugin;
 use bevy_color::{Color, ColorToComponents};
+use bevy_ecs::template::FromTemplate;
 use bevy_image::{Image, TextureAtlas, TextureAtlasLayout};
 use bevy_math::{vec2, Affine2, Mat3, Rect, Vec2, Vec4};
 
@@ -31,13 +32,14 @@ impl Plugin for SpriteMaterialPlugin {
     }
 }
 
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default, PartialEq)]
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone, PartialEq, FromTemplate)]
 #[reflect(Debug, Clone)]
 #[uniform(0, SpriteMaterialUniform)]
 pub struct SpriteMaterial {
     #[texture(1)]
     #[sampler(2)]
     pub image: Handle<Image>,
+    #[template(built_in)]
     pub texture_atlas: Option<TextureAtlas>,
     pub color: Color,
     pub flip_x: bool,

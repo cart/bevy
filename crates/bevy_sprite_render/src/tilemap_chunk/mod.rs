@@ -49,8 +49,8 @@ pub struct TilemapChunkMeshCache(HashMap<UVec2, Handle<Mesh>>);
 
 /// A component representing a chunk of a tilemap.
 /// Each chunk is a rectangular section of tiles that is rendered as a single mesh.
-#[derive(Component, Clone, Debug, Default, Reflect, FromTemplate)]
-#[reflect(Component, Clone, Debug, Default)]
+#[derive(Component, Clone, Debug, Reflect, FromTemplate)]
+#[reflect(Component, Clone, Debug)]
 #[component(immutable, on_insert = on_insert_tilemap_chunk)]
 pub struct TilemapChunk {
     /// The size of the chunk in tiles.

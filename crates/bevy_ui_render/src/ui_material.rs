@@ -182,7 +182,7 @@ where
     ExtractComponent,
     From,
 )]
-#[reflect(Component, Default)]
+#[reflect(Component)]
 #[require(Node)]
 pub struct MaterialNode<M: UiMaterial>(pub Handle<M>);
 
@@ -190,12 +190,6 @@ impl<M: UiMaterial> Into<Entity> for &MaterialNode<M> {
     #[inline]
     fn into(self) -> Entity {
         self.entity()
-    }
-}
-
-impl<M: UiMaterial> Default for MaterialNode<M> {
-    fn default() -> Self {
-        Self(Handle::default())
     }
 }
 
