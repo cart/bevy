@@ -14,6 +14,12 @@ use crossbeam_channel::Sender;
 #[derive(Reflect)]
 pub struct EntityHandle<T = ()>(pub Arc<InnerEntityHandle<T>>);
 
+impl<T: alloc::fmt::Debug> alloc::fmt::Debug for EntityHandle<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("EntityHandle").field(&self.0.data).finish()
+    }
+}
+
 impl<T> Clone for EntityHandle<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
@@ -80,6 +86,12 @@ impl<T> WeakEntityHandle<T> {
 
     pub fn strong_count(&self) -> usize {
         Weak::strong_count(&self.0)
+    }
+}
+
+impl<T> Clone for WeakEntityHandle<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 

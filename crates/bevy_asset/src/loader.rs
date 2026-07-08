@@ -12,7 +12,7 @@ use alloc::{boxed::Box, string::ToString, vec::Vec};
 use atomicow::CowArc;
 use bevy_ecs::{
     component::Component,
-    entity::Entity,
+    entity::{Entity, WeakEntityHandle},
     error::BevyError,
     lifecycle::HookContext,
     world::{DeferredWorld, World},
@@ -336,15 +336,15 @@ impl AssetServerAsset {
 
 /// A type erased container for an [`Asset`] value that is capable of inserting the [`Asset`] into a [`World`]'s [`Assets`] collection.
 pub(crate) trait AssetContainer: Downcast + Any + Send + Sync + 'static {
-    fn insert(self: Box<Self>, id: Entity, world: &mut World);
+    fn insert(self: Box<Self>, id: Entity, handle: WeakEntityHandle<AssetData>, world: &mut World);
     fn asset_type_name(&self) -> &'static str;
 }
 
 impl_downcast!(AssetContainer);
 
 impl<A: Asset> AssetContainer for A {
-    fn insert(self: Box<Self>, id: Entity, world: &mut World) {
-        let bundle = (*self, AssetServerAsset);
+    fn insert(self: Box<Self>, id: Entity, handle: WeakEntityHandle<AssetData>, world: &mut World) {
+        let bundle = (*self, handle, AssetServerAsset);
         match world.get_entity_mut(id) {
             Ok(mut entity) => {
                 entity.insert(bundle);

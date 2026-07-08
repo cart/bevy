@@ -52,6 +52,8 @@ impl Debug for AssetData {
         f.debug_struct("AssetData")
             .field("path", &self.path)
             .field("uuid", &self.uuid)
+            .field("is_default", &self.is_default)
+            .field("type_id_hint", &self.type_id_hint)
             .finish()
     }
 }
@@ -368,6 +370,17 @@ impl UntypedHandle {
         self.0.path.as_ref()
     }
 
+    /// Returns whether or not this is the default asset.
+    #[inline]
+    pub fn is_default(&self) -> bool {
+        self.0.is_default
+    }
+
+    #[inline]
+    pub fn uuid(&self) -> Option<Uuid> {
+        self.0.uuid
+    }
+
     /// Converts to a typed Handle. This _will not check if the target Handle type matches_.
     #[inline]
     pub fn typed_unchecked<A: Asset>(self) -> Handle<A> {
@@ -408,12 +421,22 @@ impl Hash for UntypedHandle {
 
 impl Debug for UntypedHandle {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "Handle{{ id: {:?}, path: {:?} }}",
-            self.entity(),
-            self.path()
-        )
+        write!(f, "Handle{{ id: {}", self.entity(),)?;
+
+        if let Some(path) = self.path() {
+            write!(f, ", path: {}", path)?;
+        }
+        if let Some(uuid) = self.uuid() {
+            write!(f, ", uuid: {}", uuid)?;
+        }
+        if self.is_default() {
+            write!(f, ", is_default")?;
+        }
+        if let Some(type_hint) = self.type_id_hint() {
+            write!(f, ", type_id_hint: {:?}", type_hint)?;
+        }
+
+        write!(f, " }}")
     }
 }
 

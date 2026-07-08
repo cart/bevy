@@ -342,8 +342,10 @@ impl WorldInstanceSpawner {
         id: AssetId<WorldAsset>,
         entity_map: &mut EntityHashMap<Entity>,
     ) -> Result<(), WorldInstanceSpawnError> {
-        let world_asset = world
-            .entity_mut(id.entity)
+        let mut entity = world
+            .get_entity_mut(id.entity)
+            .map_err(|_| WorldInstanceSpawnError::NonExistentWorldAsset { id })?;
+        let world_asset = entity
             .take::<WorldAsset>()
             .ok_or(WorldInstanceSpawnError::NonExistentWorldAsset { id })?;
         world_asset.write_to_world_with(

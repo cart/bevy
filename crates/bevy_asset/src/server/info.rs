@@ -3,9 +3,9 @@ use crate::{
     DependencyLoadState, ErasedLoadedAsset, InternalAssetEvent, LoadState,
     RecursiveDependencyLoadState, UntypedHandle,
 };
-use alloc::{borrow::ToOwned, boxed::Box, sync::Arc, vec::Vec};
+use alloc::{borrow::ToOwned, boxed::Box, fmt::Debug, sync::Arc, vec::Vec};
 use bevy_ecs::{
-    entity::{ContainsEntity, Entity, RemoteAllocator, WeakEntityHandle},
+    entity::{ContainsEntity, Entity, EntityHandle, RemoteAllocator, WeakEntityHandle},
     world::World,
 };
 use bevy_platform::collections::{hash_map::Entry, HashMap, HashSet};
@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 #[derive(Debug)]
 pub(crate) struct AssetInfo {
-    weak_handle: WeakEntityHandle<AssetData>,
+    handle: StrongOrWeakHandle,
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) uuid: Option<Uuid>,
     pub(crate) load_state: LoadState,
@@ -45,14 +45,44 @@ pub(crate) struct AssetInfo {
     pub(crate) waiting_tasks: Vec<Waker>,
 }
 
+enum StrongOrWeakHandle {
+    Strong(EntityHandle<AssetData>),
+    Weak(WeakEntityHandle<AssetData>),
+}
+
+impl StrongOrWeakHandle {
+    fn get_strong(&self) -> Option<EntityHandle<AssetData>> {
+        match self {
+            StrongOrWeakHandle::Strong(entity_handle) => Some(entity_handle.clone()),
+            StrongOrWeakHandle::Weak(weak_entity_handle) => weak_entity_handle.upgrade(),
+        }
+    }
+
+    fn weak(&self) -> WeakEntityHandle<AssetData> {
+        match self {
+            StrongOrWeakHandle::Strong(entity_handle) => entity_handle.weak(),
+            StrongOrWeakHandle::Weak(weak_entity_handle) => weak_entity_handle.clone(),
+        }
+    }
+}
+
+impl Debug for StrongOrWeakHandle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Strong(arg0) => f.debug_tuple("Strong").field(arg0.data()).finish(),
+            Self::Weak(arg0) => f.debug_tuple("Weak").field(arg0).finish(),
+        }
+    }
+}
+
 impl AssetInfo {
     fn new(
-        weak_handle: WeakEntityHandle<AssetData>,
+        handle: StrongOrWeakHandle,
         path: Option<AssetPath<'static>>,
         uuid: Option<Uuid>,
     ) -> Self {
         Self {
-            weak_handle,
+            handle,
             path,
             uuid,
             load_state: LoadState::NotLoaded,
@@ -94,13 +124,18 @@ pub(crate) struct AssetInfos {
     /// Tracks living labeled assets for a given source asset.
     /// This should only be set when watching for changes to avoid unnecessary work.
     pub(crate) living_labeled_assets: HashMap<AssetPath<'static>, HashSet<Box<str>>>,
-    pub(crate) typed_asset_event_senders: TypeIdMap<AssetEventSenders>,
+    pub(crate) asset_type_data: TypeIdMap<AssetTypeData>,
     pub(crate) pending_tasks: HashMap<Entity, Task<()>>,
     /// The stats that have collected during usage of the asset server.
     pub(crate) stats: AssetServerStats,
 }
 
-impl core::fmt::Debug for AssetInfos {
+pub(crate) struct AssetTypeData {
+    pub(crate) type_name: &'static str,
+    pub(crate) asset_event_senders: AssetEventSenders,
+}
+
+impl Debug for AssetInfos {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("AssetInfos")
             .field("path_to_index", &self.path_to_entity)
@@ -122,7 +157,7 @@ impl AssetInfos {
             living_labeled_assets: Default::default(),
             pending_tasks: Default::default(),
             stats: Default::default(),
-            typed_asset_event_senders: Default::default(),
+            asset_type_data: Default::default(),
         }
     }
 
@@ -132,6 +167,7 @@ impl AssetInfos {
         living_labeled_assets: &mut HashMap<AssetPath<'static>, HashSet<Box<str>>>,
         data: AssetData,
         watching_for_changes: bool,
+        hold_handle: bool,
         loading: bool,
     ) -> UntypedHandle {
         if watching_for_changes && let Some(path) = &data.path {
@@ -145,7 +181,12 @@ impl AssetInfos {
         let path = data.path.clone();
         let uuid = data.uuid.clone();
         let entity_handle = remote_allocator.alloc_handle_with_data(data);
-        let mut info = AssetInfo::new(entity_handle.weak(), path, uuid);
+        let info_handle = if hold_handle {
+            StrongOrWeakHandle::Strong(entity_handle.clone())
+        } else {
+            StrongOrWeakHandle::Weak(entity_handle.weak())
+        };
+        let mut info = AssetInfo::new(info_handle, path, uuid);
         if loading {
             info.load_state = LoadState::Loading;
             info.dep_load_state = DependencyLoadState::Loading;
@@ -175,6 +216,7 @@ impl AssetInfos {
                         entity,
                         data,
                         loading_mode,
+                        false,
                     );
                     *entry.get_mut() = handle.entity();
                     (handle, should_load)
@@ -188,6 +230,7 @@ impl AssetInfos {
                         self.watching_for_changes,
                         data,
                         loading_mode,
+                        false,
                     );
                     entry.insert(handle.entity());
                     (handle, should_load)
@@ -205,21 +248,23 @@ impl AssetInfos {
                         entity,
                         data,
                         loading_mode,
+                        true,
                     );
                     *entry.get_mut() = handle.entity();
-                    (handle, should_load)
+                    (handle, false)
                 }
                 Entry::Vacant(entry) => {
-                    let (handle, should_load) = Self::vacant_entry(
+                    let (handle, _) = Self::vacant_entry(
                         &mut self.infos,
                         &self.remote_allocator,
                         &mut self.living_labeled_assets,
                         self.watching_for_changes,
                         data,
                         loading_mode,
+                        true,
                     );
                     entry.insert(handle.entity());
-                    (handle, should_load)
+                    (handle, false)
                 }
             }
         } else if data.is_default {
@@ -235,21 +280,23 @@ impl AssetInfos {
                             entity,
                             data,
                             loading_mode,
+                            true,
                         );
                         *entry.get_mut() = handle.entity();
-                        (handle, should_load)
+                        (handle, false)
                     }
                     Entry::Vacant(entry) => {
-                        let (handle, should_load) = Self::vacant_entry(
+                        let (handle, _) = Self::vacant_entry(
                             &mut self.infos,
                             &self.remote_allocator,
                             &mut self.living_labeled_assets,
                             self.watching_for_changes,
                             data,
                             loading_mode,
+                            true,
                         );
                         entry.insert(handle.entity());
-                        (handle, should_load)
+                        (handle, false)
                     }
                 }
             } else {
@@ -261,6 +308,7 @@ impl AssetInfos {
                         &mut self.living_labeled_assets,
                         data,
                         self.watching_for_changes,
+                        false,
                         true,
                     ),
                     false,
@@ -274,6 +322,7 @@ impl AssetInfos {
                     &mut self.living_labeled_assets,
                     data,
                     self.watching_for_changes,
+                    false,
                     true,
                 ),
                 false,
@@ -289,6 +338,7 @@ impl AssetInfos {
         entity: Entity,
         data: AssetData,
         loading_mode: HandleLoadingMode,
+        hold_handle: bool,
     ) -> (UntypedHandle, bool) {
         // if there is a path_to_id entry, info always exists
         let info = infos.get_mut(&entity).unwrap();
@@ -303,7 +353,7 @@ impl AssetInfos {
             should_load = true;
         }
 
-        if let Some(entity_handle) = info.weak_handle.upgrade() {
+        if let Some(entity_handle) = info.handle.get_strong() {
             // If we can upgrade the handle, there is at least one live handle right now,
             // The asset load has already kicked off (and maybe completed), so we can just
             // return a strong handle
@@ -319,6 +369,7 @@ impl AssetInfos {
                 living_labeled_assets,
                 data,
                 watching_for_changes,
+                hold_handle,
                 true,
             );
             (handle, true)
@@ -331,6 +382,7 @@ impl AssetInfos {
         watching_for_changes: bool,
         data: AssetData,
         loading_mode: HandleLoadingMode,
+        hold_handle: bool,
     ) -> (UntypedHandle, bool) {
         let should_load = match loading_mode {
             HandleLoadingMode::NotLoading => false,
@@ -343,6 +395,7 @@ impl AssetInfos {
                 living_labeled_assets,
                 data,
                 watching_for_changes,
+                hold_handle,
                 should_load,
             ),
             should_load,
@@ -372,7 +425,7 @@ impl AssetInfos {
 
     pub(crate) fn get_entity_handle(&self, entity: Entity) -> Option<UntypedHandle> {
         let info = self.infos.get(&entity)?;
-        let entity_handle = info.weak_handle.upgrade()?;
+        let entity_handle = info.handle.get_strong()?;
         Some(UntypedHandle(entity_handle))
     }
 
@@ -427,7 +480,6 @@ impl AssetInfos {
             return;
         }
 
-        loaded_asset.value.insert(loaded_entity, world);
         let mut loading_deps = loaded_asset.dependencies;
         let mut failed_deps = <HashSet<_>>::default();
         let mut dep_error = None;
@@ -536,6 +588,9 @@ impl AssetInfos {
                 info.loader_dependencies = loaded_asset.loader_dependencies;
             }
 
+            loaded_asset
+                .value
+                .insert(loaded_entity, info.handle.weak(), world);
             let dependents_waiting_on_rec_load =
                 if rec_dep_load_state.is_loaded() || rec_dep_load_state.is_failed() {
                     Some(core::mem::take(

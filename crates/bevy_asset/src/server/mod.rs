@@ -552,8 +552,22 @@ impl AssetServer {
         let type_id_hint = handle.type_id_hint();
 
         let Some(path) = handle.path() else {
-            // TODO: support UUID
-            return Err(AssetLoadError::EmptyPath("".into()));
+            return Err(if let Some(uuid) = handle.uuid() {
+                AssetLoadError::MissingUuid(uuid)
+            } else if handle.is_default() {
+                let type_name = handle.type_id_hint().and_then(|id| {
+                    self.read_infos()
+                        .asset_type_data
+                        .get(&id)
+                        .map(|data| data.type_name)
+                });
+                AssetLoadError::MissingDefault {
+                    type_id: handle.type_id_hint(),
+                    type_name,
+                }
+            } else {
+                AssetLoadError::EmptyPath("".into())
+            });
         };
 
         let (mut meta, loader, mut reader) = self
@@ -1159,9 +1173,13 @@ impl AssetServer {
     }
 
     pub fn init_asset<A: Asset>(&self) {
-        self.write_infos()
-            .typed_asset_event_senders
-            .insert(TypeId::of::<A>(), AssetEventSenders::new::<A>());
+        self.write_infos().asset_type_data.insert(
+            TypeId::of::<A>(),
+            AssetTypeData {
+                type_name: core::any::type_name::<A>(),
+                asset_event_senders: AssetEventSenders::new::<A>(),
+            },
+        );
     }
 
     /// Retrieve a handle for the given path. This will create a handle (and [`AssetInfo`]) if it does not exist
@@ -1682,8 +1700,8 @@ pub fn handle_internal_asset_events(world: &mut World) {
                 InternalAssetEvent::LoadedWithDependencies { entity } => {
                     world.trigger(LoadedWithDependencies { entity });
                     if let Some(loaded_type_id) = infos.get(entity).and_then(|i| i.loaded_type_id) {
-                        if let Some(senders) = infos.typed_asset_event_senders.get(&loaded_type_id) {
-                            (senders.loaded_with_dependencies)(world, entity);
+                        if let Some(type_data) = infos.asset_type_data.get(&loaded_type_id) {
+                            (type_data.asset_event_senders.loaded_with_dependencies)(world, entity);
                         } else {
                             warn!("Failed to trigger LoadedWithDependencies event for asset type {loaded_type_id:?}. This asset type wasn't registered with the AssetServer.");
                         }
@@ -1700,8 +1718,8 @@ pub fn handle_internal_asset_events(world: &mut World) {
                     if let Some(asset_info) = infos.get(entity) &&
                         let Some(type_id) = asset_info.loaded_type_id &&
                         let Some(path) = &asset_info.path {
-                        if let Some(senders) = infos.typed_asset_event_senders.get(&type_id) {
-                            (senders.failed)(world, entity, error, path.clone());
+                        if let Some(type_data) = infos.asset_type_data.get(&type_id) {
+                            (type_data.asset_event_senders.failed)(world, entity, error, path.clone());
                         } else {
                             warn!("Failed to trigger AssetLoadFailedEvent for asset type {type_id:?}. This asset type wasn't registered with the AssetServer.");
                         }
@@ -1972,6 +1990,13 @@ pub struct RequestedHandleTypeMismatchError {
 pub enum AssetLoadError {
     #[error("Attempted to load an asset with an empty path \"{0}\"")]
     EmptyPath(AssetPath<'static>),
+    #[error("Attempted to load a default asset for type name: {type_name:?} / type id: {type_id:?}, but it does not exist")]
+    MissingDefault {
+        type_name: Option<&'static str>,
+        type_id: Option<TypeId>,
+    },
+    #[error("Attempted to load an asset with UUID \"{0}\", but it does not exist")]
+    MissingUuid(Uuid),
     #[error(transparent)]
     RequestedHandleTypeMismatch(#[from] Box<RequestedHandleTypeMismatchError>),
     #[error("Could not find an asset loader matching: Asset Type: {asset_type_id:?}; Path: {asset_path:?};")]
