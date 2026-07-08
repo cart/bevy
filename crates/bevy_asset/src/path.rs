@@ -45,7 +45,7 @@ impl<'a> AssetReference<'a> {
 
 impl<'a> Default for AssetReference<'a> {
     fn default() -> Self {
-        Self::Uuid(Self::INVALID_UUID)
+        Self::Default
     }
 }
 
