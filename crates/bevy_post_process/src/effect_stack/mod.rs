@@ -227,7 +227,7 @@ impl SpecializedRenderPipeline for PostProcessingPipeline {
             layout: vec![self.bind_group_layout.clone()],
             vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
+                shader: Some(self.fragment_shader.clone()),
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,
                     blend: None,

@@ -108,7 +108,7 @@ impl SpecializedRenderPipeline for BloomUpsamplingPipeline {
             layout: vec![self.bind_group_layout.clone()],
             vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
+                shader: Some(self.fragment_shader.clone()),
                 entry_point: Some("upsample".into()),
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,

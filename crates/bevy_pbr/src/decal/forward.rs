@@ -60,7 +60,6 @@ impl Plugin for ForwardDecalPlugin {
 ///   texture with extra transparent pixels on the edges.
 /// * On Wasm, requires using WebGPU and disabling `Msaa` on your camera.
 #[derive(Component, Reflect)]
-#[require(Mesh3d)]
 #[component(on_add=forward_decal_set_mesh)]
 pub struct ForwardDecal;
 
@@ -158,10 +157,8 @@ struct ForwardDecalMesh(Handle<Mesh>);
 // not want to use `uuid_handle!`.
 fn forward_decal_set_mesh(mut world: DeferredWorld, HookContext { entity, .. }: HookContext) {
     let decal_mesh = world.resource::<ForwardDecalMesh>().0.clone();
-    let mut entity = world.entity_mut(entity);
-    let mut entity_mesh = entity.get_mut::<Mesh3d>().unwrap();
-    // Only replace the mesh handle if the mesh handle is defaulted.
-    if **entity_mesh == Handle::default() {
-        entity_mesh.0 = decal_mesh;
+    // TODO: This should probably go back to being a required component via a "required template component"
+    if !world.entity(entity).contains::<Mesh3d>() {
+        world.commands().entity(entity).insert(Mesh3d(decal_mesh));
     }
 }

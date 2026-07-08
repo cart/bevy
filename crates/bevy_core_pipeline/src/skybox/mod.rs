@@ -27,6 +27,7 @@ use bevy_render::{
 };
 use bevy_shader::Shader;
 use bevy_transform::components::Transform;
+use bevy_utils::default;
 
 use crate::core_3d::CORE_3D_DEPTH_FORMAT;
 
@@ -149,6 +150,10 @@ impl SpecializedRenderPipeline for SkyboxPipeline {
         RenderPipelineDescriptor {
             label: Some("skybox_pipeline".into()),
             layout: vec![self.bind_group_layout.clone()],
+            vertex: VertexState {
+                shader: Some(self.shader.clone()),
+                ..default()
+            },
             depth_stencil: Some(DepthStencilState {
                 format: key.depth_format,
                 depth_write_enabled: Some(false),
@@ -171,15 +176,16 @@ impl SpecializedRenderPipeline for SkyboxPipeline {
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(FragmentState {
+                shader: Some(self.shader.clone()),
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,
                     // BlendState::REPLACE is not needed here, and None will be potentially much faster in some cases.
                     blend: None,
                     write_mask: ColorWrites::ALL,
                 })],
-                ..FragmentState::new(self.shader.clone())
+                ..default()
             }),
-            ..RenderPipelineDescriptor::new(self.shader.clone())
+            ..default()
         }
     }
 }

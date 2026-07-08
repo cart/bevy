@@ -1074,6 +1074,8 @@ pub type AnimationEntityMut<'w, 's> = EntityMutExcept<
         AnimatedBy,
         AnimationPlayer,
         AnimationGraphHandle,
+        AnimationClip,
+        AnimationGraph,
     ),
 >;
 

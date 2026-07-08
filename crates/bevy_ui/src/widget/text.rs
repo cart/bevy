@@ -278,7 +278,7 @@ pub fn measure_text_system(
     mut text_pipeline: ResMut<TextPipeline>,
     mut font_system: ResMut<FontCx>,
     mut layout_cx: ResMut<LayoutCx>,
-    mut asset_server: Res<AssetServer>,
+    asset_server: Res<AssetServer>,
     rem_size: Res<RemSize>,
 ) {
     for (

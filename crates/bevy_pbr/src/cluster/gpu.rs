@@ -600,7 +600,7 @@ impl SpecializedRenderPipeline for ClusteringRasterPipeline {
             }],
             immediate_size: 0,
             vertex: VertexState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs: vertex_shader_defs,
                 entry_point: Some("vertex_main".into()),
                 buffers: vec![VertexBufferLayout {
@@ -615,7 +615,7 @@ impl SpecializedRenderPipeline for ClusteringRasterPipeline {
                 constants: vec![],
             },
             fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs: fragment_shader_defs,
                 entry_point: Some("fragment_main".into()),
                 targets: vec![Some(ColorTargetState {
@@ -679,7 +679,7 @@ impl SpecializedComputePipeline for ClusteringZSlicingPipeline {
         ComputePipelineDescriptor {
             label: Some("clustering Z slicing pipeline".into()),
             layout: vec![self.bind_group_layout.clone()],
-            shader: self.shader.clone(),
+            shader: Some(self.shader.clone()),
             shader_defs: vec![],
             entry_point: Some("z_slice_main".into()),
             zero_initialize_workgroup_memory: true,
@@ -732,7 +732,7 @@ impl SpecializedComputePipeline for ClusteringAllocationPipeline {
                 Some("clustering allocation local pass pipeline".into())
             },
             layout: vec![self.bind_group_layout.clone()],
-            shader: self.shader.clone(),
+            shader: Some(self.shader.clone()),
             shader_defs: vec![],
             entry_point: if key.global_pass {
                 Some("allocate_global_main".into())

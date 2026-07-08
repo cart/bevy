@@ -526,7 +526,7 @@ impl SpecializedRenderPipeline for ScreenSpaceReflectionsPipeline {
             layout,
             vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
+                shader: Some(self.fragment_shader.clone()),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,

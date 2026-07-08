@@ -541,11 +541,11 @@ impl SpecializedMeshPipeline for MaterialPipelineSpecializer {
             ));
         };
         if let Some(vertex_shader) = self.properties.get_shader(MaterialVertexShader) {
-            descriptor.vertex.shader = vertex_shader.clone();
+            descriptor.vertex.shader = Some(vertex_shader.clone());
         }
 
         if let Some(fragment_shader) = self.properties.get_shader(MaterialFragmentShader) {
-            descriptor.fragment.as_mut().unwrap().shader = fragment_shader.clone();
+            descriptor.fragment.as_mut().unwrap().shader = Some(fragment_shader.clone());
         }
 
         descriptor

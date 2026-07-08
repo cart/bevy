@@ -85,7 +85,8 @@ pub struct LightmapPlugin;
 /// has a second UV layer ([`ATTRIBUTE_UV_1`](bevy_mesh::Mesh::ATTRIBUTE_UV_1)),
 /// then the lightmap will render using those UVs.
 #[derive(Component, Clone, Reflect, FromTemplate)]
-#[reflect(Component, Default, Clone)]
+#[template(manual_default)]
+#[reflect(Component, Clone)]
 pub struct Lightmap {
     /// The lightmap texture.
     pub image: Handle<Image>,
@@ -323,7 +324,7 @@ pub(crate) fn pack_lightmap_uv_rect(maybe_rect: Option<Rect>) -> UVec2 {
     }
 }
 
-impl Default for Lightmap {
+impl LightmapTemplate {
     fn default() -> Self {
         Self {
             image: Default::default(),

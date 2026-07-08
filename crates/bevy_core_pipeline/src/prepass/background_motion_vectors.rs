@@ -190,6 +190,7 @@ impl SpecializedRenderPipeline for BackgroundMotionVectorsPipeline {
         RenderPipelineDescriptor {
             label: Some("background_motion_vectors_pipeline".into()),
             layout: vec![self.bind_group_layout.clone()],
+            vertex: self.fullscreen_shader.to_vertex_state(),
             depth_stencil: Some(DepthStencilState {
                 format: CORE_3D_DEPTH_FORMAT,
                 depth_write_enabled: Some(false),
@@ -203,10 +204,11 @@ impl SpecializedRenderPipeline for BackgroundMotionVectorsPipeline {
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(FragmentState {
+                shader: Some(self.fragment_shader.clone()),
                 targets,
-                ..FragmentState::new(self.fragment_shader.clone())
+                ..default()
             }),
-            ..RenderPipelineDescriptor::new(self.fullscreen_shader.shader())
+            ..default()
         }
     }
 }

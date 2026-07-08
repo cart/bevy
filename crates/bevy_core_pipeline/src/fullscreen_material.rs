@@ -40,6 +40,7 @@ use bevy_render::{
     Render, RenderApp, RenderStartup, RenderSystems,
 };
 use bevy_shader::ShaderRef;
+use bevy_utils::default;
 
 #[derive(Default)]
 pub struct FullscreenMaterialPlugin<T: FullscreenMaterial> {
@@ -161,15 +162,17 @@ fn init_pipeline<T: FullscreenMaterial>(
     let desc = RenderPipelineDescriptor {
         label: Some(format!("fullscreen_material_pipeline<{}>", type_name::<T>()).into()),
         layout: vec![layout.clone()],
+        vertex: fullscreen_shader.to_vertex_state(),
         fragment: Some(FragmentState {
+            shader: Some(shader),
             targets: vec![Some(ColorTargetState {
                 format: TextureFormat::Rgba8UnormSrgb,
                 blend: None,
                 write_mask: ColorWrites::ALL,
             })],
-            ..FragmentState::new(shader)
+            ..default()
         }),
-        ..RenderPipelineDescriptor::new(fullscreen_shader.shader())
+        ..default()
     };
 
     commands.insert_resource(FullscreenMaterialPipeline::<T> {

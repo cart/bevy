@@ -321,12 +321,12 @@ impl SpecializedRenderPipeline for DeferredLightingLayout {
                 self.bind_group_layout_2.clone(),
             ],
             vertex: VertexState {
-                shader: self.deferred_lighting_shader.clone(),
+                shader: Some(self.deferred_lighting_shader.clone()),
                 shader_defs: shader_defs.clone(),
                 ..default()
             },
             fragment: Some(FragmentState {
-                shader: self.deferred_lighting_shader.clone(),
+                shader: Some(self.deferred_lighting_shader.clone()),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format(),

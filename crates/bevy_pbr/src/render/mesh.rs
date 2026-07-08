@@ -3662,13 +3662,13 @@ impl SpecializedMeshPipeline for MeshPipeline {
 
         Ok(RenderPipelineDescriptor {
             vertex: VertexState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs: shader_defs.clone(),
                 buffers: vec![vertex_buffer_layout],
                 ..default()
             },
             fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format,

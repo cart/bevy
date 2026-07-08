@@ -344,7 +344,7 @@ impl SpecializedMeshPipeline for Wireframe2dPipeline {
         descriptor.label = Some("wireframe_2d_pipeline".into());
         descriptor.immediate_size = 16;
         let fragment = descriptor.fragment.as_mut().unwrap();
-        fragment.shader = self.shader.clone();
+        fragment.shader = Some(self.shader.clone());
         descriptor.primitive.polygon_mode = PolygonMode::Line;
         if descriptor.primitive.topology.is_triangles() {
             descriptor.depth_stencil.as_mut().unwrap().bias.slope_scale = 1.0;

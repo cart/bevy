@@ -754,7 +754,7 @@ impl SpecializedMeshPipeline for Wireframe3dPipeline {
         if key.wide {
             descriptor.label = Some("wireframe_3d_wide_pipeline".into());
 
-            descriptor.vertex.shader = self.shader.clone();
+            descriptor.vertex.shader = Some(self.shader.clone());
             descriptor.vertex.shader_defs.push("WIREFRAME_WIDE".into());
             if key.quads {
                 descriptor.vertex.shader_defs.push("WIREFRAME_QUADS".into());
@@ -763,7 +763,7 @@ impl SpecializedMeshPipeline for Wireframe3dPipeline {
             descriptor.vertex.buffers = vec![]; // vertex pulling from storage
 
             let fragment = descriptor.fragment.as_mut().unwrap();
-            fragment.shader = self.shader.clone();
+            fragment.shader = Some(self.shader.clone());
             fragment.shader_defs.push("WIREFRAME_WIDE".into());
             fragment.entry_point = Some("fragment".into());
 
@@ -785,7 +785,7 @@ impl SpecializedMeshPipeline for Wireframe3dPipeline {
             descriptor.label = Some("wireframe_3d_pipeline".into());
             descriptor.immediate_size = 16;
             let fragment = descriptor.fragment.as_mut().unwrap();
-            fragment.shader = self.shader.clone();
+            fragment.shader = Some(self.shader.clone());
             descriptor.primitive.polygon_mode = PolygonMode::Line;
         }
 
@@ -931,10 +931,8 @@ pub struct RenderWireframeMaterial {
     pub topology: WireframeTopology,
 }
 
-#[derive(
-    Component, FromTemplate, Clone, Debug, Default, Deref, DerefMut, Reflect, PartialEq, Eq,
-)]
-#[reflect(Component, Default, Clone, PartialEq)]
+#[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq)]
+#[reflect(Component, Clone, PartialEq)]
 pub struct Mesh3dWireframe(pub Handle<WireframeMaterial>);
 
 impl AsAssetId for Mesh3dWireframe {

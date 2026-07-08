@@ -15,6 +15,7 @@ use bevy_render::{
     view::ViewTarget,
     Render, RenderApp, RenderStartup, RenderSystems,
 };
+use bevy_utils::default;
 
 use super::DEFERRED_LIGHTING_PASS_ID_DEPTH_FORMAT;
 use bevy_render::renderer::{RenderContext, ViewQuery};
@@ -115,7 +116,11 @@ pub fn init_copy_deferred_lighting_id_pipeline(
     let pipeline_id = pipeline_cache.queue_render_pipeline(RenderPipelineDescriptor {
         label: Some("copy_deferred_lighting_id_pipeline".into()),
         layout: vec![layout.clone()],
-        fragment: Some(FragmentState::new(shader)),
+        vertex: fullscreen_shader.to_vertex_state(),
+        fragment: Some(FragmentState {
+            shader: Some(shader),
+            ..default()
+        }),
         depth_stencil: Some(DepthStencilState {
             format: DEFERRED_LIGHTING_PASS_ID_DEPTH_FORMAT,
             depth_write_enabled: Some(true),
@@ -123,7 +128,7 @@ pub fn init_copy_deferred_lighting_id_pipeline(
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         }),
-        ..RenderPipelineDescriptor::new(fullscreen_shader.shader())
+        ..default()
     });
 
     commands.insert_resource(CopyDeferredLightingIdPipeline {

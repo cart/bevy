@@ -468,15 +468,22 @@ impl SpecializedRenderPipeline for SmaaEdgeDetectionPipeline {
             pass_op: StencilOperation::Replace,
         };
 
-        let mut descriptor = RenderPipelineDescriptor {
+        RenderPipelineDescriptor {
             label: Some("SMAA edge detection".into()),
             layout: vec![
                 self.postprocess_bind_group_layout.clone(),
                 self.edge_detection_bind_group_layout.clone(),
             ],
-            fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+            vertex: VertexState {
+                shader: Some(self.shader.clone()),
                 shader_defs: shader_defs.clone(),
+                entry_point: Some("edge_detection_vertex_main".into()),
+                buffers: vec![],
+                constants: vec![],
+            },
+            fragment: Some(FragmentState {
+                shader: Some(self.shader.clone()),
+                shader_defs,
                 entry_point: Some("luma_edge_detection_fragment_main".into()),
                 targets: vec![Some(ColorTargetState {
                     format: TextureFormat::Rg8Unorm,
@@ -497,11 +504,8 @@ impl SpecializedRenderPipeline for SmaaEdgeDetectionPipeline {
                 },
                 bias: default(),
             }),
-            ..RenderPipelineDescriptor::new(self.shader.clone())
-        };
-        descriptor.vertex.shader_defs = shader_defs;
-        descriptor.vertex.entry_point = Some("edge_detection_vertex_main".into());
-        descriptor
+            ..default()
+        }
     }
 }
 
@@ -523,15 +527,22 @@ impl SpecializedRenderPipeline for SmaaBlendingWeightCalculationPipeline {
             pass_op: StencilOperation::Keep,
         };
 
-        let mut descriptor = RenderPipelineDescriptor {
+        RenderPipelineDescriptor {
             label: Some("SMAA blending weight calculation".into()),
             layout: vec![
                 self.postprocess_bind_group_layout.clone(),
                 self.blending_weight_calculation_bind_group_layout.clone(),
             ],
-            fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+            vertex: VertexState {
+                shader: Some(self.shader.clone()),
                 shader_defs: shader_defs.clone(),
+                entry_point: Some("blending_weight_calculation_vertex_main".into()),
+                buffers: vec![],
+                constants: vec![],
+            },
+            fragment: Some(FragmentState {
+                shader: Some(self.shader.clone()),
+                shader_defs,
                 entry_point: Some("blending_weight_calculation_fragment_main".into()),
                 targets: vec![Some(ColorTargetState {
                     format: TextureFormat::Rgba8Unorm,
@@ -552,11 +563,8 @@ impl SpecializedRenderPipeline for SmaaBlendingWeightCalculationPipeline {
                 },
                 bias: default(),
             }),
-            ..RenderPipelineDescriptor::new(self.shader.clone())
-        };
-        descriptor.vertex.shader_defs = shader_defs;
-        descriptor.vertex.entry_point = Some("blending_weight_calculation_vertex_main".into());
-        descriptor
+            ..default()
+        }
     }
 }
 
@@ -566,15 +574,22 @@ impl SpecializedRenderPipeline for SmaaNeighborhoodBlendingPipeline {
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
         let shader_defs = vec!["SMAA_NEIGHBORHOOD_BLENDING".into(), key.preset.shader_def()];
 
-        let mut descriptor = RenderPipelineDescriptor {
+        RenderPipelineDescriptor {
             label: Some("SMAA neighborhood blending".into()),
             layout: vec![
                 self.postprocess_bind_group_layout.clone(),
                 self.neighborhood_blending_bind_group_layout.clone(),
             ],
-            fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+            vertex: VertexState {
+                shader: Some(self.shader.clone()),
                 shader_defs: shader_defs.clone(),
+                entry_point: Some("neighborhood_blending_vertex_main".into()),
+                buffers: vec![],
+                constants: vec![],
+            },
+            fragment: Some(FragmentState {
+                shader: Some(self.shader.clone()),
+                shader_defs,
                 entry_point: Some("neighborhood_blending_fragment_main".into()),
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,
@@ -583,11 +598,8 @@ impl SpecializedRenderPipeline for SmaaNeighborhoodBlendingPipeline {
                 })],
                 constants: vec![],
             }),
-            ..RenderPipelineDescriptor::new(self.shader.clone())
-        };
-        descriptor.vertex.shader_defs = shader_defs;
-        descriptor.vertex.entry_point = Some("neighborhood_blending_vertex_main".into());
-        descriptor
+            ..default()
+        }
     }
 }
 

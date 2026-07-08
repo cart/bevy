@@ -130,7 +130,7 @@ impl SpecializedRenderPipeline for BloomDownsamplingPipeline {
             layout,
             vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
+                shader: Some(self.fragment_shader.clone()),
                 shader_defs,
                 entry_point: Some(entry_point),
                 targets: vec![Some(ColorTargetState {

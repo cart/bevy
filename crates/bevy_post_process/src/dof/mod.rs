@@ -632,7 +632,7 @@ impl SpecializedRenderPipeline for DepthOfFieldPipeline {
             layout,
             vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
+                shader: Some(self.fragment_shader.clone()),
                 shader_defs,
                 entry_point: Some(match key.pass {
                     DofPass::GaussianHorizontal => "gaussian_horizontal".into(),

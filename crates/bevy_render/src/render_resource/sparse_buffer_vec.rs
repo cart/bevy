@@ -323,10 +323,12 @@ impl SpecializedComputePipeline for SparseBufferUpdatePipelines {
         ComputePipelineDescriptor {
             label: Some("sparse buffer update pipeline".into()),
             layout: self.bind_group_layout.clone().into_iter().collect(),
-            shader_defs: vec![],
             // TODO: this unwrap might be problematic. A default compute shader doesn't make much sense
             // generally, but if we really want that behavior it should probably move to SparseBufferUpdatePipelines
-            ..ComputePipelineDescriptor::new(self.shader.clone().unwrap())
+            // Note that im doing the unwrap here to make errors easier to debug as this used to fall back on the Default handle
+            shader: Some(self.shader.clone().unwrap()),
+            shader_defs: vec![],
+            ..ComputePipelineDescriptor::default()
         }
     }
 }

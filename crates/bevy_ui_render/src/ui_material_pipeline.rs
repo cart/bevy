@@ -146,13 +146,13 @@ where
 
         let mut descriptor = RenderPipelineDescriptor {
             vertex: VertexState {
-                shader: self.vertex_shader.clone(),
+                shader: Some(self.vertex_shader.clone()),
                 shader_defs: shader_defs.clone(),
                 buffers: vec![vertex_layout],
                 ..default()
             },
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
+                shader: Some(self.fragment_shader.clone()),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,

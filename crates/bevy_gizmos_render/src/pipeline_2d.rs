@@ -131,13 +131,13 @@ impl SpecializedRenderPipeline for LineGizmoPipeline {
 
         RenderPipelineDescriptor {
             vertex: VertexState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs: shader_defs.clone(),
                 buffers: line_gizmo_vertex_buffer_layouts(key.strip),
                 ..default()
             },
             fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs,
                 entry_point: Some(fragment_entry_point.into()),
                 targets: vec![Some(ColorTargetState {
@@ -216,14 +216,14 @@ impl SpecializedRenderPipeline for LineJointGizmoPipeline {
 
         RenderPipelineDescriptor {
             vertex: VertexState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 entry_point: Some(entry_point.into()),
                 shader_defs: shader_defs.clone(),
                 buffers: line_joint_gizmo_vertex_buffer_layouts(),
                 constants: vec![],
             },
             fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format,

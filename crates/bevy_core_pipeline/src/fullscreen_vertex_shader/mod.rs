@@ -32,7 +32,7 @@ impl FullscreenShader {
     /// The draw call should render one triangle: `render_pass.draw(0..3, 0..1);`
     pub fn to_vertex_state(&self) -> VertexState {
         VertexState {
-            shader: self.0.clone(),
+            shader: Some(self.0.clone()),
             shader_defs: Vec::new(),
             entry_point: Some("fullscreen_vertex_shader".into()),
             buffers: Vec::new(),

@@ -500,7 +500,7 @@ impl PipelineCache {
 
                 let vertex_module = match shader_cache.get(
                     id,
-                    descriptor.vertex.shader.id(),
+                    descriptor.vertex.shader.unwrap().id(),
                     &descriptor.vertex.shader_defs,
                 ) {
                     Ok(module) => module,
@@ -509,7 +509,11 @@ impl PipelineCache {
 
                 let fragment_module = match &descriptor.fragment {
                     Some(fragment) => {
-                        match shader_cache.get(id, fragment.shader.id(), &fragment.shader_defs) {
+                        match shader_cache.get(
+                            id,
+                            fragment.shader.as_ref().unwrap().id(),
+                            &fragment.shader_defs,
+                        ) {
                             Ok(module) => Some(module),
                             Err(err) => return Err(err),
                         }
@@ -618,11 +622,14 @@ impl PipelineCache {
                 let mut shader_cache = shader_cache.lock().unwrap();
                 let mut layout_cache = layout_cache.lock().unwrap();
 
-                let compute_module =
-                    match shader_cache.get(id, descriptor.shader.id(), &descriptor.shader_defs) {
-                        Ok(module) => module,
-                        Err(err) => return Err(err),
-                    };
+                let compute_module = match shader_cache.get(
+                    id,
+                    descriptor.shader.as_ref().unwrap().id(),
+                    &descriptor.shader_defs,
+                ) {
+                    Ok(module) => module,
+                    Err(err) => return Err(err),
+                };
 
                 let layout = if descriptor.layout.is_empty() && descriptor.immediate_size == 0 {
                     None
@@ -816,16 +823,26 @@ fn pipeline_error_context(cached_pipeline: &CachedPipeline) -> String {
     match &cached_pipeline.descriptor {
         PipelineDescriptor::RenderPipelineDescriptor(desc) => {
             let vert = &desc.vertex;
-            let vert_str = format(&vert.shader, &vert.entry_point, &vert.shader_defs);
+            let vert_str = format(
+                vert.shader.as_ref().unwrap(),
+                &vert.entry_point,
+                &vert.shader_defs,
+            );
             let Some(frag) = desc.fragment.as_ref() else {
                 return vert_str;
             };
-            let frag_str = format(&frag.shader, &frag.entry_point, &frag.shader_defs);
+            let frag_str = format(
+                frag.shader.as_ref().unwrap(),
+                &frag.entry_point,
+                &frag.shader_defs,
+            );
             format!("vertex {vert_str}\nfragment {frag_str}")
         }
-        PipelineDescriptor::ComputePipelineDescriptor(desc) => {
-            format(&desc.shader, &desc.entry_point, &desc.shader_defs)
-        }
+        PipelineDescriptor::ComputePipelineDescriptor(desc) => format(
+            &desc.shader.as_ref().unwrap(),
+            &desc.entry_point,
+            &desc.shader_defs,
+        ),
     }
 }
 

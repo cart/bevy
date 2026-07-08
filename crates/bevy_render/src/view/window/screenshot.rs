@@ -25,6 +25,7 @@ use bevy_material::{
     bind_group_layout_entries::{binding_types::texture_2d, BindGroupLayoutEntries},
     descriptor::{
         BindGroupLayoutDescriptor, CachedRenderPipelineId, FragmentState, RenderPipelineDescriptor,
+        VertexState,
     },
 };
 use bevy_platform::collections::HashSet;
@@ -471,20 +472,25 @@ impl SpecializedRenderPipeline for ScreenshotToScreenPipeline {
         RenderPipelineDescriptor {
             label: Some(Cow::Borrowed("screenshot-to-screen")),
             layout: vec![self.bind_group_layout.clone()],
+            vertex: VertexState {
+                shader: Some(self.shader.clone()),
+                ..default()
+            },
             primitive: wgpu::PrimitiveState {
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
             multisample: Default::default(),
             fragment: Some(FragmentState {
+                shader: Some(self.shader.clone()),
                 targets: vec![Some(wgpu::ColorTargetState {
                     format: key,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
-                ..FragmentState::new(self.shader.clone())
+                ..default()
             }),
-            ..RenderPipelineDescriptor::new(self.shader.clone())
+            ..default()
         }
     }
 }

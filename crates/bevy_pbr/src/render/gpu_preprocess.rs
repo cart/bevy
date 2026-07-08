@@ -1251,7 +1251,7 @@ impl SpecializedComputePipeline for PreprocessPipeline {
             } else {
                 0
             },
-            shader: self.shader.clone(),
+            shader: Some(self.shader.clone()),
             shader_defs,
             ..default()
         }
@@ -1670,7 +1670,7 @@ impl SpecializedComputePipeline for ResetIndirectBatchSetsPipeline {
         ComputePipelineDescriptor {
             label: Some("reset indirect batch sets".into()),
             layout: vec![self.bind_group_layout.clone()],
-            shader: self.shader.clone(),
+            shader: Some(self.shader.clone()),
             ..default()
         }
     }
@@ -1721,7 +1721,7 @@ impl SpecializedComputePipeline for BuildIndirectParametersPipeline {
         ComputePipelineDescriptor {
             label: Some(label.into()),
             layout: vec![self.bind_group_layout.clone()],
-            shader: self.shader.clone(),
+            shader: Some(self.shader.clone()),
             shader_defs,
             ..default()
         }
@@ -1735,7 +1735,7 @@ impl SpecializedComputePipeline for BinUnpackingPipeline {
         ComputePipelineDescriptor {
             label: Some("bin unpacking".into()),
             layout: vec![self.bind_group_layout.clone()],
-            shader: self.shader.clone(),
+            shader: Some(self.shader.clone()),
             shader_defs: vec![],
             ..default()
         }

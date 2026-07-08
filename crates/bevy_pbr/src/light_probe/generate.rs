@@ -358,7 +358,7 @@ pub fn initialize_generated_environment_map_resources(
         label: Some("downsampling_first_pipeline".into()),
         layout: vec![layouts.downsampling_first.clone()],
         immediate_size: 0,
-        shader: downsampling_shader.clone(),
+        shader: Some(downsampling_shader.clone()),
         shader_defs: {
             let mut defs = shader_defs.clone();
             if !combine_bind_group {
@@ -375,7 +375,7 @@ pub fn initialize_generated_environment_map_resources(
         label: Some("downsampling_second_pipeline".into()),
         layout: vec![layouts.downsampling_second.clone()],
         immediate_size: 0,
-        shader: downsampling_shader.clone(),
+        shader: Some(downsampling_shader.clone()),
         shader_defs: {
             let mut defs = shader_defs.clone();
             if !combine_bind_group {
@@ -393,7 +393,7 @@ pub fn initialize_generated_environment_map_resources(
         label: Some("radiance_pipeline".into()),
         layout: vec![layouts.radiance.clone()],
         immediate_size: 0,
-        shader: env_filter_shader.clone(),
+        shader: Some(env_filter_shader.clone()),
         shader_defs: shader_defs.clone(),
         entry_point: Some("generate_radiance_map".into()),
         zero_initialize_workgroup_memory: false,
@@ -405,7 +405,7 @@ pub fn initialize_generated_environment_map_resources(
         label: Some("irradiance_pipeline".into()),
         layout: vec![layouts.irradiance.clone()],
         immediate_size: 0,
-        shader: env_filter_shader,
+        shader: Some(env_filter_shader),
         shader_defs: shader_defs.clone(),
         entry_point: Some("generate_irradiance_map".into()),
         zero_initialize_workgroup_memory: false,
@@ -417,7 +417,7 @@ pub fn initialize_generated_environment_map_resources(
         label: Some("copy_pipeline".into()),
         layout: vec![layouts.copy.clone()],
         immediate_size: 0,
-        shader: copy_shader,
+        shader: Some(copy_shader),
         shader_defs: vec![],
         entry_point: Some("copy".into()),
         zero_initialize_workgroup_memory: false,

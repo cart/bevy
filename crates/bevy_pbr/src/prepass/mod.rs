@@ -632,7 +632,7 @@ impl PrepassPipeline {
             };
 
             FragmentState {
-                shader: frag_shader_handle,
+                shader: Some(frag_shader_handle),
                 shader_defs: shader_defs.clone(),
                 targets,
                 ..default()
@@ -653,7 +653,7 @@ impl PrepassPipeline {
         };
         let descriptor = RenderPipelineDescriptor {
             vertex: VertexState {
-                shader: vert_shader_handle,
+                shader: Some(vert_shader_handle),
                 shader_defs,
                 buffers: vec![vertex_buffer_layout],
                 ..default()

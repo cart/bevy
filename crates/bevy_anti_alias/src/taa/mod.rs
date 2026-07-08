@@ -271,8 +271,12 @@ fn init_taa_pipeline(
         RenderPipelineDescriptor {
             label: Some("taa_pipeline".into()),
             layout: vec![taa_bind_group_layout.clone()],
-            fragment: Some(FragmentState::new(fragment_shader)),
-            ..RenderPipelineDescriptor::new(fullscreen_shader.shader())
+            vertex: fullscreen_shader.to_vertex_state(),
+            fragment: Some(FragmentState {
+                shader: Some(fragment_shader),
+                ..default()
+            }),
+            ..default()
         },
     );
 

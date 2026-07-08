@@ -415,7 +415,7 @@ impl FromWorld for SsaoPipelines {
                     preprocess_depth_bind_group_layout.clone(),
                     common_bind_group_layout.clone(),
                 ],
-                shader: load_embedded_asset!(world, "preprocess_depth.wgsl"),
+                shader: Some(load_embedded_asset!(world, "preprocess_depth.wgsl")),
                 shader_defs: shader_defs.clone(),
                 ..default()
             });
@@ -427,7 +427,7 @@ impl FromWorld for SsaoPipelines {
                     spatial_denoise_bind_group_layout.clone(),
                     common_bind_group_layout.clone(),
                 ],
-                shader: load_embedded_asset!(world, "spatial_denoise.wgsl"),
+                shader: Some(load_embedded_asset!(world, "spatial_denoise.wgsl")),
                 shader_defs,
                 ..default()
             });
@@ -485,7 +485,7 @@ impl SpecializedComputePipeline for SsaoPipelines {
                 self.ssao_bind_group_layout.clone(),
                 self.common_bind_group_layout.clone(),
             ],
-            shader: self.shader.clone(),
+            shader: Some(self.shader.clone()),
             shader_defs,
             ..default()
         }

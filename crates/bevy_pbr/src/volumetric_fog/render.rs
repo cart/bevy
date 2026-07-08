@@ -508,7 +508,7 @@ impl SpecializedRenderPipeline for VolumetricFogPipeline {
             label: Some("volumetric lighting pipeline".into()),
             layout,
             vertex: VertexState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs: shader_defs.clone(),
                 buffers: vec![vertex_format],
                 ..default()
@@ -518,7 +518,7 @@ impl SpecializedRenderPipeline for VolumetricFogPipeline {
                 ..default()
             },
             fragment: Some(FragmentState {
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,

@@ -262,7 +262,7 @@ impl FromWorld for AtmosphereLutPipelines {
         let transmittance_lut = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: Some("transmittance_lut_pipeline".into()),
             layout: vec![layouts.transmittance_lut.clone()],
-            shader: load_embedded_asset!(world, "transmittance_lut.wgsl"),
+            shader: Some(load_embedded_asset!(world, "transmittance_lut.wgsl")),
             ..default()
         });
 
@@ -270,21 +270,21 @@ impl FromWorld for AtmosphereLutPipelines {
             pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
                 label: Some("multi_scattering_lut_pipeline".into()),
                 layout: vec![layouts.multiscattering_lut.clone()],
-                shader: load_embedded_asset!(world, "multiscattering_lut.wgsl"),
+                shader: Some(load_embedded_asset!(world, "multiscattering_lut.wgsl")),
                 ..default()
             });
 
         let sky_view_lut = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: Some("sky_view_lut_pipeline".into()),
             layout: vec![layouts.sky_view_lut.clone()],
-            shader: load_embedded_asset!(world, "sky_view_lut.wgsl"),
+            shader: Some(load_embedded_asset!(world, "sky_view_lut.wgsl")),
             ..default()
         });
 
         let aerial_view_lut = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: Some("aerial_view_lut_pipeline".into()),
             layout: vec![layouts.aerial_view_lut.clone()],
-            shader: load_embedded_asset!(world, "aerial_view_lut.wgsl"),
+            shader: Some(load_embedded_asset!(world, "aerial_view_lut.wgsl")),
             ..default()
         });
 
@@ -334,7 +334,7 @@ impl SpecializedRenderPipeline for RenderSkyBindGroupLayouts {
             }],
             vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
+                shader: Some(self.fragment_shader.clone()),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format: TextureFormat::Rgba16Float,

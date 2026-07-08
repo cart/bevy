@@ -472,11 +472,11 @@ where
             ));
         }
         if let Some(vertex_shader) = &self.vertex_shader {
-            descriptor.vertex.shader = vertex_shader.clone();
+            descriptor.vertex.shader = Some(vertex_shader.clone());
         }
 
         if let Some(fragment_shader) = &self.fragment_shader {
-            descriptor.fragment.as_mut().unwrap().shader = fragment_shader.clone();
+            descriptor.fragment.as_mut().unwrap().shader = Some(fragment_shader.clone());
         }
         descriptor.layout = vec![
             self.mesh2d_pipeline.view_layout.clone(),
