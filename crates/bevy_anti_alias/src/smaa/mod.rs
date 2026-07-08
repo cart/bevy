@@ -320,15 +320,13 @@ impl Plugin for SmaaPlugin {
         };
         #[cfg(not(feature = "smaa_luts"))]
         let smaa_luts = {
-            use bevy_asset::RenderAssetUsages;
+            use bevy_asset::{DirectAssetAccessExt, RenderAssetUsages};
             use bevy_image::ImageSampler;
             use bevy_render::render_resource::{Extent3d, TextureDataOrder};
 
-            let mut images = app.world_mut().resource_mut::<bevy_asset::Assets<Image>>();
-
             let format = TextureFormat::Rgba8Unorm;
             let data = vec![255, 0, 255, 255];
-            let handle = images.add(Image {
+            let handle = app.world_mut().spawn_asset(Image {
                 data: Some(data),
                 data_order: TextureDataOrder::default(),
                 texture_descriptor: TextureDescriptor {
@@ -470,22 +468,15 @@ impl SpecializedRenderPipeline for SmaaEdgeDetectionPipeline {
             pass_op: StencilOperation::Replace,
         };
 
-        RenderPipelineDescriptor {
+        let mut descriptor = RenderPipelineDescriptor {
             label: Some("SMAA edge detection".into()),
             layout: vec![
                 self.postprocess_bind_group_layout.clone(),
                 self.edge_detection_bind_group_layout.clone(),
             ],
-            vertex: VertexState {
-                shader: self.shader.clone(),
-                shader_defs: shader_defs.clone(),
-                entry_point: Some("edge_detection_vertex_main".into()),
-                buffers: vec![],
-                constants: vec![],
-            },
             fragment: Some(FragmentState {
                 shader: self.shader.clone(),
-                shader_defs,
+                shader_defs: shader_defs.clone(),
                 entry_point: Some("luma_edge_detection_fragment_main".into()),
                 targets: vec![Some(ColorTargetState {
                     format: TextureFormat::Rg8Unorm,
@@ -506,8 +497,11 @@ impl SpecializedRenderPipeline for SmaaEdgeDetectionPipeline {
                 },
                 bias: default(),
             }),
-            ..default()
-        }
+            ..RenderPipelineDescriptor::new(self.shader.clone())
+        };
+        descriptor.vertex.shader_defs = shader_defs;
+        descriptor.vertex.entry_point = Some("edge_detection_vertex_main".into());
+        descriptor
     }
 }
 
@@ -529,22 +523,15 @@ impl SpecializedRenderPipeline for SmaaBlendingWeightCalculationPipeline {
             pass_op: StencilOperation::Keep,
         };
 
-        RenderPipelineDescriptor {
+        let mut descriptor = RenderPipelineDescriptor {
             label: Some("SMAA blending weight calculation".into()),
             layout: vec![
                 self.postprocess_bind_group_layout.clone(),
                 self.blending_weight_calculation_bind_group_layout.clone(),
             ],
-            vertex: VertexState {
-                shader: self.shader.clone(),
-                shader_defs: shader_defs.clone(),
-                entry_point: Some("blending_weight_calculation_vertex_main".into()),
-                buffers: vec![],
-                constants: vec![],
-            },
             fragment: Some(FragmentState {
                 shader: self.shader.clone(),
-                shader_defs,
+                shader_defs: shader_defs.clone(),
                 entry_point: Some("blending_weight_calculation_fragment_main".into()),
                 targets: vec![Some(ColorTargetState {
                     format: TextureFormat::Rgba8Unorm,
@@ -565,8 +552,11 @@ impl SpecializedRenderPipeline for SmaaBlendingWeightCalculationPipeline {
                 },
                 bias: default(),
             }),
-            ..default()
-        }
+            ..RenderPipelineDescriptor::new(self.shader.clone())
+        };
+        descriptor.vertex.shader_defs = shader_defs;
+        descriptor.vertex.entry_point = Some("blending_weight_calculation_vertex_main".into());
+        descriptor
     }
 }
 
@@ -576,22 +566,15 @@ impl SpecializedRenderPipeline for SmaaNeighborhoodBlendingPipeline {
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
         let shader_defs = vec!["SMAA_NEIGHBORHOOD_BLENDING".into(), key.preset.shader_def()];
 
-        RenderPipelineDescriptor {
+        let mut descriptor = RenderPipelineDescriptor {
             label: Some("SMAA neighborhood blending".into()),
             layout: vec![
                 self.postprocess_bind_group_layout.clone(),
                 self.neighborhood_blending_bind_group_layout.clone(),
             ],
-            vertex: VertexState {
-                shader: self.shader.clone(),
-                shader_defs: shader_defs.clone(),
-                entry_point: Some("neighborhood_blending_vertex_main".into()),
-                buffers: vec![],
-                constants: vec![],
-            },
             fragment: Some(FragmentState {
                 shader: self.shader.clone(),
-                shader_defs,
+                shader_defs: shader_defs.clone(),
                 entry_point: Some("neighborhood_blending_fragment_main".into()),
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,
@@ -600,8 +583,11 @@ impl SpecializedRenderPipeline for SmaaNeighborhoodBlendingPipeline {
                 })],
                 constants: vec![],
             }),
-            ..default()
-        }
+            ..RenderPipelineDescriptor::new(self.shader.clone())
+        };
+        descriptor.vertex.shader_defs = shader_defs;
+        descriptor.vertex.entry_point = Some("neighborhood_blending_vertex_main".into());
+        descriptor
     }
 }
 

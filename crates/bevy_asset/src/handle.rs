@@ -99,12 +99,6 @@ impl<A: Asset> Handle<A> {
     }
 }
 
-impl<A: Asset> Default for Handle<A> {
-    fn default() -> Self {
-        todo!("Handles aren't default anymore!")
-    }
-}
-
 // This enables FromTemplate specialization for `Handle<T>` using the
 // ["auto trait specialization" trick](https://github.com/coolcatcoder/rust_techniques/issues/1)
 // This enables Handle to implement Default _and_ implement FromTemplate, without conflicting with the
@@ -190,7 +184,7 @@ enum AssetOrHandle<T: Asset> {
 
 impl<T: Asset> Default for AssetOrHandle<T> {
     fn default() -> Self {
-        Self::Handle(Default::default())
+        Self::Value(None)
     }
 }
 

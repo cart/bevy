@@ -326,8 +326,7 @@ mod test {
             .world_mut()
             .spawn(Sprite {
                 custom_size: Some(Vec2::ZERO),
-                image: image_handle,
-                ..Sprite::default()
+                ..Sprite::from(image_handle)
             })
             .id();
 
@@ -384,8 +383,7 @@ mod test {
             .spawn((
                 Sprite {
                     rect: Some(Rect::new(0., 0., 0.5, 1.)),
-                    image: image_handle,
-                    ..Sprite::default()
+                    ..Sprite::from(image_handle)
                 },
                 Anchor::TOP_RIGHT,
             ))

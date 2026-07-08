@@ -1,5 +1,6 @@
 use alloc::borrow::Cow;
-use bevy_ecs::system::{Commands, Query};
+use bevy_asset::{AssetReference, AssetServer};
+use bevy_ecs::system::{Commands, Query, Res};
 use bevy_platform::collections::HashMap;
 
 use core::hash::BuildHasher;
@@ -58,6 +59,7 @@ impl TextPipeline {
     pub fn update_buffer<'a>(
         &mut self,
         fonts: &Query<&Font>,
+        asset_server: &AssetServer,
         text_spans: impl Iterator<
             Item = (
                 Entity,
@@ -118,7 +120,7 @@ impl TextPipeline {
                 }
 
                 if matches!(text_font.font, FontSource::Handle(_))
-                    && resolve_font_source(text_font, fonts).is_err()
+                    && resolve_font_source(text_font, fonts, asset_server).is_err()
                 {
                     return Err(TextError::NoSuchFont);
                 }
@@ -191,7 +193,7 @@ impl TextPipeline {
                     continue;
                 }
 
-                let resolved_family = resolve_font_source(section.text_font, fonts)?;
+                let resolved_family = resolve_font_source(section.text_font, fonts, asset_server)?;
 
                 builder.push(StyleProperty::FontFamily(resolved_family), range.clone());
                 builder.push(
@@ -251,6 +253,7 @@ impl TextPipeline {
         &mut self,
         entity: Entity,
         fonts: &Query<&Font>,
+        asset_server: &AssetServer,
         text_spans: impl Iterator<
             Item = (
                 Entity,
@@ -276,6 +279,7 @@ impl TextPipeline {
 
         self.update_buffer(
             fonts,
+            asset_server,
             text_spans,
             layout.linebreak,
             layout.justify,
@@ -434,8 +438,16 @@ impl TextPipeline {
 pub fn resolve_font_source<'a>(
     text_font: &'a TextFont,
     fonts: &'a Query<&Font>,
+    asset_server: &'a AssetServer,
 ) -> Result<FontFamily<'a>, TextError> {
     Ok(match &text_font.font {
+        FontSource::Default => FontFamily::Single(parley::FontFamilyName::Named(Cow::Borrowed(
+            fonts
+                .get(&asset_server.load::<Font>(AssetReference::Default))
+                .map_err(|_| TextError::NoSuchFont)?
+                .alias
+                .as_str(),
+        ))),
         FontSource::Handle(handle) => {
             FontFamily::Single(parley::FontFamilyName::Named(Cow::Borrowed(
                 fonts
@@ -468,6 +480,7 @@ pub fn resolve_font_source<'a>(
                 FontSource::Math => parley::GenericFamily::Math.into(),
                 FontSource::FangSong => parley::GenericFamily::FangSong.into(),
                 FontSource::Handle(_) | FontSource::Family(_) => unreachable!(),
+                FontSource::Default => unreachable!(),
             }
         }
     })

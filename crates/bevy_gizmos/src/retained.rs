@@ -59,8 +59,8 @@ impl DerefMut for GizmoAsset {
 /// ```
 ///
 /// [`Gizmos`]: crate::gizmos::Gizmos
-#[derive(Component, Clone, Debug, Default, Reflect, FromTemplate)]
-#[reflect(Component, Clone, Default)]
+#[derive(Component, Clone, Debug, Reflect, FromTemplate)]
+#[reflect(Component, Clone)]
 #[require(Transform)]
 pub struct Gizmo {
     /// The handle to the gizmo to draw.

@@ -26,7 +26,7 @@ impl BindGroupLayoutDescriptor {
 }
 
 /// Describes a render (graphics) pipeline.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RenderPipelineDescriptor {
     /// Debug label of the pipeline. This will show up in graphics debuggers for easy identification.
     pub label: Option<Cow<'static, str>>,
@@ -50,6 +50,22 @@ pub struct RenderPipelineDescriptor {
     pub zero_initialize_workgroup_memory: bool,
 }
 
+impl RenderPipelineDescriptor {
+    pub fn new(vertex_shader: Handle<Shader>) -> Self {
+        Self {
+            label: Default::default(),
+            layout: Default::default(),
+            immediate_size: Default::default(),
+            vertex: VertexState::new(vertex_shader),
+            primitive: Default::default(),
+            depth_stencil: Default::default(),
+            multisample: Default::default(),
+            fragment: Default::default(),
+            zero_initialize_workgroup_memory: Default::default(),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Error)]
 #[error("RenderPipelineDescriptor has no FragmentState configured")]
 pub struct NoFragmentStateError;
@@ -64,7 +80,7 @@ impl RenderPipelineDescriptor {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VertexState {
     /// The compiled shader module for this stage.
     pub shader: Handle<Shader>,
@@ -78,8 +94,20 @@ pub struct VertexState {
     pub constants: Vec<(Cow<'static, str>, f64)>,
 }
 
+impl VertexState {
+    pub fn new(shader: Handle<Shader>) -> Self {
+        Self {
+            shader,
+            shader_defs: Default::default(),
+            entry_point: Default::default(),
+            buffers: Default::default(),
+            constants: Default::default(),
+        }
+    }
+}
+
 /// Describes the fragment process in a render pipeline.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FragmentState {
     /// The compiled shader module for this stage.
     pub shader: Handle<Shader>,
@@ -94,13 +122,22 @@ pub struct FragmentState {
 }
 
 impl FragmentState {
+    pub fn new(shader: Handle<Shader>) -> Self {
+        Self {
+            shader,
+            shader_defs: Default::default(),
+            targets: Default::default(),
+            entry_point: Default::default(),
+            constants: Default::default(),
+        }
+    }
     pub fn set_target(&mut self, index: usize, target: ColorTargetState) {
         filling_set_at(&mut self.targets, index, None, Some(target));
     }
 }
 
 /// Describes a compute pipeline.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ComputePipelineDescriptor {
     pub label: Option<Cow<'static, str>>,
     pub layout: Vec<BindGroupLayoutDescriptor>,
@@ -116,6 +153,21 @@ pub struct ComputePipelineDescriptor {
     pub zero_initialize_workgroup_memory: bool,
     /// Values for pipeline-overridable constants declared with `override` in the shader.
     pub constants: Vec<(Cow<'static, str>, f64)>,
+}
+
+impl ComputePipelineDescriptor {
+    pub fn new(shader: Handle<Shader>) -> Self {
+        Self {
+            shader,
+            label: Default::default(),
+            layout: Default::default(),
+            immediate_size: Default::default(),
+            shader_defs: Default::default(),
+            entry_point: Default::default(),
+            zero_initialize_workgroup_memory: Default::default(),
+            constants: Default::default(),
+        }
+    }
 }
 
 // utility function to set a value at the specified index, extending with

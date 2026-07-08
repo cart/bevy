@@ -280,6 +280,8 @@ impl From<Justify> for parley::Alignment {
 /// You can check which font family is used for a given [`FontSource`]
 /// by calling [`FontCx::get_family`](crate::FontCx::get_family).
 pub enum FontSource {
+    #[default]
+    Default,
     /// Use a specific font face referenced by a [`Font`] asset handle.
     ///
     /// If the default font handle is used, then
@@ -287,7 +289,6 @@ pub enum FontSource {
     ///   `FiraMono-subset.ttf` compiled into the library is used.
     /// * otherwise no text will be rendered, unless a custom font is loaded into the default font
     ///   handle.
-    #[default]
     Handle(Handle<Font>),
     /// Resolve the font by family name using the font database.
     Family(SmolStr),
@@ -341,7 +342,7 @@ pub enum FontSource {
 
 impl Default for FontSource {
     fn default() -> Self {
-        Self::Handle(Handle::default())
+        FontSource::Default
     }
 }
 
@@ -372,7 +373,8 @@ impl From<&str> for FontSource {
 /// `TextFont` determines the style of a text span within a [`ComputedTextBlock`], specifically
 /// the font face, the font size, the line height, and the antialiasing method.
 #[derive(Component, Clone, Debug, Reflect, PartialEq, FromTemplate)]
-#[reflect(Component, Default, Debug, Clone)]
+#[template(manual_default)]
+#[reflect(Component, Debug, Clone)]
 pub struct TextFont {
     /// Specifies the font face used for this text section.
     ///
@@ -454,7 +456,7 @@ impl<T: Into<FontSource>> From<T> for TextFont {
     fn from(source: T) -> Self {
         Self {
             font: source.into(),
-            ..default()
+            ..Default::default()
         }
     }
 }
@@ -474,6 +476,22 @@ impl Default for TextFont {
     }
 }
 
+impl Default for TextFontTemplate {
+    fn default() -> Self {
+        // TODO: This would benefit from the proposed "default field values" Rust feature
+        let text_font = TextFont::default();
+        Self {
+            font: Default::default(),
+            font_size: text_font.font_size,
+            style: text_font.style,
+            weight: text_font.weight,
+            width: text_font.width,
+            font_features: text_font.font_features,
+            font_variations: text_font.font_variations,
+            font_smoothing: text_font.font_smoothing,
+        }
+    }
+}
 /// The vertical height of rasterized glyphs in the font atlas in pixels.
 ///
 /// This is multiplied by the scale factor, but not the text entity

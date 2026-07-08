@@ -169,9 +169,7 @@ impl SpecializedRenderPipeline for FxaaPipeline {
         RenderPipelineDescriptor {
             label: Some("fxaa".into()),
             layout: vec![self.texture_bind_group.clone()],
-            vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
                 shader_defs: vec![
                     format!("EDGE_THRESH_{}", key.edge_threshold.get_str()).into(),
                     format!("EDGE_THRESH_MIN_{}", key.edge_threshold_min.get_str()).into(),
@@ -181,9 +179,9 @@ impl SpecializedRenderPipeline for FxaaPipeline {
                     blend: None,
                     write_mask: ColorWrites::ALL,
                 })],
-                ..default()
+                ..FragmentState::new(self.fragment_shader.clone())
             }),
-            ..default()
+            ..RenderPipelineDescriptor::new(self.fullscreen_shader.shader())
         }
     }
 }

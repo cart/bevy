@@ -14,7 +14,7 @@ use taffy::{MaybeMath, ResolveOrZero};
 /// A UI Node that renders an image.
 #[derive(Component, Clone, Debug, Reflect, FromTemplate)]
 #[template(manual_default)]
-#[reflect(Component, Default, Debug, Clone)]
+#[reflect(Component, Debug, Clone)]
 #[require(Node, ImageNodeSize)]
 pub struct ImageNode {
     /// The tint color used to draw the image.
@@ -63,63 +63,34 @@ impl Default for ImageNodeTemplate {
     }
 }
 
-impl Default for ImageNode {
-    /// A transparent 1x1 image with a solid white tint.
-    ///
-    /// # Warning
-    ///
-    /// This will be invisible by default.
-    /// To set this to a visible image, you need to set the `texture` field to a valid image handle,
-    /// or use [`Handle<Image>`]'s default 1x1 solid white texture (as is done in [`ImageNode::solid_color`]).
-    fn default() -> Self {
-        ImageNode {
-            // This should be white because the tint is multiplied with the image,
-            // so if you set an actual image with default tint you'd want its original colors
-            color: Color::WHITE,
-            texture_atlas: None,
-            // This texture needs to be transparent by default, to avoid covering the background color
-            image: todo!("Remove Handle::default"),
-            flip_x: false,
-            flip_y: false,
-            rect: None,
-            image_mode: NodeImageMode::Auto,
-            visual_box: VisualBox::ContentBox,
-        }
-    }
-}
-
 impl ImageNode {
     /// Create a new [`ImageNode`] with the given texture.
     pub fn new(texture: Handle<Image>) -> Self {
+        let template = ImageNodeTemplate::default();
         Self {
             image: texture,
-            color: Color::WHITE,
-            ..Default::default()
-        }
-    }
-
-    /// Create a solid color [`ImageNode`].
-    ///
-    /// This is primarily useful for debugging / mocking the extents of your image.
-    pub fn solid_color(color: Color) -> Self {
-        Self {
-            image: Handle::default(),
-            color,
-            flip_x: false,
-            flip_y: false,
             texture_atlas: None,
-            rect: None,
-            image_mode: NodeImageMode::Auto,
-            visual_box: VisualBox::ContentBox,
+            color: template.color,
+            flip_x: template.flip_x,
+            flip_y: template.flip_y,
+            rect: template.rect,
+            image_mode: template.image_mode,
+            visual_box: template.visual_box,
         }
     }
 
     /// Create a [`ImageNode`] from an image, with an associated texture atlas
     pub fn from_atlas_image(image: Handle<Image>, atlas: TextureAtlas) -> Self {
+        let template = ImageNodeTemplate::default();
         Self {
             image,
             texture_atlas: Some(atlas),
-            ..Default::default()
+            color: template.color,
+            flip_x: template.flip_x,
+            flip_y: template.flip_y,
+            rect: template.rect,
+            image_mode: template.image_mode,
+            visual_box: template.visual_box,
         }
     }
 

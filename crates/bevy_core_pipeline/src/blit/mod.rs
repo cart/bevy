@@ -106,22 +106,20 @@ impl SpecializedRenderPipeline for BlitPipeline {
         RenderPipelineDescriptor {
             label: Some("blit pipeline".into()),
             layout: vec![self.layout.clone()],
-            vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
                 shader_defs,
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,
                     blend: key.blend_state,
                     write_mask: ColorWrites::ALL,
                 })],
-                ..default()
+                ..FragmentState::new(self.fragment_shader.clone())
             }),
             multisample: MultisampleState {
                 count: key.samples,
                 ..default()
             },
-            ..default()
+            ..RenderPipelineDescriptor::new(self.fullscreen_shader.shader())
         }
     }
 }

@@ -14,10 +14,8 @@ use crate::{DynamicWorld, WorldAsset};
 ///
 /// Note: This was recently renamed from `SceneRoot`, in the interest of giving "scene" terminology to
 /// Bevy's next generation scene system, available in `bevy_scene`.
-#[derive(
-    Component, FromTemplate, Clone, Debug, Default, Deref, DerefMut, Reflect, PartialEq, Eq, From,
-)]
-#[reflect(Component, Default, Debug, PartialEq, Clone)]
+#[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq, From)]
+#[reflect(Component, Debug, PartialEq, Clone)]
 #[require(Transform)]
 #[require(Visibility)]
 pub struct WorldAssetRoot(pub Handle<WorldAsset>);
@@ -32,10 +30,8 @@ impl AsAssetId for WorldAssetRoot {
 
 /// Adding this component will spawn the world as a child of that entity.
 /// Once it's spawned, the entity will have a [`WorldInstance`](crate::WorldInstance) component.
-#[derive(
-    Component, FromTemplate, Clone, Debug, Default, Deref, DerefMut, Reflect, PartialEq, Eq, From,
-)]
-#[reflect(Component, Default, Debug, PartialEq, Clone)]
+#[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq, From)]
+#[reflect(Component, Debug, PartialEq, Clone)]
 #[require(Transform)]
 #[require(Visibility)]
 pub struct DynamicWorldRoot(pub Handle<DynamicWorld>);

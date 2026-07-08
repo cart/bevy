@@ -26,7 +26,6 @@ use bevy_render::{
     Render, RenderApp, RenderSystems,
 };
 use bevy_shader::ShaderDefVal;
-use bevy_utils::default;
 
 /// Contains the render node used to run the resolve pass.
 pub mod node;
@@ -226,7 +225,6 @@ fn specialize_oit_resolve_pipeline(
         label: Some("oit_resolve_pipeline".into()),
         layout,
         fragment: Some(FragmentState {
-            shader: load_embedded_asset!(asset_server, "oit_resolve.wgsl"),
             shader_defs,
             targets: vec![Some(ColorTargetState {
                 format: key.target_format,
@@ -236,10 +234,9 @@ fn specialize_oit_resolve_pipeline(
                 }),
                 write_mask: ColorWrites::ALL,
             })],
-            ..default()
+            ..FragmentState::new(load_embedded_asset!(asset_server, "oit_resolve.wgsl"))
         }),
-        vertex: fullscreen_shader.to_vertex_state(),
-        ..default()
+        ..RenderPipelineDescriptor::new(fullscreen_shader.shader())
     }
 }
 

@@ -13,8 +13,8 @@ use bevy_transform::components::GlobalTransform;
 use core::ops::Deref;
 use thiserror::Error;
 
-#[derive(Component, Debug, Default, Clone, Reflect, FromTemplate)]
-#[reflect(Component, Default, Debug, Clone)]
+#[derive(Component, Debug, Clone, Reflect, FromTemplate)]
+#[reflect(Component, Debug, Clone)]
 pub struct SkinnedMesh {
     pub inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
     #[entities]

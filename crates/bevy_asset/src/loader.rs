@@ -5,7 +5,8 @@ use crate::{
         AssetHash, AssetMeta, AssetMetaDyn, Empty, ProcessedInfo, ProcessedInfoMinimal, Settings,
     },
     path::AssetPath,
-    Asset, AssetData, AssetLoadError, AssetServer, AssetServerMode, Handle, UntypedHandle,
+    Asset, AssetData, AssetLoadError, AssetReference, AssetServer, AssetServerMode, Handle,
+    UntypedHandle,
 };
 use alloc::{boxed::Box, string::ToString, vec::Vec};
 use atomicow::CowArc;
@@ -596,6 +597,10 @@ impl<'a> LoadContext<'a> {
     /// Gets the source asset path for this load context.
     pub fn path(&self) -> &AssetPath<'static> {
         &self.asset_path
+    }
+
+    pub fn load_default<A: Asset>(&self) -> Handle<A> {
+        self.asset_server.load(AssetReference::Default)
     }
 
     /// Reads the asset at the given path and returns its bytes

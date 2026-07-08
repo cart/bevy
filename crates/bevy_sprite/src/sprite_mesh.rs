@@ -15,9 +15,9 @@ use crate::{Anchor, SpriteImageMode};
 /// Mesh backend instead of the Sprite backend.
 ///
 /// The only API difference is the added [`alpha mode`](SpriteMesh::alpha_mode).
-#[derive(Component, Debug, Default, Clone, Reflect, PartialEq, FromTemplate)]
+#[derive(Component, Debug, Clone, Reflect, PartialEq, FromTemplate)]
 #[require(Transform, Visibility, VisibilityClass, Anchor)]
-#[reflect(Component, Default, Debug, Clone)]
+#[reflect(Component, Debug, Clone)]
 pub struct SpriteMesh {
     /// The image used to render the sprite
     pub image: Handle<Image>,
@@ -63,37 +63,36 @@ impl Eq for SpriteMesh {}
 // NOTE: The SpriteImageMode, SpriteScalingMode and Anchor are imported from the sprite module.
 
 impl SpriteMesh {
-    /// Create a Sprite with a custom size
-    pub fn sized(custom_size: Vec2) -> Self {
-        SpriteMesh {
-            custom_size: Some(custom_size),
-            ..Default::default()
-        }
-    }
-
     /// Create a sprite from an image
     pub fn from_image(image: Handle<Image>) -> Self {
+        // TODO: this would benefit from the proposed "field value defaults" rust feature
+        let template = SpriteMeshTemplate::default();
         Self {
             image,
-            ..Default::default()
+            texture_atlas: None,
+            color: template.color,
+            flip_x: template.flip_x,
+            flip_y: template.flip_y,
+            custom_size: template.custom_size,
+            rect: template.rect,
+            image_mode: template.image_mode,
+            alpha_mode: template.alpha_mode,
         }
     }
 
     /// Create a sprite from an image, with an associated texture atlas
     pub fn from_atlas_image(image: Handle<Image>, atlas: TextureAtlas) -> Self {
+        let template = SpriteMeshTemplate::default();
         Self {
             image,
             texture_atlas: Some(atlas),
-            ..Default::default()
-        }
-    }
-
-    /// Create a sprite from a solid color
-    pub fn from_color(color: impl Into<Color>, size: Vec2) -> Self {
-        Self {
-            color: color.into(),
-            custom_size: Some(size),
-            ..Default::default()
+            color: template.color,
+            flip_x: template.flip_x,
+            flip_y: template.flip_y,
+            custom_size: template.custom_size,
+            rect: template.rect,
+            image_mode: template.image_mode,
+            alpha_mode: template.alpha_mode,
         }
     }
 

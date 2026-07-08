@@ -689,6 +689,7 @@ impl GltfLoader {
             // properly.
             for material in gltf.materials() {
                 let (label, gltf_material) = load_material(
+                    load_context,
                     &material,
                     &texture_handles,
                     false,
@@ -1273,6 +1274,7 @@ async fn load_image<'a, 'b>(
 
 /// Loads a glTF material as a bevy [`GltfMaterial`] and returns the label and material.
 fn load_material(
+    load_context: &LoadContext,
     material: &Material,
     textures: &[Handle<Image>],
     is_scale_inverted: bool,
@@ -1290,7 +1292,7 @@ fn load_material(
         textures
             .get(info.texture().index())
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_else(|| load_context.load_default())
     });
 
     let uv_transform = pbr
@@ -1308,7 +1310,7 @@ fn load_material(
             textures
                 .get(normal_texture.texture().index())
                 .cloned()
-                .unwrap_or_default()
+                .unwrap_or_else(|| load_context.load_default())
         });
 
     let metallic_roughness_channel = pbr
@@ -1320,7 +1322,7 @@ fn load_material(
         textures
             .get(info.texture().index())
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_else(|| load_context.load_default())
     });
 
     let occlusion_channel = material
@@ -1332,7 +1334,7 @@ fn load_material(
         textures
             .get(occlusion_texture.texture().index())
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_else(|| load_context.load_default())
     });
 
     let emissive = material.emissive_factor();
@@ -1346,7 +1348,7 @@ fn load_material(
         textures
             .get(info.texture().index())
             .cloned()
-            .unwrap_or_default()
+            .unwrap_or_else(|| load_context.load_default())
     });
 
     #[cfg(feature = "pbr_transmission_textures")]
@@ -1357,7 +1359,7 @@ fn load_material(
                 let specular_transmission_channel = transmission
                     .transmission_texture()
                     .map(|info| uv_channel(material, "specular/transmission", info.tex_coord()))
-                    .unwrap_or_default();
+                    .unwrap_or_else(|| load_context.load_default());
                 let transmission_texture: Option<Handle<Image>> = transmission
                     .transmission_texture()
                     .map(|transmission_texture| {
@@ -1387,13 +1389,13 @@ fn load_material(
                 let thickness_channel = volume
                     .thickness_texture()
                     .map(|info| uv_channel(material, "thickness", info.tex_coord()))
-                    .unwrap_or_default();
+                    .unwrap_or_else(|| load_context.load_default());
                 let thickness_texture: Option<Handle<Image>> =
                     volume.thickness_texture().map(|thickness_texture| {
                         textures
                             .get(thickness_texture.texture().index())
                             .cloned()
-                            .unwrap_or_default()
+                            .unwrap_or_else(|| load_context.load_default());
                     });
 
                 (
@@ -1649,6 +1651,7 @@ fn load_node(
                     && !load_context.has_labeled_asset(&material_label)
                 {
                     let (label, gltf_material) = load_material(
+                        root_load_context,
                         &material,
                         textures,
                         is_scale_inverted,

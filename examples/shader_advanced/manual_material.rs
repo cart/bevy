@@ -256,6 +256,7 @@ fn extract_image_materials(
                 entity.into(),
                 RenderMaterialInstance {
                     asset_entity: material.0.id().untyped(),
+                    asset_type: TypeId::of::<ImageMaterial>(),
                     last_change_tick,
                 },
             );

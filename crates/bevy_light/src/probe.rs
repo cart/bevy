@@ -103,7 +103,8 @@ impl LightProbe {
 ///
 /// See `bevy_pbr::environment_map` for detailed information.
 #[derive(Clone, Component, Reflect, FromTemplate)]
-#[reflect(Component, Default, Clone)]
+#[template(manual_default)]
+#[reflect(Component, Clone)]
 pub struct EnvironmentMapLight {
     /// The blurry image that represents diffuse radiance surrounding a region.
     pub diffuse_map: Handle<Image>,
@@ -163,7 +164,8 @@ impl EnvironmentMapLight {
             diffuse_map: handle.clone(),
             specular_map: handle,
             intensity: 1.0,
-            ..Default::default()
+            rotation: Quat::IDENTITY,
+            affects_lightmapped_mesh_diffuse: true,
         }
     }
 
@@ -212,11 +214,11 @@ impl EnvironmentMapLight {
     }
 }
 
-impl Default for EnvironmentMapLight {
+impl Default for EnvironmentMapLightTemplate {
     fn default() -> Self {
-        EnvironmentMapLight {
-            diffuse_map: Handle::default(),
-            specular_map: Handle::default(),
+        EnvironmentMapLightTemplate {
+            diffuse_map: Default::default(),
+            specular_map: Default::default(),
             intensity: 0.0,
             rotation: Quat::IDENTITY,
             affects_lightmapped_mesh_diffuse: true,
@@ -265,7 +267,8 @@ impl Default for Skybox {
 ///
 /// See `bevy_pbr::light_probe::generate` for detailed information.
 #[derive(Clone, Component, Reflect, FromTemplate)]
-#[reflect(Component, Default, Clone)]
+#[template(manual_default)]
+#[reflect(Component, Clone)]
 pub struct GeneratedEnvironmentMapLight {
     /// Source cubemap to be filtered on the GPU, size must be a power of two.
     pub environment_map: Handle<Image>,
@@ -282,10 +285,10 @@ pub struct GeneratedEnvironmentMapLight {
     pub affects_lightmapped_mesh_diffuse: bool,
 }
 
-impl Default for GeneratedEnvironmentMapLight {
+impl Default for GeneratedEnvironmentMapLightTemplate {
     fn default() -> Self {
-        GeneratedEnvironmentMapLight {
-            environment_map: Handle::default(),
+        GeneratedEnvironmentMapLightTemplate {
+            environment_map: Default::default(),
             intensity: 0.0,
             rotation: Quat::IDENTITY,
             affects_lightmapped_mesh_diffuse: true,
@@ -333,7 +336,8 @@ impl Default for AtmosphereEnvironmentMapLight {
 /// This component requires the [`LightProbe`] component, and is typically used with
 /// [`bevy_transform::components::Transform`] to place the volume appropriately.
 #[derive(Clone, Reflect, Component, Debug, FromTemplate)]
-#[reflect(Component, Default, Debug, Clone)]
+#[template(manual_default)]
+#[reflect(Component, Debug, Clone)]
 #[require(LightProbe)]
 pub struct IrradianceVolume {
     /// The 3D texture that represents the ambient cubes, encoded in the format
@@ -362,11 +366,11 @@ pub struct IrradianceVolume {
     pub affects_lightmapped_meshes: bool,
 }
 
-impl Default for IrradianceVolume {
+impl Default for IrradianceVolumeTemplate {
     #[inline]
     fn default() -> Self {
-        IrradianceVolume {
-            voxels: Handle::default(),
+        IrradianceVolumeTemplate {
+            voxels: Default::default(),
             intensity: 0.0,
             affects_lightmapped_meshes: true,
         }

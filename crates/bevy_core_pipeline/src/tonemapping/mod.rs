@@ -278,7 +278,6 @@ impl SpecializedRenderPipeline for TonemappingPipeline {
         RenderPipelineDescriptor {
             label: Some("tonemapping pipeline".into()),
             layout: vec![self.texture_bind_group.clone()],
-            vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
                 shader: self.fragment_shader.clone(),
                 shader_defs,
@@ -287,9 +286,9 @@ impl SpecializedRenderPipeline for TonemappingPipeline {
                     blend: None,
                     write_mask: ColorWrites::ALL,
                 })],
-                ..default()
+                ..FragmentState::new(self.fragment_shader.clone())
             }),
-            ..default()
+            ..RenderPipelineDescriptor::new(self.fullscreen_shader.shader())
         }
     }
 }

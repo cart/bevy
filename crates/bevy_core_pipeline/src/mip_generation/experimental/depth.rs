@@ -39,7 +39,6 @@ use bevy_render::{
     view::{ExtractedView, NoIndirectDrawing, ViewDepthTexture},
 };
 use bevy_shader::Shader;
-use bevy_utils::default;
 use bitflags::bitflags;
 
 /// The maximum number of mip levels that we can produce.
@@ -468,14 +467,13 @@ impl SpecializedComputePipeline for DownsampleDepthPipeline {
             label: Some(label),
             layout: vec![self.bind_group_layout.clone()],
             immediate_size: 4,
-            shader: self.shader.clone(),
             shader_defs,
             entry_point: Some(if key.contains(DownsampleDepthPipelineKey::SECOND_PHASE) {
                 "downsample_depth_second".into()
             } else {
                 "downsample_depth_first".into()
             }),
-            ..default()
+            ..ComputePipelineDescriptor::new(self.shader.clone())
         }
     }
 }

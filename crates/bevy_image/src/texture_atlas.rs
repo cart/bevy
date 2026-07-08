@@ -3,10 +3,10 @@ use bevy_asset::{Asset, AssetApp as _, AssetId, Handle};
 use bevy_ecs::{system::Query, template::FromTemplate};
 use bevy_math::{Rect, URect, UVec2};
 use bevy_platform::collections::HashMap;
+#[cfg(feature = "bevy_reflect")]
+use bevy_reflect::Reflect;
 #[cfg(not(feature = "bevy_reflect"))]
 use bevy_reflect::TypePath;
-#[cfg(feature = "bevy_reflect")]
-use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 #[cfg(feature = "serialize")]
 use bevy_reflect::{ReflectDeserialize, ReflectSerialize};
 
@@ -205,11 +205,11 @@ impl TextureAtlasLayout {
 /// - [`animated sprite sheet example`](https://github.com/bevyengine/bevy/blob/latest/examples/2d/sprite_sheet.rs)
 /// - [`sprite animation event example`](https://github.com/bevyengine/bevy/blob/latest/examples/2d/sprite_animation.rs)
 /// - [`texture atlas example`](https://github.com/bevyengine/bevy/blob/latest/examples/2d/texture_atlas.rs)
-#[derive(Default, Debug, Clone, PartialEq, Eq, Hash, FromTemplate)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, FromTemplate)]
 #[cfg_attr(
     feature = "bevy_reflect",
     derive(Reflect),
-    reflect(Default, Debug, PartialEq, Hash, Clone)
+    reflect(Debug, PartialEq, Hash, Clone)
 )]
 pub struct TextureAtlas {
     /// Texture atlas layout handle

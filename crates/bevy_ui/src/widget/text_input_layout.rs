@@ -3,6 +3,7 @@ use core::time::Duration;
 
 use crate::{ComputedNode, ComputedUiRenderTargetInfo, ContentSize, NodeMeasure};
 
+use bevy_asset::AssetServer;
 use bevy_ecs::{
     change_detection::{DetectChanges, DetectChangesMut},
     component::Component,
@@ -75,6 +76,7 @@ pub fn update_editable_text_content_size(
     fonts: Query<&Font>,
     mut font_cx: ResMut<FontCx>,
     rem_size: Res<RemSize>,
+    asset_server: Res<AssetServer>,
 ) {
     for (editable_text, text_font, line_height, target, mut content_size) in &mut text_input_query {
         if !(editable_text.is_changed()
@@ -89,7 +91,7 @@ pub fn update_editable_text_content_size(
         let font_size = text_font.font_size.eval(target.logical_size(), rem_size.0);
 
         let width = editable_text.visible_width.and_then(|visible_width| {
-            let resolved_font = resolve_font_source(&text_font, &fonts).ok()?;
+            let resolved_font = resolve_font_source(&text_font, &fonts, &asset_server).ok()?;
             let font_context = &mut font_cx.context;
             let mut query = font_context
                 .collection
@@ -169,6 +171,7 @@ pub fn update_editable_text_styles(
         Ref<TextLayout>,
     )>,
     rem_size: Res<RemSize>,
+    asset_server: Res<AssetServer>,
 ) {
     for (mut editable_text, text_font, line_height, target, text_layout) in
         editable_text_query.iter_mut()
@@ -193,7 +196,7 @@ pub fn update_editable_text_styles(
         }
 
         if text_font.is_changed() {
-            let Ok(resolved_font) = resolve_font_source(&text_font, &fonts) else {
+            let Ok(resolved_font) = resolve_font_source(&text_font, &fonts, &asset_server) else {
                 continue;
             };
 

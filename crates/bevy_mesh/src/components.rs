@@ -37,10 +37,8 @@ use derive_more::derive::From;
 ///     ));
 /// }
 /// ```
-#[derive(
-    Component, FromTemplate, Clone, Debug, Default, Deref, DerefMut, Reflect, PartialEq, Eq, From,
-)]
-#[reflect(Component, Default, Clone, PartialEq)]
+#[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq, From)]
+#[reflect(Component, Clone, PartialEq)]
 #[require(Transform)]
 pub struct Mesh2d(pub Handle<Mesh>);
 
@@ -101,10 +99,8 @@ impl AsAssetId for Mesh2d {
 ///     ));
 /// }
 /// ```
-#[derive(
-    Component, FromTemplate, Clone, Debug, Default, Deref, DerefMut, Reflect, PartialEq, Eq, From,
-)]
-#[reflect(Component, Default, Clone, PartialEq)]
+#[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq, From)]
+#[reflect(Component, Clone, PartialEq)]
 #[require(Transform)]
 pub struct Mesh3d(pub Handle<Mesh>);
 

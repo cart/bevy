@@ -559,7 +559,8 @@ mod tests {
         .unwrap();
 
         // The ephemeral handle was replaced by the default handle.
-        assert_eq!(stuff.ephemeral, Handle::default());
+        todo!("Check this");
+        // assert_eq!(stuff.ephemeral, Handle::default());
 
         // The deserializer should have caused the handles to start loading.
         run_app_until(&mut app, |_| {

@@ -1,9 +1,12 @@
 use crate::FontCx;
 use crate::FontSource;
 use crate::TextFont;
+use bevy_asset::AssetReference;
+use bevy_asset::AssetServer;
 use bevy_asset::{Asset, AssetId};
 use bevy_ecs::entity::Entity;
 use bevy_ecs::query::With;
+use bevy_ecs::system::Res;
 use bevy_ecs::{
     change_detection::DetectChangesMut,
     system::{Local, Query, ResMut},
@@ -54,6 +57,7 @@ pub fn load_font_assets_into_font_collection(
     mut fonts: Query<&mut Font>,
     mut loaded_fonts: Local<HashSet<AssetId<Font>>>,
     mut font_cx: ResMut<FontCx>,
+    asset_server: Res<AssetServer>,
     mut text_font_query: Query<&mut TextFont>,
 ) {
     let font_removed = loaded_fonts.iter().any(|id| !fonts.contains(*id));
@@ -74,7 +78,6 @@ pub fn load_font_assets_into_font_collection(
     if new_asset_ids.is_empty() && !font_removed {
         return;
     }
-
     let mut new_family_ids = Vec::new();
     for asset_id in &new_asset_ids {
         let mut font = fonts
@@ -109,9 +112,11 @@ pub fn load_font_assets_into_font_collection(
         font_cx.restore_generic_families();
     }
 
+    let default_font = asset_server.load::<Font>(AssetReference::Default);
     for mut text_font in text_font_query.iter_mut() {
         if font_removed
             || match &text_font.font {
+                FontSource::Default => new_asset_ids.contains(&default_font.id()),
                 FontSource::Handle(handle) => new_asset_ids.contains(&handle.id()),
                 FontSource::Family(name) => font_cx
                     .collection
@@ -119,7 +124,9 @@ pub fn load_font_assets_into_font_collection(
                     .is_some_and(|id| new_family_ids.contains(&id)),
                 generic_source => {
                     let generic_family = match generic_source {
-                        FontSource::Handle(_) | FontSource::Family(_) => unreachable!(),
+                        FontSource::Handle(_) | FontSource::Family(_) | FontSource::Default => {
+                            unreachable!()
+                        }
                         FontSource::Serif => parley::GenericFamily::Serif,
                         FontSource::SansSerif => parley::GenericFamily::SansSerif,
                         FontSource::Cursive => parley::GenericFamily::Cursive,

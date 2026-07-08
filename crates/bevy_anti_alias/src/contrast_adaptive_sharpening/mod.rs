@@ -170,12 +170,8 @@ pub fn init_cas_pipeline(
         RenderPipelineDescriptor {
             label: Some("contrast_adaptive_sharpening".into()),
             layout: vec![layout.clone()],
-            vertex: fullscreen_shader.to_vertex_state(),
-            fragment: Some(FragmentState {
-                shader: fragment_shader,
-                ..Default::default()
-            }),
-            ..Default::default()
+            fragment: Some(FragmentState::new(fragment_shader)),
+            ..RenderPipelineDescriptor::new(fullscreen_shader.shader())
         },
     );
 

@@ -3,7 +3,7 @@ use core::ops::RangeInclusive;
 use super::compensation_curve::AutoExposureCompensationCurve;
 use bevy_asset::Handle;
 use bevy_camera::Hdr;
-use bevy_ecs::{prelude::Component, reflect::ReflectComponent};
+use bevy_ecs::{prelude::Component, reflect::ReflectComponent, template::FromTemplate};
 use bevy_image::Image;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_render::extract_component::ExtractComponent;
@@ -24,7 +24,7 @@ use bevy_utils::default;
 /// # Usage Notes
 ///
 /// **Auto Exposure requires compute shaders and is not compatible with WebGL2.**
-#[derive(Component, Clone, Reflect, ExtractComponent)]
+#[derive(Component, Clone, Reflect, ExtractComponent, FromTemplate)]
 #[reflect(Component, Default, Clone)]
 #[require(Hdr)]
 pub struct AutoExposure {

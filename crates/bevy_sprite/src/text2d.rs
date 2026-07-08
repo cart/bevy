@@ -1,4 +1,5 @@
 use crate::{Anchor, Sprite};
+use bevy_asset::AssetServer;
 use bevy_camera::primitives::Aabb;
 use bevy_camera::visibility::{
     self, NoFrustumCulling, RenderLayers, Visibility, VisibilityClass, VisibleEntities,
@@ -164,7 +165,7 @@ impl Default for Text2dShadow {
 /// [`ResMut<Assets<Image>>`](Assets<Image>) -- This system only adds new [`Image`] assets.
 /// It does not modify or observe existing ones.
 pub fn update_text2d_layout(
-    mut commands: Commands,
+    (mut commands, asset_server): (Commands, Res<AssetServer>),
     mut last_logical_viewport_size: Local<Vec2>,
     mut target_scale_factors: Local<Vec<(f32, RenderLayers)>>,
     // Text2d entities from the previous frame which need to be reprocessed, usually because the font hadn't loaded yet.
@@ -269,6 +270,7 @@ pub fn update_text2d_layout(
         if text_changed {
             match text_pipeline.update_buffer(
                 &fonts,
+                &asset_server,
                 text_reader.iter(entity),
                 block.linebreak,
                 block.justify,

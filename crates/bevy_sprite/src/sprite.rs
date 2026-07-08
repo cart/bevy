@@ -14,9 +14,9 @@ use crate::TextureSlicer;
 use core::hash::Hash;
 
 /// Describes a sprite to be rendered to a 2D camera
-#[derive(Component, Debug, Default, Clone, Reflect, FromTemplate)]
+#[derive(Component, Debug, Clone, Reflect, FromTemplate)]
 #[require(Transform, Visibility, VisibilityClass, Anchor)]
-#[reflect(Component, Default, Debug, Clone)]
+#[reflect(Component, Debug, Clone)]
 #[component(on_add = visibility::add_visibility_class::<Sprite>)]
 pub struct Sprite {
     /// The image used to render the sprite
@@ -44,37 +44,33 @@ pub struct Sprite {
 }
 
 impl Sprite {
-    /// Create a Sprite with a custom size
-    pub fn sized(custom_size: Vec2) -> Self {
-        Sprite {
-            custom_size: Some(custom_size),
-            ..Default::default()
-        }
-    }
-
     /// Create a sprite from an image
     pub fn from_image(image: Handle<Image>) -> Self {
+        let template = SpriteTemplate::default();
         Self {
             image,
-            ..Default::default()
+            texture_atlas: None,
+            color: template.color,
+            flip_x: template.flip_x,
+            flip_y: template.flip_y,
+            custom_size: template.custom_size,
+            rect: template.rect,
+            image_mode: template.image_mode,
         }
     }
 
     /// Create a sprite from an image, with an associated texture atlas
     pub fn from_atlas_image(image: Handle<Image>, atlas: TextureAtlas) -> Self {
+        let template = SpriteTemplate::default();
         Self {
             image,
             texture_atlas: Some(atlas),
-            ..Default::default()
-        }
-    }
-
-    /// Create a sprite from a solid color
-    pub fn from_color(color: impl Into<Color>, size: Vec2) -> Self {
-        Self {
-            color: color.into(),
-            custom_size: Some(size),
-            ..Default::default()
+            color: template.color,
+            flip_x: template.flip_x,
+            flip_y: template.flip_y,
+            custom_size: template.custom_size,
+            rect: template.rect,
+            image_mode: template.image_mode,
         }
     }
 
@@ -305,7 +301,7 @@ mod tests {
     use bevy_math::{Rect, URect, UVec2, Vec2};
     use wgpu_types::{TextureDimension, TextureFormat};
 
-    use crate::Anchor;
+    use crate::{Anchor, SpriteTemplate};
 
     use super::Sprite;
 
@@ -326,10 +322,7 @@ mod tests {
 
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
-        let sprite = Sprite {
-            image,
-            ..Default::default()
-        };
+        let sprite = Sprite::from(image);
 
         let mut image_assets = world.query::<&Image>();
         let mut texture_atlas_assets = world.query::<&TextureAtlasLayout>();
@@ -354,7 +347,12 @@ mod tests {
         let mut world = World::new();
 
         // This also tests the `custom_size` field.
-        let sprite = Sprite::from_color(Color::BLACK, Vec2::new(50.0, 100.0));
+        let sprite = SpriteTemplate {
+            color: Color::BLACK,
+            custom_size: Vec2::new(50.0, 100.0).into(),
+            ..Default::default()
+        };
+        let sprite = world.spawn_empty().build_template(&sprite).unwrap();
 
         let mut image_assets = world.query::<&Image>();
         let mut texture_atlas_assets = world.query::<&TextureAtlasLayout>();
@@ -387,10 +385,7 @@ mod tests {
 
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
-        let sprite = Sprite {
-            image,
-            ..Default::default()
-        };
+        let sprite = Sprite::from(image);
         let anchor = Anchor::BOTTOM_LEFT;
 
         let mut compute = |point| {
@@ -417,10 +412,7 @@ mod tests {
 
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
-        let sprite = Sprite {
-            image,
-            ..Default::default()
-        };
+        let sprite = Sprite::from(image);
         let anchor = Anchor::TOP_RIGHT;
 
         let mut compute = |point| {
@@ -448,9 +440,8 @@ mod tests {
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
         let sprite = Sprite {
-            image,
             flip_x: true,
-            ..Default::default()
+            ..Sprite::from(image)
         };
         let anchor = Anchor::BOTTOM_LEFT;
 
@@ -479,9 +470,8 @@ mod tests {
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
         let sprite = Sprite {
-            image,
             flip_y: true,
-            ..Default::default()
+            ..Sprite::from(image)
         };
         let anchor = Anchor::TOP_RIGHT;
 
@@ -510,9 +500,8 @@ mod tests {
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
         let sprite = Sprite {
-            image,
             rect: Some(Rect::new(1.5, 3.0, 3.0, 9.5)),
-            ..Default::default()
+            ..Sprite::from(image)
         };
         let anchor = Anchor::BOTTOM_LEFT;
 
@@ -542,14 +531,13 @@ mod tests {
             textures: vec![URect::new(1, 1, 4, 4)],
         });
 
-        let sprite = Sprite {
+        let sprite = Sprite::from_atlas_image(
             image,
-            texture_atlas: Some(TextureAtlas {
+            TextureAtlas {
                 layout: texture_atlas,
                 index: 0,
-            }),
-            ..Default::default()
-        };
+            },
+        );
         let anchor = Anchor::BOTTOM_LEFT;
 
         let mut compute = |point| {
@@ -579,14 +567,15 @@ mod tests {
         });
 
         let sprite = Sprite {
-            image,
-            texture_atlas: Some(TextureAtlas {
-                layout: texture_atlas,
-                index: 0,
-            }),
             // The rect is relative to the texture atlas sprite.
             rect: Some(Rect::new(1.5, 1.5, 3.0, 3.0)),
-            ..Default::default()
+            ..Sprite::from_atlas_image(
+                image,
+                TextureAtlas {
+                    layout: texture_atlas,
+                    index: 0,
+                },
+            )
         };
         let anchor = Anchor::BOTTOM_LEFT;
 
@@ -613,10 +602,9 @@ mod tests {
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
         let sprite = Sprite {
-            image,
             custom_size: Some(Vec2::new(100.0, 50.0)),
             rect: Some(Rect::new(0.0, 0.0, 5.0, 5.0)),
-            ..Default::default()
+            ..Sprite::from_image(image)
         };
 
         let mut compute = |point| {
@@ -643,9 +631,8 @@ mod tests {
         let image = world.spawn_asset(make_image(UVec2::new(5, 10)));
 
         let sprite = Sprite {
-            image,
             custom_size: Some(Vec2::new(0.0, 0.0)),
-            ..Default::default()
+            ..Sprite::from(image)
         };
 
         let mut compute = |point| {

@@ -77,13 +77,12 @@ impl SpecializedComputePipeline for AutoExposurePipeline {
         ComputePipelineDescriptor {
             label: Some("luminance compute pipeline".into()),
             layout: vec![self.histogram_layout.clone()],
-            shader: self.histogram_shader.clone(),
             shader_defs: vec![],
             entry_point: Some(match pass {
                 AutoExposurePass::Histogram => "compute_histogram".into(),
                 AutoExposurePass::Average => "compute_average".into(),
             }),
-            ..default()
+            ..ComputePipelineDescriptor::new(self.histogram_shader.clone())
         }
     }
 }

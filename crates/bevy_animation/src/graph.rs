@@ -132,10 +132,8 @@ pub struct AnimationGraph {
 }
 
 /// A [`Handle`] to the [`AnimationGraph`] to be used by the [`AnimationPlayer`](crate::AnimationPlayer) on the same entity.
-#[derive(
-    Component, Clone, Debug, Default, Deref, DerefMut, Reflect, PartialEq, Eq, From, FromTemplate,
-)]
-#[reflect(Component, Default, Clone)]
+#[derive(Component, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq, From, FromTemplate)]
+#[reflect(Component, Clone)]
 pub struct AnimationGraphHandle(pub Handle<AnimationGraph>);
 
 impl Into<Entity> for &AnimationGraphHandle {

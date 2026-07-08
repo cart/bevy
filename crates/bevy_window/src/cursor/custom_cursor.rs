@@ -9,11 +9,11 @@ use bevy_math::URect;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 
 /// A custom cursor created from an image.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, FromTemplate)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, FromTemplate)]
 #[cfg_attr(
     feature = "bevy_reflect",
     derive(Reflect),
-    reflect(Debug, Default, Hash, PartialEq, Clone)
+    reflect(Debug, Hash, PartialEq, Clone)
 )]
 pub struct CustomCursorImage {
     /// Handle to the image to use as the cursor. The image must be in 8 bit int
