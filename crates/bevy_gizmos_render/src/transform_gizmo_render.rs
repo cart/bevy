@@ -145,11 +145,7 @@ fn inactive_color(color: Color) -> Color {
     )
 }
 
-fn spawn_gizmo_meshes(
-    mut commands: Commands,
-    mut meshes: Query<&mut Mesh>,
-    mut materials: Query<&mut StandardMaterial>,
-) {
+fn spawn_gizmo_meshes(mut commands: Commands) {
     let gizmo_layer = RenderLayers::layer(GIZMO_RENDER_LAYER);
 
     let colors = [COLOR_X, COLOR_Y, COLOR_Z, COLOR_VIEW];
@@ -160,7 +156,7 @@ fn spawn_gizmo_meshes(
     };
 
     // Helper: create a unique unlit material for a given axis
-    let mut make_mat = |commands: &mut Commands, axis: TransformGizmoAxis| {
+    let make_mat = |commands: &mut Commands, axis: TransformGizmoAxis| {
         commands.spawn_asset(make_unlit_material(
             colors[TransformGizmoMaterials::axis_index(axis)],
         ))

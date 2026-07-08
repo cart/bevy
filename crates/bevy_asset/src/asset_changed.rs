@@ -3,8 +3,10 @@
 //! Like [`Changed`](bevy_ecs::prelude::Changed), but for [`Asset`]s,
 //! and triggers whenever the handle or the underlying asset changes.
 
-use crate::{AsAssetId, Asset, AssetId};
+use crate::{AsAssetId, Asset, AssetEvent, AssetId};
 use bevy_ecs::component::Components;
+use bevy_ecs::message::{MessageReader, MessageWriter};
+use bevy_ecs::system::{ResMut, SystemChangeTick};
 use bevy_ecs::{
     archetype::Archetype,
     change_detection::Tick,
@@ -50,6 +52,25 @@ impl<A: Asset> Default for AssetChanges<A> {
         Self {
             change_ticks: Default::default(),
             last_change_tick: Tick::new(0),
+        }
+    }
+}
+
+pub(crate) fn populate_asset_changes<A: Asset>(
+    mut messages: MessageReader<AssetEvent<A>>,
+    asset_changes: Option<ResMut<AssetChanges<A>>>,
+    ticks: SystemChangeTick,
+) {
+    use AssetEvent::{Added, LoadedWithDependencies, Modified, Removed};
+
+    if let Some(mut asset_changes) = asset_changes {
+        for new_event in messages.read() {
+            match new_event {
+                Removed { id } | AssetEvent::Unused { id } => asset_changes.remove(id),
+                Added { id } | Modified { id } | LoadedWithDependencies { id } => {
+                    asset_changes.insert(*id, ticks.this_run());
+                }
+            };
         }
     }
 }
