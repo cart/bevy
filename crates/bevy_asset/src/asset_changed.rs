@@ -3,112 +3,21 @@
 //! Like [`Changed`](bevy_ecs::prelude::Changed), but for [`Asset`]s,
 //! and triggers whenever the handle or the underlying asset changes.
 
-use crate::{AsAssetId, Asset, AssetEvent, AssetId};
+use crate::AsAssetId;
+use bevy_ecs::change_detection::DetectChanges;
 use bevy_ecs::component::Components;
-use bevy_ecs::message::{MessageReader, MessageWriter};
-use bevy_ecs::system::{ResMut, SystemChangeTick};
+use bevy_ecs::query::NestedQuery;
+use bevy_ecs::world::Ref;
 use bevy_ecs::{
     archetype::Archetype,
     change_detection::Tick,
     component::ComponentId,
-    prelude::{Entity, Resource, World},
-    query::{FilteredAccess, FilteredAccessSet, QueryData, QueryFilter, ReadFetch, WorldQuery},
-    resource::IS_RESOURCE,
+    prelude::{Entity, World},
+    query::{FilteredAccess, FilteredAccessSet, QueryData, QueryFilter, WorldQuery},
     storage::{Table, TableRow},
     world::unsafe_world_cell::UnsafeWorldCell,
 };
-use bevy_platform::collections::HashMap;
-use bevy_utils::prelude::DebugName;
 use core::marker::PhantomData;
-use disqualified::ShortName;
-use tracing::error;
-
-/// A resource that stores the last tick an asset was changed. This is used by
-/// the [`AssetChanged`] filter to determine if an asset has changed since the last time
-/// a query ran.
-///
-/// This resource is automatically managed by the [`AssetEventSystems`](crate::AssetEventSystems)
-/// system set and should not be exposed to the user in order to maintain safety guarantees.
-/// Any additional uses of this resource should be carefully audited to ensure that they do not
-/// introduce any safety issues.
-#[derive(Resource)]
-pub(crate) struct AssetChanges<A: Asset> {
-    change_ticks: HashMap<AssetId<A>, Tick>,
-    last_change_tick: Tick,
-}
-
-impl<A: Asset> AssetChanges<A> {
-    pub(crate) fn insert(&mut self, asset_id: AssetId<A>, tick: Tick) {
-        self.last_change_tick = tick;
-        self.change_ticks.insert(asset_id, tick);
-    }
-    pub(crate) fn remove(&mut self, asset_id: &AssetId<A>) {
-        self.change_ticks.remove(asset_id);
-    }
-}
-
-impl<A: Asset> Default for AssetChanges<A> {
-    fn default() -> Self {
-        Self {
-            change_ticks: Default::default(),
-            last_change_tick: Tick::new(0),
-        }
-    }
-}
-
-pub(crate) fn populate_asset_changes<A: Asset>(
-    mut messages: MessageReader<AssetEvent<A>>,
-    asset_changes: Option<ResMut<AssetChanges<A>>>,
-    ticks: SystemChangeTick,
-) {
-    use AssetEvent::{Added, LoadedWithDependencies, Modified, Removed};
-
-    if let Some(mut asset_changes) = asset_changes {
-        for new_event in messages.read() {
-            match new_event {
-                Removed { id } | AssetEvent::Unused { id } => asset_changes.remove(id),
-                Added { id } | Modified { id } | LoadedWithDependencies { id } => {
-                    asset_changes.insert(*id, ticks.this_run());
-                }
-            };
-        }
-    }
-}
-
-struct AssetChangeCheck<'w, A: AsAssetId> {
-    // This should never be `None` in practice, but we need to handle the case
-    // where the `AssetChanges` resource was removed.
-    change_ticks: Option<&'w HashMap<AssetId<A::Asset>, Tick>>,
-    last_run: Tick,
-    this_run: Tick,
-}
-
-impl<A: AsAssetId> Clone for AssetChangeCheck<'_, A> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<A: AsAssetId> Copy for AssetChangeCheck<'_, A> {}
-
-impl<'w, A: AsAssetId> AssetChangeCheck<'w, A> {
-    fn new(changes: &'w AssetChanges<A::Asset>, last_run: Tick, this_run: Tick) -> Self {
-        Self {
-            change_ticks: Some(&changes.change_ticks),
-            last_run,
-            this_run,
-        }
-    }
-    // TODO(perf): some sort of caching? Each check has two levels of indirection,
-    // which is not optimal.
-    fn has_changed(&self, handle: &A) -> bool {
-        let is_newer = |tick: &Tick| tick.is_newer_than(self.last_run, self.this_run);
-        let id = handle.as_asset_id();
-
-        self.change_ticks
-            .is_some_and(|change_ticks| change_ticks.get(&id).is_some_and(is_newer))
-    }
-}
 
 /// Filter that selects entities with an `A` for an asset that changed
 /// after the system last ran, where `A` is a component that implements
@@ -147,39 +56,21 @@ impl<'w, A: AsAssetId> AssetChangeCheck<'w, A> {
 /// [`Assets<Mesh>::get_mut`]: crate::Assets::get_mut
 pub struct AssetChanged<A: AsAssetId>(PhantomData<A>);
 
-/// [`WorldQuery`] fetch for [`AssetChanged`].
-#[doc(hidden)]
-pub struct AssetChangedFetch<'w, A: AsAssetId> {
-    inner: Option<ReadFetch<'w, A>>,
-    check: AssetChangeCheck<'w, A>,
-}
-
-impl<'w, A: AsAssetId> Clone for AssetChangedFetch<'w, A> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner,
-            check: self.check,
-        }
-    }
-}
-
-/// [`WorldQuery`] state for [`AssetChanged`].
-#[doc(hidden)]
-pub struct AssetChangedState<A: AsAssetId> {
-    asset_id: ComponentId,
-    resource_id: ComponentId,
-    _asset: PhantomData<fn(A)>,
-}
+type AssetChangedInner<A> = (
+    &'static A,
+    NestedQuery<Ref<'static, <A as AsAssetId>::Asset>>,
+);
 
 #[expect(unsafe_code, reason = "WorldQuery is an unsafe trait.")]
 // SAFETY: `ROQueryFetch<Self>` is the same as `QueryFetch<Self>`
 unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
-    type Fetch<'w> = AssetChangedFetch<'w, A>;
-
-    type State = AssetChangedState<A>;
+    type Fetch<'w> = (<AssetChangedInner<A> as WorldQuery>::Fetch<'w>, Tick);
+    type State = <AssetChangedInner<A> as WorldQuery>::State;
 
     fn shrink_fetch<'wlong: 'wshort, 'wshort>(fetch: Self::Fetch<'wlong>) -> Self::Fetch<'wshort> {
-        fetch
+        let (fetch, last_run) = fetch;
+        let fetch = <AssetChangedInner<A> as WorldQuery>::shrink_fetch(fetch);
+        (fetch, last_run)
     }
 
     unsafe fn init_fetch<'w, 's>(
@@ -188,44 +79,14 @@ unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
         last_run: Tick,
         this_run: Tick,
     ) -> Self::Fetch<'w> {
-        // SAFETY:
-        // - `state.resource_id` was obtained from `world.init_resource::<AssetChanges<A::Asset>>()`,
-        //   so the untyped pointer returned by `get_resource_by_id` can safely be dereferenced into that type.
-        // - `init_nested_access` declares a read on `state.resource_id`, so it is safe to
-        //   read that resource here (see trait-level safety comments on `WorldQuery`)
-        let Some(changes) = (unsafe {
-            world
-                .get_resource_by_id(state.resource_id)
-                .map(|ptr| ptr.deref::<AssetChanges<A::Asset>>())
-        }) else {
-            error!(
-                "AssetChanges<{ty}> resource was removed, please do not remove \
-                AssetChanges<{ty}> when using the AssetChanged<{ty}> world query",
-                ty = ShortName::of::<A>()
-            );
-
-            return AssetChangedFetch {
-                inner: None,
-                check: AssetChangeCheck {
-                    change_ticks: None,
-                    last_run,
-                    this_run,
-                },
-            };
+        // SAFETY: All safety requirements are satisfied by the caller.
+        let fetch = unsafe {
+            <AssetChangedInner<A> as WorldQuery>::init_fetch(world, state, last_run, this_run)
         };
-        let has_updates = changes.last_change_tick.is_newer_than(last_run, this_run);
-
-        AssetChangedFetch {
-            inner: has_updates.then(||
-                    // SAFETY: We delegate to the inner `init_fetch` for `A`
-                    unsafe {
-                        <&A>::init_fetch(world, &state.asset_id, last_run, this_run)
-                    }),
-            check: AssetChangeCheck::new(changes, last_run, this_run),
-        }
+        (fetch, last_run)
     }
 
-    const IS_DENSE: bool = <&A>::IS_DENSE;
+    const IS_DENSE: bool = <AssetChangedInner<A> as WorldQuery>::IS_DENSE;
 
     unsafe fn set_archetype<'w, 's>(
         fetch: &mut Self::Fetch<'w>,
@@ -233,11 +94,14 @@ unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
         archetype: &'w Archetype,
         table: &'w Table,
     ) {
-        if let Some(inner) = &mut fetch.inner {
-            // SAFETY: We delegate to the inner `set_archetype` for `A`
-            unsafe {
-                <&A>::set_archetype(inner, &state.asset_id, archetype, table);
-            }
+        // SAFETY: All safety requirements are satisfied by the caller.
+        unsafe {
+            <AssetChangedInner<A> as WorldQuery>::set_archetype(
+                &mut fetch.0,
+                state,
+                archetype,
+                table,
+            )
         }
     }
 
@@ -246,17 +110,13 @@ unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
         state: &Self::State,
         table: &'w Table,
     ) {
-        if let Some(inner) = &mut fetch.inner {
-            // SAFETY: We delegate to the inner `set_table` for `A`
-            unsafe {
-                <&A>::set_table(inner, &state.asset_id, table);
-            }
-        }
+        // SAFETY: All safety requirements are satisfied by the caller.
+        unsafe { <AssetChangedInner<A> as WorldQuery>::set_table(&mut fetch.0, state, table) }
     }
 
     #[inline]
     fn update_component_access(state: &Self::State, access: &mut FilteredAccess) {
-        <&A>::update_component_access(&state.asset_id, access);
+        <AssetChangedInner<A> as WorldQuery>::update_component_access(state, access)
     }
 
     // ChangedAsset accesses both the asset and the AssetChanges<A> resource.
@@ -265,45 +125,33 @@ unsafe impl<A: AsAssetId> WorldQuery for AssetChanged<A> {
         state: &Self::State,
         system_name: Option<&str>,
         component_access_set: &mut FilteredAccessSet,
-        _world: UnsafeWorldCell,
+        world: UnsafeWorldCell,
     ) {
-        let mut filter = FilteredAccess::default();
-        filter.add_read(state.resource_id);
-        filter.and_with(IS_RESOURCE);
-
-        let conflicts = component_access_set.get_conflicts_single(&filter);
-        if conflicts.is_empty() {
-            component_access_set.add(filter);
-            return;
-        }
-        panic!("error[B0002]: AssetChanged<{}> in system {:?} conflicts with a previous system parameter. Consider removing the duplicate access. See: https://bevy.org/learn/errors/b0002", DebugName::type_name::<A>(), system_name);
+        <AssetChangedInner<A> as WorldQuery>::init_nested_access(
+            state,
+            system_name,
+            component_access_set,
+            world,
+        )
     }
 
-    fn init_state(world: &mut World) -> AssetChangedState<A> {
-        let resource_id = world.init_resource::<AssetChanges<A::Asset>>();
-        let asset_id = world.register_component::<A>();
-        AssetChangedState {
-            asset_id,
-            resource_id,
-            _asset: PhantomData,
-        }
+    fn init_state(world: &mut World) -> Self::State {
+        <AssetChangedInner<A> as WorldQuery>::init_state(world)
     }
 
     fn get_state(components: &Components) -> Option<Self::State> {
-        let resource_id = components.component_id::<AssetChanges<A::Asset>>()?;
-        let asset_id = components.component_id::<A>()?;
-        Some(AssetChangedState {
-            asset_id,
-            resource_id,
-            _asset: PhantomData,
-        })
+        <AssetChangedInner<A> as WorldQuery>::get_state(components)
     }
 
     fn matches_component_set(
         state: &Self::State,
         set_contains_id: &impl Fn(ComponentId) -> bool,
     ) -> bool {
-        set_contains_id(state.asset_id)
+        <AssetChangedInner<A> as WorldQuery>::matches_component_set(state, set_contains_id)
+    }
+
+    fn update_archetypes(state: &mut Self::State, world: UnsafeWorldCell) {
+        <AssetChangedInner<A> as WorldQuery>::update_archetypes(state, world);
     }
 }
 
@@ -319,13 +167,20 @@ unsafe impl<A: AsAssetId> QueryFilter for AssetChanged<A> {
         entity: Entity,
         table_row: TableRow,
     ) -> bool {
-        fetch.inner.as_mut().is_some_and(|inner| {
-            // SAFETY: We delegate to the inner `fetch` for `A`
-            unsafe {
-                let handle = <&A>::fetch(&state.asset_id, inner, entity, table_row);
-                handle.is_some_and(|handle| fetch.check.has_changed(handle))
-            }
-        })
+        let (fetch, last_run) = fetch;
+        // SAFETY: All safety requirements are satisfied by the caller.
+        let fetch =
+            unsafe { <AssetChangedInner<A> as QueryData>::fetch(state, fetch, entity, table_row) };
+
+        let Some((component, asset_query)) = fetch else {
+            return false;
+        };
+        let id = component.as_asset_id();
+        let Ok(asset_ref) = asset_query.get(id) else {
+            return false;
+        };
+
+        asset_ref.is_changed_after(*last_run)
     }
 }
 
@@ -334,8 +189,9 @@ unsafe impl<A: AsAssetId> QueryFilter for AssetChanged<A> {
 mod tests {
     use crate::direct_access_ext::AssetCommands;
     use crate::tests::create_app;
-    use crate::{AssetEventSystems, Handle};
+    use crate::{AssetEventSystems, AssetId, Handle};
     use alloc::{vec, vec::Vec};
+    use bevy_asset_macros::Asset;
     use bevy_ecs::system::assert_is_system;
     use core::num::NonZero;
     use std::println;
@@ -375,7 +231,7 @@ mod tests {
 
         fn system(
             _: Query<&Foo, AssetChanged<MyComponent>>,
-            _: Query<&mut AssetChanges<MyAsset>, bevy_ecs::query::Without<Foo>>,
+            _: Query<&mut MyAsset, bevy_ecs::query::Without<Foo>>,
         ) {
         }
         assert_is_system(system);

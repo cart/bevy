@@ -200,7 +200,6 @@ pub use server::*;
 pub use uuid;
 
 use crate::{
-    asset_changed::populate_asset_changes,
     io::{
         embedded::{EmbeddedAssetRegistry, GetAssetServer},
         AssetSourceBuilder, AssetSourceBuilders, AssetSourceId,
@@ -670,12 +669,7 @@ impl AssetApp for App {
             .register_type::<Handle<A>>()
             .add_systems(
                 PostUpdate,
-                (
-                    produce_asset_modified_events::<A>,
-                    populate_asset_changes::<A>,
-                )
-                    .chain()
-                    .in_set(AssetEventSystems),
+                produce_asset_modified_events::<A>.in_set(AssetEventSystems),
             )
     }
 
