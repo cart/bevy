@@ -6,7 +6,6 @@ use bevy_ecs::{
     system::Commands,
     world::{Mut, World},
 };
-use uuid::Uuid;
 
 use crate::{
     meta::Settings, Asset, AssetData, AssetId, AssetReference, AssetServer, Handle, LoadBuilder,
@@ -139,7 +138,11 @@ impl<'w, 's> AssetCommands for Commands<'w, 's> {
         let entity_handle = self
             .entity_allocator()
             .alloc_handle_with_data(AssetData::new::<A>());
-        self.spawn(entity_handle.weak());
+        let entity = entity_handle.id();
+        let weak = entity_handle.weak();
+        self.queue(move |world: &mut World| {
+            world.spawn_at(entity, weak).unwrap();
+        });
         entity_handle.into()
     }
 }
