@@ -614,7 +614,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetMaterialBindGroup<I> 
             return RenderCommandResult::Skip;
         };
         let Some(material_bind_group_allocator) =
-            material_bind_group_allocators.get(&material_instance.asset_entity.type_id())
+            material_bind_group_allocators.get(&material_instance.asset_type)
         else {
             return RenderCommandResult::Skip;
         };
@@ -1144,7 +1144,7 @@ pub(crate) fn specialize_material_meshes(
                     mesh_key,
                     layout: mesh.layout.clone(),
                     properties: material.properties.clone(),
-                    material_type_id: material_instance.asset_entity.type_id(),
+                    material_type_id: material_instance.asset_type,
                 });
             }
         }
