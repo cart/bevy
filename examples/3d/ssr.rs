@@ -226,49 +226,29 @@ fn main() {
 }
 
 // Set up the scene.
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-    mut water_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, Water>>>,
-    asset_server: Res<AssetServer>,
-    app_settings: Res<AppSettings>,
-) {
-    spawn_cube(
-        &mut commands,
-        &asset_server,
-        &mut meshes,
-        &mut standard_materials,
-    );
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, app_settings: Res<AppSettings>) {
+    spawn_cube(&mut commands, &asset_server);
     spawn_flight_helmet(&mut commands, &asset_server);
-    spawn_capsules(&mut commands, &mut meshes, &mut standard_materials);
-    spawn_metallic_base(&mut commands, &mut meshes, &mut standard_materials);
-    spawn_non_metallic_base(&mut commands, &mut meshes, &mut standard_materials);
-    spawn_water(
-        &mut commands,
-        &asset_server,
-        &mut meshes,
-        &mut water_materials,
-    );
+    spawn_capsules(&mut commands);
+    spawn_metallic_base(&mut commands);
+    spawn_non_metallic_base(&mut commands);
+    spawn_water(&mut commands, &asset_server);
     spawn_camera(&mut commands, &asset_server, &app_settings);
     spawn_buttons(&mut commands, &app_settings);
 }
 
 // Spawns the rotating cube.
-fn spawn_cube(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
-    standard_materials: &mut Assets<StandardMaterial>,
-) {
+fn spawn_cube(commands: &mut Commands, asset_server: &AssetServer) {
+    let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::from(WHITE),
+        base_color_texture: Some(asset_server.load("branding/icon.png")),
+        ..default()
+    });
     commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-            MeshMaterial3d(standard_materials.add(StandardMaterial {
-                base_color: Color::from(WHITE),
-                base_color_texture: Some(asset_server.load("branding/icon.png")),
-                ..default()
-            })),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
             Transform::from_xyz(0.0, 0.5, 0.0),
         ))
         .insert(CubeModel);
@@ -288,12 +268,8 @@ fn spawn_flight_helmet(commands: &mut Commands, asset_server: &AssetServer) {
 }
 
 // Spawns the row of capsules.
-fn spawn_capsules(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    standard_materials: &mut Assets<StandardMaterial>,
-) {
-    let capsule_mesh = meshes.add(Capsule3d::new(0.4, 0.5));
+fn spawn_capsules(commands: &mut Commands) {
+    let capsule_mesh = commands.spawn_asset(Mesh::from(Capsule3d::new(0.4, 0.5)));
     let parent = commands
         .spawn((
             Transform::from_xyz(0.0, 0.5, 0.0),
@@ -304,14 +280,15 @@ fn spawn_capsules(
 
     for i in 0..5 {
         let roughness = i as f32 * 0.25;
+        let material = commands.spawn_asset(StandardMaterial {
+            base_color: Color::BLACK,
+            perceptual_roughness: roughness.max(0.08),
+            ..default()
+        });
         let child = commands
             .spawn((
                 Mesh3d(capsule_mesh.clone()),
-                MeshMaterial3d(standard_materials.add(StandardMaterial {
-                    base_color: Color::BLACK,
-                    perceptual_roughness: roughness.max(0.08),
-                    ..default()
-                })),
+                MeshMaterial3d(material),
                 Transform::from_xyz(i as f32 * 1.1 - (1.1 * 2.0), 0.5, 0.0),
                 CapsuleModel,
             ))
@@ -321,19 +298,17 @@ fn spawn_capsules(
 }
 
 // Spawns the metallic base.
-fn spawn_metallic_base(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    standard_materials: &mut Assets<StandardMaterial>,
-) {
+fn spawn_metallic_base(commands: &mut Commands) {
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::new(Vec3::Y, Vec2::splat(1.0))));
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::from(bevy::color::palettes::css::DARK_GRAY),
+        metallic: 1.0,
+        perceptual_roughness: 0.3,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0)))),
-        MeshMaterial3d(standard_materials.add(StandardMaterial {
-            base_color: Color::from(bevy::color::palettes::css::DARK_GRAY),
-            metallic: 1.0,
-            perceptual_roughness: 0.3,
-            ..default()
-        })),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_scale(Vec3::splat(100.0)),
         MetallicBaseModel,
         Visibility::Hidden,
@@ -341,19 +316,17 @@ fn spawn_metallic_base(
 }
 
 // Spawns the non-metallic base.
-fn spawn_non_metallic_base(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    standard_materials: &mut Assets<StandardMaterial>,
-) {
+fn spawn_non_metallic_base(commands: &mut Commands) {
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::new(Vec3::Y, Vec2::splat(1.0))));
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::from(bevy::color::palettes::css::RED),
+        metallic: 0.0,
+        perceptual_roughness: 0.2,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0)))),
-        MeshMaterial3d(standard_materials.add(StandardMaterial {
-            base_color: Color::from(bevy::color::palettes::css::RED),
-            metallic: 0.0,
-            perceptual_roughness: 0.2,
-            ..default()
-        })),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_scale(Vec3::splat(100.0)),
         RedPlaneBaseModel,
         Visibility::Hidden,
@@ -361,48 +334,44 @@ fn spawn_non_metallic_base(
 }
 
 // Spawns the water plane.
-fn spawn_water(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
-    water_materials: &mut Assets<ExtendedMaterial<StandardMaterial, Water>>,
-) {
+fn spawn_water(commands: &mut Commands, asset_server: &AssetServer) {
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::new(Vec3::Y, Vec2::splat(1.0))));
+    let material = commands.spawn_asset(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: BLACK.into(),
+            perceptual_roughness: 0.09,
+            ..default()
+        },
+        extension: Water {
+            normals: asset_server
+                .load_builder()
+                .with_settings::<ImageLoaderSettings>(|settings| {
+                    settings.is_srgb = false;
+                    settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                        address_mode_u: ImageAddressMode::Repeat,
+                        address_mode_v: ImageAddressMode::Repeat,
+                        mag_filter: ImageFilterMode::Linear,
+                        min_filter: ImageFilterMode::Linear,
+                        ..default()
+                    });
+                })
+                .load("textures/water_normals.png"),
+            // These water settings are just random values to create some
+            // variety.
+            settings: WaterSettings {
+                octave_vectors: [
+                    vec4(0.080, 0.059, 0.073, -0.062),
+                    vec4(0.153, 0.138, -0.149, -0.195),
+                ],
+                octave_scales: vec4(1.0, 2.1, 7.9, 14.9) * 5.0,
+                octave_strengths: vec4(0.16, 0.18, 0.093, 0.044),
+            },
+        },
+    });
+
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0)))),
-        MeshMaterial3d(
-            water_materials.add(ExtendedMaterial {
-                base: StandardMaterial {
-                    base_color: BLACK.into(),
-                    perceptual_roughness: 0.09,
-                    ..default()
-                },
-                extension: Water {
-                    normals: asset_server
-                        .load_builder()
-                        .with_settings::<ImageLoaderSettings>(|settings| {
-                            settings.is_srgb = false;
-                            settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                                address_mode_u: ImageAddressMode::Repeat,
-                                address_mode_v: ImageAddressMode::Repeat,
-                                mag_filter: ImageFilterMode::Linear,
-                                min_filter: ImageFilterMode::Linear,
-                                ..default()
-                            });
-                        })
-                        .load("textures/water_normals.png"),
-                    // These water settings are just random values to create some
-                    // variety.
-                    settings: WaterSettings {
-                        octave_vectors: [
-                            vec4(0.080, 0.059, 0.073, -0.062),
-                            vec4(0.153, 0.138, -0.149, -0.195),
-                        ],
-                        octave_scales: vec4(1.0, 2.1, 7.9, 14.9) * 5.0,
-                        octave_strengths: vec4(0.16, 0.18, 0.093, 0.044),
-                    },
-                },
-            }),
-        ),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_scale(Vec3::splat(100.0)),
         WaterModel,
     ));

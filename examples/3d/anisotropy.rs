@@ -166,14 +166,15 @@ fn create_material_variants(
             continue;
         };
 
+        let new_material = commands.spawn_asset(StandardMaterial {
+            anisotropy_texture: None,
+            anisotropy_strength: 0.0,
+            anisotropy_rotation: 0.0,
+            ..anisotropic_material
+        });
         commands.entity(entity).insert(MaterialVariants {
             anisotropic: anisotropic_material_handle.0.clone(),
-            isotropic: materials.add(StandardMaterial {
-                anisotropy_texture: None,
-                anisotropy_strength: 0.0,
-                anisotropy_rotation: 0.0,
-                ..anisotropic_material
-            }),
+            isotropic: new_material,
         });
     }
 }

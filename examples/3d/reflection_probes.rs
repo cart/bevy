@@ -95,14 +95,12 @@ fn main() {
 // Spawns all the scene objects.
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
     app_status: Res<AppStatus>,
     cubemaps: Res<Cubemaps>,
 ) {
     spawn_camera(&mut commands);
-    spawn_sphere(&mut commands, &mut meshes, &mut materials, &app_status);
+    spawn_sphere(&mut commands, &app_status);
     spawn_reflection_probe(&mut commands, &cubemaps);
     spawn_scene(&mut commands, &asset_server);
     spawn_text(&mut commands, &app_status);
@@ -130,24 +128,20 @@ fn spawn_camera(commands: &mut Commands) {
 }
 
 // Creates the sphere mesh and spawns it.
-fn spawn_sphere(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    app_status: &AppStatus,
-) {
+fn spawn_sphere(commands: &mut Commands, app_status: &AppStatus) {
     // Create a sphere mesh.
-    let sphere_mesh = meshes.add(Sphere::new(1.0).mesh().ico(7).unwrap());
+    let sphere_mesh = commands.spawn_asset(Sphere::new(1.0).mesh().ico(7).unwrap());
 
     // Create a sphere.
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color: Srgba::hex("#ffffff").unwrap().into(),
+        metallic: 1.0,
+        perceptual_roughness: app_status.sphere_roughness,
+        ..StandardMaterial::default()
+    });
     commands.spawn((
         Mesh3d(sphere_mesh.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Srgba::hex("#ffffff").unwrap().into(),
-            metallic: 1.0,
-            perceptual_roughness: app_status.sphere_roughness,
-            ..StandardMaterial::default()
-        })),
+        MeshMaterial3d(material),
         SphereMaterial,
     ));
 }
@@ -372,8 +366,8 @@ impl FromWorld for Cubemaps {
     }
 }
 
-fn setup_environment_map_usage(cubemaps: Res<Cubemaps>, mut images: ResMut<Assets<Image>>) {
-    if let Some(mut image) = images.get_mut(&cubemaps.specular_environment_map)
+fn setup_environment_map_usage(cubemaps: Res<Cubemaps>, mut images: Query<&mut Image>) {
+    if let Ok(mut image) = images.get_mut(&cubemaps.specular_environment_map)
         && !image
             .texture_descriptor
             .usage
@@ -403,7 +397,7 @@ struct CubesScene;
 fn change_sphere_roughness(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut app_status: ResMut<AppStatus>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     sphere_query: Query<&MeshMaterial3d<StandardMaterial>, With<SphereMaterial>>,
 ) {
     let roughness_delta = if keyboard.pressed(KeyCode::ArrowUp) {
@@ -421,7 +415,7 @@ fn change_sphere_roughness(
 
         // Update the sphere material
         for material_handle in sphere_query.iter() {
-            if let Some(mut material) = materials.get_mut(&material_handle.0) {
+            if let Ok(mut material) = materials.get_mut(&material_handle.0) {
                 material.perceptual_roughness = app_status.sphere_roughness;
             }
         }

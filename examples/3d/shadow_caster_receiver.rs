@@ -23,51 +23,48 @@ fn main() {
 }
 
 /// set up a 3D scene to test shadow biases and perspective projections
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     let spawn_plane_depth = 500.0f32;
     let spawn_height = 2.0;
     let sphere_radius = 0.25;
 
-    let white_handle = materials.add(StandardMaterial {
+    let white_handle = commands.spawn_asset(StandardMaterial {
         base_color: Color::WHITE,
         perceptual_roughness: 1.0,
         ..default()
     });
-    let sphere_handle = meshes.add(Sphere::new(sphere_radius));
+    let sphere_handle = commands.spawn_asset(Mesh::from(Sphere::new(sphere_radius)));
 
     // sphere - initially a caster
+    let caster_material = commands.spawn_asset(StandardMaterial::from(Color::from(RED)));
     commands.spawn((
         Mesh3d(sphere_handle.clone()),
-        MeshMaterial3d(materials.add(Color::from(RED))),
+        MeshMaterial3d(caster_material),
         Transform::from_xyz(-1.0, spawn_height, 0.0),
     ));
 
     // sphere - initially not a caster
+    let not_caster_material = commands.spawn_asset(StandardMaterial::from(Color::from(BLUE)));
     commands.spawn((
         Mesh3d(sphere_handle),
-        MeshMaterial3d(materials.add(Color::from(BLUE))),
+        MeshMaterial3d(not_caster_material),
         Transform::from_xyz(1.0, spawn_height, 0.0),
         NotShadowCaster,
     ));
 
     // floating plane - initially not a shadow receiver and not a caster
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(20.0, 20.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::from(LIME)));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(materials.add(Color::from(LIME))),
+        Mesh3d(plane_mesh.clone()),
+        MeshMaterial3d(plane_material),
         Transform::from_xyz(0.0, 1.0, -10.0),
         NotShadowCaster,
         NotShadowReceiver,
     ));
 
     // lower ground plane - initially a shadow receiver
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(white_handle),
-    ));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(white_handle)));
 
     println!("Using DirectionalLight");
 

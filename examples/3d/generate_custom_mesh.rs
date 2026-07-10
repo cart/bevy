@@ -23,24 +23,20 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Import the custom texture.
     let custom_texture_handle: Handle<Image> = asset_server.load("textures/array_texture.png");
     // Create and save a handle to the mesh.
-    let cube_mesh_handle: Handle<Mesh> = meshes.add(create_cube_mesh());
+    let cube_mesh_handle: Handle<Mesh> = commands.spawn_asset(create_cube_mesh());
 
     // Render the mesh with the custom texture, and add the marker.
+    let custom_material: Handle<StandardMaterial> = commands.spawn_asset(StandardMaterial {
+        base_color_texture: Some(custom_texture_handle),
+        ..default()
+    });
     commands.spawn((
         Mesh3d(cube_mesh_handle),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(custom_texture_handle),
-            ..default()
-        })),
+        MeshMaterial3d(custom_material),
         CustomUV,
     ));
 
@@ -71,13 +67,13 @@ fn setup(
 fn input_handler(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mesh_query: Query<&Mesh3d, With<CustomUV>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut meshes: Query<&mut Mesh>,
     mut query: Query<&mut Transform, With<CustomUV>>,
     time: Res<Time>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
         let mesh_handle = mesh_query.single().expect("Query not successful");
-        let mesh = meshes.get_mut(mesh_handle).unwrap();
+        let mesh = meshes.get_mut(mesh_handle.entity()).unwrap();
         toggle_texture(mesh.into_inner());
     }
     if keyboard_input.pressed(KeyCode::KeyX) {

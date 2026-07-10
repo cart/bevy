@@ -30,13 +30,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-    mut debug_materials: ResMut<Assets<MeshletDebugMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_translation(Vec3::new(1.8, 0.4, -0.1)).looking_at(Vec3::ZERO, Vec3::Y),
@@ -70,23 +64,24 @@ fn setup(
     // using [`bevy_pbr::meshlet::MeshletMesh::from_mesh`], which is
     // a function only available when the `meshlet_processor` cargo feature is enabled.
     let meshlet_mesh_handle = asset_server.load(ASSET_URL);
-    let debug_material = debug_materials.add(MeshletDebugMaterial::default());
+    let debug_material = commands.spawn_asset(MeshletDebugMaterial::default());
 
     for x in -2..=2 {
+        let material = commands.spawn_asset(StandardMaterial {
+            base_color: match x {
+                -2 => Srgba::hex("#dc2626").unwrap().into(),
+                -1 => Srgba::hex("#ea580c").unwrap().into(),
+                0 => Srgba::hex("#facc15").unwrap().into(),
+                1 => Srgba::hex("#16a34a").unwrap().into(),
+                2 => Srgba::hex("#0284c7").unwrap().into(),
+                _ => unreachable!(),
+            },
+            perceptual_roughness: (x + 2) as f32 / 4.0,
+            ..default()
+        });
         let mut bunny = commands.spawn((
             MeshletMesh3d(meshlet_mesh_handle.clone()),
-            MeshMaterial3d(standard_materials.add(StandardMaterial {
-                base_color: match x {
-                    -2 => Srgba::hex("#dc2626").unwrap().into(),
-                    -1 => Srgba::hex("#ea580c").unwrap().into(),
-                    0 => Srgba::hex("#facc15").unwrap().into(),
-                    1 => Srgba::hex("#16a34a").unwrap().into(),
-                    2 => Srgba::hex("#0284c7").unwrap().into(),
-                    _ => unreachable!(),
-                },
-                perceptual_roughness: (x + 2) as f32 / 4.0,
-                ..default()
-            })),
+            MeshMaterial3d(material),
             Transform::default()
                 .with_scale(Vec3::splat(0.2))
                 .with_translation(Vec3::new(x as f32 / 2.0, 0.0, -0.3)),
@@ -106,14 +101,13 @@ fn setup(
         ));
     }
 
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
-        MeshMaterial3d(standard_materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
-    ));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(5.0, 5.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::WHITE,
+        perceptual_roughness: 1.0,
+        ..default()
+    });
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(plane_material)));
 }
 
 #[derive(Component)]

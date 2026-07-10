@@ -39,17 +39,11 @@ fn draw_cursor(
 #[derive(Component)]
 struct Ground;
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20., 20.))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
-        Ground,
-    ));
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(20., 20.)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
+    commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), Ground));
 
     // light
     commands.spawn((

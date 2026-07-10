@@ -72,13 +72,7 @@ fn main() {
 }
 
 /// Creates the scene.
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    app_status: Res<AppStatus>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
     // Spawns a camera.
     commands.spawn((
         Transform::from_xyz(-2.0, 0.0, 3.5).looking_at(Vec3::ZERO, Vec3::Y),
@@ -100,23 +94,25 @@ fn setup(
     ));
 
     // Spawn the sphere.
+    let sphere_mesh = commands.spawn_asset(Sphere::default().mesh().uv(32, 18));
+    let sphere_material = commands.spawn_asset(StandardMaterial {
+        // We want only reflected specular light here, so we set the base
+        // color as black.
+        base_color: Color::BLACK,
+        reflectance: 1.0,
+        specular_tint: Color::hsva(app_status.hue, 1.0, 1.0, 1.0),
+        // The object must not be metallic, or else the reflectance is
+        // ignored per the Filament spec:
+        //
+        // <https://google.github.io/filament/Filament.md.html#listing_fnormal>
+        metallic: 0.0,
+        perceptual_roughness: 0.0,
+        ..default()
+    });
     commands.spawn((
         Transform::from_rotation(Quat::from_rotation_x(PI * 0.5)),
-        Mesh3d(meshes.add(Sphere::default().mesh().uv(32, 18))),
-        MeshMaterial3d(standard_materials.add(StandardMaterial {
-            // We want only reflected specular light here, so we set the base
-            // color as black.
-            base_color: Color::BLACK,
-            reflectance: 1.0,
-            specular_tint: Color::hsva(app_status.hue, 1.0, 1.0, 1.0),
-            // The object must not be metallic, or else the reflectance is
-            // ignored per the Filament spec:
-            //
-            // <https://google.github.io/filament/Filament.md.html#listing_fnormal>
-            metallic: 0.0,
-            perceptual_roughness: 0.0,
-            ..default()
-        })),
+        Mesh3d(sphere_mesh),
+        MeshMaterial3d(sphere_material),
     ));
 
     // Spawn the help text.
@@ -144,7 +140,7 @@ fn rotate_camera(mut cameras: Query<&mut Transform, With<Camera3d>>) {
 fn shift_hue(
     mut app_status: ResMut<AppStatus>,
     objects_with_materials: Query<&MeshMaterial3d<StandardMaterial>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
+    mut standard_materials: Query<&mut StandardMaterial>,
 ) {
     if app_status.tint_type != TintType::Solid {
         return;
@@ -153,7 +149,7 @@ fn shift_hue(
     app_status.hue += HUE_SHIFT_SPEED;
 
     for material_handle in objects_with_materials.iter() {
-        let Some(mut material) = standard_materials.get_mut(material_handle) else {
+        let Ok(mut material) = standard_materials.get_mut(material_handle) else {
             continue;
         };
         material.specular_tint = Color::hsva(app_status.hue, 1.0, 1.0, 1.0);
@@ -179,7 +175,7 @@ fn toggle_specular_map(
     mut app_status: ResMut<AppStatus>,
     app_assets: Res<AppAssets>,
     objects_with_materials: Query<&MeshMaterial3d<StandardMaterial>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
+    mut standard_materials: Query<&mut StandardMaterial>,
 ) {
     if !keyboard.just_pressed(KeyCode::Space) {
         return;
@@ -192,7 +188,7 @@ fn toggle_specular_map(
     };
 
     for material_handle in objects_with_materials.iter() {
-        let Some(mut material) = standard_materials.get_mut(material_handle) else {
+        let Ok(mut material) = standard_materials.get_mut(material_handle) else {
             continue;
         };
 

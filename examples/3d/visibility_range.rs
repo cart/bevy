@@ -109,18 +109,11 @@ fn main() {
 }
 
 // Set up a simple 3D scene. Load the two meshes.
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-    app_status: Res<AppStatus>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, app_status: Res<AppStatus>) {
     // Spawn a plane.
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.1, 0.2, 0.1))),
-    ));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(50.0, 50.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.1, 0.2, 0.1)));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(plane_material)));
 
     // Spawn the two HLODs.
 

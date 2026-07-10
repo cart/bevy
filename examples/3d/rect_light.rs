@@ -27,26 +27,22 @@ struct FloorMaterial(Handle<StandardMaterial>);
 struct RoughnessDisplay;
 
 /// Simple scene with a sphere on a reflective floor, lit by two rectangular area lights
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let floor_material = materials.add(StandardMaterial {
+fn setup(mut commands: Commands) {
+    let floor_material = commands.spawn_asset(StandardMaterial {
         base_color: Color::WHITE,
         metallic: 1.0,
         perceptual_roughness: 0.6,
         ..default()
     });
     commands.insert_resource(FloorMaterial(floor_material.clone()));
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(floor_material),
-    ));
+    let plane_mesh = meshes.add(Plane3d::default().mesh().size(20.0, 20.0));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(floor_material)));
 
+    let mesh = commands.spawn_asset(Mesh::from(Sphere::new(1.0)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(1.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_xyz(0.0, 1.0, 0.0),
     ));
 
@@ -103,7 +99,7 @@ fn setup(
 fn adjust_roughness(
     keys: Res<ButtonInput<KeyCode>>,
     floor_material: Res<FloorMaterial>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     mut text_query: Query<&mut Text, With<RoughnessDisplay>>,
 ) {
     let delta = if keys.pressed(KeyCode::ArrowUp) {
@@ -114,7 +110,7 @@ fn adjust_roughness(
         return;
     };
 
-    if let Some(mut material) = materials.get_mut(&floor_material.0) {
+    if let Ok(mut material) = materials.get_mut(&floor_material.0) {
         material.perceptual_roughness = (material.perceptual_roughness + delta).clamp(0.0, 1.0);
 
         if let Ok(mut text) = text_query.single_mut() {

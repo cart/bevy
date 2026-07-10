@@ -409,28 +409,23 @@ fn update_ui(
 }
 
 /// Set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.1, 0.2, 0.1))),
-    ));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(20.0, 20.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.1, 0.2, 0.1)));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(plane_material)));
 
-    let cube_material = materials.add(StandardMaterial {
-        base_color_texture: Some(images.add(uv_debug_texture())),
+    let debug_texture = commands.spawn_asset(uv_debug_texture());
+    let cube_material = commands.spawn_asset(StandardMaterial {
+        base_color_texture: Some(debug_texture),
         ..default()
     });
 
     // Cubes
+    let cube = commands.spawn_asset(Mesh::from(Cuboid::new(0.25, 0.25, 0.25)));
     for i in 0..5 {
         commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.25, 0.25, 0.25))),
+            Mesh3d(cube.clone()),
             MeshMaterial3d(cube_material.clone()),
             Transform::from_xyz(i as f32 * 0.25 - 1.0, 0.125, -i as f32 * 0.5),
         ));

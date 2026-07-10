@@ -12,71 +12,74 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // Opaque plane, uses `alpha_mode: Opaque` by default
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(6.0, 6.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
-    ));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(6.0, 6.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(plane_material)));
 
     // Transparent sphere, uses `alpha_mode: Mask(f32)`
+    let sphere_mesh = commands.spawn_asset(Sphere::new(0.5).mesh().ico(3).unwrap());
+    let mask_0_5_material = commands.spawn_asset(StandardMaterial {
+        // Alpha channel of the color controls transparency.
+        // We set it to 0.0 here, because it will be changed over time in the
+        // `fade_transparency` function.
+        // Note that the transparency has no effect on the objects shadow.
+        base_color: Color::srgba(0.2, 0.7, 0.1, 0.0),
+        // Mask sets a cutoff for transparency. Alpha values below are fully transparent,
+        // alpha values above are fully opaque.
+        alpha_mode: AlphaMode::Mask(0.5),
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            // Alpha channel of the color controls transparency.
-            // We set it to 0.0 here, because it will be changed over time in the
-            // `fade_transparency` function.
-            // Note that the transparency has no effect on the objects shadow.
-            base_color: Color::srgba(0.2, 0.7, 0.1, 0.0),
-            // Mask sets a cutoff for transparency. Alpha values below are fully transparent,
-            // alpha values above are fully opaque.
-            alpha_mode: AlphaMode::Mask(0.5),
-            ..default()
-        })),
+        Mesh3d(sphere_mesh.clone()),
+        MeshMaterial3d(mask_0_5_material),
         Transform::from_xyz(1.0, 0.5, -1.5),
     ));
 
     // Transparent unlit sphere, uses `alpha_mode: Mask(f32)`
+    let mask_0_1_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::srgba(0.2, 0.7, 0.1, 0.0),
+        alpha_mode: AlphaMode::Mask(0.1),
+        unlit: true,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.2, 0.7, 0.1, 0.0),
-            alpha_mode: AlphaMode::Mask(0.1),
-            unlit: true,
-            ..default()
-        })),
+        Mesh3d(sphere_mesh.clone()),
+        MeshMaterial3d(mask_0_1_material),
         Transform::from_xyz(-1.0, 0.5, -1.5),
     ));
 
     // Transparent cube, uses `alpha_mode: Blend`
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::default()));
+    let blend_material =
+        commands.spawn_asset(StandardMaterial::from(Color::srgba(0.5, 0.5, 1.0, 0.0)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
+        Mesh3d(cube_mesh.clone()),
         // Notice how there is no need to set the `alpha_mode` explicitly here.
         // When converting a color to a material using `into()`, the alpha mode is
         // automatically set to `Blend` if the alpha channel is anything lower than 1.0.
-        MeshMaterial3d(materials.add(Color::srgba(0.5, 0.5, 1.0, 0.0))),
+        MeshMaterial3d(blend_material),
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
 
     // Transparent cube, uses `alpha_mode: AlphaToCoverage`
+    let alpha_to_coverage_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::srgba(0.5, 1.0, 0.5, 0.0),
+        alpha_mode: AlphaMode::AlphaToCoverage,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.5, 1.0, 0.5, 0.0),
-            alpha_mode: AlphaMode::AlphaToCoverage,
-            ..default()
-        })),
+        Mesh3d(cube_mesh),
+        MeshMaterial3d(alpha_to_coverage_material),
         Transform::from_xyz(-1.5, 0.5, 0.0),
     ));
 
     // Opaque sphere
+    let opaque_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.7, 0.2, 0.1)));
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap())),
-        MeshMaterial3d(materials.add(Color::srgb(0.7, 0.2, 0.1))),
+        Mesh3d(sphere_mesh),
+        MeshMaterial3d(opaque_material),
         Transform::from_xyz(0.0, 0.5, -1.5),
     ));
 
@@ -107,9 +110,9 @@ fn setup(
 ///   samples in use. For example, assuming 8xMSAA, the object will be
 ///   completely opaque, then will be 7/8 opaque (1/8 transparent), then will be
 ///   6/8 opaque, then 5/8, etc.
-pub fn fade_transparency(time: Res<Time>, mut materials: ResMut<Assets<StandardMaterial>>) {
+pub fn fade_transparency(time: Res<Time>, mut materials: Query<&mut StandardMaterial>) {
     let alpha = (ops::sin(time.elapsed_secs()) / 2.0) + 0.5;
-    for (_, material) in materials.iter_mut() {
+    for mut material in materials.iter_mut() {
         material.base_color.set_alpha(alpha);
     }
 }

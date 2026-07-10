@@ -157,8 +157,6 @@ fn setup(
     app_status: Res<AppStatus>,
     render_device: Res<RenderDevice>,
     render_adapter: Res<RenderAdapter>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, CustomDecalExtension>>>,
 ) {
     // Error out if clustered decals aren't supported on the current platform.
     if !decal::clustered::clustered_decals_are_usable(&render_device, &render_adapter) {
@@ -166,7 +164,7 @@ fn setup(
         commands.write_message(AppExit::error());
     }
 
-    spawn_cube(&mut commands, &mut meshes, &mut materials);
+    spawn_cube(&mut commands);
     spawn_camera(&mut commands);
     spawn_light(&mut commands);
     spawn_decals(&mut commands, &asset_server);
@@ -175,26 +173,20 @@ fn setup(
 }
 
 /// Spawns the cube onto which the decals are projected.
-fn spawn_cube(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ExtendedMaterial<StandardMaterial, CustomDecalExtension>>,
-) {
+fn spawn_cube(commands: &mut Commands) {
     // Rotate the cube a bit just to make it more interesting.
     let mut transform = Transform::IDENTITY;
     transform.rotate_y(FRAC_PI_3);
 
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(3.0, 3.0, 3.0))),
-        MeshMaterial3d(materials.add(ExtendedMaterial {
-            base: StandardMaterial {
-                base_color: SILVER.into(),
-                ..default()
-            },
-            extension: CustomDecalExtension {},
-        })),
-        transform,
-    ));
+    let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(3.0, 3.0, 3.0)));
+    let material = commands.spawn_asset(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: SILVER.into(),
+            ..default()
+        },
+        extension: CustomDecalExtension {},
+    });
+    commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), transform));
 }
 
 /// Spawns the directional light.

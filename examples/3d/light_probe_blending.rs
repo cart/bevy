@@ -203,8 +203,6 @@ fn main() {
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut gizmo_config_store: ResMut<GizmoConfigStore>,
 ) {
     adjust_gizmo_settings(&mut gizmo_config_store);
@@ -213,8 +211,8 @@ fn setup(
 
     spawn_camera(&mut commands);
     spawn_gltf_scene(&mut commands, &asset_server);
-    spawn_reflective_sphere(&mut commands, &mut meshes, reflective_material.clone());
-    spawn_reflective_prism(&mut commands, &mut meshes, reflective_material);
+    spawn_reflective_sphere(&mut commands, reflective_material.clone());
+    spawn_reflective_prism(&mut commands, reflective_material);
     spawn_light_probes(&mut commands, &asset_server);
     spawn_buttons(&mut commands);
     spawn_help_text(&mut commands);
@@ -265,13 +263,9 @@ fn spawn_gltf_scene(commands: &mut Commands, asset_server: &AssetServer) {
 }
 
 /// Spawns the reflective sphere, creating its mesh in the process.
-fn spawn_reflective_sphere(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    material: Handle<StandardMaterial>,
-) {
+fn spawn_reflective_sphere(commands: &mut Commands, material: Handle<StandardMaterial>) {
     // Create a mesh.
-    let sphere = meshes.add(Sphere::default().mesh().uv(32, 18));
+    let sphere = commands.spawn_asset(Sphere::default().mesh().uv(32, 18));
 
     // Spawn the sphere.
     commands.spawn((
@@ -286,13 +280,9 @@ fn spawn_reflective_sphere(
 ///
 /// The reflective prism starts invisible, but the user can toggle it on and off
 /// as desired.
-fn spawn_reflective_prism(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    material: Handle<StandardMaterial>,
-) {
+fn spawn_reflective_prism(commands: &mut Commands, material: Handle<StandardMaterial>) {
     // Create a mesh.
-    let cube = meshes.add(
+    let cube = commands.spawn_asset(
         Cuboid {
             half_size: vec3(2.0, 1.0, 10.0),
         }

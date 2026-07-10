@@ -142,12 +142,6 @@ fn setup(
     mut commands: Commands,
     windows_query: Query<&Window>,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-    mut screen_space_texture_materials: ResMut<
-        Assets<ExtendedMaterial<StandardMaterial, ScreenSpaceTextureExtension>>,
-    >,
-    mut images: ResMut<Assets<Image>>,
     app_status: Res<AppStatus>,
 ) {
     // Spawn the main camera.
@@ -158,18 +152,12 @@ fn setup(
     spawn_light(&mut commands);
 
     // Spawn the objects reflected in the mirror.
-    spawn_ground_plane(&mut commands, &mut meshes, &mut standard_materials);
+    spawn_ground_plane(&mut commands);
     spawn_fox(&mut commands, &asset_server);
 
     // Spawn the mirror and associated camera.
-    let mirror_render_target_image =
-        create_mirror_texture_resource(&mut commands, &windows_query, &mut images);
-    let mirror_transform = spawn_mirror(
-        &mut commands,
-        &mut meshes,
-        &mut screen_space_texture_materials,
-        mirror_render_target_image.clone(),
-    );
+    let mirror_render_target_image = create_mirror_texture_resource(&mut commands, &windows_query);
+    let mirror_transform = spawn_mirror(&mut commands, mirror_render_target_image.clone());
     spawn_mirror_camera(
         &mut commands,
         &camera_transform,
@@ -214,14 +202,12 @@ fn spawn_light(commands: &mut Commands) {
 }
 
 /// Spawns the circular ground plane object.
-fn spawn_ground_plane(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    standard_materials: &mut Assets<StandardMaterial>,
-) {
+fn spawn_ground_plane(commands: &mut Commands) {
+    let mesh = commands.spawn_asset(Mesh::from(Circle::new(200.0)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::from(GREEN)));
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(200.0))),
-        MeshMaterial3d(standard_materials.add(Color::from(GREEN))),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_rotation(Quat::from_rotation_x(-FRAC_PI_2))
             .with_translation(vec3(-25.0, 0.0, 0.0)),
     ));
@@ -232,11 +218,10 @@ fn spawn_ground_plane(
 fn create_mirror_texture_resource(
     commands: &mut Commands,
     windows_query: &Query<&Window>,
-    images: &mut Assets<Image>,
 ) -> Handle<Image> {
     let window = windows_query.iter().next().expect("No window found");
     let window_size = uvec2(window.physical_width(), window.physical_height());
-    let image = create_mirror_texture_image(images, window_size);
+    let image = create_mirror_texture_image(commands, window_size);
     commands.insert_resource(MirrorImage(image.clone()));
     image
 }
@@ -285,31 +270,26 @@ fn spawn_fox(commands: &mut Commands, asset_server: &AssetServer) {
 }
 
 /// Spawns the mirror plane mesh and returns its transform.
-fn spawn_mirror(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    screen_space_texture_materials: &mut Assets<
-        ExtendedMaterial<StandardMaterial, ScreenSpaceTextureExtension>,
-    >,
-    mirror_render_target: Handle<Image>,
-) -> Transform {
+fn spawn_mirror(commands: &mut Commands, mirror_render_target: Handle<Image>) -> Transform {
     let mirror_transform = Transform::from_scale(vec3(300.0, 1.0, 150.0))
         .with_rotation(Quat::from_rotation_x(MIRROR_ROTATION_ANGLE))
         .with_translation(MIRROR_POSITION);
 
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(1.0, 1.0)));
+    let material = commands.spawn_asset(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: Color::BLACK,
+            emissive: Color::WHITE.into(),
+            emissive_texture: Some(mirror_render_target),
+            perceptual_roughness: 0.0,
+            metallic: 1.0,
+            ..default()
+        },
+        extension: ScreenSpaceTextureExtension { dummy: 0.0 },
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(1.0, 1.0))),
-        MeshMaterial3d(screen_space_texture_materials.add(ExtendedMaterial {
-            base: StandardMaterial {
-                base_color: Color::BLACK,
-                emissive: Color::WHITE.into(),
-                emissive_texture: Some(mirror_render_target),
-                perceptual_roughness: 0.0,
-                metallic: 1.0,
-                ..default()
-            },
-            extension: ScreenSpaceTextureExtension { dummy: 0.0 },
-        })),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         mirror_transform,
         Mirror,
     ));
@@ -383,12 +363,12 @@ fn calculate_mirror_camera_transform_and_projection(
 /// size as the window, we need to reallocate it and reattach it to the mirror
 /// material whenever the window size changes.
 fn handle_window_resize_messages(
+    mut commands: Commands,
     windows_query: Query<&Window>,
     mut mirror_cameras_query: Query<&mut RenderTarget, With<MirrorCamera>>,
-    mut images: ResMut<Assets<Image>>,
     mut mirror_image: ResMut<MirrorImage>,
-    mut screen_space_texture_materials: ResMut<
-        Assets<ExtendedMaterial<StandardMaterial, ScreenSpaceTextureExtension>>,
+    mut screen_space_texture_materials: Query<
+        &mut ExtendedMaterial<StandardMaterial, ScreenSpaceTextureExtension>,
     >,
     mut resize_messages: MessageReader<WindowResized>,
 ) {
@@ -402,8 +382,7 @@ fn handle_window_resize_messages(
     };
 
     let window_size = uvec2(window.physical_width(), window.physical_height());
-    let image = create_mirror_texture_image(&mut images, window_size);
-    images.remove(mirror_image.0.id());
+    let image = create_mirror_texture_image(&mut commands, window_size);
 
     mirror_image.0 = image.clone();
 
@@ -411,14 +390,14 @@ fn handle_window_resize_messages(
         *target = image.clone().into();
     }
 
-    for (_, material) in screen_space_texture_materials.iter_mut() {
+    for mut material in screen_space_texture_materials.iter_mut() {
         material.base.emissive_texture = Some(image.clone());
     }
 }
 
 /// Creates the image that will be used to store the reflected scene.
-fn create_mirror_texture_image(images: &mut Assets<Image>, window_size: UVec2) -> Handle<Image> {
-    images.add(Image::new_target_texture(
+fn create_mirror_texture_image(commands: &mut Commands, window_size: UVec2) -> Handle<Image> {
+    commands.spawn_asset(Image::new_target_texture(
         window_size.x,
         window_size.y,
         TextureFormat::Bgra8UnormSrgb,
@@ -608,7 +587,6 @@ fn play_fox_animation(
         Without<AnimationGraphHandle>,
     >,
     asset_server: Res<AssetServer>,
-    mut animation_graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     // Only pick up animation players that don't already have an animation graph
     // handle.
@@ -620,7 +598,7 @@ fn play_fox_animation(
     let fox_animation = asset_server.load(GltfAssetLabel::Animation(0).from_asset(FOX_ASSET_PATH));
     let (fox_animation_graph, fox_animation_node) =
         AnimationGraph::from_clip(fox_animation.clone());
-    let fox_animation_graph = animation_graphs.add(fox_animation_graph);
+    let fox_animation_graph = commands.spawn_asset(fox_animation_graph);
 
     for (entity, mut animation_player) in animation_players_query.iter_mut() {
         commands

@@ -17,26 +17,21 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-    mut decal_standard_materials: ResMut<Assets<ForwardDecalMaterial<StandardMaterial>>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Spawn the forward decal
+    let decal_material = commands.spawn_asset(ForwardDecalMaterial {
+        base: StandardMaterial {
+            base_color_texture: Some(asset_server.load("textures/uv_checker_bw.png")),
+            ..default()
+        },
+        extension: ForwardDecalMaterialExt {
+            depth_fade_factor: 1.0,
+        },
+    });
     commands.spawn((
         Name::new("Decal"),
         ForwardDecal,
-        MeshMaterial3d(decal_standard_materials.add(ForwardDecalMaterial {
-            base: StandardMaterial {
-                base_color_texture: Some(asset_server.load("textures/uv_checker_bw.png")),
-                ..default()
-            },
-            extension: ForwardDecalMaterialExt {
-                depth_fade_factor: 1.0,
-            },
-        })),
+        MeshMaterial3d(decal_material),
         Transform::from_scale(Vec3::splat(4.0)),
     ));
 
@@ -49,14 +44,17 @@ fn setup(
         Transform::from_xyz(2.0, 9.5, 2.5).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    let white_material = standard_materials.add(Color::WHITE);
+    let rectangle_mesh = commands.spawn_asset(Mesh::from(Rectangle::from_length(10.0)));
+    let white_material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
 
     commands.spawn((
         Name::new("Floor"),
-        Mesh3d(meshes.add(Rectangle::from_length(10.0))),
+        Mesh3d(rectangle_mesh),
         MeshMaterial3d(white_material.clone()),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
+
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::from_length(0.6)));
 
     // Spawn a few cube with random rotations to showcase how the decals behave with non-flat geometry
     let num_obs = 10;
@@ -77,7 +75,7 @@ fn setup(
             ));
 
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::from_length(0.6))),
+                Mesh3d(cube_mesh.clone()),
                 MeshMaterial3d(white_material.clone()),
                 transform,
             ));

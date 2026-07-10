@@ -134,41 +134,35 @@ fn setup_basic_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-fn setup_color_gradient_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorGradientMaterial>>,
-    camera_transform: Res<CameraTransform>,
-) {
+fn setup_color_gradient_scene(mut commands: Commands, camera_transform: Res<CameraTransform>) {
     let mut transform = camera_transform.0;
     transform.translation += *transform.forward();
 
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::new(0.7, 0.7)));
+    let material = commands.spawn_asset(ColorGradientMaterial {});
     commands.spawn((
-        Mesh3d(meshes.add(Rectangle::new(0.7, 0.7))),
-        MeshMaterial3d(materials.add(ColorGradientMaterial {})),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         transform,
         Visibility::Hidden,
         SceneNumber(2),
     ));
 }
 
-fn setup_image_viewer_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    camera_transform: Res<CameraTransform>,
-) {
+fn setup_image_viewer_scene(mut commands: Commands, camera_transform: Res<CameraTransform>) {
     let mut transform = camera_transform.0;
     transform.translation += *transform.forward();
 
     // exr/hdr viewer (exr requires enabling bevy feature)
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::default()));
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color_texture: None,
+        unlit: true,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Rectangle::default())),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: None,
-            unlit: true,
-            ..default()
-        })),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         transform,
         Visibility::Hidden,
         SceneNumber(3),
@@ -198,7 +192,7 @@ fn setup_image_viewer_scene(
 fn drag_drop_image(
     image_mat: Query<&MeshMaterial3d<StandardMaterial>, With<HDRViewer>>,
     text: Query<Entity, (With<Text>, With<SceneNumber>)>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     mut drag_and_drop_reader: MessageReader<FileDragAndDrop>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
@@ -213,7 +207,7 @@ fn drag_drop_image(
     };
 
     for mat_h in &image_mat {
-        if let Some(mut mat) = materials.get_mut(mat_h) {
+        if let Ok(mut mat) = materials.get_mut(mat_h.entity()) {
             mat.base_color_texture = Some(new_image.clone());
 
             // Despawn the image viewer instructions
@@ -226,9 +220,9 @@ fn drag_drop_image(
 
 fn resize_image(
     image_mesh: Query<(&MeshMaterial3d<StandardMaterial>, &Mesh3d), With<HDRViewer>>,
-    materials: Res<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    images: Res<Assets<Image>>,
+    materials: Query<&StandardMaterial>,
+    images: Query<&Image>,
+    mut commands: Commands,
     mut image_event_reader: MessageReader<AssetEvent<Image>>,
 ) {
     for event in image_event_reader.read() {
@@ -237,7 +231,7 @@ fn resize_image(
         };
 
         for (mat_h, mesh_h) in &image_mesh {
-            let Some(mat) = materials.get(mat_h) else {
+            let Ok(mat) = materials.get(mat_h.entity()) else {
                 continue;
             };
 
@@ -249,14 +243,14 @@ fn resize_image(
                 continue;
             };
 
-            let Some(image_changed) = images.get(*id) else {
+            let Ok(image_changed) = images.get(id.entity) else {
                 continue;
             };
 
             let size = image_changed.size_f32().normalize_or_zero() * 1.4;
             // Resize Mesh
             let quad = Mesh::from(Rectangle::from_size(size));
-            meshes.insert(mesh_h, quad).unwrap();
+            commands.entity(mesh_h.entity()).insert(quad);
         }
     }
 }

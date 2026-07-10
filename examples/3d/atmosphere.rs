@@ -131,14 +131,10 @@ fn atmosphere_controls(
     }
 }
 
-fn setup_camera_fog(
-    mut commands: Commands,
-    mut scattering_mediums: ResMut<Assets<ScatteringMedium>>,
-    asset_server: Res<AssetServer>,
-) {
-    let earth_medium = scattering_mediums.add(ScatteringMedium::earth(256, 256));
+fn setup_camera_fog(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let earth_medium = commands.spawn_asset(ScatteringMedium::earth(256, 256));
     let mars_phase = asset_server.load("textures/mars_mie_phase.ktx2");
-    let mars_medium = scattering_mediums.add(ScatteringMedium::mars(256, 256, mars_phase));
+    let mars_medium = commands.spawn_asset(ScatteringMedium::mars(256, 256, mars_phase));
 
     commands.insert_resource(AtmospherePresets {
         earth: earth_medium.clone(),
@@ -216,12 +212,7 @@ impl MaterialExtension for Water {
     }
 }
 
-fn setup_terrain_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut water_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, Water>>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup_terrain_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Sun
     commands.spawn((
         DirectionalLight {
@@ -256,57 +247,48 @@ fn setup_terrain_scene(
             .with_rotation(Quat::from_rotation_y(PI / 2.0)),
     ));
 
-    spawn_water(
-        &mut commands,
-        &asset_server,
-        &mut meshes,
-        &mut water_materials,
-    );
+    spawn_water(&mut commands, &asset_server);
 }
 
 // Spawns the water plane.
-fn spawn_water(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
-    water_materials: &mut Assets<ExtendedMaterial<StandardMaterial, Water>>,
-) {
+fn spawn_water(commands: &mut Commands, asset_server: &AssetServer) {
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::new(Vec3::Y, Vec2::splat(1.0))));
+    let material = commands.spawn_asset(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: BLACK.into(),
+            perceptual_roughness: 0.0,
+            ..default()
+        },
+        extension: Water {
+            normals: asset_server
+                .load_builder()
+                .with_settings(|settings: &mut ImageLoaderSettings| {
+                    settings.is_srgb = false;
+                    settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                        address_mode_u: ImageAddressMode::Repeat,
+                        address_mode_v: ImageAddressMode::Repeat,
+                        mag_filter: ImageFilterMode::Linear,
+                        min_filter: ImageFilterMode::Linear,
+                        ..default()
+                    });
+                })
+                .load("textures/water_normals.png"),
+            // These water settings are just random values to create some
+            // variety.
+            settings: WaterSettings {
+                octave_vectors: [
+                    vec4(0.080, 0.059, 0.073, -0.062),
+                    vec4(0.153, 0.138, -0.149, -0.195),
+                ],
+                octave_scales: vec4(1.0, 2.1, 7.9, 14.9) * 500.0,
+                octave_strengths: vec4(0.16, 0.18, 0.093, 0.044) * 0.2,
+            },
+        },
+    });
+
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0)))),
-        MeshMaterial3d(
-            water_materials.add(ExtendedMaterial {
-                base: StandardMaterial {
-                    base_color: BLACK.into(),
-                    perceptual_roughness: 0.0,
-                    ..default()
-                },
-                extension: Water {
-                    normals: asset_server
-                        .load_builder()
-                        .with_settings(|settings: &mut ImageLoaderSettings| {
-                            settings.is_srgb = false;
-                            settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                                address_mode_u: ImageAddressMode::Repeat,
-                                address_mode_v: ImageAddressMode::Repeat,
-                                mag_filter: ImageFilterMode::Linear,
-                                min_filter: ImageFilterMode::Linear,
-                                ..default()
-                            });
-                        })
-                        .load("textures/water_normals.png"),
-                    // These water settings are just random values to create some
-                    // variety.
-                    settings: WaterSettings {
-                        octave_vectors: [
-                            vec4(0.080, 0.059, 0.073, -0.062),
-                            vec4(0.153, 0.138, -0.149, -0.195),
-                        ],
-                        octave_scales: vec4(1.0, 2.1, 7.9, 14.9) * 500.0,
-                        octave_strengths: vec4(0.16, 0.18, 0.093, 0.044) * 0.2,
-                    },
-                },
-            }),
-        ),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_scale(Vec3::splat(100.0)),
     ));
 }

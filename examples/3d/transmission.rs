@@ -58,21 +58,18 @@ fn main() {
 }
 
 /// set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
-    let icosphere_mesh = meshes.add(Sphere::new(0.9).mesh().ico(7).unwrap());
-    let cube_mesh = meshes.add(Cuboid::new(0.7, 0.7, 0.7));
-    let plane_mesh = meshes.add(Plane3d::default().mesh().size(2.0, 2.0));
-    let cylinder_mesh = meshes.add(Cylinder::new(0.5, 2.0).mesh().resolution(50));
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let icosphere_mesh = commands.spawn_asset(Sphere::new(0.9).mesh().ico(7).unwrap());
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(0.7, 0.7, 0.7)));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(2.0, 2.0)));
+    let cylinder_mesh =
+        commands.spawn_asset(Mesh::from(Cylinder::new(0.5, 2.0).mesh().resolution(50)));
 
     // Cube #1
+    let material_1 = commands.spawn_asset(StandardMaterial::default());
     commands.spawn((
         Mesh3d(cube_mesh.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial::default())),
+        MeshMaterial3d(material_1),
         Transform::from_xyz(0.25, 0.5, -2.0).with_rotation(Quat::from_euler(
             EulerRot::XYZ,
             1.4,
@@ -87,9 +84,10 @@ fn setup(
     ));
 
     // Cube #2
+    let material_2 = commands.spawn_asset(StandardMaterial::default());
     commands.spawn((
         Mesh3d(cube_mesh),
-        MeshMaterial3d(materials.add(StandardMaterial::default())),
+        MeshMaterial3d(material_2),
         Transform::from_xyz(-0.75, 0.7, -2.0).with_rotation(Quat::from_euler(
             EulerRot::XYZ,
             0.4,
@@ -104,15 +102,16 @@ fn setup(
     ));
 
     // Candle
+    let candle_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::srgb(0.9, 0.2, 0.3),
+        diffuse_transmission: 0.7,
+        perceptual_roughness: 0.32,
+        thickness: 0.2,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(cylinder_mesh),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.9, 0.2, 0.3),
-            diffuse_transmission: 0.7,
-            perceptual_roughness: 0.32,
-            thickness: 0.2,
-            ..default()
-        })),
+        MeshMaterial3d(candle_material),
         Transform::from_xyz(-1.0, 0.0, 0.0),
         ExampleControls {
             color: true,
@@ -131,30 +130,32 @@ fn setup(
         alpha: 1.0,
     };
 
+    let flame_material = commands.spawn_asset(StandardMaterial {
+        emissive,
+        diffuse_transmission: 1.0,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(icosphere_mesh.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            emissive,
-            diffuse_transmission: 1.0,
-            ..default()
-        })),
+        MeshMaterial3d(flame_material),
         Transform::from_xyz(-1.0, 1.15, 0.0).with_scale(Vec3::new(0.1, 0.2, 0.1)),
         Flicker,
         NotShadowCaster,
     ));
 
     // Glass Sphere
+    let glass_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::WHITE,
+        specular_transmission: 0.9,
+        diffuse_transmission: 1.0,
+        thickness: 1.8,
+        ior: 1.5,
+        perceptual_roughness: 0.12,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(icosphere_mesh.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            specular_transmission: 0.9,
-            diffuse_transmission: 1.0,
-            thickness: 1.8,
-            ior: 1.5,
-            perceptual_roughness: 0.12,
-            ..default()
-        })),
+        MeshMaterial3d(glass_material),
         Transform::from_xyz(1.0, 0.0, 0.0),
         ExampleControls {
             color: true,
@@ -164,17 +165,18 @@ fn setup(
     ));
 
     // R Sphere
+    let r_sphere_material = commands.spawn_asset(StandardMaterial {
+        base_color: RED.into(),
+        specular_transmission: 0.9,
+        diffuse_transmission: 1.0,
+        thickness: 1.8,
+        ior: 1.5,
+        perceptual_roughness: 0.12,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(icosphere_mesh.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.into(),
-            specular_transmission: 0.9,
-            diffuse_transmission: 1.0,
-            thickness: 1.8,
-            ior: 1.5,
-            perceptual_roughness: 0.12,
-            ..default()
-        })),
+        MeshMaterial3d(r_sphere_material),
         Transform::from_xyz(1.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
         ExampleControls {
             color: true,
@@ -184,17 +186,18 @@ fn setup(
     ));
 
     // G Sphere
+    let g_sphere_material = commands.spawn_asset(StandardMaterial {
+        base_color: LIME.into(),
+        specular_transmission: 0.9,
+        diffuse_transmission: 1.0,
+        thickness: 1.8,
+        ior: 1.5,
+        perceptual_roughness: 0.12,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(icosphere_mesh.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: LIME.into(),
-            specular_transmission: 0.9,
-            diffuse_transmission: 1.0,
-            thickness: 1.8,
-            ior: 1.5,
-            perceptual_roughness: 0.12,
-            ..default()
-        })),
+        MeshMaterial3d(g_sphere_material),
         Transform::from_xyz(0.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
         ExampleControls {
             color: true,
@@ -204,17 +207,18 @@ fn setup(
     ));
 
     // B Sphere
+    let b_sphere_material = commands.spawn_asset(StandardMaterial {
+        base_color: BLUE.into(),
+        specular_transmission: 0.9,
+        diffuse_transmission: 1.0,
+        thickness: 1.8,
+        ior: 1.5,
+        perceptual_roughness: 0.12,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(icosphere_mesh),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: BLUE.into(),
-            specular_transmission: 0.9,
-            diffuse_transmission: 1.0,
-            thickness: 1.8,
-            ior: 1.5,
-            perceptual_roughness: 0.12,
-            ..default()
-        })),
+        MeshMaterial3d(b_sphere_material),
         Transform::from_xyz(-1.0, -0.5, 2.0).with_scale(Vec3::splat(0.5)),
         ExampleControls {
             color: true,
@@ -224,14 +228,14 @@ fn setup(
     ));
 
     // Chessboard Plane
-    let black_material = materials.add(StandardMaterial {
+    let black_material = commands.spawn_asset(StandardMaterial {
         base_color: Color::BLACK,
         reflectance: 0.3,
         perceptual_roughness: 0.8,
         ..default()
     });
 
-    let white_material = materials.add(StandardMaterial {
+    let white_material = commands.spawn_asset(StandardMaterial {
         base_color: Color::WHITE,
         reflectance: 0.3,
         perceptual_roughness: 0.8,
@@ -258,17 +262,18 @@ fn setup(
     }
 
     // Paper
+    let paper_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::WHITE,
+        diffuse_transmission: 0.6,
+        perceptual_roughness: 0.8,
+        reflectance: 1.0,
+        double_sided: true,
+        cull_mode: None,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(plane_mesh),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            diffuse_transmission: 0.6,
-            perceptual_roughness: 0.8,
-            reflectance: 1.0,
-            double_sided: true,
-            cull_mode: None,
-            ..default()
-        })),
+        MeshMaterial3d(paper_material),
         Transform::from_xyz(0.0, 0.5, -3.0)
             .with_scale(Vec3::new(2.0, 1.0, 1.0))
             .with_rotation(Quat::from_euler(EulerRot::XYZ, PI / 2.0, 0.0, 0.0)),
@@ -374,7 +379,7 @@ impl Default for ExampleState {
 
 fn example_control_system(
     mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     controllable: Query<(&MeshMaterial3d<StandardMaterial>, &ExampleControls)>,
     camera: Single<
         (
@@ -431,7 +436,7 @@ fn example_control_system(
     let randomize_colors = input.just_pressed(KeyCode::KeyC);
 
     for (material_handle, controls) in &controllable {
-        let mut material = materials.get_mut(material_handle).unwrap();
+        let mut material = materials.get_mut(material_handle.entity()).unwrap();
         if controls.specular_transmission {
             material.specular_transmission = state.specular_transmission;
             material.thickness = state.thickness;

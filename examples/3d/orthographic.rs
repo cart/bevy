@@ -10,11 +10,7 @@ fn main() {
 }
 
 /// set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // camera
     commands.spawn((
         Camera3d::default(),
@@ -29,29 +25,30 @@ fn setup(
     ));
 
     // plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
-    ));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(5.0, 5.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(plane_material)));
     // cubes
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::default()));
+    let cube_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.8, 0.7, 0.6)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(cube_material.clone()),
         Transform::from_xyz(1.5, 0.5, 1.5),
     ));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(cube_material.clone()),
         Transform::from_xyz(1.5, 0.5, -1.5),
     ));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(cube_material.clone()),
         Transform::from_xyz(-1.5, 0.5, 1.5),
     ));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(cube_material.clone()),
         Transform::from_xyz(-1.5, 0.5, -1.5),
     ));
     // light

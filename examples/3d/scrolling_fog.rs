@@ -38,12 +38,7 @@ fn main() {
 }
 
 /// Spawns all entities into the scene.
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    assets: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     // Spawn camera with temporal anti-aliasing and a VolumetricFog configuration.
     commands.spawn((
         Camera3d::default(),
@@ -69,20 +64,24 @@ fn setup(
     ));
 
     // Spawn ground mesh.
+    let ground_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(64.0, 1.0, 64.0)));
+    let ground_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::BLACK,
+        perceptual_roughness: 1.0,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(64.0, 1.0, 64.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::BLACK,
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
+        Mesh3d(ground_mesh),
+        MeshMaterial3d(ground_material),
         Transform::from_xyz(0.0, -0.5, 0.0),
     ));
 
     // Spawn pillar standing between the camera and the sun.
+    let pillar_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(2.0, 9.0, 2.0)));
+    let pillar_material = commands.spawn_asset(StandardMaterial::from(Color::BLACK));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(2.0, 9.0, 2.0))),
-        MeshMaterial3d(materials.add(Color::BLACK)),
+        Mesh3d(pillar_mesh),
+        MeshMaterial3d(pillar_material),
         Transform::from_xyz(-10.0, 4.5, -11.0),
     ));
 

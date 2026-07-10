@@ -237,34 +237,25 @@ impl Plugin for ReadbackIndirectParametersPlugin {
 }
 
 /// Spawns all the objects in the scene.
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    spawn_small_cubes(&mut commands, &mut meshes, &mut materials);
-    spawn_large_cube(&mut commands, &asset_server, &mut meshes, &mut materials);
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    spawn_small_cubes(&mut commands);
+    spawn_large_cube(&mut commands, &asset_server);
     spawn_light(&mut commands);
     spawn_camera(&mut commands);
     spawn_help_text(&mut commands);
 }
 
 /// Spawns the rotating sphere of small cubes.
-fn spawn_small_cubes(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-) {
+fn spawn_small_cubes(commands: &mut Commands) {
     // Add the cube mesh.
-    let small_cube = meshes.add(Cuboid::new(
+    let small_cube = commands.spawn_asset(Mesh::from(Cuboid::new(
         SMALL_CUBE_SIZE,
         SMALL_CUBE_SIZE,
         SMALL_CUBE_SIZE,
-    ));
+    )));
 
     // Add the cube material.
-    let small_cube_material = materials.add(StandardMaterial {
+    let small_cube_material = commands.spawn_asset(StandardMaterial {
         base_color: SILVER.into(),
         ..default()
     });
@@ -305,23 +296,20 @@ fn spawn_small_cubes(
 /// Spawns the large cube at the center of the screen.
 ///
 /// This cube rotates chaotically and occludes small cubes behind it.
-fn spawn_large_cube(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-) {
+fn spawn_large_cube(commands: &mut Commands, asset_server: &AssetServer) {
+    let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(
+        LARGE_CUBE_SIZE,
+        LARGE_CUBE_SIZE,
+        LARGE_CUBE_SIZE,
+    )));
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color: WHITE.into(),
+        base_color_texture: Some(asset_server.load("branding/icon.png")),
+        ..default()
+    });
     commands
-        .spawn(Mesh3d(meshes.add(Cuboid::new(
-            LARGE_CUBE_SIZE,
-            LARGE_CUBE_SIZE,
-            LARGE_CUBE_SIZE,
-        ))))
-        .insert(MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: WHITE.into(),
-            base_color_texture: Some(asset_server.load("branding/icon.png")),
-            ..default()
-        })))
+        .spawn(Mesh3d(mesh))
+        .insert(MeshMaterial3d(material))
         .insert(Transform::IDENTITY)
         .insert(LargeCube);
 }

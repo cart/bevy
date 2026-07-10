@@ -19,6 +19,7 @@ use bevy::{
     },
     prelude::*,
 };
+use bevy_asset::AssetReference;
 
 fn main() {
     App::new()
@@ -29,13 +30,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut compensation_curves: ResMut<Assets<AutoExposureCompensationCurve>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let metering_mask = asset_server.load("textures/basic_metering_mask.png");
 
     commands.spawn((
@@ -52,20 +47,21 @@ fn setup(
         },
     ));
 
+    let basic_compensation_curve = commands.spawn_asset(
+        AutoExposureCompensationCurve::from_curve(LinearSpline::new([
+            vec2(-4.0, -2.0),
+            vec2(0.0, 0.0),
+            vec2(2.0, 0.0),
+            vec2(4.0, 2.0),
+        ]))
+        .unwrap(),
+    );
     commands.insert_resource(ExampleResources {
-        basic_compensation_curve: compensation_curves.add(
-            AutoExposureCompensationCurve::from_curve(LinearSpline::new([
-                vec2(-4.0, -2.0),
-                vec2(0.0, 0.0),
-                vec2(2.0, 0.0),
-                vec2(4.0, 2.0),
-            ]))
-            .unwrap(),
-        ),
+        basic_compensation_curve,
         basic_metering_mask: metering_mask.clone(),
     });
 
-    let plane = meshes.add(Mesh::from(
+    let plane = commands.spawn_asset(Mesh::from(
         Plane3d {
             normal: -Dir3::Z,
             half_size: Vec2::new(2.0, 0.5),
@@ -82,16 +78,17 @@ fn setup(
 
             let height = Vec3::Y * level as f32;
 
+            let material = commands.spawn_asset(StandardMaterial {
+                base_color: Color::srgb(
+                    0.5 + side.x * 0.5,
+                    0.75 - level as f32 * 0.25,
+                    0.5 + side.z * 0.5,
+                ),
+                ..default()
+            });
             commands.spawn((
                 Mesh3d(plane.clone()),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::srgb(
-                        0.5 + side.x * 0.5,
-                        0.75 - level as f32 * 0.25,
-                        0.5 + side.z * 0.5,
-                    ),
-                    ..default()
-                })),
+                MeshMaterial3d(material),
                 Transform::from_translation(side * 2.0 + height).looking_at(height, Vec3::Y),
             ));
         }
@@ -158,6 +155,7 @@ struct ExampleResources {
 
 fn example_control_system(
     camera: Single<(&mut Transform, &mut AutoExposure), With<Camera3d>>,
+    asset_server: Res<AssetServer>,
     mut display: Single<&mut Text, With<ExampleDisplay>>,
     mut mask_image: Single<&mut Node, With<ImageNode>>,
     time: Res<Time>,
@@ -179,7 +177,7 @@ fn example_control_system(
     if input.just_pressed(KeyCode::KeyC) {
         auto_exposure.compensation_curve =
             if auto_exposure.compensation_curve == resources.basic_compensation_curve {
-                Handle::default()
+                asset_server.load(AssetReference::Default)
             } else {
                 resources.basic_compensation_curve.clone()
             };
@@ -188,7 +186,7 @@ fn example_control_system(
     if input.just_pressed(KeyCode::KeyM) {
         auto_exposure.metering_mask =
             if auto_exposure.metering_mask == resources.basic_metering_mask {
-                Handle::default()
+                asset_server.load(AssetReference::Default)
             } else {
                 resources.basic_metering_mask.clone()
             };

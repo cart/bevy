@@ -54,44 +54,40 @@ const EXTRUSION_X_EXTENT: f32 = 14.0;
 const Z_EXTENT: f32 = 8.0;
 const THICKNESS: f32 = 0.1;
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let debug_material = materials.add(StandardMaterial {
-        base_color_texture: Some(images.add(uv_debug_texture())),
+fn setup(mut commands: Commands) {
+    let debug_texture = commands.spawn_asset(uv_debug_texture());
+    let debug_material = commands.spawn_asset(StandardMaterial {
+        base_color_texture: Some(debug_texture),
         ..default()
     });
 
     let shapes = [
-        meshes.add(Cuboid::default()),
-        meshes.add(Tetrahedron::default()),
-        meshes.add(Capsule3d::default()),
-        meshes.add(Torus::default()),
-        meshes.add(Cylinder::default()),
-        meshes.add(Cone::default()),
-        meshes.add(ConicalFrustum::default()),
-        meshes.add(Sphere::default().mesh().ico(5).unwrap()),
-        meshes.add(Sphere::default().mesh().uv(32, 18)),
-        meshes.add(Segment3d::default()),
-        meshes.add(Polyline3d::new(vec![
+        commands.spawn_asset(Mesh::from(Cuboid::default())),
+        commands.spawn_asset(Mesh::from(Tetrahedron::default())),
+        commands.spawn_asset(Mesh::from(Capsule3d::default())),
+        commands.spawn_asset(Mesh::from(Torus::default())),
+        commands.spawn_asset(Mesh::from(Cylinder::default())),
+        commands.spawn_asset(Mesh::from(Cone::default())),
+        commands.spawn_asset(Mesh::from(ConicalFrustum::default())),
+        commands.spawn_asset(Mesh::from(Sphere::default().mesh().ico(5).unwrap())),
+        commands.spawn_asset(Mesh::from(Sphere::default().mesh().uv(32, 18))),
+        commands.spawn_asset(Mesh::from(Segment3d::default())),
+        commands.spawn_asset(Mesh::from(Polyline3d::new(vec![
             Vec3::new(-0.5, 0.0, 0.0),
             Vec3::new(0.5, 0.0, 0.0),
             Vec3::new(0.0, 0.5, 0.0),
-        ])),
+        ]))),
     ];
 
     let extrusions = [
-        meshes.add(Extrusion::new(Rectangle::default(), 1.)),
-        meshes.add(Extrusion::new(Capsule2d::default(), 1.)),
-        meshes.add(Extrusion::new(Annulus::default(), 1.)),
-        meshes.add(Extrusion::new(Circle::default(), 1.)),
-        meshes.add(Extrusion::new(Ellipse::default(), 1.)),
-        meshes.add(Extrusion::new(RegularPolygon::default(), 1.)),
-        meshes.add(Extrusion::new(Triangle2d::default(), 1.)),
-        meshes.add(Extrusion::new(
+        commands.spawn_asset(Mesh::from(Extrusion::new(Rectangle::default(), 1.))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(Capsule2d::default(), 1.))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(Annulus::default(), 1.))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(Circle::default(), 1.))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(Ellipse::default(), 1.))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(RegularPolygon::default(), 1.))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(Triangle2d::default(), 1.))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(
             ConvexPolygon::new(vec![
                 Vec2::new(0.0, 0.8),
                 Vec2::new(-0.47, 0.25),
@@ -101,18 +97,27 @@ fn setup(
             ])
             .unwrap(),
             1.0,
-        )),
+        ))),
     ];
 
     let ring_extrusions = [
-        meshes.add(Extrusion::new(Rectangle::default().to_ring(THICKNESS), 1.)),
-        meshes.add(Extrusion::new(Capsule2d::default().to_ring(THICKNESS), 1.)),
-        meshes.add(Extrusion::new(
+        commands.spawn_asset(Mesh::from(Extrusion::new(
+            Rectangle::default().to_ring(THICKNESS),
+            1.,
+        ))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(
+            Capsule2d::default().to_ring(THICKNESS),
+            1.,
+        ))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(
             Ring::new(Circle::new(1.0), Circle::new(0.5)),
             1.,
-        )),
-        meshes.add(Extrusion::new(Circle::default().to_ring(THICKNESS), 1.)),
-        meshes.add(Extrusion::new(
+        ))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(
+            Circle::default().to_ring(THICKNESS),
+            1.,
+        ))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(
             {
                 // This is an approximation; Ellipse does not implement Inset as concentric ellipses do not have parallel curves
                 let outer = Ellipse::default();
@@ -121,12 +126,15 @@ fn setup(
                 Ring::new(outer, inner)
             },
             1.,
-        )),
-        meshes.add(Extrusion::new(
+        ))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(
             RegularPolygon::default().to_ring(THICKNESS),
             1.,
-        )),
-        meshes.add(Extrusion::new(Triangle2d::default().to_ring(THICKNESS), 1.)),
+        ))),
+        commands.spawn_asset(Mesh::from(Extrusion::new(
+            Triangle2d::default().to_ring(THICKNESS),
+            1.,
+        ))),
     ];
 
     let num_shapes = shapes.len();
@@ -194,10 +202,11 @@ fn setup(
     ));
 
     // ground plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0).subdivisions(10))),
-        MeshMaterial3d(materials.add(Color::from(SILVER))),
+    let plane_mesh = commands.spawn_asset(Mesh::from(
+        Plane3d::default().mesh().size(50.0, 50.0).subdivisions(10),
     ));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::from(SILVER)));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(plane_material)));
 
     commands.spawn((
         Camera3d::default(),

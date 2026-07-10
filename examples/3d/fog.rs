@@ -53,12 +53,8 @@ fn setup_camera_fog(mut commands: Commands) {
     ));
 }
 
-fn setup_pyramid_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let stone = materials.add(StandardMaterial {
+fn setup_pyramid_scene(mut commands: Commands) {
+    let stone = commands.spawn_asset(StandardMaterial {
         base_color: Srgba::hex("28221B").unwrap().into(),
         perceptual_roughness: 1.0,
         ..default()
@@ -66,24 +62,27 @@ fn setup_pyramid_scene(
 
     // pillars
     for (x, z) in &[(-1.5, -1.5), (1.5, -1.5), (1.5, 1.5), (-1.5, 1.5)] {
+        let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 3.0, 1.0)));
         commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.0, 3.0, 1.0))),
+            Mesh3d(cube_mesh),
             MeshMaterial3d(stone.clone()),
             Transform::from_xyz(*x, 1.5, *z),
         ));
     }
 
     // orb
+    let sphere_mesh = commands.spawn_asset(Mesh::from(Sphere::default()));
+    let sphere_material = commands.spawn_asset(StandardMaterial {
+        base_color: Srgba::hex("126212CC").unwrap().into(),
+        reflectance: 1.0,
+        perceptual_roughness: 0.0,
+        metallic: 0.5,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::default())),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Srgba::hex("126212CC").unwrap().into(),
-            reflectance: 1.0,
-            perceptual_roughness: 0.0,
-            metallic: 0.5,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
+        Mesh3d(sphere_mesh),
+        MeshMaterial3d(sphere_material),
         Transform::from_scale(Vec3::splat(1.75)).with_translation(Vec3::new(0.0, 4.0, 0.0)),
         NotShadowCaster,
         NotShadowReceiver,
@@ -93,22 +92,29 @@ fn setup_pyramid_scene(
     for i in 0..50 {
         let half_size = i as f32 / 2.0 + 3.0;
         let y = -i as f32 / 2.0;
+        let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(
+            2.0 * half_size,
+            0.5,
+            2.0 * half_size,
+        )));
         commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(2.0 * half_size, 0.5, 2.0 * half_size))),
+            Mesh3d(cube_mesh),
             MeshMaterial3d(stone.clone()),
             Transform::from_xyz(0.0, y + 0.25, 0.0),
         ));
     }
 
     // sky
+    let sky_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(2.0, 1.0, 1.0)));
+    let sky_material = commands.spawn_asset(StandardMaterial {
+        base_color: Srgba::hex("888888").unwrap().into(),
+        unlit: true,
+        cull_mode: None,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(2.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Srgba::hex("888888").unwrap().into(),
-            unlit: true,
-            cull_mode: None,
-            ..default()
-        })),
+        Mesh3d(sky_mesh),
+        MeshMaterial3d(sky_material),
         Transform::from_scale(Vec3::splat(1_000_000.0)),
     ));
 

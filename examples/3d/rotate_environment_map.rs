@@ -21,14 +21,9 @@ pub fn main() {
 }
 
 /// Initializes the scene.
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
-    let sphere_mesh = create_sphere_mesh(&mut meshes);
-    spawn_sphere(&mut commands, &mut materials, &asset_server, &sphere_mesh);
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let sphere_mesh = create_sphere_mesh(&mut commands);
+    spawn_sphere(&mut commands, &asset_server, &sphere_mesh);
     spawn_light(&mut commands);
     spawn_camera(&mut commands, &asset_server);
 }
@@ -47,7 +42,7 @@ fn rotate_skybox_and_environment_map(
 }
 
 /// Generates a sphere.
-fn create_sphere_mesh(meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
+fn create_sphere_mesh(meshes: &mut Commands) -> Handle<Mesh> {
     // We're going to use normal maps, so make sure we've generated tangents, or
     // else the normal maps won't show up.
 
@@ -55,36 +50,31 @@ fn create_sphere_mesh(meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
     sphere_mesh
         .generate_tangents()
         .expect("Failed to generate tangents");
-    meshes.add(sphere_mesh)
+    commands.spawn_asset(sphere_mesh)
 }
 
 /// Spawn a regular object with a clearcoat layer. This looks like car paint.
-fn spawn_sphere(
-    commands: &mut Commands,
-    materials: &mut Assets<StandardMaterial>,
-    asset_server: &AssetServer,
-    sphere_mesh: &Handle<Mesh>,
-) {
+fn spawn_sphere(commands: &mut Commands, asset_server: &AssetServer, sphere_mesh: &Handle<Mesh>) {
+    let material = commands.spawn_asset(StandardMaterial {
+        clearcoat: 1.0,
+        clearcoat_perceptual_roughness: 0.3,
+        clearcoat_normal_texture: Some(
+            asset_server
+                .load_builder()
+                .with_settings(|settings: &mut ImageLoaderSettings| {
+                    settings.is_srgb = false;
+                })
+                .load("textures/ScratchedGold-Normal.png"),
+        ),
+        metallic: 0.9,
+        perceptual_roughness: 0.1,
+        base_color: GOLD.into(),
+        ..default()
+    });
+
     commands.spawn((
         Mesh3d(sphere_mesh.clone()),
-        MeshMaterial3d(
-            materials.add(StandardMaterial {
-                clearcoat: 1.0,
-                clearcoat_perceptual_roughness: 0.3,
-                clearcoat_normal_texture: Some(
-                    asset_server
-                        .load_builder()
-                        .with_settings(|settings: &mut ImageLoaderSettings| {
-                            settings.is_srgb = false;
-                        })
-                        .load("textures/ScratchedGold-Normal.png"),
-                ),
-                metallic: 0.9,
-                perceptual_roughness: 0.1,
-                base_color: GOLD.into(),
-                ..default()
-            }),
-        ),
+        MeshMaterial3d(material),
         Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(1.25)),
     ));
 }

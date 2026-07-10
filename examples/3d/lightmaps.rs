@@ -62,7 +62,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, args: Res<Args>
 fn add_lightmaps_to_meshes(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     meshes: Query<
         (Entity, &GltfMeshName, &MeshMaterial3d<StandardMaterial>),
         (With<Mesh3d>, Without<Lightmap>),
@@ -72,7 +72,10 @@ fn add_lightmaps_to_meshes(
     let exposure = 250.0;
     for (entity, name, material) in meshes.iter() {
         if &**name == "large_box" {
-            materials.get_mut(material).unwrap().lightmap_exposure = exposure;
+            materials
+                .get_mut(material.entity())
+                .unwrap()
+                .lightmap_exposure = exposure;
             commands.entity(entity).insert(Lightmap {
                 image: asset_server.load("lightmaps/CornellBox-Large.zstd.ktx2"),
                 bicubic_sampling: args.bicubic,
@@ -82,7 +85,10 @@ fn add_lightmaps_to_meshes(
         }
 
         if &**name == "small_box" {
-            materials.get_mut(material).unwrap().lightmap_exposure = exposure;
+            materials
+                .get_mut(material.entity())
+                .unwrap()
+                .lightmap_exposure = exposure;
             commands.entity(entity).insert(Lightmap {
                 image: asset_server.load("lightmaps/CornellBox-Small.zstd.ktx2"),
                 bicubic_sampling: args.bicubic,
@@ -92,7 +98,10 @@ fn add_lightmaps_to_meshes(
         }
 
         if name.starts_with("cornell_box") {
-            materials.get_mut(material).unwrap().lightmap_exposure = exposure;
+            materials
+                .get_mut(material.entity())
+                .unwrap()
+                .lightmap_exposure = exposure;
             commands.entity(entity).insert(Lightmap {
                 image: asset_server.load("lightmaps/CornellBox-Box.zstd.ktx2"),
                 bicubic_sampling: args.bicubic,

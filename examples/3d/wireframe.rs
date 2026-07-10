@@ -53,28 +53,28 @@ fn main() {
 struct ColorToggleCube;
 
 /// set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // Red cube: Never renders a wireframe
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::default()));
+    let red_material = commands.spawn_asset(StandardMaterial::from(Color::from(RED)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::from(RED))),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(red_material),
         Transform::from_xyz(-1.5, 0.5, -1.5),
         NoWireframe,
     ));
     // Orange cube: Follows global wireframe setting
+    let orange_material = commands.spawn_asset(StandardMaterial::from(Color::from(ORANGE)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::from(ORANGE))),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(orange_material),
         Transform::from_xyz(-0.5, 0.5, -0.5),
     ));
     // Green cube: Always renders a wireframe with custom color
+    let green_material = commands.spawn_asset(StandardMaterial::from(Color::from(LIME)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::from(LIME))),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(green_material),
         Transform::from_xyz(0.5, 0.5, 0.5),
         Wireframe,
         // This lets you configure the wireframe color of this entity.
@@ -84,9 +84,10 @@ fn setup(
     ));
 
     // Purple cube: wireframe with explicit Quads topology override
+    let purple_material = commands.spawn_asset(StandardMaterial::from(Color::from(PURPLE)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::from(PURPLE))),
+        Mesh3d(cube_mesh),
+        MeshMaterial3d(purple_material),
         Transform::from_xyz(1.5, 0.5, 1.5),
         Wireframe,
         WireframeColor {
@@ -97,9 +98,11 @@ fn setup(
     ));
 
     // plane
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(5.0, 5.0)));
+    let blue_material = commands.spawn_asset(StandardMaterial::from(Color::from(BLUE)));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
-        MeshMaterial3d(materials.add(Color::from(BLUE))),
+        Mesh3d(plane_mesh),
+        MeshMaterial3d(blue_material),
         // You can insert this component without the `Wireframe` component
         // to override the color of the global wireframe for this mesh
         WireframeColor {

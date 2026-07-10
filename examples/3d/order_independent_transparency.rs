@@ -9,7 +9,6 @@ use bevy::{
     camera::visibility::RenderLayers,
     color::palettes::css::{BLUE, GREEN, RED, YELLOW},
     core_pipeline::{oit::OrderIndependentTransparencySettings, prepass::DepthPrepass},
-    ecs::system::SystemParam,
     pbr::{ExtendedMaterial, MaterialExtension},
     picking::window::update_window_hits,
     prelude::*,
@@ -22,7 +21,7 @@ use bevy::{
 mod widgets;
 
 /// Scene construction functions
-const SCENES: &[(&str, &str, fn(&mut Commands, &mut SceneResources))] = &[
+const SCENES: &[(&str, &str, fn(&mut Commands, &AssetServer))] = &[
     ("1", "Three balls", spawn_spheres),
     ("2", "Stacked quads", spawn_quads),
     ("3", "Opaque occlusion test", spawn_occlusion_test),
@@ -65,17 +64,6 @@ enum AppSetting {
     ChangeScene(usize),
 }
 
-/// This system param bundles up the resources used by the scene creation functions.
-#[derive(SystemParam)]
-struct SceneResources<'w> {
-    meshes: ResMut<'w, Assets<Mesh>>,
-    materials: ResMut<'w, Assets<StandardMaterial>>,
-    extended_materials:
-        ResMut<'w, Assets<ExtendedMaterial<StandardMaterial, CheckeredMaterialExtension>>>,
-    custom_materials: ResMut<'w, Assets<NoisyOpacityMaterial>>,
-    asset_server: Res<'w, AssetServer>,
-}
-
 /// This message is similar to `WidgetClickEvent<AppSetting>`, only for events generated
 /// by the app itself.
 #[derive(Clone, Message, Deref, DerefMut)]
@@ -113,7 +101,7 @@ struct BaseTransform(Transform);
 /// Sets up the base scene
 fn setup(
     mut commands: Commands,
-    mut resources: SceneResources,
+    asset_server: Res<AssetServer>,
     app_state: Res<AppState>,
     window: Single<Entity, With<PrimaryWindow>>,
 ) {
@@ -196,7 +184,7 @@ fn setup(
     ));
 
     // Spawn the default scene
-    SCENES[0].2(&mut commands, &mut resources); //&mut meshes, &mut materials);
+    SCENES[0].2(&mut commands, &asset_server);
 }
 
 /// Watches for key presses and queues corresponding `AppEvent`'s
@@ -361,7 +349,7 @@ fn scene_change_watcher(
     app_state: Res<AppState>,
     mut prev_scene_id: Local<usize>,
     entities: Query<Entity, With<Mesh3d>>,
-    mut resources: SceneResources<'_>,
+    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     if app_state.is_changed() && *prev_scene_id != app_state.current_scene_id {
@@ -369,7 +357,7 @@ fn scene_change_watcher(
         for e in &entities {
             commands.entity(e).despawn();
         }
-        SCENES[app_state.current_scene_id].2(&mut commands, &mut resources);
+        SCENES[app_state.current_scene_id].2(&mut commands, &asset_server);
         *prev_scene_id = app_state.current_scene_id;
     }
 }
@@ -377,49 +365,49 @@ fn scene_change_watcher(
 /// Spawns 3 overlapping spheres
 /// Technically, when using `alpha_to_coverage` with MSAA this particular example wouldn't break,
 /// but it breaks when disabling MSAA and is enough to show the difference between OIT enabled vs disabled.
-fn spawn_spheres(commands: &mut Commands, resources: &mut SceneResources) {
-    let meshes = &mut resources.meshes;
-    let materials = &mut resources.materials;
-
+fn spawn_spheres(commands: &mut Commands, _asset_server: &AssetServer) {
     let pos_a = Vec3::new(-1.0, 0.75, 0.0);
     let pos_b = Vec3::new(0.0, -0.75, 0.0);
     let pos_c = Vec3::new(1.0, 0.75, 0.0);
 
     let offset = Vec3::new(0.0, 0.0, 0.0);
 
-    let sphere_handle = meshes.add(Sphere::new(2.0).mesh());
+    let sphere_handle = commands.spawn_asset(Mesh::from(Sphere::new(2.0).mesh()));
 
     let alpha = 0.25;
 
     let render_layers = RenderLayers::layer(1);
 
+    let material_1 = commands.spawn_asset(StandardMaterial {
+        base_color: RED.with_alpha(alpha).into(),
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+    let material_2 = commands.spawn_asset(StandardMaterial {
+        base_color: GREEN.with_alpha(alpha).into(),
+        alpha_mode: AlphaMode::Premultiplied,
+        ..default()
+    });
+    let material_3 = commands.spawn_asset(StandardMaterial {
+        base_color: BLUE.with_alpha(alpha).into(),
+        alpha_mode: AlphaMode::Add,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(sphere_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.with_alpha(alpha).into(),
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
+        MeshMaterial3d(material_1),
         Transform::from_translation(pos_a + offset),
         render_layers.clone(),
     ));
     commands.spawn((
         Mesh3d(sphere_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: GREEN.with_alpha(alpha).into(),
-            alpha_mode: AlphaMode::Premultiplied,
-            ..default()
-        })),
+        MeshMaterial3d(material_2),
         Transform::from_translation(pos_b + offset),
         render_layers.clone(),
     ));
     commands.spawn((
         Mesh3d(sphere_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: BLUE.with_alpha(alpha).into(),
-            alpha_mode: AlphaMode::Add,
-            ..default()
-        })),
+        MeshMaterial3d(material_3),
         Transform::from_translation(pos_c + offset),
         render_layers.clone(),
     ));
@@ -427,11 +415,8 @@ fn spawn_spheres(commands: &mut Commands, resources: &mut SceneResources) {
 
 /// Spawns a stack of transparent quads, which better illustrates the shortcomings
 /// of the standard mesh sorted transparency.
-fn spawn_quads(commands: &mut Commands, resources: &mut SceneResources) {
-    let meshes = &mut resources.meshes;
-    let materials = &mut resources.materials;
-
-    let quad_handle = meshes.add(Rectangle::new(3.0, 3.0).mesh());
+fn spawn_quads(commands: &mut Commands, _asset_server: &AssetServer) {
+    let quad_handle = commands.spawn_asset(Mesh::from(Rectangle::new(3.0, 3.0).mesh()));
     let render_layers = RenderLayers::layer(1);
     let xform = |x, y, z| {
         Transform::from_rotation(Quat::from_rotation_y(0.5))
@@ -445,48 +430,53 @@ fn spawn_quads(commands: &mut Commands, resources: &mut SceneResources) {
         ..default()
     };
 
+    let material_1 = commands.spawn_asset(StandardMaterial {
+        base_color: RED.with_alpha(0.5).into(),
+        ..common_params.clone()
+    });
+    let material_2 = commands.spawn_asset(StandardMaterial {
+        base_color: BLUE.with_alpha(0.8).into(),
+        ..common_params.clone()
+    });
+    let material_3 = commands.spawn_asset(StandardMaterial {
+        base_color: GREEN.with_green(1.0).with_alpha(0.5).into(),
+        ..common_params.clone()
+    });
+    let material_4 = commands.spawn_asset(StandardMaterial {
+        base_color: YELLOW.with_alpha(0.3).into(),
+        ..common_params.clone()
+    });
+    let material_5 = commands.spawn_asset(StandardMaterial {
+        base_color: BLUE.with_alpha(0.2).into(),
+        ..common_params
+    });
     commands.spawn((
         Mesh3d(quad_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.with_alpha(0.5).into(),
-            ..common_params.clone()
-        })),
+        MeshMaterial3d(material_1),
         xform(1.0, -0.1, 0.),
         render_layers.clone(),
     ));
     commands.spawn((
         Mesh3d(quad_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: BLUE.with_alpha(0.8).into(),
-            ..common_params.clone()
-        })),
+        MeshMaterial3d(material_2),
         xform(0.5, 0.2, -0.5),
         render_layers.clone(),
     ));
     commands.spawn((
         Mesh3d(quad_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: GREEN.with_green(1.0).with_alpha(0.5).into(),
-            ..common_params.clone()
-        })),
+        MeshMaterial3d(material_3),
         xform(0.0, 0.4, -1.),
         render_layers.clone(),
     ));
     commands.spawn((
         Mesh3d(quad_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: YELLOW.with_alpha(0.3).into(),
-            ..common_params.clone()
-        })),
+        MeshMaterial3d(material_4),
         xform(-0.5, 0.6, -1.1),
         render_layers.clone(),
     ));
     commands.spawn((
         Mesh3d(quad_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: BLUE.with_alpha(0.2).into(),
-            ..common_params
-        })),
+        MeshMaterial3d(material_5),
         xform(-0.8, 0.8, -1.2),
         render_layers.clone(),
     ));
@@ -495,13 +485,10 @@ fn spawn_quads(commands: &mut Commands, resources: &mut SceneResources) {
 /// Spawns a combination of opaque cubes and transparent spheres.
 /// This is useful to make sure transparent meshes drawn with OIT
 /// are properly occluded by opaque meshes.
-fn spawn_occlusion_test(commands: &mut Commands, resources: &mut SceneResources) {
-    let meshes = &mut resources.meshes;
-    let materials = &mut resources.materials;
-
-    let sphere_handle = meshes.add(Sphere::new(1.0).mesh());
-    let cube_handle = meshes.add(Cuboid::from_size(Vec3::ONE).mesh());
-    let cube_material = materials.add(Color::srgb(0.8, 0.7, 0.6));
+fn spawn_occlusion_test(commands: &mut Commands, _asset_server: &AssetServer) {
+    let sphere_handle = commands.spawn_asset(Mesh::from(Sphere::new(1.0).mesh()));
+    let cube_handle = commands.spawn_asset(Mesh::from(Cuboid::from_size(Vec3::ONE).mesh()));
+    let cube_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.8, 0.7, 0.6)));
 
     let render_layers = RenderLayers::layer(1);
 
@@ -513,18 +500,24 @@ fn spawn_occlusion_test(commands: &mut Commands, resources: &mut SceneResources)
         Transform::from_xyz(x, 0.0, 2.0),
         render_layers.clone(),
     ));
+    let front_material = commands.spawn_asset(StandardMaterial {
+        base_color: RED.with_alpha(0.5).into(),
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(sphere_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.with_alpha(0.5).into(),
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
+        MeshMaterial3d(front_material),
         Transform::from_xyz(x, 0., 0.),
         render_layers.clone(),
     ));
 
     // intersection
+    let intersection_material = commands.spawn_asset(StandardMaterial {
+        base_color: RED.with_alpha(0.5).into(),
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(cube_handle.clone()),
         MeshMaterial3d(cube_material.clone()),
@@ -533,16 +526,17 @@ fn spawn_occlusion_test(commands: &mut Commands, resources: &mut SceneResources)
     ));
     commands.spawn((
         Mesh3d(sphere_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.with_alpha(0.5).into(),
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
+        MeshMaterial3d(intersection_material),
         Transform::from_xyz(0., 0., 0.),
         render_layers.clone(),
     ));
 
     // back
+    let back_material = commands.spawn_asset(StandardMaterial {
+        base_color: RED.with_alpha(0.5).into(),
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
     let x = 2.5;
     commands.spawn((
         Mesh3d(cube_handle.clone()),
@@ -552,11 +546,7 @@ fn spawn_occlusion_test(commands: &mut Commands, resources: &mut SceneResources)
     ));
     commands.spawn((
         Mesh3d(sphere_handle.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.with_alpha(0.5).into(),
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
+        MeshMaterial3d(back_material),
         Transform::from_xyz(x, 0., 0.),
         render_layers.clone(),
     ));
@@ -564,15 +554,11 @@ fn spawn_occlusion_test(commands: &mut Commands, resources: &mut SceneResources)
 
 /// Spawns multiple entities with the same Mesh+Material. They should automatically be drawn using
 /// instancing (when GPU preprocessing is not active) or `MultiDrawIndirect` (when it is).
-fn spawn_auto_instancing_test(commands: &mut Commands, resources: &mut SceneResources) {
-    let meshes = &mut resources.meshes;
-    let materials = &mut resources.materials;
-    let asset_server = &mut resources.asset_server;
-
+fn spawn_auto_instancing_test(commands: &mut Commands, asset_server: &AssetServer) {
     let render_layers = RenderLayers::layer(1);
 
-    let cube = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let material_handle = materials.add(StandardMaterial {
+    let cube = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let material_handle = commands.spawn_asset(StandardMaterial {
         alpha_mode: AlphaMode::Blend,
         base_color_texture: Some(asset_server.load("textures/slice_square.png")),
         ..Default::default()
@@ -647,52 +633,50 @@ impl Material for NoisyOpacityMaterial {
     }
 }
 /// This scene demonstrates the integration of OIT into extended/custom materials
-fn spawn_custom_material(commands: &mut Commands, resources: &mut SceneResources) {
-    let meshes = &mut resources.meshes;
-    let ext_materials = &mut resources.extended_materials;
-    let custom_materials = &mut resources.custom_materials;
-    let materials = &mut resources.materials;
-
+fn spawn_custom_material(commands: &mut Commands, _asset_server: &AssetServer) {
     let render_layers = RenderLayers::layer(1);
 
-    let torus = meshes.add(Torus::new(2.0, 3.0));
+    let torus = commands.spawn_asset(Mesh::from(Torus::new(2.0, 3.0)));
 
     // Spawn a torus with an ExtendedMaterial
+    let extended_material = commands.spawn_asset(ExtendedMaterial {
+        base: StandardMaterial {
+            cull_mode: None,
+            ..default()
+        },
+        extension: CheckeredMaterialExtension {
+            color_1: LinearRgba::new(0.9, 0.1, 0.2, 0.4),
+            color_2: LinearRgba::new(0.2, 0.1, 0.9, 0.7),
+        },
+    });
     commands.spawn((
         Mesh3d(torus.clone()),
-        MeshMaterial3d(ext_materials.add(ExtendedMaterial {
-            base: StandardMaterial {
-                cull_mode: None,
-                ..default()
-            },
-            extension: CheckeredMaterialExtension {
-                color_1: LinearRgba::new(0.9, 0.1, 0.2, 0.4),
-                color_2: LinearRgba::new(0.2, 0.1, 0.9, 0.7),
-            },
-        })),
+        MeshMaterial3d(extended_material),
         Transform::from_rotation(Quat::from_rotation_z(0.4)),
         render_layers.clone(),
     ));
 
     // Spawn a torus with an custom material
+    let custom_material = commands.spawn_asset(NoisyOpacityMaterial {
+        color: LinearRgba::new(0.9, 0.6, 0.0, 0.5),
+    });
     commands.spawn((
         Mesh3d(torus.clone()),
-        MeshMaterial3d(custom_materials.add(NoisyOpacityMaterial {
-            color: LinearRgba::new(0.9, 0.6, 0.0, 0.5),
-        })),
+        MeshMaterial3d(custom_material),
         Transform::from_rotation(Quat::from_rotation_z(1.0)),
         render_layers.clone(),
     ));
 
     // Spawn a torus with a StandardMaterial
+    let standard_material = commands.spawn_asset(StandardMaterial {
+        base_color: LinearRgba::new(0.3, 1.0, 0.1, 0.5).into(),
+        alpha_mode: AlphaMode::Blend,
+        cull_mode: None,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(torus.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: LinearRgba::new(0.3, 1.0, 0.1, 0.5).into(),
-            alpha_mode: AlphaMode::Blend,
-            cull_mode: None,
-            ..default()
-        })),
+        MeshMaterial3d(standard_material),
         Transform::from_rotation(Quat::from_rotation_x(1.0)),
         render_layers.clone(),
     ));

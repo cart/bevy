@@ -39,81 +39,88 @@ struct Parameters(PhysicalCameraParameters);
 struct Movable;
 
 /// set up a simple 3D scene
-fn setup(
-    parameters: Res<Parameters>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup(parameters: Res<Parameters>, mut commands: Commands, asset_server: Res<AssetServer>) {
     // ground plane
+    let ground_plane_mesh =
+        commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(10.0, 10.0)));
+    let ground_plane_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::WHITE,
+        perceptual_roughness: 1.0,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(10.0, 10.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
+        Mesh3d(ground_plane_mesh),
+        MeshMaterial3d(ground_plane_material),
     ));
 
     // left wall
     let mut transform = Transform::from_xyz(2.5, 2.5, 0.0);
     transform.rotate_z(PI / 2.);
+    let left_wall_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(5.0, 0.15, 5.0)));
+    let left_wall_material = commands.spawn_asset(StandardMaterial {
+        base_color: INDIGO.into(),
+        perceptual_roughness: 1.0,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(5.0, 0.15, 5.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: INDIGO.into(),
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
+        Mesh3d(left_wall_mesh),
+        MeshMaterial3d(left_wall_material),
         transform,
     ));
     // back (right) wall
     let mut transform = Transform::from_xyz(0.0, 2.5, -2.5);
     transform.rotate_x(PI / 2.);
+    let back_wall_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(5.0, 0.15, 5.0)));
+    let back_wall_material = commands.spawn_asset(StandardMaterial {
+        base_color: INDIGO.into(),
+        perceptual_roughness: 1.0,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(5.0, 0.15, 5.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: INDIGO.into(),
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
+        Mesh3d(back_wall_mesh),
+        MeshMaterial3d(back_wall_material),
         transform,
     ));
 
     // Bevy logo to demonstrate alpha mask shadows
     let mut transform = Transform::from_xyz(-2.2, 0.5, 1.0);
     transform.rotate_y(PI / 8.);
+    let logo_mesh = commands.spawn_asset(Mesh::from(Rectangle::new(2.0, 0.5)));
+    let logo_material = commands.spawn_asset(StandardMaterial {
+        base_color_texture: Some(asset_server.load("branding/bevy_logo_light.png")),
+        perceptual_roughness: 1.0,
+        alpha_mode: AlphaMode::Mask(0.5),
+        cull_mode: None,
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Rectangle::new(2.0, 0.5))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(asset_server.load("branding/bevy_logo_light.png")),
-            perceptual_roughness: 1.0,
-            alpha_mode: AlphaMode::Mask(0.5),
-            cull_mode: None,
-            ..default()
-        })),
+        Mesh3d(logo_mesh),
+        MeshMaterial3d(logo_material),
         transform,
         Movable,
     ));
 
     // cube
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::default()));
+    let cube_material = commands.spawn_asset(StandardMaterial {
+        base_color: DEEP_PINK.into(),
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: DEEP_PINK.into(),
-            ..default()
-        })),
+        Mesh3d(cube_mesh),
+        MeshMaterial3d(cube_material),
         Transform::from_xyz(0.0, 0.5, 0.0),
         Movable,
     ));
     // sphere
+    let sphere_mesh = commands.spawn_asset(Sphere::new(0.5).mesh().uv(32, 18));
+    let sphere_material = commands.spawn_asset(StandardMaterial {
+        base_color: LIMEGREEN.into(),
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.5).mesh().uv(32, 18))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: LIMEGREEN.into(),
-            ..default()
-        })),
+        Mesh3d(sphere_mesh),
+        MeshMaterial3d(sphere_material),
         Transform::from_xyz(1.5, 1.0, 1.5),
         Movable,
     ));
@@ -127,6 +134,12 @@ fn setup(
     });
 
     // red point light
+    let red_light_mesh = commands.spawn_asset(Sphere::new(0.1).mesh().uv(32, 18));
+    let red_light_material = commands.spawn_asset(StandardMaterial {
+        base_color: RED.into(),
+        emissive: LinearRgba::new(4.0, 0.0, 0.0, 0.0),
+        ..default()
+    });
     commands.spawn((
         PointLight {
             intensity: 100_000.0,
@@ -135,17 +148,16 @@ fn setup(
             ..default()
         },
         Transform::from_xyz(1.0, 2.0, 0.0),
-        children![(
-            Mesh3d(meshes.add(Sphere::new(0.1).mesh().uv(32, 18))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: RED.into(),
-                emissive: LinearRgba::new(4.0, 0.0, 0.0, 0.0),
-                ..default()
-            })),
-        )],
+        children![(Mesh3d(red_light_mesh), MeshMaterial3d(red_light_material),)],
     ));
 
     // green spot light
+    let green_light_mesh = commands.spawn_asset(Mesh::from(Capsule3d::new(0.1, 0.125)));
+    let green_light_material = commands.spawn_asset(StandardMaterial {
+        base_color: LIME.into(),
+        emissive: LinearRgba::new(0.0, 4.0, 0.0, 0.0),
+        ..default()
+    });
     commands.spawn((
         SpotLight {
             intensity: 100_000.0,
@@ -157,17 +169,19 @@ fn setup(
         },
         Transform::from_xyz(-1.0, 2.0, 0.0).looking_at(Vec3::new(-1.0, 0.0, 0.0), Vec3::Z),
         children![(
-            Mesh3d(meshes.add(Capsule3d::new(0.1, 0.125))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: LIME.into(),
-                emissive: LinearRgba::new(0.0, 4.0, 0.0, 0.0),
-                ..default()
-            })),
+            Mesh3d(green_light_mesh),
+            MeshMaterial3d(green_light_material),
             Transform::from_rotation(Quat::from_rotation_x(PI / 2.0)),
         )],
     ));
 
     // blue point light
+    let blue_light_mesh = commands.spawn_asset(Sphere::new(0.1).mesh().uv(32, 18));
+    let blue_light_material = commands.spawn_asset(StandardMaterial {
+        base_color: BLUE.into(),
+        emissive: LinearRgba::new(0.0, 0.0, 713.0, 0.0),
+        ..default()
+    });
     commands.spawn((
         PointLight {
             intensity: 100_000.0,
@@ -176,14 +190,7 @@ fn setup(
             ..default()
         },
         Transform::from_xyz(0.0, 4.0, 0.0),
-        children![(
-            Mesh3d(meshes.add(Sphere::new(0.1).mesh().uv(32, 18))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: BLUE.into(),
-                emissive: LinearRgba::new(0.0, 0.0, 713.0, 0.0),
-                ..default()
-            })),
-        )],
+        children![(Mesh3d(blue_light_mesh), MeshMaterial3d(blue_light_material),)],
     ));
 
     // directional 'sun' light

@@ -205,8 +205,6 @@ fn setup_pica_pica(
 fn setup_many_lights(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     args: Res<Args>,
     #[cfg(all(feature = "dlss", not(feature = "force_disable_dlss")))] dlss_rr_supported: Option<
         Res<DlssRayReconstructionSupported>,
@@ -226,15 +224,15 @@ fn setup_many_lights(
         }
         _ => unreachable!(),
     }
-    let plane_mesh = meshes.add(plane_mesh);
-    let cube_mesh = meshes.add(
+    let plane_mesh = commands.spawn_asset(plane_mesh);
+    let cube_mesh = commands.spawn_asset(
         Cuboid::default()
             .mesh()
             .build()
             .with_generated_tangents()
             .unwrap(),
     );
-    let sphere_mesh = meshes.add(
+    let sphere_mesh = commands.spawn_asset(
         Sphere::new(1.0)
             .mesh()
             .build()
@@ -242,38 +240,39 @@ fn setup_many_lights(
             .unwrap(),
     );
 
+    let plane_material = commands.spawn_asset(StandardMaterial {
+        base_color_texture: Some(
+            asset_server
+                .load_builder()
+                .with_settings::<ImageLoaderSettings>(|settings| {
+                    settings
+                        .sampler
+                        .get_or_init_descriptor()
+                        .set_address_mode(ImageAddressMode::Repeat);
+                })
+                .load("textures/uv_checker_bw.png"),
+        ),
+        perceptual_roughness: 0.0,
+        ..default()
+    });
+
     commands
         .spawn((
             RaytracingMesh3d(plane_mesh.clone()),
-            MeshMaterial3d(
-                materials.add(StandardMaterial {
-                    base_color_texture: Some(
-                        asset_server
-                            .load_builder()
-                            .with_settings::<ImageLoaderSettings>(|settings| {
-                                settings
-                                    .sampler
-                                    .get_or_init_descriptor()
-                                    .set_address_mode(ImageAddressMode::Repeat);
-                            })
-                            .load("textures/uv_checker_bw.png"),
-                    ),
-                    perceptual_roughness: 0.0,
-                    ..default()
-                }),
-            ),
+            MeshMaterial3d(plane_material),
         ))
         .insert_if(Mesh3d(plane_mesh), || args.pathtracer != Some(true));
 
     for _ in 0..8000 {
+        let cube_material = commands.spawn_asset(StandardMaterial {
+            base_color: Color::srgb(rng.random(), rng.random(), rng.random()),
+            perceptual_roughness: rng.random(),
+            ..default()
+        });
         commands
             .spawn((
                 RaytracingMesh3d(cube_mesh.clone()),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::srgb(rng.random(), rng.random(), rng.random()),
-                    perceptual_roughness: rng.random(),
-                    ..default()
-                })),
+                MeshMaterial3d(cube_material),
                 Transform::default()
                     .with_scale(Vec3 {
                         x: rng.random_range(0.2..=2.0),
@@ -291,20 +290,20 @@ fn setup_many_lights(
 
     for x in -10..=10 {
         for y in -10..=10 {
+            let sphere_material = commands.spawn_asset(StandardMaterial {
+                emissive: Color::linear_rgb(
+                    rng.random::<f32>() * 60000.0,
+                    rng.random::<f32>() * 60000.0,
+                    rng.random::<f32>() * 60000.0,
+                )
+                .into(),
+                ..default()
+            });
+
             commands
                 .spawn((
                     RaytracingMesh3d(sphere_mesh.clone()),
-                    MeshMaterial3d(
-                        materials.add(StandardMaterial {
-                            emissive: Color::linear_rgb(
-                                rng.random::<f32>() * 60000.0,
-                                rng.random::<f32>() * 60000.0,
-                                rng.random::<f32>() * 60000.0,
-                            )
-                            .into(),
-                            ..default()
-                        }),
-                    ),
+                    MeshMaterial3d(sphere_material),
                     Transform::default().with_translation(Vec3::new(
                         (x * 20) as f32,
                         7.0,
@@ -395,8 +394,8 @@ fn add_raytracing_meshes_on_scene_load(
         &MeshMaterial3d<StandardMaterial>,
         Option<&GltfMaterialName>,
     )>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: Query<&mut Mesh>,
+    mut materials: Query<&mut StandardMaterial>,
     mut commands: Commands,
     args: Res<Args>,
 ) {
@@ -496,7 +495,7 @@ struct RobotLightMaterial(Handle<StandardMaterial>);
 fn toggle_lights(
     key_input: Res<ButtonInput<KeyCode>>,
     robot_light_material: Option<Res<RobotLightMaterial>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     directional_light: Query<Entity, With<DirectionalLight>>,
     mut commands: Commands,
 ) {
@@ -569,7 +568,7 @@ struct ControlText;
 fn update_control_text(
     mut text: Single<&mut Text, With<ControlText>>,
     robot_light_material: Option<Res<RobotLightMaterial>>,
-    materials: Res<Assets<StandardMaterial>>,
+    materials: Query<&StandardMaterial>,
     directional_light: Query<Entity, With<DirectionalLight>>,
     time: Res<Time<Virtual>>,
     args: Res<Args>,
@@ -596,7 +595,7 @@ fn update_control_text(
             text.0.push_str("\n(1): Enable directional light");
         }
 
-        match robot_light_material.and_then(|m| materials.get(&m.0)) {
+        match robot_light_material.and_then(|m| materials.get(&m.0).ok()) {
             Some(robot_light_material) if robot_light_material.emissive != LinearRgba::BLACK => {
                 text.0.push_str("\n(2): Disable robot emissive light");
             }

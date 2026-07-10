@@ -19,40 +19,40 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<LineMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // Spawn a list of lines with start and end points for each lines
+    let line_list_mesh = commands.spawn_asset(Mesh::from(LineList {
+        lines: vec![
+            (Vec3::ZERO, Vec3::new(1.0, 1.0, 0.0)),
+            (Vec3::new(1.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0)),
+        ],
+    }));
+    let line_list_material = commands.spawn_asset(LineMaterial {
+        color: LinearRgba::GREEN,
+    });
     commands.spawn((
-        Mesh3d(meshes.add(LineList {
-            lines: vec![
-                (Vec3::ZERO, Vec3::new(1.0, 1.0, 0.0)),
-                (Vec3::new(1.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0)),
-            ],
-        })),
-        MeshMaterial3d(materials.add(LineMaterial {
-            color: LinearRgba::GREEN,
-        })),
+        Mesh3d(line_list_mesh),
+        MeshMaterial3d(line_list_material),
         Transform::from_xyz(-1.5, 0.0, 0.0),
     ));
 
     // Spawn a line strip that goes from point to point
+    let line_strip_mesh = commands.spawn_asset(Mesh::from(LineStrip {
+        points: vec![
+            Vec3::ZERO,
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(2.0, 1.0, 0.0),
+            Vec3::new(3.0, 1.0, 0.0),
+        ],
+        indices: Indices::U16(vec![0, 1, u16::MAX /* primitive restart */, 2, 3, 4]),
+    }));
+    let line_strip_material = commands.spawn_asset(LineMaterial {
+        color: LinearRgba::BLUE,
+    });
     commands.spawn((
-        Mesh3d(meshes.add(LineStrip {
-            points: vec![
-                Vec3::ZERO,
-                Vec3::new(1.0, 1.0, 0.0),
-                Vec3::new(2.0, 0.0, 0.0),
-                Vec3::new(2.0, 1.0, 0.0),
-                Vec3::new(3.0, 1.0, 0.0),
-            ],
-            indices: Indices::U16(vec![0, 1, u16::MAX /* primitive restart */, 2, 3, 4]),
-        })),
-        MeshMaterial3d(materials.add(LineMaterial {
-            color: LinearRgba::BLUE,
-        })),
+        Mesh3d(line_strip_mesh),
+        MeshMaterial3d(line_strip_material),
         Transform::from_xyz(0.5, 0.0, 0.0),
     ));
 

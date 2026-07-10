@@ -35,15 +35,14 @@ fn main() {
 struct Movable;
 
 /// set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // ground plane
+    let ground_mesh =
+        commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(100.0, 100.0)));
+    let ground_material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(100.0, 100.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
+        Mesh3d(ground_mesh),
+        MeshMaterial3d(ground_material),
         Movable,
     ));
 
@@ -52,8 +51,8 @@ fn setup(
     // We're seeding the PRNG here to make this example deterministic for testing purposes.
     // This isn't strictly required in practical use unless you need your app to be deterministic.
     let mut rng = ChaCha8Rng::seed_from_u64(19878367467713);
-    let cube_mesh = meshes.add(Cuboid::new(0.5, 0.5, 0.5));
-    let blue = materials.add(Color::srgb_u8(124, 144, 255));
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(0.5, 0.5, 0.5)));
+    let blue = commands.spawn_asset(StandardMaterial::from(Color::srgb_u8(124, 144, 255)));
 
     commands.spawn_batch(
         std::iter::repeat_with(move || {
@@ -71,14 +70,14 @@ fn setup(
         .take(40),
     );
 
-    let sphere_mesh = meshes.add(Sphere::new(0.05).mesh().uv(32, 18));
-    let sphere_mesh_direction = meshes.add(Sphere::new(0.1).mesh().uv(32, 18));
-    let red_emissive = materials.add(StandardMaterial {
+    let sphere_mesh = commands.spawn_asset(Sphere::new(0.05).mesh().uv(32, 18));
+    let sphere_mesh_direction = commands.spawn_asset(Sphere::new(0.1).mesh().uv(32, 18));
+    let red_emissive = commands.spawn_asset(StandardMaterial {
         base_color: RED.into(),
         emissive: LinearRgba::new(1.0, 0.0, 0.0, 0.0),
         ..default()
     });
-    let maroon_emissive = materials.add(StandardMaterial {
+    let maroon_emissive = commands.spawn_asset(StandardMaterial {
         base_color: MAROON.into(),
         emissive: LinearRgba::new(0.369, 0.0, 0.0, 0.0),
         ..default()

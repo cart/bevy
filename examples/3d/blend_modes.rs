@@ -24,24 +24,20 @@ fn main() {
 }
 
 /// set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let base_color = Color::srgb(0.9, 0.2, 0.3);
-    let icosphere_mesh = meshes.add(Sphere::new(0.9).mesh().ico(7).unwrap());
+    let icosphere_mesh = commands.spawn_asset(Mesh::from(Sphere::new(0.9).mesh().ico(7).unwrap()));
 
     // Opaque
+    let opaque_material = commands.spawn_asset(StandardMaterial {
+        base_color,
+        alpha_mode: AlphaMode::Opaque,
+        ..default()
+    });
     let opaque = commands
         .spawn((
             Mesh3d(icosphere_mesh.clone()),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color,
-                alpha_mode: AlphaMode::Opaque,
-                ..default()
-            })),
+            MeshMaterial3d(opaque_material),
             Transform::from_xyz(-4.0, 0.0, 0.0),
             ExampleControls {
                 unlit: true,
@@ -51,14 +47,15 @@ fn setup(
         .id();
 
     // Blend
+    let blend_material = commands.spawn_asset(StandardMaterial {
+        base_color,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
     let blend = commands
         .spawn((
             Mesh3d(icosphere_mesh.clone()),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color,
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            })),
+            MeshMaterial3d(blend_material),
             Transform::from_xyz(-2.0, 0.0, 0.0),
             ExampleControls {
                 unlit: true,
@@ -68,14 +65,15 @@ fn setup(
         .id();
 
     // Premultiplied
+    let premultiplied_material = commands.spawn_asset(StandardMaterial {
+        base_color,
+        alpha_mode: AlphaMode::Premultiplied,
+        ..default()
+    });
     let premultiplied = commands
         .spawn((
             Mesh3d(icosphere_mesh.clone()),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color,
-                alpha_mode: AlphaMode::Premultiplied,
-                ..default()
-            })),
+            MeshMaterial3d(premultiplied_material),
             Transform::from_xyz(0.0, 0.0, 0.0),
             ExampleControls {
                 unlit: true,
@@ -85,14 +83,15 @@ fn setup(
         .id();
 
     // Add
+    let add_material = commands.spawn_asset(StandardMaterial {
+        base_color,
+        alpha_mode: AlphaMode::Add,
+        ..default()
+    });
     let add = commands
         .spawn((
             Mesh3d(icosphere_mesh.clone()),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color,
-                alpha_mode: AlphaMode::Add,
-                ..default()
-            })),
+            MeshMaterial3d(add_material),
             Transform::from_xyz(2.0, 0.0, 0.0),
             ExampleControls {
                 unlit: true,
@@ -102,14 +101,15 @@ fn setup(
         .id();
 
     // Multiply
+    let multiple_material = commands.spawn_asset(StandardMaterial {
+        base_color,
+        alpha_mode: AlphaMode::Multiply,
+        ..default()
+    });
     let multiply = commands
         .spawn((
             Mesh3d(icosphere_mesh),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color,
-                alpha_mode: AlphaMode::Multiply,
-                ..default()
-            })),
+            MeshMaterial3d(multiple_material),
             Transform::from_xyz(4.0, 0.0, 0.0),
             ExampleControls {
                 unlit: true,
@@ -119,10 +119,10 @@ fn setup(
         .id();
 
     // Chessboard Plane
-    let black_material = materials.add(Color::BLACK);
-    let white_material = materials.add(Color::WHITE);
+    let black_material = commands.spawn_asset(StandardMaterial::from(Color::BLACK));
+    let white_material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
 
-    let plane_mesh = meshes.add(Plane3d::default().mesh().size(2.0, 2.0));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(2.0, 2.0)));
 
     for x in -3..4 {
         for z in -3..4 {
@@ -245,7 +245,7 @@ impl Default for ExampleState {
 }
 
 fn example_control_system(
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     controllable: Query<(&MeshMaterial3d<StandardMaterial>, &ExampleControls)>,
     camera: Single<
         (
@@ -278,7 +278,7 @@ fn example_control_system(
     let randomize_colors = input.just_pressed(KeyCode::KeyC);
 
     for (material_handle, controls) in &controllable {
-        let mut material = materials.get_mut(material_handle).unwrap();
+        let mut material = materials.get_mut(material_handle.entity()).unwrap();
 
         if controls.color && randomize_colors {
             material.base_color = Srgba {

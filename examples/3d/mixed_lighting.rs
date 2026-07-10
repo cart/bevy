@@ -219,7 +219,7 @@ fn spawn_help_text(commands: &mut Commands, app_status: &AppStatus) {
 fn update_lightmaps(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     meshes: Query<(Entity, &GltfMeshName, &MeshMaterial3d<StandardMaterial>), With<Mesh3d>>,
     mut lighting_mode_changed_reader: MessageReader<LightingModeChanged>,
     app_status: Res<AppStatus>,
@@ -256,7 +256,7 @@ fn update_lightmaps(
             }
 
             // Lightmap exposure defaults to zero, so we need to set it.
-            if let Some(ref mut material) = materials.get_mut(material) {
+            if let Ok(mut material) = materials.get_mut(material) {
                 material.lightmap_exposure = LIGHTMAP_EXPOSURE;
             }
 
@@ -279,7 +279,7 @@ fn update_lightmaps(
         // Add lightmaps to or remove lightmaps from the sphere.
         if &**name == "Sphere" {
             // Lightmap exposure defaults to zero, so we need to set it.
-            if let Some(ref mut material) = materials.get_mut(material) {
+            if let Ok(mut material) = materials.get_mut(material) {
                 material.lightmap_exposure = LIGHTMAP_EXPOSURE;
             }
 

@@ -191,7 +191,7 @@ fn spawn_plane_mesh(
     //
     // As the plane has a normal map, we must generate tangents for the
     // vertices.
-    let plane_mesh = meshes.add(
+    let plane_mesh = commands.spawn_asset(
         Plane3d {
             normal: Dir3::NEG_Z,
             half_size: Vec2::splat(PLANE_HALF_SIZE),
@@ -213,13 +213,14 @@ fn spawn_plane_mesh(
         .load("textures/ScratchedGold-Normal.png");
 
     // Actually spawn the plane.
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::from(CRIMSON),
+        normal_map_texture: Some(normal_map_texture),
+        ..StandardMaterial::default()
+    });
     commands.spawn((
         Mesh3d(plane_mesh),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::from(CRIMSON),
-            normal_map_texture: Some(normal_map_texture),
-            ..StandardMaterial::default()
-        })),
+        MeshMaterial3d(material),
         Transform::IDENTITY,
     ));
 }

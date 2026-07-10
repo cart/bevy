@@ -180,7 +180,7 @@ fn update_dof_settings(
 fn tweak_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: Query<&mut StandardMaterial>,
     mut lights: Query<&mut DirectionalLight, Changed<DirectionalLight>>,
     mut named_entities: Query<
         (Entity, &GltfMeshName, &MeshMaterial3d<StandardMaterial>),
@@ -195,7 +195,10 @@ fn tweak_scene(
     // Add a nice lightmap to the circuit board.
     for (entity, name, material) in named_entities.iter_mut() {
         if &**name == "CircuitBoard" {
-            materials.get_mut(material).unwrap().lightmap_exposure = 10000.0;
+            materials
+                .get_mut(material.entity())
+                .unwrap()
+                .lightmap_exposure = 10000.0;
             commands.entity(entity).insert(Lightmap {
                 image: asset_server.load("models/DepthOfFieldExample/CircuitBoardLightmap.hdr"),
                 ..default()

@@ -12,41 +12,38 @@ fn main() {
 }
 
 /// set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
-    let sphere_mesh = meshes.add(Sphere::new(0.45));
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let sphere_mesh = commands.spawn_asset(Mesh::from(Sphere::new(0.45)));
     // add entities to the world
     for y in -2..=2 {
         for x in -5..=5 {
             let x01 = (x + 5) as f32 / 10.0;
             let y01 = (y + 2) as f32 / 4.0;
             // sphere
+            let material = commands.spawn_asset(StandardMaterial {
+                base_color: Srgba::hex("#ffd891").unwrap().into(),
+                // vary key PBR parameters on a grid of spheres to show the effect
+                metallic: y01,
+                perceptual_roughness: x01,
+                ..default()
+            });
             commands.spawn((
                 Mesh3d(sphere_mesh.clone()),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Srgba::hex("#ffd891").unwrap().into(),
-                    // vary key PBR parameters on a grid of spheres to show the effect
-                    metallic: y01,
-                    perceptual_roughness: x01,
-                    ..default()
-                })),
+                MeshMaterial3d(material),
                 Transform::from_xyz(x as f32, y as f32 + 0.5, 0.0),
             ));
         }
     }
     // unlit sphere
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color: Srgba::hex("#ffd891").unwrap().into(),
+        // vary key PBR parameters on a grid of spheres to show the effect
+        unlit: true,
+        ..default()
+    });
     commands.spawn((
         Mesh3d(sphere_mesh),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Srgba::hex("#ffd891").unwrap().into(),
-            // vary key PBR parameters on a grid of spheres to show the effect
-            unlit: true,
-            ..default()
-        })),
+        MeshMaterial3d(material),
         Transform::from_xyz(-5.0, -2.5, 0.0),
     ));
 

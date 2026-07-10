@@ -19,11 +19,7 @@ fn main() {
         .run();
 }
 
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup_scene(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         Camera {
@@ -35,24 +31,24 @@ fn setup_scene(
         Bloom::NATURAL, // 2. Enable bloom for the camera
     ));
 
-    let material_emissive1 = materials.add(StandardMaterial {
+    let material_emissive1 = commands.spawn_asset(StandardMaterial {
         emissive: LinearRgba::rgb(0.0, 0.0, 150.0), // 3. Put something bright in a dark environment to see the effect
         ..default()
     });
-    let material_emissive2 = materials.add(StandardMaterial {
+    let material_emissive2 = commands.spawn_asset(StandardMaterial {
         emissive: LinearRgba::rgb(1000.0, 1000.0, 1000.0),
         ..default()
     });
-    let material_emissive3 = materials.add(StandardMaterial {
+    let material_emissive3 = commands.spawn_asset(StandardMaterial {
         emissive: LinearRgba::rgb(50.0, 0.0, 0.0),
         ..default()
     });
-    let material_non_emissive = materials.add(StandardMaterial {
+    let material_non_emissive = commands.spawn_asset(StandardMaterial {
         base_color: Color::BLACK,
         ..default()
     });
 
-    let mesh = meshes.add(Sphere::new(0.4).mesh().ico(5).unwrap());
+    let mesh = commands.spawn_asset(Mesh::from(Sphere::new(0.4).mesh().ico(5).unwrap()));
 
     for x in -5..5 {
         for z in -5..5 {
