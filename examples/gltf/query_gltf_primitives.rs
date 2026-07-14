@@ -14,8 +14,8 @@ fn main() {
 }
 
 fn find_top_material_and_mesh(
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: Query<&mut StandardMaterial>,
+    mut meshes: Query<&mut Mesh>,
     time: Res<Time>,
     mat_query: Query<(
         &MeshMaterial3d<StandardMaterial>,
@@ -26,7 +26,7 @@ fn find_top_material_and_mesh(
     for (mat_handle, mesh_handle, name) in mat_query.iter() {
         // locate a material by material name
         if name.0 == "Top" {
-            if let Some(mut material) = materials.get_mut(mat_handle) {
+            if let Ok(mut material) = materials.get_mut(mat_handle.entity()) {
                 if let Color::Hsla(ref mut hsla) = material.base_color {
                     *hsla = hsla.rotate_hue(time.delta_secs() * 100.0);
                 } else {
@@ -34,7 +34,7 @@ fn find_top_material_and_mesh(
                 }
             }
 
-            if let Some(mut mesh) = meshes.get_mut(mesh_handle)
+            if let Ok(mut mesh) = meshes.get_mut(mesh_handle)
                 && let Some(VertexAttributeValues::Float32x3(positions)) =
                     mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
             {

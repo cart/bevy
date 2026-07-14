@@ -58,7 +58,7 @@ fn change_material(
     children: Query<&Children>,
     color_override: Query<&ColorOverride>,
     mesh_materials: Query<(&MeshMaterial3d<StandardMaterial>, &GltfMaterialName)>,
-    mut asset_materials: ResMut<Assets<StandardMaterial>>,
+    asset_materials: Query<&StandardMaterial>,
 ) {
     info!("processing Scene Entity: {}", scene_ready.entity);
 
@@ -75,7 +75,7 @@ fn change_material(
             continue;
         };
         // Get the material of the descendant
-        let Some(material) = asset_materials.get(id.id()) else {
+        let Ok(material) = asset_materials.get(id.id()) else {
             continue;
         };
 
@@ -91,9 +91,8 @@ fn change_material(
                 new_material.base_color = color_override.0;
 
                 // Override `MeshMaterial3d` with new material
-                commands
-                    .entity(descendant)
-                    .insert(MeshMaterial3d(asset_materials.add(new_material)));
+                let mesh = commands.spawn_asset(new_material);
+                commands.entity(descendant).insert(MeshMaterial3d(mesh));
             }
             name => {
                 info!("not replacing: {name}");

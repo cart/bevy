@@ -36,23 +36,20 @@ fn gizmo_color_text(config: &LightGizmoConfigGroup) -> String {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut config_store: ResMut<GizmoConfigStore>,
-) {
+fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
     // Circular base.
+    let circle_mesh = commands.spawn_asset(Mesh::from(Circle::new(4.0)));
+    let circle_material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(4.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
+        Mesh3d(circle_mesh),
+        MeshMaterial3d(circle_material),
         Transform::from_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
     ));
 
     // Cubes.
     {
-        let mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-        let material = materials.add(Color::srgb_u8(124, 144, 255));
+        let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+        let material = commands.spawn_asset(StandardMaterial::from(Color::srgb_u8(124, 144, 255)));
         for x in [-2.0, 0.0, 2.0] {
             commands.spawn((
                 Mesh3d(mesh.clone()),

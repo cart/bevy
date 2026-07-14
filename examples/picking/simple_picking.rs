@@ -9,11 +9,7 @@ fn main() {
         .run();
 }
 
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup_scene(mut commands: Commands) {
     commands
         .spawn((
             Text::new("Click Me to get a box\nDrag cubes to rotate"),
@@ -37,9 +33,11 @@ fn setup_scene(
         );
 
     // Base
+    let base_mesh = commands.spawn_asset(Mesh::from(Circle::new(4.0)));
+    let base_material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(4.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
+        Mesh3d(base_mesh),
+        MeshMaterial3d(base_material),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
 
@@ -59,17 +57,13 @@ fn setup_scene(
     ));
 }
 
-fn on_click_spawn_cube(
-    _click: On<Pointer<Click>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut num: Local<usize>,
-) {
+fn on_click_spawn_cube(_click: On<Pointer<Click>>, mut commands: Commands, mut num: Local<usize>) {
+    let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(0.5, 0.5, 0.5)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb_u8(124, 144, 255)));
     commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
-            MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
             Transform::from_xyz(0.0, 0.25 + 0.55 * *num as f32, 0.0),
         ))
         // With the MeshPickingPlugin added, you can add pointer event observers to meshes:

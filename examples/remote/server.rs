@@ -23,22 +23,22 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // circular base
+    let base_mesh = commands.spawn_asset(Mesh::from(Circle::new(4.0)));
+    let base_material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(4.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
+        Mesh3d(base_mesh),
+        MeshMaterial3d(base_material),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
 
     // cube
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let cube_material = commands.spawn_asset(StandardMaterial::from(Color::srgb_u8(124, 144, 255)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+        Mesh3d(cube_mesh),
+        MeshMaterial3d(cube_material),
         Transform::from_xyz(0.0, 0.5, 0.0),
         Cube(1.0),
     ));

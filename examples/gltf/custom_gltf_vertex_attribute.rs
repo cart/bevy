@@ -43,11 +43,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<CustomMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Add a mesh loaded from a glTF file. This mesh has data for `ATTRIBUTE_BARYCENTRIC`.
     let mesh = asset_server.load(
         GltfAssetLabel::Primitive {
@@ -56,9 +52,10 @@ fn setup(
         }
         .from_asset("models/barycentric/barycentric.gltf"),
     );
+    let material = commands.spawn_asset(CustomMaterial {});
     commands.spawn((
         Mesh2d(mesh),
-        MeshMaterial2d(materials.add(CustomMaterial {})),
+        MeshMaterial2d(material),
         Transform::from_scale(150.0 * Vec3::ONE),
     ));
 

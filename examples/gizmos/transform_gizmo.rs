@@ -28,11 +28,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // Instructions
     commands.spawn((
         Text::new(
@@ -48,18 +44,26 @@ fn setup(
     ));
 
     // Ground plane (not pickable)
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(10.0, 10.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.3, 0.3)));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(10.0, 10.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.3, 0.3))),
+        Mesh3d(plane_mesh),
+        MeshMaterial3d(plane_material),
         Pickable::IGNORE,
     ));
 
     // Table: a parent body with a child part, demonstrating local vs world space.
     // The parent cube is selected by default.
+    let tabletop_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.5, 0.15, 1.0)));
+    let leg_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.5, 0.15, 1.0)));
+
+    let tabletop_material =
+        commands.spawn_asset(StandardMaterial::from(Color::srgb(0.8, 0.3, 0.3)));
+    let leg_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.6, 0.2, 0.2)));
     commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.5, 0.15, 1.0))),
-            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.3, 0.3))),
+            Mesh3d(tabletop_mesh),
+            MeshMaterial3d(tabletop_material),
             Transform::from_xyz(-2.0, 1.0, 0.0),
             TransformGizmoFocus,
         ))
@@ -67,36 +71,38 @@ fn setup(
         .with_children(|parent| {
             // Table leg (child)
             parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.1, 0.85, 0.1))),
-                MeshMaterial3d(materials.add(Color::srgb(0.6, 0.2, 0.2))),
+                Mesh3d(leg_mesh.clone()),
+                MeshMaterial3d(leg_material.clone()),
                 Transform::from_xyz(-0.6, -0.5, 0.4),
                 Pickable::IGNORE,
             ));
             parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.1, 0.85, 0.1))),
-                MeshMaterial3d(materials.add(Color::srgb(0.6, 0.2, 0.2))),
+                Mesh3d(leg_mesh.clone()),
+                MeshMaterial3d(leg_material.clone()),
                 Transform::from_xyz(0.6, -0.5, 0.4),
                 Pickable::IGNORE,
             ));
             parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.1, 0.85, 0.1))),
-                MeshMaterial3d(materials.add(Color::srgb(0.6, 0.2, 0.2))),
+                Mesh3d(leg_mesh.clone()),
+                MeshMaterial3d(leg_material.clone()),
                 Transform::from_xyz(-0.6, -0.5, -0.4),
                 Pickable::IGNORE,
             ));
             parent.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.1, 0.85, 0.1))),
-                MeshMaterial3d(materials.add(Color::srgb(0.6, 0.2, 0.2))),
+                Mesh3d(leg_mesh.clone()),
+                MeshMaterial3d(leg_material.clone()),
                 Transform::from_xyz(0.6, -0.5, -0.4),
                 Pickable::IGNORE,
             ));
         });
 
     // Standalone cube
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let cube_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.8, 0.3)));
     commands
         .spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-            MeshMaterial3d(materials.add(Color::srgb(0.3, 0.8, 0.3))),
+            Mesh3d(cube_mesh),
+            MeshMaterial3d(cube_material),
             Transform::from_xyz(2.0, 0.5, 0.0),
         ))
         .observe(on_click_select);

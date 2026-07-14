@@ -48,19 +48,17 @@ struct SamplePoint;
 #[derive(Resource)]
 struct MousePressed(bool);
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // Use seeded rng and store it in a resource; this makes the random output reproducible.
     let seeded_rng = ChaCha8Rng::seed_from_u64(19878367467712);
     commands.insert_resource(RandomSource(seeded_rng));
 
     // Make a plane for establishing space.
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(12.0, 12.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(12.0, 12.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Mesh3d(plane_mesh),
+        MeshMaterial3d(plane_material),
         Transform::from_xyz(0.0, -2.5, 0.0),
     ));
 
@@ -69,15 +67,14 @@ fn setup(
     commands.insert_resource(SampledShape(shape));
 
     // The sampled shape shown transparently:
-    commands.spawn((
-        Mesh3d(meshes.add(shape)),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.2, 0.1, 0.6, 0.3),
-            alpha_mode: AlphaMode::Blend,
-            cull_mode: None,
-            ..default()
-        })),
-    ));
+    let sample_mesh = commands.spawn_asset(Mesh::from(shape));
+    let sample_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::srgba(0.2, 0.1, 0.6, 0.3),
+        alpha_mode: AlphaMode::Blend,
+        cull_mode: None,
+        ..default()
+    });
+    commands.spawn((Mesh3d(sample_mesh), MeshMaterial3d(sample_material)));
 
     // A light:
     commands.spawn((
@@ -95,18 +92,18 @@ fn setup(
     ));
 
     // Store the mesh and material for sample points in resources:
-    commands.insert_resource(PointMesh(
-        meshes.add(
-            Sphere::new(0.03)
-                .mesh()
-                .kind(SphereKind::Ico { subdivisions: 3 }),
-        ),
+    let point_mesh = commands.spawn_asset(Mesh::from(
+        Sphere::new(0.03)
+            .mesh()
+            .kind(SphereKind::Ico { subdivisions: 3 }),
     ));
-    commands.insert_resource(PointMaterial(materials.add(StandardMaterial {
+    let point_material = commands.spawn_asset(StandardMaterial {
         base_color: Color::srgb(1.0, 0.8, 0.8),
         metallic: 0.8,
         ..default()
-    })));
+    });
+    commands.insert_resource(PointMesh(point_mesh));
+    commands.insert_resource(PointMaterial(point_material));
 
     // Instructions for the example:
     commands.spawn((

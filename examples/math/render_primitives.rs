@@ -510,13 +510,9 @@ pub struct MeshDim2;
 #[derive(Debug, Clone, Component, Default)]
 pub struct MeshDim3;
 
-fn spawn_primitive_2d(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn spawn_primitive_2d(mut commands: Commands) {
     const POSITION: Vec3 = Vec3::new(LEFT_RIGHT_OFFSET_2D, 0.0, 0.0);
-    let material: Handle<ColorMaterial> = materials.add(Color::WHITE);
+    let material: Handle<ColorMaterial> = commands.spawn_asset(ColorMaterial::from(Color::WHITE));
     let camera_mode = CameraActive::Dim2;
     let polyline_2d = Polyline2d {
         vertices: POLYLINE_2D_VERTICES.to_vec(),
@@ -548,13 +544,14 @@ fn spawn_primitive_2d(
     .zip(PrimitiveSelected::ALL)
     .for_each(|(maybe_mesh, state)| {
         if let Some(mesh) = maybe_mesh {
+            let mesh = commands.spawn_asset(mesh);
             commands.spawn((
                 MeshDim2,
                 PrimitiveData {
                     camera_mode,
                     primitive_state: state,
                 },
-                Mesh2d(meshes.add(mesh)),
+                Mesh2d(mesh),
                 MeshMaterial2d(material.clone()),
                 Transform::from_translation(POSITION),
             ));
@@ -562,13 +559,10 @@ fn spawn_primitive_2d(
     });
 }
 
-fn spawn_primitive_3d(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn spawn_primitive_3d(mut commands: Commands) {
     const POSITION: Vec3 = Vec3::new(-LEFT_RIGHT_OFFSET_3D, 0.0, 0.0);
-    let material: Handle<StandardMaterial> = materials.add(Color::WHITE);
+    let material: Handle<StandardMaterial> =
+        commands.spawn_asset(StandardMaterial::from(Color::WHITE));
     let camera_mode = CameraActive::Dim3;
     let polyline_3d = Polyline3d {
         vertices: POLYLINE_3D_VERTICES.to_vec(),
@@ -599,13 +593,14 @@ fn spawn_primitive_3d(
     .zip(PrimitiveSelected::ALL)
     .for_each(|(maybe_mesh, state)| {
         if let Some(mesh) = maybe_mesh {
+            let mesh = commands.spawn_asset(mesh);
             commands.spawn((
                 MeshDim3,
                 PrimitiveData {
                     camera_mode,
                     primitive_state: state,
                 },
-                Mesh3d(meshes.add(mesh)),
+                Mesh3d(mesh),
                 MeshMaterial3d(material.clone()),
                 Transform::from_translation(POSITION),
             ));

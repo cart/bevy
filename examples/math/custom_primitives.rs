@@ -168,23 +168,21 @@ fn main() {
     app.run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // Spawn the camera
     commands.spawn((Camera3d::default(), TRANSFORM_2D, PROJECTION_2D));
 
     // Spawn the 2D heart
+    let heart_mesh = commands.spawn_asset(Mesh::from(HEART.mesh().resolution(50)));
+    let heart_material = commands.spawn_asset(StandardMaterial {
+        emissive: RED.into(),
+        base_color: RED.into(),
+        ..Default::default()
+    });
     commands.spawn((
         // We can use the methods defined on the `MeshBuilder` to customize the mesh.
-        Mesh3d(meshes.add(HEART.mesh().resolution(50))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            emissive: RED.into(),
-            base_color: RED.into(),
-            ..Default::default()
-        })),
+        Mesh3d(heart_mesh),
+        MeshMaterial3d(heart_material.clone()),
         Transform::from_xyz(0.0, 0.0, 0.0),
         Shape2d,
         Visibility::Visible,
@@ -192,14 +190,13 @@ fn setup(
     ));
 
     // Spawn the 2D heart ring
+    let heart_ring_mesh = commands.spawn_asset(Mesh::from(
+        RING.mesh().with_inner(|heart| heart.resolution(50)),
+    ));
     commands.spawn((
         // We can use the methods defined on the `MeshBuilder` to customize the mesh.
-        Mesh3d(meshes.add(RING.mesh().with_inner(|heart| heart.resolution(50)))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            emissive: RED.into(),
-            base_color: RED.into(),
-            ..Default::default()
-        })),
+        Mesh3d(heart_ring_mesh),
+        MeshMaterial3d(heart_material),
         Transform::from_xyz(0.0, 0.0, 0.0),
         Shape2d,
         Visibility::Hidden,
@@ -207,13 +204,15 @@ fn setup(
     ));
 
     // Spawn an extrusion of the heart
+    let heart_extrusion_mesh = commands.spawn_asset(Mesh::from(EXTRUSION.mesh().resolution(50)));
+    let heart_extrusion_material = commands.spawn_asset(StandardMaterial {
+        base_color: RED.into(),
+        ..Default::default()
+    });
     commands.spawn((
         // We can set a custom resolution for the round parts of the extrusion as well.
-        Mesh3d(meshes.add(EXTRUSION.mesh().resolution(50))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.into(),
-            ..Default::default()
-        })),
+        Mesh3d(heart_extrusion_mesh),
+        MeshMaterial3d(heart_extrusion_material),
         Transform::from_xyz(0., -3., -5.).with_rotation(Quat::from_rotation_x(-PI / 4.)),
         Shape3d,
         Visibility::Hidden,
@@ -221,19 +220,19 @@ fn setup(
     ));
 
     // Spawn an extrusion of the heart ring
+    let heart_ring_extrusion_mesh = commands.spawn_asset(Mesh::from(
+        RING_EXTRUSION
+            .mesh()
+            .with_inner(|ring| ring.with_inner(|heart| heart.resolution(50))),
+    ));
+    let heart_ring_extrusion_material = commands.spawn_asset(StandardMaterial {
+        base_color: RED.into(),
+        ..Default::default()
+    });
     commands.spawn((
         // We can set a custom resolution for the round parts of the extrusion as well.
-        Mesh3d(
-            meshes.add(
-                RING_EXTRUSION
-                    .mesh()
-                    .with_inner(|ring| ring.with_inner(|heart| heart.resolution(50))),
-            ),
-        ),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: RED.into(),
-            ..Default::default()
-        })),
+        Mesh3d(heart_ring_extrusion_mesh),
+        MeshMaterial3d(heart_ring_extrusion_material),
         Transform::from_xyz(0., -3., -5.).with_rotation(Quat::from_rotation_x(-PI / 4.)),
         Shape3d,
         Visibility::Hidden,

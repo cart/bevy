@@ -185,13 +185,10 @@ fn spawn_player(mut commands: Commands) {
 }
 
 /// Spawn a field of floating spheres to fly around in
-fn spawn_environment(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let sphere_material = materials.add(Color::from(tailwind::SKY_200));
-    let sphere_mesh = meshes.add(Sphere::new(0.3));
+fn spawn_environment(mut commands: Commands) {
+    let sphere_material =
+        commands.spawn_asset(StandardMaterial::from(Color::from(tailwind::SKY_200)));
+    let sphere_mesh = commands.spawn_asset(Mesh::from(Sphere::new(0.3)));
     let spheres_in_x = 6;
     let spheres_in_y = 4;
     let spheres_in_z = 10;

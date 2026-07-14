@@ -93,30 +93,28 @@ fn touch_camera(
 }
 
 /// set up a simple 3D scene
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    device: Res<bevy::render::renderer::RenderDevice>,
-) {
+fn setup_scene(mut commands: Commands, device: Res<bevy::render::renderer::RenderDevice>) {
     bevy::log::info!("Configured wgpu adapter Limits: {:#?}", device.limits());
     bevy::log::info!("Configured wgpu adapter Features: {:#?}", device.features());
 
     // plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.1, 0.2, 0.1))),
-    ));
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(5.0, 5.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.1, 0.2, 0.1)));
+    commands.spawn((Mesh3d(plane_mesh), MeshMaterial3d(plane_material)));
     // cube
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::default()));
+    let cube_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.5, 0.4, 0.3)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.5, 0.4, 0.3))),
+        Mesh3d(cube_mesh),
+        MeshMaterial3d(cube_material),
         Transform::from_xyz(0.0, 0.5, 0.0),
     ));
     // sphere
+    let sphere_mesh = commands.spawn_asset(Sphere::new(0.5).mesh().ico(4).unwrap());
+    let sphere_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.1, 0.4, 0.8)));
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.5).mesh().ico(4).unwrap())),
-        MeshMaterial3d(materials.add(Color::srgb(0.1, 0.4, 0.8))),
+        Mesh3d(sphere_mesh),
+        MeshMaterial3d(sphere_material),
         Transform::from_xyz(1.5, 1.5, 1.5),
     ));
     // light

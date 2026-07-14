@@ -37,11 +37,7 @@ struct TransformTracking {
 #[derive(Resource)]
 struct SeededRng(ChaCha8Rng);
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // We're seeding the PRNG here to make this example deterministic for testing purposes.
     // This isn't strictly required in practical use unless you need your app to be deterministic.
     let mut rng = ChaCha8Rng::seed_from_u64(19878367467713);
@@ -62,9 +58,11 @@ fn setup(
     ));
 
     // Action! (Our cubes that are going to move)
+    let cube_mesh_1 = commands.spawn_asset(Mesh::from(Cuboid::new(1., 1., 1.)));
+    let cube_material_1 = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.8, 0.7, 0.6)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1., 1., 1.))),
-        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Mesh3d(cube_mesh_1),
+        MeshMaterial3d(cube_material_1),
         ShowAxes,
         TransformTracking {
             initial_transform: default(),
@@ -73,9 +71,11 @@ fn setup(
         },
     ));
 
+    let cube_mesh_2 = commands.spawn_asset(Mesh::from(Cuboid::new(0.5, 0.5, 0.5)));
+    let cube_material_2 = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.6, 0.7, 0.8)));
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
-        MeshMaterial3d(materials.add(Color::srgb(0.6, 0.7, 0.8))),
+        Mesh3d(cube_mesh_2),
+        MeshMaterial3d(cube_material_2),
         ShowAxes,
         TransformTracking {
             initial_transform: default(),
@@ -85,9 +85,11 @@ fn setup(
     ));
 
     // A plane to give a sense of place
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(20., 20.)));
+    let plane_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.1, 0.1, 0.1)));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20., 20.))),
-        MeshMaterial3d(materials.add(Color::srgb(0.1, 0.1, 0.1))),
+        Mesh3d(plane_mesh),
+        MeshMaterial3d(plane_material),
         Transform::from_xyz(0., -2., 0.),
     ));
 
