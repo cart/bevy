@@ -35,13 +35,7 @@ struct AnimatedJoint(isize);
 /// Construct a mesh and a skeleton with 2 joints for that mesh,
 ///   and mark the second joint to be animated.
 /// It is similar to the scene defined in `models/SimpleSkin/SimpleSkin.gltf`
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut skinned_mesh_inverse_bindposes_assets: ResMut<Assets<SkinnedMeshInverseBindposes>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Create a camera
     commands.spawn((
         Camera3d::default(),
@@ -49,10 +43,10 @@ fn setup(
     ));
 
     // Create inverse bindpose matrices for a skeleton consists of 2 joints
-    let inverse_bindposes = skinned_mesh_inverse_bindposes_assets.add(vec![
+    let inverse_bindposes = commands.spawn_asset(SkinnedMeshInverseBindposes::from(vec![
         Mat4::from_translation(Vec3::new(-0.5, -1.0, 0.0)),
         Mat4::from_translation(Vec3::new(-0.5, -1.0, 0.0)),
-    ]);
+    ]));
 
     // Create a mesh
     let mesh = Mesh::new(
@@ -142,7 +136,7 @@ fn setup(
     .with_generated_skinned_mesh_bounds()
     .unwrap();
 
-    let mesh = meshes.add(mesh);
+    let mesh = commands.spawn_asset(mesh);
 
     // We're seeding the PRNG here to make this example deterministic for testing purposes.
     // This isn't strictly required in practical use unless you need your app to be deterministic.
@@ -168,17 +162,18 @@ fn setup(
         let joint_entities = vec![joint_0, joint_1];
 
         // Create skinned mesh renderer. Note that its transform doesn't affect the position of the mesh.
+        let material = commands.spawn_asset(StandardMaterial {
+            base_color: Color::srgb(
+                rng.random_range(0.0..1.0),
+                rng.random_range(0.0..1.0),
+                rng.random_range(0.0..1.0),
+            ),
+            base_color_texture: Some(asset_server.load("textures/uv_checker_bw.png")),
+            ..default()
+        });
         commands.spawn((
             Mesh3d(mesh.clone()),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(
-                    rng.random_range(0.0..1.0),
-                    rng.random_range(0.0..1.0),
-                    rng.random_range(0.0..1.0),
-                ),
-                base_color_texture: Some(asset_server.load("textures/uv_checker_bw.png")),
-                ..default()
-            })),
+            MeshMaterial3d(material),
             SkinnedMesh {
                 inverse_bindposes: inverse_bindposes.clone(),
                 joints: joint_entities,

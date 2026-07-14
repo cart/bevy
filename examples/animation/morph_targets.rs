@@ -25,19 +25,16 @@ struct AnimationToPlay {
     index: AnimationNodeIndex,
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let (graph, index) = AnimationGraph::from_clip(
         asset_server.load(GltfAssetLabel::Animation(2).from_asset(GLTF_PATH)),
     );
 
+    let graph_handle = commands.spawn_asset(graph);
     commands
         .spawn((
             AnimationToPlay {
-                graph_handle: graphs.add(graph),
+                graph_handle,
                 index,
             },
             WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(GLTF_PATH))),
@@ -80,12 +77,12 @@ fn play_animation_when_ready(
 fn name_morphs(
     asset_server: Res<AssetServer>,
     mut events: MessageReader<AssetEvent<Mesh>>,
-    meshes: Res<Assets<Mesh>>,
+    meshes: Query<&Mesh>,
 ) {
     for event in events.read() {
         if let AssetEvent::<Mesh>::Added { id } = event
             && let Some(path) = asset_server.get_path(*id)
-            && let Some(mesh) = meshes.get(*id)
+            && let Ok(mesh) = meshes.get(*id)
             && let Some(names) = mesh.morph_target_names()
         {
             info!("Morph target names for {path:?}:");

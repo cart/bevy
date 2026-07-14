@@ -116,12 +116,7 @@ fn main() {
 
 // Spawns the 3D objects in the scene, and loads the fox animation from the glTF
 // file.
-fn setup_scene(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Spawn the camera.
     commands.spawn((
         Camera3d::default(),
@@ -147,9 +142,11 @@ fn setup_scene(
     ));
 
     // Spawn the ground.
+    let mesh = commands.spawn_asset(Mesh::from(Circle::new(7.0)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(7.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
 }
@@ -340,7 +337,6 @@ fn new_mask_group_control(label: &str, width: Val, mask_group_id: u32) -> impl B
 fn setup_animation_graph_once_loaded(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut animation_graphs: ResMut<Assets<AnimationGraph>>,
     mut players: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
     targets: Query<(Entity, &AnimationTargetId)>,
 ) {
@@ -380,7 +376,7 @@ fn setup_animation_graph_once_loaded(
         }
 
         // We're doing constructing the animation graph. Add it as an asset.
-        let animation_graph = animation_graphs.add(animation_graph);
+        let animation_graph = commands.spawn_asset(animation_graph);
         commands
             .entity(entity)
             .insert(AnimationGraphHandle(animation_graph));
@@ -412,7 +408,7 @@ fn setup_animation_graph_once_loaded(
 fn handle_button_toggles(
     mut interactions: Query<(&Interaction, &mut AnimationControl), Changed<Interaction>>,
     mut animation_players: Query<&AnimationGraphHandle, With<AnimationPlayer>>,
-    mut animation_graphs: ResMut<Assets<AnimationGraph>>,
+    mut animation_graphs: Query<&mut AnimationGraph>,
     mut animation_nodes: Option<ResMut<AnimationNodes>>,
     mut app_state: ResMut<AppState>,
 ) {
@@ -433,7 +429,7 @@ fn handle_button_toggles(
         // iterate just for clarity's sake.)
         for animation_graph_handle in animation_players.iter_mut() {
             // The animation graph needs to have loaded.
-            let Some(mut animation_graph) = animation_graphs.get_mut(animation_graph_handle) else {
+            let Ok(mut animation_graph) = animation_graphs.get_mut(animation_graph_handle) else {
                 continue;
             };
 

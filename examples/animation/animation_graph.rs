@@ -120,20 +120,10 @@ struct ExampleAnimationWeights {
 }
 
 /// Initializes the scene.
-fn setup_assets(
-    mut commands: Commands,
-    mut asset_server: ResMut<AssetServer>,
-    mut animation_graphs: ResMut<Assets<AnimationGraph>>,
-    args: Res<Args>,
-) {
+fn setup_assets(mut commands: Commands, mut asset_server: ResMut<AssetServer>, args: Res<Args>) {
     // Create or load the assets.
     if args.no_load || args.save {
-        setup_assets_programmatically(
-            &mut commands,
-            &mut asset_server,
-            &mut animation_graphs,
-            args.save,
-        );
+        setup_assets_programmatically(&mut commands, &mut asset_server, args.save);
     } else {
         setup_assets_via_serialized_animation_graph(&mut commands, &mut asset_server);
     }
@@ -151,7 +141,6 @@ fn setup_ui(mut commands: Commands) {
 fn setup_assets_programmatically(
     commands: &mut Commands,
     asset_server: &mut AssetServer,
-    animation_graphs: &mut Assets<AnimationGraph>,
     _save: bool,
 ) {
     // Create the nodes.
@@ -202,7 +191,7 @@ fn setup_assets_programmatically(
     }
 
     // Add the graph.
-    let handle = animation_graphs.add(animation_graph);
+    let handle = commands.spawn_asset(animation_graph);
 
     // Save the assets in a resource.
     commands.insert_resource(ExampleAnimationGraph(handle));
@@ -218,12 +207,7 @@ fn setup_assets_via_serialized_animation_graph(
 }
 
 /// Spawns the animated fox.
-fn setup_scene(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-10.0, 5.0, 13.0).looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
@@ -247,9 +231,11 @@ fn setup_scene(
 
     // Ground
 
+    let mesh = commands.spawn_asset(Mesh::from(Circle::new(7.0)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(7.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
 }

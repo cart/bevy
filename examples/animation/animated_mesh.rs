@@ -31,11 +31,7 @@ struct AnimationToPlay {
     index: AnimationNodeIndex,
 }
 
-fn setup_mesh_and_animation(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-) {
+fn setup_mesh_and_animation(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Create an animation graph containing a single animation. We want the "run"
     // animation from our example asset, which has an index of two.
     let (graph, index) = AnimationGraph::from_clip(
@@ -43,7 +39,7 @@ fn setup_mesh_and_animation(
     );
 
     // Store the animation graph as an asset.
-    let graph_handle = graphs.add(graph);
+    let graph_handle = commands.spawn_asset(graph);
 
     // Create a component that stores a reference to our animation.
     let animation_to_play = AnimationToPlay {
@@ -98,11 +94,7 @@ fn play_animation_when_ready(
 }
 
 // Spawn a camera and a simple environment with a ground plane and light.
-fn setup_camera_and_environment(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup_camera_and_environment(mut commands: Commands) {
     // Camera
     commands.spawn((
         Camera3d::default(),
@@ -110,10 +102,11 @@ fn setup_camera_and_environment(
     ));
 
     // Plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(500000.0, 500000.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+    let mesh = commands.spawn_asset(Mesh::from(
+        Plane3d::default().mesh().size(500000.0, 500000.0),
     ));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
+    commands.spawn((Mesh3d(mesh), MeshMaterial3d(material)));
 
     // Light
     commands.spawn((

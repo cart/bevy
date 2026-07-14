@@ -77,13 +77,7 @@ fn observe_on_step(
     Ok(())
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Build the animation graph
     let (graph, index) = AnimationGraph::from_clip(
         // We specifically want the "run" animation, which is the third one.
@@ -91,7 +85,7 @@ fn setup(
     );
 
     // Insert a resource with the current scene information
-    let graph_handle = graphs.add(graph);
+    let graph_handle = commands.spawn_asset(graph);
     commands.insert_resource(Animations {
         index,
         graph_handle,
@@ -104,10 +98,11 @@ fn setup(
     ));
 
     // Plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(500000.0, 500000.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+    let mesh = commands.spawn_asset(Mesh::from(
+        Plane3d::default().mesh().size(500000.0, 500000.0),
     ));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
+    commands.spawn((Mesh3d(mesh), MeshMaterial3d(material)));
 
     // Light
     commands.spawn((
@@ -141,14 +136,14 @@ fn setup_scene_once_loaded(
     mut commands: Commands,
     animations: Res<Animations>,
     feet: Res<FoxFeetTargets>,
-    graphs: Res<Assets<AnimationGraph>>,
-    mut clips: ResMut<Assets<AnimationClip>>,
+    graphs: Query<&AnimationGraph>,
+    mut clips: Query<&mut AnimationClip>,
     mut players: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
 ) {
     fn get_clip<'a>(
         node: AnimationNodeIndex,
         graph: &AnimationGraph,
-        clips: &'a mut Assets<AnimationClip>,
+        clips: &'a mut Query<&mut AnimationClip>,
     ) -> &'a mut AnimationClip {
         let node = graph.get(node).unwrap();
         let clip = match &node.node_type {
@@ -226,8 +221,8 @@ struct ParticleAssets {
 impl FromWorld for ParticleAssets {
     fn from_world(world: &mut World) -> Self {
         Self {
-            mesh: world.add_asset::<Mesh>(Sphere::new(10.0)),
-            material: world.add_asset::<StandardMaterial>(StandardMaterial {
+            mesh: world.spawn_asset(Mesh::from(Sphere::new(10.0))),
+            material: world.spawn_asset(StandardMaterial {
                 base_color: WHITE.into(),
                 ..Default::default()
             }),
