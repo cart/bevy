@@ -22,12 +22,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // #11111: We use a duplicated image so that it can be load with and without
     // settings
     let image_with_default_sampler =
@@ -48,12 +43,14 @@ fn setup(
         .load("textures/fantasy_ui_borders/panel-border-010-repeated.png");
 
     // central rectangle with not repeated texture
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::new(RECTANGLE_SIDE, RECTANGLE_SIDE)));
+    let material = commands.spawn_asset(ColorMaterial {
+        texture: Some(image_with_default_sampler.clone()),
+        ..default()
+    });
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(RECTANGLE_SIDE, RECTANGLE_SIDE))),
-        MeshMaterial2d(materials.add(ColorMaterial {
-            texture: Some(image_with_default_sampler.clone()),
-            ..default()
-        })),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_translation(Vec3::ZERO),
         children![(
             Text2d::new("Control"),
@@ -62,15 +59,17 @@ fn setup(
     ));
 
     // left rectangle with repeated texture
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::new(RECTANGLE_SIDE, RECTANGLE_SIDE)));
+    let material = commands.spawn_asset(ColorMaterial {
+        texture: Some(image_with_repeated_sampler),
+        // uv_transform used here for proportions only, but it is full Affine2
+        // that's why you can use rotation and shift also
+        uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
+        ..default()
+    });
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(RECTANGLE_SIDE, RECTANGLE_SIDE))),
-        MeshMaterial2d(materials.add(ColorMaterial {
-            texture: Some(image_with_repeated_sampler),
-            // uv_transform used here for proportions only, but it is full Affine2
-            // that's why you can use rotation and shift also
-            uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
-            ..default()
-        })),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_xyz(-RECTANGLE_OFFSET, 0.0, 0.0),
         children![(
             Text2d::new("Repeat On"),
@@ -79,19 +78,21 @@ fn setup(
     ));
 
     // right rectangle with scaled texture, but with default sampler.
-    commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(RECTANGLE_SIDE, RECTANGLE_SIDE))),
-        MeshMaterial2d(materials.add(ColorMaterial {
-            // there is no sampler set, that's why
-            // by default you see only one small image in a row/column
-            // and other space is filled by image edge
-            texture: Some(image_with_default_sampler),
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::new(RECTANGLE_SIDE, RECTANGLE_SIDE)));
+    let material = commands.spawn_asset(ColorMaterial {
+        // there is no sampler set, that's why
+        // by default you see only one small image in a row/column
+        // and other space is filled by image edge
+        texture: Some(image_with_default_sampler),
 
-            // uv_transform used here for proportions only, but it is full Affine2
-            // that's why you can use rotation and shift also
-            uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
-            ..default()
-        })),
+        // uv_transform used here for proportions only, but it is full Affine2
+        // that's why you can use rotation and shift also
+        uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
+        ..default()
+    });
+    commands.spawn((
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_xyz(RECTANGLE_OFFSET, 0.0, 0.0),
         children![(
             Text2d::new("Repeat Off"),

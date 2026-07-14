@@ -31,13 +31,9 @@ fn main() {
 #[derive(Component, Debug)]
 struct DrawBounds<Shape: Bounded2d + Send + Sync + 'static>(Shape);
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    let material = materials.add(asset_server.load("branding/icon.png"));
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let material =
+        commands.spawn_asset(ColorMaterial::from(asset_server.load("branding/icon.png")));
 
     commands.spawn((
         Camera2d,
@@ -64,8 +60,9 @@ fn setup(
             CircularSectorMeshBuilder::new(sector).uv_mode(CircularMeshUvMode::Mask {
                 angle: sector_angle,
             });
+        let mesh = commands.spawn_asset(Mesh::from(sector_mesh));
         commands.spawn((
-            Mesh2d(meshes.add(sector_mesh)),
+            Mesh2d(mesh),
             MeshMaterial2d(material.clone()),
             Transform {
                 translation: Vec3::new(SPACING_X * i as f32 - OFFSET_X, 50.0, 0.0),
@@ -88,8 +85,9 @@ fn setup(
             CircularSegmentMeshBuilder::new(segment).uv_mode(CircularMeshUvMode::Mask {
                 angle: -segment_angle,
             });
+        let mesh = commands.spawn_asset(Mesh::from(segment_mesh));
         commands.spawn((
-            Mesh2d(meshes.add(segment_mesh)),
+            Mesh2d(mesh),
             MeshMaterial2d(material.clone()),
             Transform {
                 translation: Vec3::new(SPACING_X * i as f32 - OFFSET_X, -50.0, 0.0),

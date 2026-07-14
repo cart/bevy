@@ -44,37 +44,33 @@ const X_EXTENT: f32 = 1000.;
 const Y_EXTENT: f32 = 150.;
 const THICKNESS: f32 = 5.0;
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
 
     let shapes = [
-        meshes.add(Circle::new(50.0)),
-        meshes.add(CircularSector::new(50.0, 1.0)),
-        meshes.add(CircularSegment::new(50.0, 1.25)),
-        meshes.add(Ellipse::new(25.0, 50.0)),
-        meshes.add(Annulus::new(25.0, 50.0)),
-        meshes.add(Capsule2d::new(25.0, 50.0)),
-        meshes.add(Rhombus::new(75.0, 100.0)),
-        meshes.add(Rectangle::new(50.0, 100.0)),
-        meshes.add(RegularPolygon::new(50.0, 6)),
-        meshes.add(Triangle2d::new(
+        commands.spawn_asset(Mesh::from(Circle::new(50.0))),
+        commands.spawn_asset(Mesh::from(CircularSector::new(50.0, 1.0))),
+        commands.spawn_asset(Mesh::from(CircularSegment::new(50.0, 1.25))),
+        commands.spawn_asset(Mesh::from(Ellipse::new(25.0, 50.0))),
+        commands.spawn_asset(Mesh::from(Annulus::new(25.0, 50.0))),
+        commands.spawn_asset(Mesh::from(Capsule2d::new(25.0, 50.0))),
+        commands.spawn_asset(Mesh::from(Rhombus::new(75.0, 100.0))),
+        commands.spawn_asset(Mesh::from(Rectangle::new(50.0, 100.0))),
+        commands.spawn_asset(Mesh::from(RegularPolygon::new(50.0, 6))),
+        commands.spawn_asset(Mesh::from(Triangle2d::new(
             Vec2::Y * 50.0,
             Vec2::new(-50.0, -50.0),
             Vec2::new(50.0, -50.0),
-        )),
-        meshes.add(Segment2d::new(
+        ))),
+        commands.spawn_asset(Mesh::from(Segment2d::new(
             Vec2::new(-50.0, 50.0),
             Vec2::new(50.0, -50.0),
-        )),
-        meshes.add(Polyline2d::new(vec![
+        ))),
+        commands.spawn_asset(Mesh::from(Polyline2d::new(vec![
             Vec2::new(-50.0, 50.0),
             Vec2::new(0.0, -50.0),
             Vec2::new(50.0, 50.0),
-        ])),
+        ]))),
     ];
     let num_shapes = shapes.len();
 
@@ -82,9 +78,10 @@ fn setup(
         // Distribute colors evenly across the rainbow.
         let color = Color::hsl(360. * i as f32 / num_shapes as f32, 0.95, 0.7);
 
+        let material = commands.spawn_asset(ColorMaterial::from(color));
         commands.spawn((
             Mesh2d(shape),
-            MeshMaterial2d(materials.add(color)),
+            MeshMaterial2d(material),
             Transform::from_xyz(
                 // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
                 -X_EXTENT / 2. + i as f32 / (num_shapes - 1) as f32 * X_EXTENT,
@@ -95,34 +92,36 @@ fn setup(
     }
 
     let rings = [
-        meshes.add(Circle::new(50.0).to_ring(THICKNESS)),
+        commands.spawn_asset(Mesh::from(Circle::new(50.0).to_ring(THICKNESS))),
         // this visually produces an arc segment but this is not technically accurate
-        meshes.add(Ring::new(
+        commands.spawn_asset(Mesh::from(Ring::new(
             CircularSector::new(50.0, 1.0),
             CircularSector::new(45.0, 1.0),
+        ))),
+        commands.spawn_asset(Mesh::from(
+            CircularSegment::new(50.0, 1.25).to_ring(THICKNESS),
         )),
-        meshes.add(CircularSegment::new(50.0, 1.25).to_ring(THICKNESS)),
-        meshes.add({
+        commands.spawn_asset(Mesh::from({
             // This is an approximation; Ellipse does not implement Inset as concentric ellipses do not have parallel curves
             let outer = Ellipse::new(25.0, 50.0);
             let mut inner = outer;
             inner.half_size -= Vec2::splat(THICKNESS);
             Ring::new(outer, inner)
-        }),
+        })),
         // this is equivalent to the Annulus::new(25.0, 50.0) above
-        meshes.add(Ring::new(Circle::new(50.0), Circle::new(25.0))),
-        meshes.add(Capsule2d::new(25.0, 50.0).to_ring(THICKNESS)),
-        meshes.add(Rhombus::new(75.0, 100.0).to_ring(THICKNESS)),
-        meshes.add(Rectangle::new(50.0, 100.0).to_ring(THICKNESS)),
-        meshes.add(RegularPolygon::new(50.0, 6).to_ring(THICKNESS)),
-        meshes.add(
+        commands.spawn_asset(Mesh::from(Ring::new(Circle::new(50.0), Circle::new(25.0)))),
+        commands.spawn_asset(Mesh::from(Capsule2d::new(25.0, 50.0).to_ring(THICKNESS))),
+        commands.spawn_asset(Mesh::from(Rhombus::new(75.0, 100.0).to_ring(THICKNESS))),
+        commands.spawn_asset(Mesh::from(Rectangle::new(50.0, 100.0).to_ring(THICKNESS))),
+        commands.spawn_asset(Mesh::from(RegularPolygon::new(50.0, 6).to_ring(THICKNESS))),
+        commands.spawn_asset(Mesh::from(
             Triangle2d::new(
                 Vec2::Y * 50.0,
                 Vec2::new(-50.0, -50.0),
                 Vec2::new(50.0, -50.0),
             )
             .to_ring(THICKNESS),
-        ),
+        )),
     ];
     // Allow for 2 empty spaces
     let num_rings = rings.len() + 2;
@@ -131,9 +130,10 @@ fn setup(
         // Distribute colors evenly across the rainbow.
         let color = Color::hsl(360. * i as f32 / num_rings as f32, 0.95, 0.7);
 
+        let material = commands.spawn_asset(ColorMaterial::from(color));
         commands.spawn((
             Mesh2d(shape),
-            MeshMaterial2d(materials.add(color)),
+            MeshMaterial2d(material),
             Transform::from_xyz(
                 // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
                 -X_EXTENT / 2. + i as f32 / (num_rings - 1) as f32 * X_EXTENT,

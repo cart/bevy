@@ -14,12 +14,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Camera2d,
         Camera {
@@ -40,18 +35,22 @@ fn setup(
     });
 
     // Circle mesh
+    let mesh = commands.spawn_asset(Mesh::from(Circle::new(100.)));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::srgb(7.5, 0.0, 7.5)));
     commands.spawn((
-        Mesh2d(meshes.add(Circle::new(100.))),
+        Mesh2d(mesh),
         // 3. Put something bright in a dark environment to see the effect
-        MeshMaterial2d(materials.add(Color::srgb(7.5, 0.0, 7.5))),
+        MeshMaterial2d(material),
         Transform::from_translation(Vec3::new(-200., 0., 0.)),
     ));
 
     // Hexagon mesh
+    let mesh = commands.spawn_asset(Mesh::from(RegularPolygon::new(100., 6)));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::srgb(6.25, 9.4, 9.1)));
     commands.spawn((
-        Mesh2d(meshes.add(RegularPolygon::new(100., 6))),
+        Mesh2d(mesh),
         // 3. Put something bright in a dark environment to see the effect
-        MeshMaterial2d(materials.add(Color::srgb(6.25, 9.4, 9.1))),
+        MeshMaterial2d(material),
         Transform::from_translation(Vec3::new(200., 0., 0.)),
     ));
 

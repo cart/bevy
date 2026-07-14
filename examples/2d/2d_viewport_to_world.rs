@@ -123,12 +123,7 @@ fn controls(
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    window: Single<&Window>,
-) {
+fn setup(mut commands: Commands, window: Single<&Window>) {
     let window_size = window.resolution.physical_size().as_vec2();
 
     // Initialize centered, non-window-filling viewport
@@ -162,15 +157,16 @@ fn setup(
     ));
 
     // Add mesh to make camera movement visible
-    commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(40.0, 20.0))),
-        MeshMaterial2d(materials.add(Color::from(GREEN))),
-    ));
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::new(40.0, 20.0)));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::from(GREEN)));
+    commands.spawn((Mesh2d(mesh), MeshMaterial2d(material)));
 
     // Add background to visualize viewport bounds
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::new(50000.0, 50000.0)));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::linear_rgb(0.01, 0.01, 0.01)));
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(50000.0, 50000.0))),
-        MeshMaterial2d(materials.add(Color::linear_rgb(0.01, 0.01, 0.01))),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_translation(Vec3::new(0.0, 0.0, -200.0)),
     ));
 }

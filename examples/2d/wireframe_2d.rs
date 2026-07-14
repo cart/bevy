@@ -48,32 +48,34 @@ fn main() {
 }
 
 /// Set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     // Triangle: Never renders a wireframe
+    let mesh = commands.spawn_asset(Mesh::from(Triangle2d::new(
+        Vec2::new(0.0, 50.0),
+        Vec2::new(-50.0, -50.0),
+        Vec2::new(50.0, -50.0),
+    )));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::BLACK));
     commands.spawn((
-        Mesh2d(meshes.add(Triangle2d::new(
-            Vec2::new(0.0, 50.0),
-            Vec2::new(-50.0, -50.0),
-            Vec2::new(50.0, -50.0),
-        ))),
-        MeshMaterial2d(materials.add(Color::BLACK)),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_xyz(-150.0, 0.0, 0.0),
         NoWireframe2d,
     ));
     // Rectangle: Follows global wireframe setting
+    let mesh = commands.spawn_asset(Mesh::from(Rectangle::new(100.0, 100.0)));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::BLACK));
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(100.0, 100.0))),
-        MeshMaterial2d(materials.add(Color::BLACK)),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_xyz(0.0, 0.0, 0.0),
     ));
     // Circle: Always renders a wireframe
+    let mesh = commands.spawn_asset(Mesh::from(Circle::new(50.0)));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::BLACK));
     commands.spawn((
-        Mesh2d(meshes.add(Circle::new(50.0))),
-        MeshMaterial2d(materials.add(Color::BLACK)),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_xyz(150.0, 0.0, 0.0),
         Wireframe2d,
         // This lets you configure the wireframe color of this entity.

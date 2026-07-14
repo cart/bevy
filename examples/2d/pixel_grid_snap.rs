@@ -61,26 +61,24 @@ fn setup_sprite(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 /// Spawns a capsule mesh on the pixel-perfect layer.
-fn setup_mesh(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup_mesh(mut commands: Commands) {
+    let mesh = commands.spawn_asset(Mesh::from(Capsule2d::default()));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::BLACK));
     commands.spawn((
-        Mesh2d(meshes.add(Capsule2d::default())),
-        MeshMaterial2d(materials.add(Color::BLACK)),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_xyz(25., 0., 2.).with_scale(Vec3::splat(32.)),
         Rotate,
         PIXEL_PERFECT_LAYERS,
     ));
 }
 
-fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn setup_camera(mut commands: Commands) {
     // This Image serves as a canvas representing the low-resolution game screen
     let canvas =
         Image::new_target_texture(RES_WIDTH, RES_HEIGHT, TextureFormat::Bgra8UnormSrgb, None);
 
-    let image_handle = images.add(canvas);
+    let image_handle = commands.spawn_asset(canvas);
 
     // This camera renders whatever is on `PIXEL_PERFECT_LAYERS` to the canvas
     commands.spawn((

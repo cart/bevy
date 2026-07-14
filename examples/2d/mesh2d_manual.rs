@@ -46,11 +46,7 @@ fn main() {
         .run();
 }
 
-fn star(
-    mut commands: Commands,
-    // We will add a new Mesh for the star being created
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn star(mut commands: Commands) {
     // Let's define the mesh for the object we want to draw: a nice star.
     // We will specify here what kind of topology is used to define the mesh,
     // that is, how triangles are built from the vertices. We will use a
@@ -111,11 +107,12 @@ fn star(
     star.insert_indices(Indices::U32(indices));
 
     // We can now spawn the entities for the star and the camera
+    let mesh = commands.spawn_asset(star);
     commands.spawn((
         // We use a marker component to identify the custom colored meshes
         ColoredMesh2d,
         // The `Handle<Mesh>` needs to be wrapped in a `Mesh2d` for 2D rendering
-        Mesh2d(meshes.add(star)),
+        Mesh2d(mesh),
     ));
 
     commands.spawn(Camera2d);
@@ -172,14 +169,14 @@ impl SpecializedRenderPipeline for ColoredMesh2dPipeline {
         RenderPipelineDescriptor {
             vertex: VertexState {
                 // Use our custom shader
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 // Use our custom vertex buffer
                 buffers: vec![vertex_layout],
                 ..default()
             },
             fragment: Some(FragmentState {
                 // Use our custom shader
-                shader: self.shader.clone(),
+                shader: Some(self.shader.clone()),
                 targets: vec![Some(ColorTargetState {
                     format,
                     blend: Some(BlendState::ALPHA_BLENDING),
@@ -298,11 +295,11 @@ pub struct RenderColoredMesh2dInstances(MainEntityHashMap<RenderMesh2dInstance>)
 
 impl Plugin for ColoredMesh2dPlugin {
     fn build(&self, app: &mut App) {
-        // Load our custom shader
-        let mut shaders = app.world_mut().resource_mut::<Assets<Shader>>();
         // Here, we construct and add the shader asset manually. There are many ways to load this
         // shader, including `embedded_asset`/`load_embedded_asset`.
-        let shader = shaders.add(Shader::from_wgsl(COLORED_MESH2D_SHADER, file!()));
+        let shader = app
+            .world_mut()
+            .spawn_asset(Shader::from_wgsl(COLORED_MESH2D_SHADER, file!()));
 
         app.add_plugins(SyncComponentPlugin::<ColoredMesh2d>::default());
 

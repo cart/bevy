@@ -289,8 +289,7 @@ struct AppAssets {
 
 impl FromWorld for AppAssets {
     fn from_world(world: &mut World) -> Self {
-        let mut meshes = world.resource_mut::<Assets<Mesh>>();
-        let rectangle = meshes.add(Rectangle::default());
+        let rectangle = world.spawn_asset(Mesh::from(Rectangle::default()));
 
         let asset_server = world.resource::<AssetServer>();
         let font = asset_server.load("fonts/FiraSans-Bold.ttf");
@@ -552,9 +551,6 @@ fn regenerate_image_when_requested(
     windows_query: Query<&Window, With<PrimaryWindow>>,
     app_assets: Res<AppAssets>,
     mut app_status: ResMut<AppStatus>,
-    mut images: ResMut<Assets<Image>>,
-    mut single_mip_level_materials: ResMut<Assets<SingleMipLevelMaterial>>,
-    mut color_materials: ResMut<Assets<ColorMaterial>>,
     mut message_reader: MessageReader<RegenerateImage>,
 ) {
     // Only do this at most once per frame, or else the despawn logic below will
@@ -569,7 +565,7 @@ fn regenerate_image_when_requested(
     }
 
     // Regenerate the image.
-    let image_handle = app_status.regenerate_mipmap_source_image(&mut commands, &mut images);
+    let image_handle = app_status.regenerate_mipmap_source_image(&mut commands);
 
     // Respawn the animated image view on the left side of the window.
     spawn_animated_mesh(
@@ -577,7 +573,6 @@ fn regenerate_image_when_requested(
         &app_status,
         &app_assets,
         &windows_query,
-        &mut color_materials,
         &image_handle,
     );
 
@@ -587,7 +582,6 @@ fn regenerate_image_when_requested(
         &app_status,
         &app_assets,
         &windows_query,
-        &mut single_mip_level_materials,
         &image_handle,
     );
 }
@@ -602,19 +596,19 @@ fn spawn_animated_mesh(
     app_status: &AppStatus,
     app_assets: &AppAssets,
     windows_query: &Query<&Window, With<PrimaryWindow>>,
-    color_materials: &mut Assets<ColorMaterial>,
     image_handle: &Handle<Image>,
 ) {
     let window_size = windows_query.iter().next().unwrap().size();
     let animated_mesh_area_size = app_status.animated_mesh_area_size(window_size);
     let animated_mesh_size = app_status.animated_mesh_size(window_size);
 
+    let material = commands.spawn_asset(ColorMaterial {
+        texture: Some(image_handle.clone()),
+        ..default()
+    });
     commands.spawn((
         Mesh2d(app_assets.rectangle.clone()),
-        MeshMaterial2d(color_materials.add(ColorMaterial {
-            texture: Some(image_handle.clone()),
-            ..default()
-        })),
+        MeshMaterial2d(material),
         Transform::from_translation(
             (animated_mesh_area_size * 0.5 - window_size * 0.5).extend(0.0),
         )
@@ -631,7 +625,6 @@ fn spawn_mip_level_views(
     app_status: &AppStatus,
     app_assets: &AppAssets,
     windows_query: &Query<&Window, With<PrimaryWindow>>,
-    single_mip_level_materials: &mut Assets<SingleMipLevelMaterial>,
     image_handle: &Handle<Image>,
 ) {
     let window_size = windows_query.iter().next().unwrap().size();
@@ -653,12 +646,13 @@ fn spawn_mip_level_views(
 
         // Spawn the image. Use the `SingleMipLevelMaterial` with its custom
         // shader so that only the mip level in question is displayed.
+        let material = commands.spawn_asset(SingleMipLevelMaterial {
+            mip_level: mip_level as u32,
+            texture: image_handle.clone(),
+        });
         commands.spawn((
             Mesh2d(app_assets.rectangle.clone()),
-            MeshMaterial2d(single_mip_level_materials.add(SingleMipLevelMaterial {
-                mip_level: mip_level as u32,
-                texture: image_handle.clone(),
-            })),
+            MeshMaterial2d(material),
             Transform::from_xyz(x_origin, y_center, 0.0).with_scale(slice_size.extend(1.0)),
             ImageView,
         ));
@@ -763,11 +757,7 @@ impl AppStatus {
     }
 
     /// Regenerates the main image based on the image size selected by the user.
-    fn regenerate_mipmap_source_image(
-        &mut self,
-        commands: &mut Commands,
-        images: &mut Assets<Image>,
-    ) -> Handle<Image> {
+    fn regenerate_mipmap_source_image(&mut self, commands: &mut Commands) -> Handle<Image> {
         let image_data = self.generate_image_data();
 
         let mut image = Image::new_uninit(
@@ -784,7 +774,7 @@ impl AppStatus {
         image.texture_descriptor.usage |= TextureUsages::STORAGE_BINDING;
         image.data = Some(image_data);
 
-        let image_handle = images.add(image);
+        let image_handle = commands.spawn_asset(image);
         commands.insert_resource(MipmapSourceImage(image_handle.clone()));
 
         image_handle
