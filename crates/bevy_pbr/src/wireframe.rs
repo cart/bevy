@@ -933,7 +933,7 @@ pub struct RenderWireframeMaterial {
 
 #[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq)]
 #[reflect(Component, Clone, PartialEq)]
-pub struct Mesh3dWireframe(pub Handle<WireframeMaterial>);
+pub struct Mesh3dWireframe(#[template] pub Handle<WireframeMaterial>);
 
 impl AsAssetId for Mesh3dWireframe {
     type Asset = WireframeMaterial;

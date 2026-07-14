@@ -48,6 +48,7 @@ pub struct Atmosphere {
 
     /// A handle to a [`ScatteringMedium`], which describes the substance
     /// of the atmosphere and how it scatters light.
+    #[template]
     pub medium: Handle<ScatteringMedium>,
 }
 

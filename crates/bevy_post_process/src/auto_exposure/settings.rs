@@ -34,14 +34,12 @@ pub struct AutoExposure {
     /// Pixel values below this range will be ignored, and pixel values above this range will be
     /// clamped in the sense that they will count towards the highest bin in the histogram.
     /// The default value is `-8.0..=8.0`.
-    #[template(RangeInclusive<f32>)]
     pub range: RangeInclusive<f32>,
 
     /// The portion of the histogram to consider when metering.
     ///
     /// By default, the darkest 10% and the brightest 10% of samples are ignored,
     /// so the default value is `0.10..=0.90`.
-    #[template(RangeInclusive<f32>)]
     pub filter: RangeInclusive<f32>,
 
     /// The speed at which the exposure adapts from dark to bright scenes, in F-stops per second.
@@ -85,11 +83,13 @@ pub struct AutoExposure {
     ///
     /// The mask is quantized to 16 discrete levels because of limitations in the compute shader
     /// implementation.
+    #[template]
     pub metering_mask: Handle<Image>,
 
     /// Exposure compensation curve to apply after metering.
     /// The default value is a flat line at 0.0.
     /// For more information, see [`AutoExposureCompensationCurve`].
+    #[template]
     pub compensation_curve: Handle<AutoExposureCompensationCurve>,
 }
 

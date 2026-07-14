@@ -20,9 +20,10 @@ use core::hash::Hash;
 #[component(on_add = visibility::add_visibility_class::<Sprite>)]
 pub struct Sprite {
     /// The image used to render the sprite
+    #[template]
     pub image: Handle<Image>,
     /// The (optional) texture atlas used to render the sprite
-    #[template(built_in)]
+    #[template]
     pub texture_atlas: Option<TextureAtlas>,
     /// The sprite's color tint
     pub color: Color,

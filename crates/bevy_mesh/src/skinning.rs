@@ -16,6 +16,7 @@ use thiserror::Error;
 #[derive(Component, Debug, Clone, Reflect, FromTemplate)]
 #[reflect(Component, Debug, Clone)]
 pub struct SkinnedMesh {
+    #[template]
     pub inverse_bindposes: Handle<SkinnedMeshInverseBindposes>,
     #[entities]
     pub joints: Vec<Entity>,

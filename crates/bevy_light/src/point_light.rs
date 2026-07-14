@@ -154,13 +154,14 @@ impl PointLight {
 }
 
 /// Add to a [`PointLight`] to add a light texture effect.
-/// A texture mask is applied to the light source to modulate its intensity,  
+/// A texture mask is applied to the light source to modulate its intensity,
 /// simulating patterns like window shadows, gobo/cookie effects, or soft falloffs.
 #[derive(Clone, Component, Debug, Reflect, FromTemplate)]
 #[reflect(Component, Debug)]
 #[require(PointLight)]
 pub struct PointLightTexture {
     /// The texture image. Only the R channel is read.
+    #[template]
     pub image: Handle<Image>,
     /// The cubemap layout. The image should be a packed cubemap in one of the formats described by the [`CubemapLayout`] enum.
     pub cubemap_layout: CubemapLayout,

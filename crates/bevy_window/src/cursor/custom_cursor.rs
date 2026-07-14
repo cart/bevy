@@ -18,9 +18,10 @@ use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 pub struct CustomCursorImage {
     /// Handle to the image to use as the cursor. The image must be in 8 bit int
     /// or 32 bit float rgba. PNG images work well for this.
+    #[template]
     pub handle: Handle<Image>,
     /// An optional texture atlas used to render the image.
-    #[template(built_in)]
+    #[template]
     pub texture_atlas: Option<TextureAtlas>,
     /// Whether the image should be flipped along its x-axis.
     ///
@@ -74,7 +75,7 @@ pub struct CustomCursorUrl {
 pub enum CustomCursor {
     #[default]
     /// Use an image as the cursor.
-    Image(CustomCursorImage),
+    Image(#[template] CustomCursorImage),
     /// Use a URL to an image as the cursor. Note that this currently only works on the web.
     Url(CustomCursorUrl),
 }

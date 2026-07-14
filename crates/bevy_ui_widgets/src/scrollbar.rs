@@ -68,6 +68,7 @@ pub struct ScrollIntoView {
 #[reflect(Component)]
 pub struct Scrollbar {
     /// Entity being scrolled.
+    #[template]
     pub target: Entity,
     /// Whether the scrollbar is vertical or horizontal.
     pub orientation: ControlOrientation,

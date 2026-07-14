@@ -289,7 +289,7 @@ pub enum FontSource {
     ///   `FiraMono-subset.ttf` compiled into the library is used.
     /// * otherwise no text will be rendered, unless a custom font is loaded into the default font
     ///   handle.
-    Handle(Handle<Font>),
+    Handle(#[template] Handle<Font>),
     /// Resolve the font by family name using the font database.
     Family(SmolStr),
     /// Fonts with serifs — small decorative strokes at the ends of letterforms.

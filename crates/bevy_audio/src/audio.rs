@@ -248,7 +248,7 @@ pub struct DefaultSpatialScale(pub SpatialScale);
 #[derive(Component, Reflect, FromTemplate)]
 #[reflect(Component, Clone)]
 #[require(PlaybackSettings)]
-pub struct AudioPlayer<Source = AudioSource>(pub Handle<Source>)
+pub struct AudioPlayer<Source = AudioSource>(#[template] pub Handle<Source>)
 where
     Source: Asset + Decodable;
 

@@ -206,7 +206,7 @@ pub fn spot_light_clip_from_view(angle: f32, near_z: f32) -> Mat4 {
 }
 
 /// Add to a [`SpotLight`] to add a light texture effect.
-/// A texture mask is applied to the light source to modulate its intensity,  
+/// A texture mask is applied to the light source to modulate its intensity,
 /// simulating patterns like window shadows, gobo/cookie effects, or soft falloffs.
 #[derive(Clone, Component, Debug, Reflect, FromTemplate)]
 #[reflect(Component, Debug)]
@@ -214,6 +214,7 @@ pub fn spot_light_clip_from_view(angle: f32, near_z: f32) -> Mat4 {
 pub struct SpotLightTexture {
     /// The texture image. Only the R channel is read.
     /// Note the border of the image should be entirely black to avoid leaking light.
+    #[template]
     pub image: Handle<Image>,
 }
 

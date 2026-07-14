@@ -38,8 +38,9 @@ impl Plugin for SpriteMaterialPlugin {
 pub struct SpriteMaterial {
     #[texture(1)]
     #[sampler(2)]
+    #[template]
     pub image: Handle<Image>,
-    #[template(built_in)]
+    #[template]
     pub texture_atlas: Option<TextureAtlas>,
     pub color: Color,
     pub flip_x: bool,

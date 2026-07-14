@@ -202,7 +202,7 @@ pub trait Material2d:
 /// [`MeshMaterial2d`]: crate::MeshMaterial2d
 #[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, From)]
 #[reflect(Component, Clone)]
-pub struct MeshMaterial2d<M: Material2d>(pub Handle<M>);
+pub struct MeshMaterial2d<M: Material2d>(#[template] pub Handle<M>);
 
 impl<M: Material2d> PartialEq for MeshMaterial2d<M> {
     fn eq(&self, other: &Self) -> bool {

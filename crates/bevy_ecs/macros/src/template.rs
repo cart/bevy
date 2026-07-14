@@ -1,15 +1,17 @@
-use bevy_macro_utils::{fq_std::FQDefault, BevyManifest};
+use bevy_macro_utils::{
+    fq_std::{FQClone, FQDefault},
+    BevyManifest,
+};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
     parse::ParseStream, parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned,
-    Data, DeriveInput, Fields, FieldsUnnamed, Ident, Index, Path, Result, Token, WhereClause,
+    Data, DeriveInput, Fields, FieldsUnnamed, Ident, Index, Meta, Path, Result, Token, WhereClause,
 };
 
 const TEMPLATE_DEFAULT_ATTRIBUTE: &str = "default";
 const TEMPLATE_MANUAL_DEFAULT_ATTRIBUTE: &str = "manual_default";
 const TEMPLATE_ATTRIBUTE: &str = "template";
-const BUILT_IN_ATTRIBUTE: &str = "built_in";
 
 pub(crate) fn derive_from_template(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -369,8 +371,8 @@ struct StructImpl {
 }
 
 enum TemplateType {
+    Direct,
     FromTemplate,
-    BuiltIn,
     Manual(Path),
 }
 
@@ -386,16 +388,13 @@ fn struct_impl(fields: &Fields, bevy_ecs: &Path, is_enum: bool) -> Result<Struct
         let ident = &field.ident;
         let ty = &field.ty;
         let index = Index::from(index);
-        let mut template_type = TemplateType::FromTemplate;
+        let mut template_type = TemplateType::Direct;
         for attr in &field.attrs {
             if attr.path().is_ident(TEMPLATE_ATTRIBUTE) {
-                attr.parse_args_with(|stream: ParseStream| {
-                    let forked = stream.fork();
-                    let ident = forked.parse::<Ident>()?;
-                    if ident == BUILT_IN_ATTRIBUTE {
-                        stream.parse::<Ident>()?;
-                        template_type = TemplateType::BuiltIn;
-                    } else {
+                if matches!(attr.meta, Meta::Path(_)) {
+                    template_type = TemplateType::FromTemplate;
+                } else {
+                    attr.parse_args_with(|stream: ParseStream| {
                         if let Ok(path) = stream.parse::<Path>() {
                             template_type = TemplateType::Manual(path);
                         } else {
@@ -404,40 +403,58 @@ fn struct_impl(fields: &Fields, bevy_ecs: &Path, is_enum: bool) -> Result<Struct
                                 "Expected a Template type path",
                             ));
                         }
-                    }
-                    Ok(())
-                })?;
+                        Ok(())
+                    })?;
+                }
             }
         }
 
-        let template_type = match template_type {
+        let template_ty = match &template_type {
+            TemplateType::Direct => {
+                quote! {#ty}
+            }
             TemplateType::FromTemplate => {
                 quote!(<#ty as #bevy_ecs::template::FromTemplate>::Template)
-            }
-            TemplateType::BuiltIn => {
-                quote!(<#ty as #bevy_ecs::template::BuiltInTemplate>::Template)
             }
             TemplateType::Manual(path) => quote! {#path},
         };
 
         if is_named {
             template_fields.push(quote! {
-                #field_maybe_pub #ident: #template_type
+                #field_maybe_pub #ident: #template_ty
             });
-            if is_enum {
-                template_field_builds.push(quote! {
-                    #ident: #ident.build_template(context)?
-                });
-                template_field_clones.push(quote! {
-                    #ident: #bevy_ecs::template::Template::clone_template(#ident)
-                });
+            if matches!(template_type, TemplateType::Direct) {
+                if is_enum {
+                    template_field_builds.push(quote! {
+                        #ident: #FQClone::clone(#ident)
+                    });
+                    template_field_clones.push(quote! {
+                        #ident: #FQClone::clone(#ident)
+                    });
+                } else {
+                    template_field_builds.push(quote! {
+                        #ident: #FQClone::clone(&self.#ident)
+                    });
+                    template_field_clones.push(quote! {
+                        #ident: #FQClone::clone(&self.#ident)
+                    });
+                }
             } else {
-                template_field_builds.push(quote! {
-                    #ident: self.#ident.build_template(context)?
-                });
-                template_field_clones.push(quote! {
-                    #ident: #bevy_ecs::template::Template::clone_template(&self.#ident)
-                });
+                if is_enum {
+                    template_field_builds.push(quote! {
+                        #ident: #ident.build_template(context)?
+                    });
+                    template_field_clones.push(quote! {
+                        #ident: #bevy_ecs::template::Template::clone_template(#ident)
+                    });
+                } else {
+                    template_field_builds.push(quote! {
+                        #ident: self.#ident.build_template(context)?
+                    });
+                    template_field_clones.push(quote! {
+                        #ident: #bevy_ecs::template::Template::clone_template(&self.#ident)
+                    });
+                }
             }
 
             template_field_defaults.push(quote! {
@@ -445,23 +462,42 @@ fn struct_impl(fields: &Fields, bevy_ecs: &Path, is_enum: bool) -> Result<Struct
             });
         } else {
             template_fields.push(quote! {
-                #field_maybe_pub #template_type
+                #field_maybe_pub #template_ty
             });
-            if is_enum {
-                let enum_tuple_ident = format_ident!("t{}", index);
-                template_field_builds.push(quote! {
-                    #enum_tuple_ident.build_template(context)?
-                });
-                template_field_clones.push(quote! {
-                    #bevy_ecs::template::Template::clone_template(#enum_tuple_ident)
-                });
+            if matches!(template_type, TemplateType::Direct) {
+                if is_enum {
+                    let enum_tuple_ident = format_ident!("t{}", index);
+                    template_field_builds.push(quote! {
+                        #FQClone::clone(#enum_tuple_ident)
+                    });
+                    template_field_clones.push(quote! {
+                        #FQClone::clone(#enum_tuple_ident)
+                    });
+                } else {
+                    template_field_builds.push(quote! {
+                        #FQClone::clone(&self.#index)
+                    });
+                    template_field_clones.push(quote! {
+                        #FQClone::clone(&self.#index)
+                    });
+                }
             } else {
-                template_field_builds.push(quote! {
-                    self.#index.build_template(context)?
-                });
-                template_field_clones.push(quote! {
-                    #bevy_ecs::template::Template::clone_template(&self.#index)
-                });
+                if is_enum {
+                    let enum_tuple_ident = format_ident!("t{}", index);
+                    template_field_builds.push(quote! {
+                        #enum_tuple_ident.build_template(context)?
+                    });
+                    template_field_clones.push(quote! {
+                        #bevy_ecs::template::Template::clone_template(#enum_tuple_ident)
+                    });
+                } else {
+                    template_field_builds.push(quote! {
+                        self.#index.build_template(context)?
+                    });
+                    template_field_clones.push(quote! {
+                        #bevy_ecs::template::Template::clone_template(&self.#index)
+                    });
+                }
             }
             template_field_defaults.push(quote! {
                 #FQDefault::default()

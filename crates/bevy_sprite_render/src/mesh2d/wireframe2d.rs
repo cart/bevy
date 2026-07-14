@@ -443,7 +443,7 @@ pub struct RenderWireframeMaterial {
 
 #[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq)]
 #[reflect(Component, Clone, PartialEq)]
-pub struct Mesh2dWireframe(pub Handle<Wireframe2dMaterial>);
+pub struct Mesh2dWireframe(#[template] pub Handle<Wireframe2dMaterial>);
 
 impl AsAssetId for Mesh2dWireframe {
     type Asset = Wireframe2dMaterial;

@@ -7,7 +7,7 @@ use bevy_ecs::{
     reflect::ReflectComponent,
     template::FromTemplate,
 };
-use bevy_reflect::{prelude::ReflectDefault, Reflect};
+use bevy_reflect::Reflect;
 use bevy_render::{
     extract_component::ExtractComponent,
     render_resource::{AsBindGroup, RenderPipelineDescriptor, TextureFormat},
@@ -184,7 +184,7 @@ where
 )]
 #[reflect(Component)]
 #[require(Node)]
-pub struct MaterialNode<M: UiMaterial>(pub Handle<M>);
+pub struct MaterialNode<M: UiMaterial>(#[template] pub Handle<M>);
 
 impl<M: UiMaterial> Into<Entity> for &MaterialNode<M> {
     #[inline]

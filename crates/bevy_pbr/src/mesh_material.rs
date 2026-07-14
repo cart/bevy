@@ -38,7 +38,7 @@ use derive_more::derive::From;
 /// ```
 #[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect, From)]
 #[reflect(Component, Clone, PartialEq)]
-pub struct MeshMaterial3d<M: Material>(pub Handle<M>);
+pub struct MeshMaterial3d<M: Material>(#[template] pub Handle<M>);
 
 impl<M: Material> PartialEq for MeshMaterial3d<M> {
     fn eq(&self, other: &Self) -> bool {

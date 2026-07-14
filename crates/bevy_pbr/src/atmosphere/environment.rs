@@ -31,6 +31,7 @@ use tracing::warn;
 // Render world representation of an environment map light for the atmosphere
 #[derive(Component, ExtractComponent, Clone, FromTemplate)]
 pub struct AtmosphereEnvironmentMap {
+    #[template]
     pub environment_map: Handle<Image>,
     pub size: UVec2,
 }

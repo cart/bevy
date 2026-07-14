@@ -18,7 +18,7 @@ use crate::{DynamicWorld, WorldAsset};
 #[reflect(Component, Debug, PartialEq, Clone)]
 #[require(Transform)]
 #[require(Visibility)]
-pub struct WorldAssetRoot(pub Handle<WorldAsset>);
+pub struct WorldAssetRoot(#[template] pub Handle<WorldAsset>);
 
 impl AsAssetId for WorldAssetRoot {
     type Asset = WorldAsset;
@@ -34,7 +34,7 @@ impl AsAssetId for WorldAssetRoot {
 #[reflect(Component, Debug, PartialEq, Clone)]
 #[require(Transform)]
 #[require(Visibility)]
-pub struct DynamicWorldRoot(pub Handle<DynamicWorld>);
+pub struct DynamicWorldRoot(#[template] pub Handle<DynamicWorld>);
 
 impl AsAssetId for DynamicWorldRoot {
     type Asset = DynamicWorld;

@@ -64,6 +64,7 @@ impl DerefMut for GizmoAsset {
 #[require(Transform)]
 pub struct Gizmo {
     /// The handle to the gizmo to draw.
+    #[template]
     pub handle: Handle<GizmoAsset>,
     /// The line specific configuration for this gizmo.
     pub line_config: GizmoLineConfig,

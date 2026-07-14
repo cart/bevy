@@ -83,8 +83,9 @@ impl Plugin for GpuReadbackPlugin {
 #[derive(Component, ExtractComponent, Clone, Debug, FromTemplate)]
 pub enum Readback {
     #[default]
-    Texture(Handle<Image>),
+    Texture(#[template] Handle<Image>),
     Buffer {
+        #[template]
         buffer: Handle<ShaderBuffer>,
         start_offset_and_size: Option<(u64, u64)>,
     },

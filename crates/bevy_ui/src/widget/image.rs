@@ -25,9 +25,10 @@ pub struct ImageNode {
     /// Handle to the texture.
     ///
     /// This defaults to a [`TRANSPARENT_IMAGE_HANDLE`], which points to a fully transparent 1x1 texture.
+    #[template]
     pub image: Handle<Image>,
     /// The (optional) texture atlas used to render the image.
-    #[template(built_in)]
+    #[template]
     pub texture_atlas: Option<TextureAtlas>,
     /// Whether the image should be flipped along its x-axis.
     pub flip_x: bool,

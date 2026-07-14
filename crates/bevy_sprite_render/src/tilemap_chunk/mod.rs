@@ -59,6 +59,7 @@ pub struct TilemapChunk {
     /// The size of the tile in the tileset image is determined by the tileset image's dimensions.
     pub tile_display_size: UVec2,
     /// Handle to the tileset image containing all tile textures.
+    #[template]
     pub tileset: Handle<Image>,
     /// The alpha mode to use for the tilemap chunk.
     pub alpha_mode: AlphaMode2d,

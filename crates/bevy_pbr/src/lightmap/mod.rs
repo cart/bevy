@@ -89,6 +89,7 @@ pub struct LightmapPlugin;
 #[reflect(Component, Clone)]
 pub struct Lightmap {
     /// The lightmap texture.
+    #[template]
     pub image: Handle<Image>,
 
     /// The rectangle within the lightmap texture that the UVs are relative to.

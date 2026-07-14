@@ -293,5 +293,6 @@ pub struct GizmoMeshConfig {
     /// Gizmos will only be rendered to cameras with intersecting layers.
     pub render_layers: RenderLayers,
     /// Handle of the gizmo asset.
+    #[template]
     pub handle: Handle<GizmoAsset>,
 }

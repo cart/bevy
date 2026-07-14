@@ -213,6 +213,7 @@ impl TextureAtlasLayout {
 )]
 pub struct TextureAtlas {
     /// Texture atlas layout handle
+    #[template]
     pub layout: Handle<TextureAtlasLayout>,
     /// Texture atlas section index
     pub index: usize,

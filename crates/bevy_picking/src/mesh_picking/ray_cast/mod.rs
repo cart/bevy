@@ -112,7 +112,7 @@ pub struct RayCastBackfaces;
 /// Consider using this component for complex meshes that don't need perfectly accurate ray casting.
 #[derive(Component, FromTemplate, Clone, Debug, Deref, DerefMut, Reflect)]
 #[reflect(Component, Debug, Clone)]
-pub struct SimplifiedMesh(pub Handle<Mesh>);
+pub struct SimplifiedMesh(#[template] pub Handle<Mesh>);
 
 type MeshFilter = Or<(With<Mesh3d>, With<Mesh2d>, With<SimplifiedMesh>)>;
 
