@@ -20,6 +20,7 @@ use crate::{
     observer::IntoEntityObserver,
     relationship::RelationshipHookMode,
     system::Command,
+    template::Template,
     world::{error::EntityMutableFetchError, EntityWorldMut, FromWorld, World},
 };
 use bevy_ptr::{move_as_ptr, OwningPtr};
@@ -137,6 +138,13 @@ pub fn insert(bundle: impl Bundle, mode: InsertMode) -> impl EntityCommand {
     }
 }
 
+/// An [`EntityCommand`] that adds the components in a [`Bundle`] to an entity.
+#[track_caller]
+pub fn insert_template<T: Template<Output: Bundle> + Send + Sync + 'static>(
+    template: T,
+) -> impl EntityCommand {
+    move |mut entity: EntityWorldMut| entity.insert_template(template).map(|_| ())
+}
 /// An [`EntityCommand`] that adds a dynamic component to an entity.
 ///
 /// # Safety

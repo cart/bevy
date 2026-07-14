@@ -1661,7 +1661,7 @@ impl<'w> EntityWorldMut<'w> {
     pub fn build_template<T: Template>(&mut self, template: &T) -> crate::error::Result<T::Output> {
         self.template_context(|context| template.build_template(context))
     }
-    ///
+
     /// Builds the given template using a [`TemplateContext`] generated for this entity.
     pub fn insert_template<T: Template<Output = B>, B: Bundle>(
         &mut self,

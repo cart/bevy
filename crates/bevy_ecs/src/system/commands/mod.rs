@@ -1533,6 +1533,14 @@ impl<'a> EntityCommands<'a> {
         self.queue(entity_command::insert(bundle, InsertMode::Replace))
     }
 
+    #[track_caller]
+    pub fn insert_template<T: Template<Output = B> + Send + Sync + 'static, B: Bundle>(
+        &mut self,
+        template: T,
+    ) -> &mut Self {
+        self.queue(entity_command::insert_template(template))
+    }
+
     /// Adds a [`Bundle`] of components to the entity if the predicate returns true.
     ///
     /// This is useful for chaining method calls.
