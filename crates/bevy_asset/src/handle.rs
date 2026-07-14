@@ -5,7 +5,7 @@ use crate::{
 use alloc::sync::Arc;
 use bevy_ecs::{
     entity::{ContainsEntity, Entity, EntityHandle},
-    template::{FromTemplate, SpecializeFromTemplate, Template, TemplateContext},
+    template::{EntityTemplate, FromTemplate, SpecializeFromTemplate, Template, TemplateContext},
 };
 use bevy_platform::{collections::Equivalent, sync::Mutex};
 use bevy_reflect::{Reflect, TypePath};
@@ -150,6 +150,7 @@ pub enum HandleTemplate<T: Asset> {
     ///
     /// This should generally be constructed using [`HandleTemplate::value`] or [`asset_value`].
     Value(ArcMutexValue<T>),
+    EntityTemplate(EntityTemplate),
 }
 
 impl<T: Asset> HandleTemplate<T> {
@@ -197,25 +198,42 @@ impl<T: Asset> Default for HandleTemplate<T> {
 }
 
 impl<I: Into<AssetPath<'static>>, T: Asset> From<I> for HandleTemplate<T> {
+    #[inline]
     fn from(value: I) -> Self {
         Self::Path(value.into())
     }
 }
 
 impl<T: Asset> From<Handle<T>> for HandleTemplate<T> {
+    #[inline]
     fn from(value: Handle<T>) -> Self {
         Self::Handle(value)
     }
 }
 
 impl<T: Asset> From<Uuid> for HandleTemplate<T> {
+    #[inline]
     fn from(value: Uuid) -> Self {
         Self::Uuid(value)
     }
 }
 
+impl<T: Asset> From<EntityTemplate> for HandleTemplate<T> {
+    #[inline]
+    fn from(value: EntityTemplate) -> Self {
+        Self::EntityTemplate(value)
+    }
+}
+
+impl<T: Asset> From<Entity> for HandleTemplate<T> {
+    #[inline]
+    fn from(value: Entity) -> Self {
+        Self::EntityTemplate(EntityTemplate::Entity(value))
+    }
+}
 impl<T: Asset> Template for HandleTemplate<T> {
     type Output = Handle<T>;
+    #[allow(unsafe_code, reason = "Improved performance on high traffic type")]
     fn build_template(&self, context: &mut TemplateContext) -> bevy_ecs::error::Result<Handle<T>> {
         Ok(match self {
             HandleTemplate::Default => context
@@ -241,6 +259,15 @@ impl<T: Asset> Template for HandleTemplate<T> {
                     AssetOrHandle::Handle(handle) => handle.clone(),
                 }
             }
+            HandleTemplate::EntityTemplate(entity_template) => {
+                let entity = entity_template.build_template(context)?;
+                // SAFETY: we've checked that this is a different entity
+                let world = unsafe { context.entity.world_mut() };
+                world
+                    .get_entity_mut(entity)?
+                    .handle_with_data(AssetData::new::<T>())
+                    .into()
+            }
         })
     }
 
@@ -251,6 +278,9 @@ impl<T: Asset> Template for HandleTemplate<T> {
             HandleTemplate::Handle(handle) => HandleTemplate::Handle(handle.clone()),
             HandleTemplate::Value(value) => HandleTemplate::Value(value.clone()),
             HandleTemplate::Uuid(uuid) => HandleTemplate::Uuid(*uuid),
+            HandleTemplate::EntityTemplate(entity_template) => {
+                HandleTemplate::EntityTemplate(entity_template.clone())
+            }
         }
     }
 }

@@ -10,9 +10,10 @@ use bevy_ecs::{
     template::{SceneEntityReference, SceneEntityReferences, Template, TemplateContext},
     world::{EntityWorldMut, World},
 };
-use bevy_platform::collections::HashSet;
+use bevy_platform::collections::{HashMap, HashSet};
 use bevy_utils::TypeIdMap;
 use core::any::{Any, TypeId};
+use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 
 /// A final "spawnable" root [`ResolvedScene`].
@@ -181,6 +182,8 @@ pub struct ResolvedScene {
     /// A list of all [`SceneEntityReference`] values associated with this entity. There can be more than one if this scene uses
     /// "flattened" caching.
     pub entity_references: Vec<SceneEntityReference>,
+    pub(crate) shared_entities: Vec<ResolvedScene>,
+    pub(crate) spawned_shared_scenes: AtomicBool,
 }
 
 impl core::fmt::Debug for ResolvedScene {
@@ -226,6 +229,21 @@ impl ResolvedScene {
         bundle_scratch: &mut BundleScratch,
         writer_ops: impl FnOnce(&mut TemplateContext, &mut BundleWriter),
     ) -> Result<(), ApplySceneError> {
+        if !self.spawned_shared_scenes.load(Ordering::Relaxed) {
+            self.spawned_shared_scenes.store(true, Ordering::Relaxed);
+            context
+                .entity
+                .world_scope(|world| -> Result<(), ApplySceneError> {
+                    for scene in self.shared_entities.iter() {
+                        let mut context = TemplateContext {
+                            entity: &mut world.spawn_empty(),
+                            entity_references: context.entity_references,
+                        };
+                        scene.apply(&mut context, bundle_scratch)?;
+                    }
+                    Ok(())
+                })?;
+        }
         let mut bundle_writer = bundle_scratch.writer();
         for entity_reference in self.entity_references.iter().copied() {
             context

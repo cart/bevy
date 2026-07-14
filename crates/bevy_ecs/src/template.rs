@@ -1,11 +1,12 @@
 //! Functionality that relates to the [`Template`] trait.
 pub use bevy_ecs_macros::FromTemplate;
+use bevy_reflect::Reflect;
 
 use core::{hash::Hash, ops::Deref};
 
 use crate::{
     component::{Component, Mutable},
-    entity::Entity,
+    entity::{Entity, EntityHandle},
     error::{BevyError, Result},
     resource::Resource,
     world::{EntityWorldMut, Mut, World},
@@ -143,11 +144,11 @@ impl SceneEntityReferences {
 /// - macro invocation location: filename, line and column
 /// - the `name_id` should uniquely identify a name in the individual macros scope
 /// - runtime, per-scope counter for each runtime call (usually from a static `AtomicU64`)
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Reflect)]
 pub struct SceneEntityReference(Hashed<InnerSceneEntityReference>);
 
 /// The inner struct actually storing the unique index
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Reflect)]
 pub struct InnerSceneEntityReference {
     file: &'static str,
     line: usize,
@@ -423,7 +424,7 @@ pub trait SpecializeFromTemplate: Sized {}
 /// A [`Template`] reference to an [`Entity`].
 ///
 /// This is only valid during scene spawning and should **never** be used as a [`Component`](bevy_ecs::prelude::Component) field.
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, Reflect)]
 pub enum EntityTemplate {
     /// A reference to a specific [`Entity`]
     Entity(Entity),

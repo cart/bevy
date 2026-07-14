@@ -14,6 +14,7 @@ pub struct Bsn<const ALLOW_FLAT: bool> {
 
 #[derive(Debug)]
 pub enum BsnEntry {
+    SharedEntity(Bsn<false>),
     Name(Ident),
     FromTemplatePatch(BsnType),
     TemplatePatch(BsnType),

@@ -623,3 +623,22 @@ impl<F: FnOnce(&mut ResolveContext, &mut ResolvedScene) + Send + Sync + 'static>
         Ok(())
     }
 }
+
+pub struct SharedEntity<S: Scene>(pub S);
+
+impl<S: Scene> Scene for SharedEntity<S> {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let mut resolved_scene = ResolvedScene::default();
+        self.0.resolve(context, &mut resolved_scene)?;
+        scene.shared_entities.push(resolved_scene);
+        Ok(())
+    }
+
+    fn register_dependencies(&self, dependencies: &mut SceneDependencies) {
+        self.0.register_dependencies(dependencies);
+    }
+}

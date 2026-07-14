@@ -18,7 +18,8 @@ use crate::{deferred::DEFAULT_PBR_DEFERRED_LIGHTING_PASS_ID, *};
 /// The `StandardMaterial` can be extended with more data and custom
 /// shaders using [`ExtendedMaterial`]. Examples of how to do this can
 /// be found in the Bevy examples.
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone, FromTemplate)]
+#[template(manual_default)]
 #[bind_group_data(StandardMaterialKey)]
 #[data(0, StandardMaterialUniform, binding_array(10))]
 #[bindless(index_table(range(0..31)))]
@@ -54,6 +55,7 @@ pub struct StandardMaterial {
     #[texture(1)]
     #[sampler(2)]
     #[dependency]
+    #[template]
     pub base_color_texture: Option<Handle<Image>>,
 
     // Use a color for user friendliness even though we technically don't use the alpha channel
@@ -114,6 +116,7 @@ pub struct StandardMaterial {
     #[texture(3)]
     #[sampler(4)]
     #[dependency]
+    #[template]
     pub emissive_texture: Option<Handle<Image>>,
 
     /// Linear perceptual roughness, clamped to `[0.089, 1.0]` in the shader.
@@ -167,6 +170,7 @@ pub struct StandardMaterial {
     #[texture(5)]
     #[sampler(6)]
     #[dependency]
+    #[template]
     pub metallic_roughness_texture: Option<Handle<Image>>,
 
     /// Specular intensity for non-metals on a linear scale of `[0.0, 1.0]`.
@@ -232,6 +236,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_transmission_textures", sampler(20))]
     #[cfg(feature = "pbr_transmission_textures")]
     #[dependency]
+    #[template]
     pub diffuse_transmission_texture: Option<Handle<Image>>,
 
     /// The amount of light transmitted _specularly_ through the material (i.e. via refraction).
@@ -274,6 +279,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_transmission_textures", sampler(16))]
     #[cfg(feature = "pbr_transmission_textures")]
     #[dependency]
+    #[template]
     pub specular_transmission_texture: Option<Handle<Image>>,
 
     /// Thickness of the volume beneath the material surface.
@@ -304,6 +310,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_transmission_textures", sampler(18))]
     #[cfg(feature = "pbr_transmission_textures")]
     #[dependency]
+    #[template]
     pub thickness_texture: Option<Handle<Image>>,
 
     /// The [index of refraction](https://en.wikipedia.org/wiki/Refractive_index) of the material.
@@ -407,6 +414,7 @@ pub struct StandardMaterial {
     #[texture(9)]
     #[sampler(10)]
     #[dependency]
+    #[template]
     pub normal_map_texture: Option<Handle<Image>>,
 
     /// Normal map textures authored for DirectX have their y-component flipped. Set this to flip
@@ -436,6 +444,7 @@ pub struct StandardMaterial {
     #[texture(7)]
     #[sampler(8)]
     #[dependency]
+    #[template]
     pub occlusion_texture: Option<Handle<Image>>,
 
     /// The UV channel to use for the [`StandardMaterial::specular_texture`].
@@ -464,6 +473,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_specular_textures", sampler(28))]
     #[cfg(feature = "pbr_specular_textures")]
     #[dependency]
+    #[template]
     pub specular_texture: Option<Handle<Image>>,
 
     /// The UV channel to use for the
@@ -486,6 +496,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_specular_textures", sampler(30))]
     #[cfg(feature = "pbr_specular_textures")]
     #[dependency]
+    #[template]
     pub specular_tint_texture: Option<Handle<Image>>,
 
     /// An extra thin translucent layer on top of the main PBR layer. This is
@@ -512,6 +523,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_multi_layer_material_textures", sampler(22))]
     #[cfg(feature = "pbr_multi_layer_material_textures")]
     #[dependency]
+    #[template]
     pub clearcoat_texture: Option<Handle<Image>>,
 
     /// The roughness of the clearcoat material. This is specified in exactly
@@ -538,6 +550,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_multi_layer_material_textures", sampler(24))]
     #[cfg(feature = "pbr_multi_layer_material_textures")]
     #[dependency]
+    #[template]
     pub clearcoat_roughness_texture: Option<Handle<Image>>,
 
     /// The UV channel to use for the [`StandardMaterial::clearcoat_normal_texture`].
@@ -561,6 +574,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_multi_layer_material_textures", sampler(26))]
     #[cfg(feature = "pbr_multi_layer_material_textures")]
     #[dependency]
+    #[template]
     pub clearcoat_normal_texture: Option<Handle<Image>>,
 
     /// Increases the roughness along a specific direction, so that the specular
@@ -632,6 +646,7 @@ pub struct StandardMaterial {
     #[cfg_attr(feature = "pbr_anisotropy_texture", sampler(14))]
     #[cfg(feature = "pbr_anisotropy_texture")]
     #[dependency]
+    #[template]
     pub anisotropy_texture: Option<Handle<Image>>,
 
     /// Support two-sided lighting by automatically flipping the normals for "back" faces
@@ -736,6 +751,7 @@ pub struct StandardMaterial {
     #[texture(11)]
     #[sampler(12)]
     #[dependency]
+    #[template]
     pub depth_map: Option<Handle<Image>>,
 
     /// How deep the offset introduced by the depth map should be.
@@ -851,6 +867,97 @@ impl StandardMaterial {
 impl Default for StandardMaterial {
     fn default() -> Self {
         StandardMaterial {
+            // White because it gets multiplied with texture values if someone uses
+            // a texture.
+            base_color: Color::WHITE,
+            base_color_channel: UvChannel::Uv0,
+            base_color_texture: None,
+            emissive: LinearRgba::BLACK,
+            emissive_exposure_weight: 0.0,
+            emissive_channel: UvChannel::Uv0,
+            emissive_texture: None,
+            // Matches Blender's default roughness.
+            perceptual_roughness: 0.5,
+            // Metallic should generally be set to 0.0 or 1.0.
+            metallic: 0.0,
+            metallic_roughness_channel: UvChannel::Uv0,
+            metallic_roughness_texture: None,
+            // Minimum real-world reflectance is 2%, most materials between 2-5%
+            // Expressed in a linear scale and equivalent to 4% reflectance see
+            // <https://google.github.io/filament/Material%20Properties.pdf>
+            reflectance: 0.5,
+            diffuse_transmission: 0.0,
+            #[cfg(feature = "pbr_transmission_textures")]
+            diffuse_transmission_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_transmission_textures")]
+            diffuse_transmission_texture: None,
+            specular_transmission: 0.0,
+            #[cfg(feature = "pbr_transmission_textures")]
+            specular_transmission_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_transmission_textures")]
+            specular_transmission_texture: None,
+            thickness: 0.0,
+            #[cfg(feature = "pbr_transmission_textures")]
+            thickness_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_transmission_textures")]
+            thickness_texture: None,
+            ior: 1.5,
+            attenuation_color: Color::WHITE,
+            attenuation_distance: f32::INFINITY,
+            occlusion_channel: UvChannel::Uv0,
+            occlusion_texture: None,
+            normal_map_channel: UvChannel::Uv0,
+            normal_map_texture: None,
+            #[cfg(feature = "pbr_specular_textures")]
+            specular_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_specular_textures")]
+            specular_texture: None,
+            specular_tint: Color::WHITE,
+            #[cfg(feature = "pbr_specular_textures")]
+            specular_tint_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_specular_textures")]
+            specular_tint_texture: None,
+            clearcoat: 0.0,
+            clearcoat_perceptual_roughness: 0.5,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            clearcoat_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            clearcoat_texture: None,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            clearcoat_roughness_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            clearcoat_roughness_texture: None,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            clearcoat_normal_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            clearcoat_normal_texture: None,
+            anisotropy_strength: 0.0,
+            anisotropy_rotation: 0.0,
+            #[cfg(feature = "pbr_anisotropy_texture")]
+            anisotropy_channel: UvChannel::Uv0,
+            #[cfg(feature = "pbr_anisotropy_texture")]
+            anisotropy_texture: None,
+            flip_normal_map_y: false,
+            double_sided: false,
+            cull_mode: Some(Face::Back),
+            unlit: false,
+            fog_enabled: true,
+            alpha_mode: AlphaMode::Opaque,
+            depth_bias: 0.0,
+            depth_map: None,
+            parallax_depth_scale: 0.1,
+            max_parallax_layer_count: 16.0,
+            lightmap_exposure: 1.0,
+            parallax_mapping_method: ParallaxMappingMethod::Occlusion,
+            opaque_render_method: OpaqueRendererMethod::Auto,
+            deferred_lighting_pass_id: DEFAULT_PBR_DEFERRED_LIGHTING_PASS_ID,
+            uv_transform: Affine2::IDENTITY,
+        }
+    }
+}
+impl Default for StandardMaterialTemplate {
+    fn default() -> Self {
+        StandardMaterialTemplate {
             // White because it gets multiplied with texture values if someone uses
             // a texture.
             base_color: Color::WHITE,

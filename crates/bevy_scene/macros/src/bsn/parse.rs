@@ -96,6 +96,10 @@ impl<const ALLOW_FLAT: bool> Parse for Bsn<ALLOW_FLAT> {
     }
 }
 
+mod kw {
+    syn::custom_keyword!(shared);
+}
+
 impl BsnEntry {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(if input.peek(Token![:]) {
@@ -105,6 +109,15 @@ impl BsnEntry {
             BsnEntry::Name(input.parse::<Ident>()?)
         } else if input.peek(Brace) || input.peek(At) {
             BsnEntry::UncachedScene(BsnScene::parse(input)?)
+        } else if input.peek(kw::shared) {
+            let shared = input.parse::<kw::shared>()?;
+            if !input.peek(Paren) {
+                return Err(syn::Error::new(
+                    shared.span(),
+                    "shared entities must always be preceded by parentheses",
+                ));
+            }
+            BsnEntry::SharedEntity(Bsn::<false>::parse(input)?)
         } else {
             let is_template = input.peek(Tilde);
             if is_template {

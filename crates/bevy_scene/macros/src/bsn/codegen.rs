@@ -293,6 +293,10 @@ impl BsnEntry {
                     #bevy_scene::NameEntityReference { name: #bevy_ecs::name::Name(#name.into()), reference: #bevy_ecs::template::SceneEntityReference::new(#invocation, #index, _call_id,) }.resolve_inline(_context, _scene);
                 })
             }
+            BsnEntry::SharedEntity(bsn_scene) => {
+                let tokens = bsn_scene.to_tokens(ctx);
+                EntryResult::NewSceneImpl(quote! { #bevy_scene::SharedEntity(#tokens) })
+            }
         })
     }
 }
@@ -577,7 +581,7 @@ impl BsnType {
                 let bevy_ecs = ctx.bevy_ecs;
                 let invocation = ctx.invocation_index.clone();
                 assignments.push(quote! {
-                    #(#base_path.)*#member = #bevy_ecs::template::EntityTemplate::from_reference(#invocation, #index,  _call_id);
+                    #(#base_path.)*#member = #bevy_ecs::template::EntityTemplate::from_reference(#invocation, #index,  _call_id).into();
                 });
             }
             Some(value @ BsnValue::Type(ty)) if ty.enum_variant.is_some() => {
