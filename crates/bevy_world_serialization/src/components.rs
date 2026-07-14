@@ -1,7 +1,7 @@
 use bevy_asset::{AsAssetId, AssetId, Handle};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{component::Component, prelude::ReflectComponent, template::FromTemplate};
-use bevy_reflect::{prelude::ReflectDefault, Reflect};
+use bevy_reflect::Reflect;
 use bevy_transform::components::Transform;
 use derive_more::derive::From;
 

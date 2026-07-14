@@ -730,7 +730,6 @@ impl AssetServer {
     /// It can later be loaded/referenced with [`AssetReference::Uuid`].
     ///
     /// After the asset has been fully loaded by the [`AssetServer`], it will be spawned as a component on the [`Handle`] entity.
-    #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
     pub fn add_with_uuid<A: Asset>(&self, uuid: Uuid, asset: A) -> Handle<A> {
         self.load_asset(
             Some(AssetReference::Uuid(uuid)),
@@ -744,7 +743,6 @@ impl AssetServer {
     /// It can later be loaded/referenced with [`AssetReference::Default`].
     ///
     /// After the asset has been fully loaded by the [`AssetServer`], it will be spawned as a component on the [`Handle`] entity.
-    #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
     pub fn add_default<A: Asset>(&self, asset: A) -> Handle<A> {
         self.load_asset(
             Some(AssetReference::Default),

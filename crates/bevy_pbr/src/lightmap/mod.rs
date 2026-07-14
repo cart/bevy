@@ -49,7 +49,7 @@ use bevy_ecs::{
 use bevy_image::Image;
 use bevy_math::{uvec2, vec4, Rect, UVec2};
 use bevy_platform::collections::HashSet;
-use bevy_reflect::{std_traits::ReflectDefault, Reflect};
+use bevy_reflect::Reflect;
 use bevy_render::{
     render_asset::RenderAssets,
     render_resource::{Sampler, TextureView, WgpuSampler, WgpuTextureView},
@@ -108,6 +108,16 @@ pub struct Lightmap {
     ///
     /// If true, the lightmap texture's sampler must be set to [`bevy_image::ImageSampler::linear`].
     pub bicubic_sampling: bool,
+}
+
+impl Default for LightmapTemplate {
+    fn default() -> Self {
+        Self {
+            image: Default::default(),
+            uv_rect: Rect::new(0.0, 0.0, 1.0, 1.0),
+            bicubic_sampling: false,
+        }
+    }
 }
 
 /// Lightmap data stored in the render world.
@@ -322,16 +332,6 @@ pub(crate) fn pack_lightmap_uv_rect(maybe_rect: Option<Rect>) -> UVec2 {
             )
         }
         None => UVec2::ZERO,
-    }
-}
-
-impl LightmapTemplate {
-    fn default() -> Self {
-        Self {
-            image: Default::default(),
-            uv_rect: Rect::new(0.0, 0.0, 1.0, 1.0),
-            bicubic_sampling: false,
-        }
     }
 }
 

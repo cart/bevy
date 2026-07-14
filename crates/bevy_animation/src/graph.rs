@@ -21,7 +21,7 @@ use bevy_ecs::{
     template::FromTemplate,
 };
 use bevy_platform::collections::HashMap;
-use bevy_reflect::{prelude::ReflectDefault, Reflect, TypePath};
+use bevy_reflect::{Reflect, TypePath};
 use derive_more::derive::From;
 use petgraph::{
     graph::{DiGraph, NodeIndex},

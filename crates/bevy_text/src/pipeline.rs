@@ -1,6 +1,6 @@
 use alloc::borrow::Cow;
 use bevy_asset::{AssetReference, AssetServer};
-use bevy_ecs::system::{Commands, Query, Res};
+use bevy_ecs::system::{Commands, Query};
 use bevy_platform::collections::HashMap;
 
 use core::hash::BuildHasher;

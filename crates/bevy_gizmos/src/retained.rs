@@ -4,7 +4,7 @@ use core::ops::{Deref, DerefMut};
 
 use bevy_asset::Handle;
 use bevy_ecs::{component::Component, reflect::ReflectComponent, template::FromTemplate};
-use bevy_reflect::{std_traits::ReflectDefault, Reflect};
+use bevy_reflect::Reflect;
 use bevy_transform::components::Transform;
 
 use crate::{

@@ -240,7 +240,7 @@ impl AssetInfos {
             match self.uuid_to_entity.entry(*uuid) {
                 Entry::Occupied(mut entry) => {
                     let entity = *entry.get();
-                    let (handle, should_load) = Self::occupied_entry(
+                    let (handle, _should_load) = Self::occupied_entry(
                         &mut self.infos,
                         &self.remote_allocator,
                         &mut self.living_labeled_assets,
@@ -272,7 +272,7 @@ impl AssetInfos {
                 match self.type_id_to_entity.entry(type_id) {
                     Entry::Occupied(mut entry) => {
                         let entity = *entry.get();
-                        let (handle, should_load) = Self::occupied_entry(
+                        let (handle, _should_load) = Self::occupied_entry(
                             &mut self.infos,
                             &self.remote_allocator,
                             &mut self.living_labeled_assets,

@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
     parse::ParseStream, parse_macro_input, parse_quote, punctuated::Punctuated, spanned::Spanned,
-    Data, DeriveInput, Fields, FieldsUnnamed, Ident, Index, Meta, Path, Result, Token, WhereClause,
+    Data, DeriveInput, Fields, FieldsUnnamed, Index, Meta, Path, Result, Token, WhereClause,
 };
 
 const TEMPLATE_DEFAULT_ATTRIBUTE: &str = "default";

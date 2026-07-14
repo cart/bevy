@@ -5,7 +5,7 @@ use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{prelude::*, reflect::ReflectComponent};
 use bevy_math::Vec2;
 use bevy_reflect::prelude::*;
-use bevy_utils::{default, once};
+use bevy_utils::once;
 use core::fmt::{Debug, Formatter};
 use core::str::from_utf8;
 use parley::setting::Tag;
@@ -280,6 +280,7 @@ impl From<Justify> for parley::Alignment {
 /// You can check which font family is used for a given [`FontSource`]
 /// by calling [`FontCx::get_family`](crate::FontCx::get_family).
 pub enum FontSource {
+    /// Use the default font source.
     #[default]
     Default,
     /// Use a specific font face referenced by a [`Font`] asset handle.
