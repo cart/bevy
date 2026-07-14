@@ -5,14 +5,15 @@ use bevy::prelude::*;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
+        .add_systems(Startup, scene.spawn())
         .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(Camera2d);
-    commands.spawn(Sprite {
-        image: asset_server.load("branding/bevy_bird_dark.png"),
-        ..default()
-    });
+fn scene() -> impl SceneList {
+    bsn_list![
+        Camera2d,
+        Sprite {
+            image: "branding/bevy_bird_dark.png"
+        }
+    ]
 }
