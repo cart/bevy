@@ -43,32 +43,32 @@ fn main() {
 }
 
 /// Set up a simple 3D scene
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands) {
     commands.spawn((
         Name::new("Camera"),
         Camera3d::default(),
         Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
+    let plane_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(5.0, 5.0)));
+    let plane_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::srgb(0.3, 0.5, 0.3),
+        // Turning off culling keeps the plane visible when viewed from beneath.
+        cull_mode: None,
+        ..default()
+    });
     commands.spawn((
         Name::new("Plane"),
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.3, 0.5, 0.3),
-            // Turning off culling keeps the plane visible when viewed from beneath.
-            cull_mode: None,
-            ..default()
-        })),
+        Mesh3d(plane_mesh),
+        MeshMaterial3d(plane_material),
     ));
 
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::default()));
+    let cube_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.8, 0.7, 0.6)));
     commands.spawn((
         Name::new("Cube"),
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Mesh3d(cube_mesh),
+        MeshMaterial3d(cube_material),
         Transform::from_xyz(1.5, 0.51, 1.5),
     ));
 

@@ -236,19 +236,16 @@ fn spawn_lights(mut commands: Commands) {
     ));
 }
 
-fn spawn_world(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
-    let cube = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let floor = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(10.0)));
-    let sphere = meshes.add(Sphere::new(0.5));
-    let wall = meshes.add(Cuboid::new(0.2, 4.0, 3.0));
+fn spawn_world(mut commands: Commands) {
+    let cube = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let floor = meshescommands.spawn_asset(Mesh::from(Plane3d::new(Vec3::Y, Vec2::splat(10.0))));
+    let sphere = commands.spawn_asset(Mesh::from(Sphere::new(0.5)));
+    let wall = commands.spawn_asset(Mesh::from(Cuboid::new(0.2, 4.0, 3.0)));
 
-    let blue_material = materials.add(Color::from(tailwind::BLUE_700));
-    let red_material = materials.add(Color::from(tailwind::RED_950));
-    let white_material = materials.add(Color::WHITE);
+    let blue_material =
+        commands.spawn_asset(StandardMaterial::from(Color::from(tailwind::BLUE_700)));
+    let red_material = commands.spawn_asset(StandardMaterial::from(Color::from(tailwind::RED_950)));
+    let white_material = commands.spawn_asset(StandardMaterial::from(Color::WHITE));
 
     // Top side of floor
     commands.spawn((

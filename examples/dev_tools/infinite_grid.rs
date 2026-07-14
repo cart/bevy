@@ -23,11 +23,7 @@ fn main() {
         .run();
 }
 
-fn setup_system(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup_system(mut commands: Commands) {
     commands.spawn((
         // You need to spawn an entity with this component
         InfiniteGrid,
@@ -47,23 +43,23 @@ fn setup_system(
     ));
 
     // cube
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let material_1 = commands.spawn_asset(StandardMaterial::from_color(Color::srgba(
+        1.0, 1.0, 1.0, 0.5,
+    )));
+    let material_2 = commands.spawn_asset(StandardMaterial::from_color(Color::srgba(
+        1.0, 1.0, 1.0, 0.5,
+    )));
+
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(
-            standard_materials.add(StandardMaterial::from_color(Color::srgba(
-                1.0, 1.0, 1.0, 0.5,
-            ))),
-        ),
+        Mesh3d(cube_mesh.clone()),
+        MeshMaterial3d(material_1),
         Transform::from_xyz(0.0, 2.0, 0.0),
     ));
 
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(
-            standard_materials.add(StandardMaterial::from_color(Color::srgba(
-                1.0, 1.0, 1.0, 0.5,
-            ))),
-        ),
+        Mesh3d(cube_mesh),
+        MeshMaterial3d(material_2),
         Transform::from_xyz(0.0, -2.0, 0.0),
     ));
 }

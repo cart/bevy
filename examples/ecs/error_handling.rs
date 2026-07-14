@@ -57,17 +57,15 @@ fn main() {
 /// An example of a system that calls several fallible functions with the question mark operator.
 ///
 /// See: <https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator>
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) -> Result {
+fn setup(mut commands: Commands) -> Result {
     let mut seeded_rng = ChaCha8Rng::seed_from_u64(19878367467712);
 
     // Make a plane for establishing space.
+    let floor_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(12.0, 12.0)));
+    let floor_material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(12.0, 12.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Mesh3d(floor_mesh),
+        MeshMaterial3d(floor_material),
         Transform::from_xyz(0.0, -2.5, 0.0),
     ));
 
@@ -91,25 +89,30 @@ fn setup(
     sphere_mesh.generate_tangents()?;
 
     // Spawn the mesh into the scene:
-    let mut sphere = commands.spawn((
-        Mesh3d(meshes.add(sphere_mesh.clone())),
-        MeshMaterial3d(materials.add(StandardMaterial::default())),
-        Transform::from_xyz(-1.0, 1.0, 0.0),
-    ));
+    let sphere_mesh_handle = commands.spawn_asset(sphere_mesh.clone());
+    let sphere_material = commands.spawn_asset(StandardMaterial::default());
+    let sphere = commands
+        .spawn((
+            Mesh3d(sphere_mesh_handle),
+            MeshMaterial3d(sphere_material),
+            Transform::from_xyz(-1.0, 1.0, 0.0),
+        ))
+        .id();
 
     // Generate random sample points:
     let triangles = sphere_mesh.triangles()?;
     let distribution = UniformMeshSampler::try_new(triangles)?;
 
     // Setup sample points:
-    let point_mesh = meshes.add(Sphere::new(0.01).mesh().ico(3)?);
-    let point_material = materials.add(StandardMaterial {
+    let point_mesh = commands.spawn_asset(Sphere::new(0.01).mesh().ico(3)?);
+    let point_material = commands.spawn_asset(StandardMaterial {
         base_color: Srgba::RED.into(),
         emissive: LinearRgba::rgb(1.0, 0.0, 0.0),
         ..default()
     });
 
     // Add sample points as children of the sphere:
+    let mut sphere = commands.entity(sphere);
     for point in distribution.sample_iter(&mut seeded_rng).take(10000) {
         sphere.with_child((
             Mesh3d(point_mesh.clone()),

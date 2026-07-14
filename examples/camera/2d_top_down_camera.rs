@@ -28,22 +28,20 @@ fn main() {
         .run();
 }
 
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup_scene(mut commands: Commands) {
     // World where we move the player
-    commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(1000., 700.))),
-        MeshMaterial2d(materials.add(Color::srgb(0.2, 0.2, 0.3))),
-    ));
+    let world_mesh = commands.spawn_asset(Mesh::from(Rectangle::new(1000., 700.)));
+    let world_material = commands.spawn_asset(ColorMaterial::from(Color::srgb(0.2, 0.2, 0.3)));
+    commands.spawn((Mesh2d(world_mesh), MeshMaterial2d(world_material)));
 
     // Player
+    let player_mesh = commands.spawn_asset(Mesh::from(Circle::new(25.)));
+    // RGB values exceed 1 to achieve a bright color for the bloom effect
+    let player_material = commands.spawn_asset(ColorMaterial::from(Color::srgb(6.25, 9.4, 9.1)));
     commands.spawn((
         Player,
-        Mesh2d(meshes.add(Circle::new(25.))),
-        MeshMaterial2d(materials.add(Color::srgb(6.25, 9.4, 9.1))), // RGB values exceed 1 to achieve a bright color for the bloom effect
+        Mesh2d(player_mesh),
+        MeshMaterial2d(player_material),
         Transform::from_xyz(0., 0., 2.),
     ));
 }

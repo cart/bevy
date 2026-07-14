@@ -48,8 +48,6 @@ fn setup(
     asset_server: Res<AssetServer>,
     camera_settings: Res<CameraSettings>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     commands.spawn((
         Name::new("Camera"),
@@ -68,15 +66,17 @@ fn setup(
         Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
+    let floor_mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(5.0, 5.0)));
+    let floor_material = commands.spawn_asset(StandardMaterial {
+        base_color: Color::srgb(0.3, 0.5, 0.3),
+        // Turning off culling keeps the plane visible when viewed from beneath.
+        cull_mode: None,
+        ..default()
+    });
     commands.spawn((
         Name::new("Plane"),
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.3, 0.5, 0.3),
-            // Turning off culling keeps the plane visible when viewed from beneath.
-            cull_mode: None,
-            ..default()
-        })),
+        Mesh3d(floor_mesh),
+        MeshMaterial3d(floor_material),
     ));
 
     commands.spawn((

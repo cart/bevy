@@ -101,20 +101,22 @@ fn reenable_entities_on_space(
 
 const X_EXTENT: f32 = 900.;
 
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup_scene(mut commands: Commands) {
     commands.spawn(Camera2d);
 
     let named_shapes = [
-        (Name::new("Annulus"), meshes.add(Annulus::new(25.0, 50.0))),
+        (
+            Name::new("Annulus"),
+            commands.spawn_asset(Mesh::from(Annulus::new(25.0, 50.0))),
+        ),
         (
             Name::new("Bestagon"),
-            meshes.add(RegularPolygon::new(50.0, 6)),
+            commands.spawn_asset(Mesh::from(RegularPolygon::new(50.0, 6))),
         ),
-        (Name::new("Rhombus"), meshes.add(Rhombus::new(75.0, 100.0))),
+        (
+            Name::new("Rhombus"),
+            commands.spawn_asset(Mesh::from(Rhombus::new(75.0, 100.0))),
+        ),
     ];
     let num_shapes = named_shapes.len();
 
@@ -122,11 +124,12 @@ fn setup_scene(
         // Distribute colors evenly across the rainbow.
         let color = Color::hsl(360. * i as f32 / num_shapes as f32, 0.95, 0.7);
 
+        let material = commands.spawn_asset(ColorMaterial::from(color));
         commands.spawn((
             name,
             DisableOnClick,
             Mesh2d(shape),
-            MeshMaterial2d(materials.add(color)),
+            MeshMaterial2d(material),
             Transform::from_xyz(
                 // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
                 -X_EXTENT / 2. + i as f32 / (num_shapes - 1) as f32 * X_EXTENT,

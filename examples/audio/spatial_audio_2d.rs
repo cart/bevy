@@ -23,19 +23,16 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Space between the two ears
     let gap = 400.0;
 
     // sound emitter
+    let mesh = commands.spawn_asset(Mesh::from(Circle::new(15.0)));
+    let material = commands.spawn_asset(ColorMaterial::from(Color::from(BLUE)));
     commands.spawn((
-        Mesh2d(meshes.add(Circle::new(15.0))),
-        MeshMaterial2d(materials.add(Color::from(BLUE))),
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
         Transform::from_translation(Vec3::new(0.0, 50.0, 0.0)),
         Emitter::default(),
         AudioPlayer::new(asset_server.load("sounds/Windless Slopes.ogg")),

@@ -176,34 +176,39 @@ fn setup_camera(mut commands: Commands) {
 }
 
 /// Spawn a scene so we have something to look at.
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup_scene(mut commands: Commands) {
     // Background tile
+    let background_tile_mesh = commands.spawn_asset(Mesh::from(Rectangle::new(1000., 700.)));
+    let background_material = commands.spawn_asset(ColorMaterial::from(Color::srgb(0.2, 0.2, 0.3)));
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(1000., 700.))),
-        MeshMaterial2d(materials.add(Color::srgb(0.2, 0.2, 0.3))),
+        Mesh2d(background_tile_mesh),
+        MeshMaterial2d(background_material),
     ));
 
     // The shape in the middle could be our player character.
+    let player_mesh = commands.spawn_asset(Mesh::from(Rectangle::new(50.0, 100.0)));
+    let player_material = commands.spawn_asset(ColorMaterial::from(Color::srgb(0.25, 0.94, 0.91)));
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(50.0, 100.0))),
-        MeshMaterial2d(materials.add(Color::srgb(0.25, 0.94, 0.91))),
+        Mesh2d(player_mesh),
+        MeshMaterial2d(player_material),
         Transform::from_xyz(0., 0., 2.),
     ));
 
     // These two shapes could be obstacles.
+    let obstacle_mesh_1 = commands.spawn_asset(Mesh::from(Rectangle::new(50.0, 50.0)));
+    let obstacle_material_1 =
+        commands.spawn_asset(ColorMaterial::from(Color::srgb(0.85, 0.0, 0.2)));
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(50.0, 50.0))),
-        MeshMaterial2d(materials.add(Color::srgb(0.85, 0.0, 0.2))),
+        Mesh2d(obstacle_mesh_1),
+        MeshMaterial2d(obstacle_material_1),
         Transform::from_xyz(-450.0, 200.0, 2.),
     ));
 
+    let obstacle_mesh_2 = commands.spawn_asset(Mesh::from(Rectangle::new(70.0, 50.0)));
+    let obstacle_material_2 = commands.spawn_asset(ColorMaterial::from(Color::srgb(0.5, 0.8, 0.2)));
     commands.spawn((
-        Mesh2d(meshes.add(Rectangle::new(70.0, 50.0))),
-        MeshMaterial2d(materials.add(Color::srgb(0.5, 0.8, 0.2))),
+        Mesh2d(obstacle_mesh_2),
+        MeshMaterial2d(obstacle_material_2),
         Transform::from_xyz(450.0, -150.0, 2.),
     ));
 }

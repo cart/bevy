@@ -15,19 +15,16 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Space between the two ears
     let gap = 4.0;
 
     // sound emitter
+    let mesh = commands.spawn_asset(Mesh::from(Sphere::new(0.2).mesh().uv(32, 18)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::from(BLUE)));
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.2).mesh().uv(32, 18))),
-        MeshMaterial3d(materials.add(Color::from(BLUE))),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_xyz(0.0, 0.0, 0.0),
         Emitter::default(),
         AudioPlayer::new(asset_server.load("sounds/Windless Slopes.ogg")),
@@ -35,6 +32,9 @@ fn setup(
     ));
 
     let listener = SpatialListener::new(gap);
+    let cube_mesh = commands.spawn_asset(Mesh::from(Cuboid::new(0.2, 0.2, 0.2)));
+    let left_ear_material = commands.spawn_asset(StandardMaterial::from(Color::from(RED)));
+    let right_ear_material = commands.spawn_asset(StandardMaterial::from(Color::from(LIME)));
     commands.spawn((
         Transform::default(),
         Visibility::default(),
@@ -42,14 +42,14 @@ fn setup(
         children![
             // left ear indicator
             (
-                Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.2))),
-                MeshMaterial3d(materials.add(Color::from(RED))),
+                Mesh3d(cube_mesh.clone()),
+                MeshMaterial3d(left_ear_material),
                 Transform::from_translation(listener.left_ear_offset),
             ),
             // right ear indicator
             (
-                Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.2))),
-                MeshMaterial3d(materials.add(Color::from(LIME))),
+                Mesh3d(cube_mesh),
+                MeshMaterial3d(right_ear_material),
                 Transform::from_translation(listener.right_ear_offset),
             )
         ],

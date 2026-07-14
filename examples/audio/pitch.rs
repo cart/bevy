@@ -23,18 +23,19 @@ fn setup(mut commands: Commands) {
 }
 
 fn play_pitch(
-    mut pitch_assets: ResMut<Assets<Pitch>>,
     frequency: Res<PitchFrequency>,
+    pitch_assets: Query<&Pitch>,
     mut play_pitch_reader: MessageReader<PlayPitch>,
     mut commands: Commands,
 ) {
+    let mut current_assets = pitch_assets.count();
     for _ in play_pitch_reader.read() {
         info!("playing pitch with frequency: {}", frequency.0);
-        commands.spawn((
-            AudioPlayer(pitch_assets.add(Pitch::new(frequency.0, Duration::new(1, 0)))),
-            PlaybackSettings::DESPAWN,
-        ));
-        info!("number of pitch assets: {}", pitch_assets.len());
+        let pitch = commands.spawn_asset(Pitch::new(frequency.0, Duration::new(1, 0)));
+        commands.spawn((AudioPlayer(pitch), PlaybackSettings::DESPAWN));
+
+        current_assets += 1;
+        info!("number of pitch assets: {}", current_assets);
     }
 }
 

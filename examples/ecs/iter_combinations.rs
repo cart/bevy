@@ -26,7 +26,7 @@ struct LastPos(Vec3);
 #[derive(Component)]
 struct Star;
 
-#[derive(Bundle, Default)]
+#[derive(Bundle)]
 struct BodyBundle {
     mesh: Mesh3d,
     material: MeshMaterial3d<StandardMaterial>,
@@ -35,13 +35,8 @@ struct BodyBundle {
     acceleration: Acceleration,
 }
 
-fn generate_bodies(
-    time: Res<Time<Fixed>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let mesh = meshes.add(Sphere::new(1.0).mesh().ico(3).unwrap());
+fn generate_bodies(time: Res<Time<Fixed>>, mut commands: Commands) {
+    let mesh = commands.spawn_asset(Sphere::new(1.0).mesh().ico(3).unwrap());
 
     let color_range = 0.5..1.0;
     let vel_range = -0.5..0.5;
@@ -62,14 +57,15 @@ fn generate_bodies(
             * ops::cbrt(rng.random_range(0.2f32..1.0))
             * 15.;
 
+        let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(
+            rng.random_range(color_range.clone()),
+            rng.random_range(color_range.clone()),
+            rng.random_range(color_range.clone()),
+        )));
         commands.spawn((
             BodyBundle {
                 mesh: Mesh3d(mesh.clone()),
-                material: MeshMaterial3d(materials.add(Color::srgb(
-                    rng.random_range(color_range.clone()),
-                    rng.random_range(color_range.clone()),
-                    rng.random_range(color_range.clone()),
-                ))),
+                material: MeshMaterial3d(material),
                 mass: Mass(mass_value),
                 acceleration: Acceleration(Vec3::ZERO),
                 last_pos: LastPos(
@@ -91,18 +87,20 @@ fn generate_bodies(
 
     // add bigger "star" body in the center
     let star_radius = 1.;
+    let star_mesh = commands.spawn_asset(Sphere::new(1.0).mesh().ico(5).unwrap());
+    let star_material = commands.spawn_asset(StandardMaterial {
+        base_color: ORANGE_RED.into(),
+        emissive: LinearRgba::from(ORANGE_RED) * 2.,
+        ..default()
+    });
     commands
         .spawn((
             BodyBundle {
-                mesh: Mesh3d(meshes.add(Sphere::new(1.0).mesh().ico(5).unwrap())),
-                material: MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: ORANGE_RED.into(),
-                    emissive: LinearRgba::from(ORANGE_RED) * 2.,
-                    ..default()
-                })),
-
+                mesh: Mesh3d(star_mesh),
+                material: MeshMaterial3d(star_material),
                 mass: Mass(500.0),
-                ..default()
+                last_pos: LastPos::default(),
+                acceleration: Acceleration::default(),
             },
             Transform::from_scale(Vec3::splat(star_radius)),
             Star,
