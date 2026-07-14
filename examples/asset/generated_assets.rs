@@ -10,12 +10,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    meshes: Res<Assets<Mesh>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((Camera3d::default(), Transform::from_xyz(0.0, 0.0, 5.0)));
 
     commands.spawn((
@@ -24,7 +19,7 @@ fn setup(
     ));
 
     // The simplest way to generate an asset is to add it directly to the `Assets`.
-    let material_handle = materials.add(StandardMaterial::default());
+    let material_handle = commands.spawn_asset(StandardMaterial::default());
 
     commands.spawn((
         Transform::from_xyz(-2.0, 0.0, 0.0),
@@ -38,7 +33,7 @@ fn setup(
     // The last way to generate assets is to reserve a handle, and then use `Assets::insert` to
     // populate the asset later. In this example, the `generate_mesh_system` system runs to populate
     // the mesh.
-    let mesh_handle = meshes.reserve_handle();
+    let mesh_handle = commands.reserve_handle();
     commands.insert_resource(HandleToGenerate(mesh_handle.clone()));
     commands.spawn((
         Transform::from_xyz(2.0, 0.0, 0.0)
@@ -62,10 +57,7 @@ struct HandleToGenerate(Handle<Mesh>);
 ///
 /// This generates a runtime mesh. Since it's a system, it can use other data in the world to
 /// generate the asset!
-fn generate_mesh_system(
-    handle_to_generate: Res<HandleToGenerate>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn generate_mesh_system(handle_to_generate: Res<HandleToGenerate>, mut commands: Commands) {
     let mesh = Mesh::from(Torus::new(0.8, 1.2));
-    meshes.insert(&handle_to_generate.0, mesh).unwrap();
+    commands.entity(handle_to_generate.0.entity()).insert(mesh);
 }

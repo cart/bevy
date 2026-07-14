@@ -185,11 +185,7 @@ fn setup_ui(mut commands: Commands) {
     ));
 }
 
-fn setup_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup_scene(mut commands: Commands) {
     // Camera
     commands.spawn((
         Camera3d::default(),
@@ -206,11 +202,9 @@ fn setup_scene(
     ));
 
     // Plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(50000.0, 50000.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.7, 0.2, 0.2))),
-        Loading,
-    ));
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(50000.0, 50000.0)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.7, 0.2, 0.2)));
+    commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), Loading));
 }
 
 // A run condition for all assets being loaded.
@@ -222,17 +216,13 @@ fn assets_loaded(barrier: Option<Res<AssetBarrier>>) -> bool {
 // This showcases how to wait for assets using sync code and systems.
 //
 // This function only runs if `assets_loaded` returns true.
-fn wait_on_load(
-    mut commands: Commands,
-    foxes: Res<OneHundredThings>,
-    gltfs: Res<Assets<Gltf>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn wait_on_load(mut commands: Commands, foxes: Res<OneHundredThings>, gltfs: Query<&Gltf>) {
     // Change color of plane to green
+    let mesh = commands.spawn_asset(Mesh::from(Plane3d::default().mesh().size(50000.0, 50000.0)));
+    let material = commands.spawn_asset(StandardMaterial::from(Color::srgb(0.3, 0.5, 0.3)));
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(50000.0, 50000.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_translation(Vec3::Z * -0.01),
     ));
 

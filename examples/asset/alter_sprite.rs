@@ -123,9 +123,9 @@ fn alter_handle(
     sprite.image = asset_server.load(bird.get_texture_path());
 }
 
-fn alter_asset(mut images: ResMut<Assets<Image>>, left_bird: Single<&Sprite, With<Left>>) {
+fn alter_asset(mut images: Query<&mut Image>, left_bird: Single<&Sprite, With<Left>>) {
     // Obtain a mutable reference to the Image asset.
-    let Some(mut image) = images.get_mut(&left_bird.image) else {
+    let Ok(mut image) = images.get_mut(&left_bird.image) else {
         return;
     };
 

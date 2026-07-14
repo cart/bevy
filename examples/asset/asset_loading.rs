@@ -9,12 +9,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    meshes: Res<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, meshes: Query<&Mesh>) {
     // By default AssetServer will load assets from inside the "assets" folder.
     // For example, the next line will load GltfAssetLabel::Primitive{mesh:0,primitive:0}.from_asset("ROOT/assets/models/cube/cube.gltf"),
     // where "ROOT" is the directory of the Application.
@@ -36,7 +31,7 @@ fn setup(
     );
 
     // All assets end up in their Assets<T> collection once they are done loading:
-    if let Some(sphere) = meshes.get(&sphere_handle) {
+    if let Ok(sphere) = meshes.get(&sphere_handle) {
         // You might notice that this doesn't run! This is because assets load in parallel without
         // blocking. When an asset has loaded, it will appear in relevant Assets<T>
         // collection.
@@ -67,7 +62,7 @@ fn setup(
     );
 
     // You can also add assets directly to their Assets<T> storage:
-    let material_handle = materials.add(StandardMaterial {
+    let material_handle = commands.spawn_asset(StandardMaterial {
         base_color: Color::srgb(0.8, 0.7, 0.6),
         ..default()
     });

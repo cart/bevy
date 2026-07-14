@@ -92,7 +92,6 @@ impl AssetLoader for BlobAssetLoader {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .init_resource::<State>()
         .init_asset::<CustomAsset>()
         .init_asset::<Blob>()
         .init_asset_loader::<CustomAssetLoader>()
@@ -102,7 +101,7 @@ fn main() {
         .run();
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 struct State {
     handle: Handle<CustomAsset>,
     other_handle: Handle<CustomAsset>,
@@ -110,21 +109,28 @@ struct State {
     printed: bool,
 }
 
-fn setup(mut state: ResMut<State>, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Recommended way to load an asset
-    state.handle = asset_server.load("data/asset.custom");
+    let handle = asset_server.load("data/asset.custom");
 
     // File extensions are optional, but are recommended for project management and last-resort inference
-    state.other_handle = asset_server.load("data/asset_no_extension");
+    let other_handle = asset_server.load("data/asset_no_extension");
 
     // Will use BlobAssetLoader instead of CustomAssetLoader thanks to type inference
-    state.blob = asset_server.load("data/asset.custom");
+    let blob = asset_server.load("data/asset.custom");
+
+    commands.insert_resource(State {
+        handle,
+        other_handle,
+        blob,
+        printed: false,
+    });
 }
 
 fn print_on_load(
     mut state: ResMut<State>,
-    custom_assets: Res<Assets<CustomAsset>>,
-    blob_assets: Res<Assets<Blob>>,
+    custom_assets: Query<&CustomAsset>,
+    blob_assets: Query<&Blob>,
 ) {
     let custom_asset = custom_assets.get(&state.handle);
     let other_custom_asset = custom_assets.get(&state.other_handle);
@@ -135,17 +141,17 @@ fn print_on_load(
         return;
     }
 
-    if custom_asset.is_none() {
+    if custom_asset.is_err() {
         info!("Custom Asset Not Ready");
         return;
     }
 
-    if other_custom_asset.is_none() {
+    if other_custom_asset.is_err() {
         info!("Other Custom Asset Not Ready");
         return;
     }
 
-    if blob.is_none() {
+    if blob.is_err() {
         info!("Blob Not Ready");
         return;
     }

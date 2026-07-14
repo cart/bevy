@@ -14,70 +14,70 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let image_with_default_sampler =
         asset_server.load("textures/fantasy_ui_borders/panel-border-010.png");
 
     // central cube with not repeated texture
+    let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color_texture: Some(image_with_default_sampler.clone()),
+        ..default()
+    });
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(image_with_default_sampler.clone()),
-            ..default()
-        })),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_translation(Vec3::ZERO),
     ));
 
     // left cube with repeated texture
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(
-            materials.add(StandardMaterial {
-                base_color_texture: Some(
-                    asset_server
-                        .load_builder()
-                        .with_settings(|s: &mut _| {
-                            *s = ImageLoaderSettings {
-                                sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
-                                    // rewriting mode to repeat image,
-                                    address_mode_u: ImageAddressMode::Repeat,
-                                    address_mode_v: ImageAddressMode::Repeat,
-                                    ..default()
-                                }),
-                                ..default()
-                            }
-                        })
-                        .load("textures/fantasy_ui_borders/panel-border-010-repeated.png"),
-                ),
-
-                // uv_transform used here for proportions only, but it is full Affine2
-                // that's why you can use rotation and shift also
-                uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
-                ..default()
-            }),
+    let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let material = commands.spawn_asset(StandardMaterial {
+        base_color_texture: Some(
+            asset_server
+                .load_builder()
+                .with_settings(|s: &mut _| {
+                    *s = ImageLoaderSettings {
+                        sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
+                            // rewriting mode to repeat image,
+                            address_mode_u: ImageAddressMode::Repeat,
+                            address_mode_v: ImageAddressMode::Repeat,
+                            ..default()
+                        }),
+                        ..default()
+                    }
+                })
+                .load("textures/fantasy_ui_borders/panel-border-010-repeated.png"),
         ),
+
+        // uv_transform used here for proportions only, but it is full Affine2
+        // that's why you can use rotation and shift also
+        uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
+        ..default()
+    });
+
+    commands.spawn((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_xyz(-1.5, 0.0, 0.0),
     ));
 
     // right cube with scaled texture, because with default sampler
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            // there is no sampler set, that's why
-            // by default you see only one small image in a row/column
-            // and other space is filled by image edge
-            base_color_texture: Some(image_with_default_sampler),
+    let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let material = commands.spawn_asset(StandardMaterial {
+        // there is no sampler set, that's why
+        // by default you see only one small image in a row/column
+        // and other space is filled by image edge
+        base_color_texture: Some(image_with_default_sampler),
 
-            // uv_transform used here for proportions only, but it is full Affine2
-            // that's why you can use rotation and shift also
-            uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
-            ..default()
-        })),
+        // uv_transform used here for proportions only, but it is full Affine2
+        // that's why you can use rotation and shift also
+        uv_transform: Affine2::from_scale(Vec2::new(2., 3.)),
+        ..default()
+    });
+    commands.spawn((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
         Transform::from_xyz(1.5, 0.0, 0.0),
     ));
 

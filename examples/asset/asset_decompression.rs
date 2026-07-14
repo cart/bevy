@@ -87,7 +87,7 @@ impl AssetLoader for GzAssetLoader {
     }
 }
 
-#[derive(Component, Default)]
+#[derive(Component)]
 struct Compressed<T> {
     compressed: Handle<GzAsset>,
     _phantom: PhantomData<T>,
@@ -108,26 +108,33 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     commands.spawn(Compressed::<Image> {
         compressed: asset_server.load("data/compressed_image.png.gz"),
-        ..default()
+        _phantom: PhantomData,
     });
 }
 
 fn decompress<T: Component + From<Handle<A>>, A: Asset>(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut compressed_assets: ResMut<Assets<GzAsset>>,
+    compressed_assets: Query<&GzAsset>,
     query: Query<(Entity, &Compressed<A>)>,
 ) {
     for (entity, Compressed { compressed, .. }) in query.iter() {
-        let Some(GzAsset { uncompressed }) = compressed_assets.remove(compressed) else {
+        if !compressed_assets.contains(compressed) {
             continue;
-        };
+        }
 
-        let uncompressed = uncompressed.take::<A>().unwrap();
+        let compressed = compressed.clone();
+        commands.queue(move |world: &mut World| {
+            let Some(GzAsset { uncompressed }) = world.entity_mut(compressed.entity()).take()
+            else {
+                return;
+            };
 
-        commands
-            .entity(entity)
-            .remove::<Compressed<A>>()
-            .insert(T::from(asset_server.add(uncompressed)));
+            let uncompressed = world.spawn_asset(uncompressed.take::<A>().unwrap());
+
+            world
+                .entity_mut(entity)
+                .remove::<Compressed<A>>()
+                .insert(T::from(uncompressed));
+        });
     }
 }

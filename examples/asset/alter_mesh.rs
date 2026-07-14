@@ -45,11 +45,7 @@ impl Shape {
 #[derive(Component, Debug)]
 struct Left;
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let left_shape = Shape::Cube;
     let right_shape = Shape::Cube;
 
@@ -98,7 +94,7 @@ fn setup(
     );
 
     // Add a material asset directly to the materials storage
-    let material_handle = materials.add(StandardMaterial {
+    let material_handle = commands.spawn_asset(StandardMaterial {
         base_color: Color::srgb(0.6, 0.8, 0.6),
         ..default()
     });
@@ -175,10 +171,10 @@ fn alter_handle(
 fn alter_mesh(
     mut is_mesh_scaled: Local<bool>,
     left_shape: Single<&Mesh3d, With<Left>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut meshes: Query<&mut Mesh>,
 ) {
     // Obtain a mutable reference to the Mesh asset.
-    let Some(mut mesh) = meshes.get_mut(*left_shape) else {
+    let Ok(mut mesh) = meshes.get_mut(*left_shape) else {
         return;
     };
 

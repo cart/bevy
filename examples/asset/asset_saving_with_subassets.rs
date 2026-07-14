@@ -100,13 +100,13 @@ struct PendingLoad(Handle<ManyBoxes>);
 /// Waits for any [`PendingLoad`]s to complete, and spawns in their boxes when they do.
 fn wait_for_pending_loads(
     loads: Populated<(Entity, &PendingLoad)>,
-    many_boxes: Res<Assets<ManyBoxes>>,
-    one_boxes: Res<Assets<OneBox>>,
+    many_boxes: Query<&ManyBoxes>,
+    one_boxes: Query<&OneBox>,
     existing_boxes: Query<Entity, With<Box>>,
     mut commands: Commands,
 ) {
     for (entity, load) in loads.iter() {
-        let Some(many_boxes) = many_boxes.get(&load.0) else {
+        let Ok(many_boxes) = many_boxes.get(&load.0) else {
             continue;
         };
 
@@ -116,7 +116,7 @@ fn wait_for_pending_loads(
         }
 
         for box_handle in many_boxes.boxes.iter() {
-            let Some(one_box) = one_boxes.get(box_handle) else {
+            let Ok(one_box) = one_boxes.get(box_handle) else {
                 return;
             };
             commands.spawn((

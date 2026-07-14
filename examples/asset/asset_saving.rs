@@ -37,7 +37,7 @@ const ASSET_PATH: &str = "art_project.png";
 
 fn perform_save(
     image_to_save: Res<ImageToSave>,
-    images: Res<Assets<Image>>,
+    images: Query<&Image>,
     asset_server: Res<AssetServer>,
 ) {
     let image = images.get(&image_to_save.0).unwrap();
@@ -82,11 +82,7 @@ struct ImageToSave(Handle<Image>);
 #[derive(Component)]
 struct SpriteToSave;
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut images: ResMut<Assets<Image>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Camera2d,
         Projection::Orthographic(OrthographicProjection {
@@ -123,23 +119,21 @@ F5 - Save image"
     // image into that handle. If the load succeeds, the image will be replaced with the loaded
     // contents. If it fails, the default image will remain. In real code, you likely want to poll
     // `AssetServer::load_state` and only insert this on load failure.
-    images
-        .insert(&handle, {
-            let mut image = Image::new_fill(
-                Extent3d {
-                    width: 100,
-                    height: 100,
-                    depth_or_array_layers: 1,
-                },
-                TextureDimension::D2,
-                &[0, 0, 0, 255],
-                TextureFormat::Rgba8Unorm,
-                RenderAssetUsages::all(),
-            );
-            image.sampler = ImageSampler::nearest();
-            image
-        })
-        .unwrap();
+    commands.entity(handle.entity()).insert({
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: 100,
+                height: 100,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[0, 0, 0, 255],
+            TextureFormat::Rgba8Unorm,
+            RenderAssetUsages::all(),
+        );
+        image.sampler = ImageSampler::nearest();
+        image
+    });
 
     commands.insert_resource(ImageToSave(handle));
 
@@ -209,9 +203,9 @@ fn try_plot(
     event: On<TryPlot>,
     sprite: Query<(&Sprite, &Anchor, &GlobalTransform), With<SpriteToSave>>,
     camera: Single<(&Camera, &GlobalTransform)>,
-    texture_atlases: Res<Assets<TextureAtlasLayout>>,
+    texture_atlases: Query<&TextureAtlasLayout>,
     draw_color: Res<DrawColor>,
-    mut images: ResMut<Assets<Image>>,
+    mut images: Query<&mut Image>,
 ) {
     let Ok((sprite, anchor, sprite_transform)) = sprite.get(event.entity) else {
         return;
@@ -228,7 +222,7 @@ fn try_plot(
     let Ok(pixel_space) = sprite.compute_pixel_space_point(
         relative_to_sprite.xy(),
         *anchor,
-        &images,
+        &images.as_readonly(),
         &texture_atlases,
     ) else {
         return;
