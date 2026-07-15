@@ -227,7 +227,7 @@ impl<T> From<Option<T>> for MeshExtractableData<T> {
 ///
 /// To transmit a [`Mesh`] between two running Bevy apps, e.g. through BRP, use [`SerializedMesh`].
 /// This type is only meant for short-term transmission between same versions and should not be stored anywhere.
-#[derive(Asset, Debug, Clone, Reflect, PartialEq)]
+#[derive(Asset, Debug, Default, Clone, Reflect, PartialEq)]
 #[reflect(Clone)]
 pub struct Mesh {
     #[reflect(ignore, clone)]
@@ -278,7 +278,7 @@ bitflags::bitflags! {
     /// - Joint weight will be Unorm16x4.
     /// - Color will be Float16x4 or Unorm8x4.
     #[repr(transparent)]
-    #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug, Reflect)]
+    #[derive(Hash, Clone, Copy, PartialEq, Eq, Debug, Reflect, Default)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     #[reflect(opaque)]
     #[reflect(Hash, Clone, PartialEq, Debug)]

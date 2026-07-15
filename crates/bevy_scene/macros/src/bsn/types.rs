@@ -114,6 +114,7 @@ pub enum BsnValue {
     Type(BsnType),
     Tuple(BsnTuple),
     Name(Ident),
+    SharedEntity(Bsn<false>),
 }
 
 #[derive(Debug)]

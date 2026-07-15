@@ -13,15 +13,21 @@ use syn::{parse::Parse, ExprTuple, Ident, Index, Lit, Member, Path};
 /// during the code generation process.
 #[derive(Default)]
 pub(crate) struct EntityRefs {
-    refs: HashMap<String, usize>,
+    refs: HashMap<EntityRefId, usize>,
     next: usize,
+}
+
+#[derive(Hash, PartialEq, Eq)]
+pub enum EntityRefId {
+    Name(String),
+    SharedIndex(usize),
 }
 
 impl EntityRefs {
     /// Retrieves the index for a given entity name.
     /// Creates a new one if it hasn't been seen yet.
-    fn get(&mut self, name: String) -> usize {
-        match self.refs.entry(name) {
+    fn get(&mut self, id: EntityRefId) -> usize {
+        match self.refs.entry(id) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
                 let index = self.next;
@@ -62,13 +68,17 @@ pub(crate) struct BsnCodegenCtx<'a> {
     pub invocation_index: ExprTuple,
     pub entity_refs: &'a mut EntityRefs,
     pub hoisted_expressions: &'a mut HoistedExpressions,
+    pub shared_entity_values: Vec<TokenStream>,
     /// Accumulated parsing and validation errors.
     pub errors: Vec<syn::Error>,
 }
 impl<'a> BsnCodegenCtx<'a> {
-    fn fixed_entity_ref(&mut self, ident: &Ident) -> (String, usize) {
+    fn name_entity_ref(&mut self, ident: &Ident) -> (String, usize) {
         let string = ident.to_string();
-        (ident.to_string(), self.entity_refs.get(string))
+        (
+            ident.to_string(),
+            self.entity_refs.get(EntityRefId::Name(string)),
+        )
     }
 }
 
@@ -103,6 +113,12 @@ impl BsnTokenStream for BsnRoot {
             quote! {}
         };
 
+        let shared_entity_values = &ctx.shared_entity_values;
+        let tokens = if shared_entity_values.is_empty() {
+            tokens
+        } else {
+            quote! {(#tokens, #bevy_scene::auto_nest_tuple!(#(#shared_entity_values),*))}
+        };
         // NOTE: Assigning the result to a variable first so that the LSP's
         // type inference can see assignments before it encounters
         // any compile errors. This keeps autocomplete working in broken states,
@@ -132,6 +148,13 @@ impl BsnTokenStream for BsnListRoot {
             }
         } else {
             quote! {}
+        };
+
+        let shared_entity_values = &ctx.shared_entity_values;
+        let tokens = if shared_entity_values.is_empty() {
+            tokens
+        } else {
+            quote! {(#tokens, #bevy_scene::auto_nest_tuple!(#(#shared_entity_values),*))}
         };
 
         // NOTE: Assigning the result to a variable first so that the LSP's
@@ -287,7 +310,7 @@ impl BsnEntry {
             BsnEntry::UncachedScene(s) => EntryResult::NewSceneImpl(s.to_tokens(ctx)?),
             BsnEntry::CachedScene(s) => EntryResult::NewSceneImpl(s.to_tokens(ctx)?),
             BsnEntry::Name(ident) => {
-                let (name, index) = ctx.fixed_entity_ref(ident);
+                let (name, index) = ctx.name_entity_ref(ident);
                 let invocation = ctx.invocation_index.clone();
                 EntryResult::CombinedSceneFunction(quote! {
                     #bevy_scene::NameEntityReference { name: #bevy_ecs::name::Name(#name.into()), reference: #bevy_ecs::template::SceneEntityReference::new(#invocation, #index, _call_id,) }.resolve_inline(_context, _scene);
@@ -577,11 +600,36 @@ impl BsnType {
                 assignments.push(quote! { #(#base_path.)*#member = #value; });
             }
             Some(BsnValue::Name(ident)) => {
-                let index = ctx.entity_refs.get(ident.to_string());
+                let index = ctx.entity_refs.get(EntityRefId::Name(ident.to_string()));
                 let bevy_ecs = ctx.bevy_ecs;
                 let invocation = ctx.invocation_index.clone();
                 assignments.push(quote! {
                     #(#base_path.)*#member = #bevy_ecs::template::EntityTemplate::from_reference(#invocation, #index,  _call_id).into();
+                });
+            }
+            Some(BsnValue::SharedEntity(bsn)) => {
+                let mut index = None;
+                for entry in bsn.entries.iter() {
+                    if let BsnEntry::Name(name) = entry {
+                        index = Some(ctx.entity_refs.get(EntityRefId::Name(name.to_string())));
+                        break;
+                    }
+                }
+
+                let index = index.unwrap_or_else(|| {
+                    let shared_index = ctx.shared_entity_values.len();
+                    ctx.entity_refs.get(EntityRefId::SharedIndex(shared_index))
+                });
+
+                let bevy_ecs = ctx.bevy_ecs;
+                let bevy_scene = ctx.bevy_scene;
+                let invocation = ctx.invocation_index.clone();
+                let entity_template = quote! { #bevy_ecs::template::EntityTemplate::from_reference(#invocation, #index,  _call_id).into() };
+                let tokens = bsn.to_tokens(ctx);
+                ctx.shared_entity_values
+                    .push(quote! { #bevy_scene::SharedEntity((#bevy_scene::AddEntityReference(#bevy_ecs::template::SceneEntityReference::new(#invocation, #index, _call_id)), #tokens)) });
+                assignments.push(quote! {
+                    #(#base_path.)*#member = #entity_template;
                 });
             }
             Some(value @ BsnValue::Type(ty)) if ty.enum_variant.is_some() => {
@@ -704,7 +752,7 @@ impl BsnTokenStream for BsnFnArg {
         let bevy_ecs = ctx.bevy_ecs;
         match self {
             BsnFnArg::EntityName(ident) => {
-                let index = ctx.entity_refs.get(ident.to_string());
+                let index = ctx.entity_refs.get(EntityRefId::Name(ident.to_string()));
                 let invocation = ctx.invocation_index.clone();
                 quote! {
                     #bevy_ecs::template::EntityTemplate::SceneEntityReference(
@@ -737,6 +785,10 @@ impl ToTokens for BsnValue {
             BsnValue::Type(ty) => quote! {(#ty).into()}.to_tokens(tokens),
             BsnValue::Name(_) => {
                 // Name requires additional context to convert to tokens
+                unreachable!()
+            }
+            BsnValue::SharedEntity(_) => {
+                // Shared Entities require additional context to convert to tokens / require hoisting
                 unreachable!()
             }
         }
@@ -773,6 +825,7 @@ mod tests {
                 entity_refs: refs,
                 invocation_index: parse_quote!(("", 0, 0)),
                 hoisted_expressions,
+                shared_entity_values: Vec::new(),
                 errors: Vec::new(),
             }
         }

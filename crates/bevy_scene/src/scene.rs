@@ -11,6 +11,7 @@ use bevy_ecs::{
     template::{FnTemplate, FromTemplate, SceneEntityReference, Template, TemplateContext},
 };
 use core::{any::TypeId, marker::PhantomData};
+use std::sync::atomic::AtomicU64;
 use thiserror::Error;
 use variadics_please::all_tuples;
 
@@ -472,6 +473,19 @@ impl Scene for NameEntityReference {
     }
 }
 
+pub struct AddEntityReference(pub SceneEntityReference);
+
+impl Scene for AddEntityReference {
+    fn resolve(
+        self,
+        _context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        scene.entity_references.push(self.0);
+        Ok(())
+    }
+}
+
 /// A [`Scene`] that will create a new "entity scope" and fully resolve the given scene `S` on top of the current [`ResolvedScene`] (using that scope).
 /// It is not cached.
 #[must_use]
@@ -634,7 +648,9 @@ impl<S: Scene> Scene for SharedEntity<S> {
     ) -> Result<(), ResolveSceneError> {
         let mut resolved_scene = ResolvedScene::default();
         self.0.resolve(context, &mut resolved_scene)?;
-        scene.shared_entities.push(resolved_scene);
+        scene
+            .shared_entities
+            .push((AtomicU64::default(), resolved_scene));
         Ok(())
     }
 

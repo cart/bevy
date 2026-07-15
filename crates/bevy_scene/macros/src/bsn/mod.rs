@@ -38,6 +38,7 @@ fn bsn_token_stream<T: BsnTokenStream>(input: TokenStream) -> TokenStream {
         entity_refs: &mut entity_refs,
         invocation_index: parse_quote!((#file, #line, #column)),
         hoisted_expressions: &mut hoisted_expressions,
+        shared_entity_values: Vec::new(),
         errors: Vec::new(),
     };
 

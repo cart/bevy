@@ -111,13 +111,19 @@ impl BsnEntry {
             BsnEntry::UncachedScene(BsnScene::parse(input)?)
         } else if input.peek(kw::shared) {
             let shared = input.parse::<kw::shared>()?;
-            if !input.peek(Paren) {
+            if input.peek(Paren) {
+                BsnEntry::SharedEntity(Bsn::<false>::parse(input)?)
+            } else if input.peek(Ident) {
+                let entry = BsnEntry::parse(input)?;
+                BsnEntry::SharedEntity(Bsn::<false> {
+                    entries: vec![entry],
+                })
+            } else {
                 return Err(syn::Error::new(
                     shared.span(),
                     "shared entities must always be preceded by parentheses",
                 ));
             }
-            BsnEntry::SharedEntity(Bsn::<false>::parse(input)?)
         } else {
             let is_template = input.peek(Tilde);
             if is_template {
@@ -515,6 +521,21 @@ impl Parse for BsnValue {
             let braced = braced_tokens(input)?;
 
             BsnValue::Expr(quote! {#unsafe_token {#braced}})
+        } else if input.peek(kw::shared) {
+            let shared = input.parse::<kw::shared>()?;
+            if input.peek(Paren) {
+                BsnValue::SharedEntity(Bsn::<false>::parse(input)?)
+            } else if input.peek(Ident) {
+                let entry = BsnEntry::parse(input)?;
+                BsnValue::SharedEntity(Bsn::<false> {
+                    entries: vec![entry],
+                })
+            } else {
+                return Err(syn::Error::new(
+                    shared.span(),
+                    "shared entities must always be preceded by parentheses",
+                ));
+            }
         } else if input.peek(Token![|]) {
             let tokens = parse_closure_loose(input)?;
             BsnValue::Closure(tokens)

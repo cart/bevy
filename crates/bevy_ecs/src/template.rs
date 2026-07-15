@@ -6,7 +6,7 @@ use core::{hash::Hash, ops::Deref};
 
 use crate::{
     component::{Component, Mutable},
-    entity::{Entity, EntityHandle},
+    entity::Entity,
     error::{BevyError, Result},
     resource::Resource,
     world::{EntityWorldMut, Mut, World},
