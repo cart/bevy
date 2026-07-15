@@ -16,6 +16,7 @@ fn scene() -> impl SceneList {
             #CircularBase
             Mesh3d(shared Mesh::from(Circle::new(4.0)))
             MeshMaterial3d::<StandardMaterial>(shared StandardMaterial { base_color: Color::WHITE })
+            Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
         ),
         (
             #Cube

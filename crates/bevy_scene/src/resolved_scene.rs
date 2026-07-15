@@ -85,8 +85,14 @@ impl ResolvedSceneRoot {
 
 /// A final "spawnable" root list of [`ResolvedScene`]s.
 pub struct ResolvedSceneListRoot {
+    pub scene_list: ResolvedSceneList,
+}
+
+#[derive(Default, Debug)]
+pub struct ResolvedSceneList {
     /// The root [`ResolvedScene`] list.
     pub scenes: Vec<ResolvedScene>,
+    pub shared_entities: SharedEntities,
 }
 
 impl ResolvedSceneListRoot {
@@ -97,17 +103,17 @@ impl ResolvedSceneListRoot {
         assets: &AssetServer,
         patches: &Query<&ScenePatch>,
     ) -> Result<Self, ResolveSceneError> {
-        let mut resolved_scenes = Vec::new();
+        let mut resolved = ResolvedSceneList::default();
         scene_list.resolve_list_box(
             &mut ResolveContext {
                 assets,
                 patches,
                 cached: None,
             },
-            &mut resolved_scenes,
+            &mut resolved,
         )?;
         Ok(ResolvedSceneListRoot {
-            scenes: resolved_scenes,
+            scene_list: resolved,
         })
     }
     /// Spawns a new [`Entity`] for each [`ResolvedScene`] in the list, and applies that [`ResolvedScene`] to them.
@@ -123,7 +129,14 @@ impl ResolvedSceneListRoot {
         let mut entities = Vec::new();
         let mut entity_references = SceneEntityReferences::default();
         let mut bundle_scratch = BundleScratch::default();
-        for scene in self.scenes.iter() {
+        if !self.scene_list.shared_entities.entities.is_empty() {
+            self.scene_list.shared_entities.apply(
+                world,
+                &mut entity_references,
+                &mut bundle_scratch,
+            )?;
+        }
+        for scene in self.scene_list.scenes.iter() {
             let mut entity = if let Some(entity_index) = scene.entity_references.first().copied() {
                 let entity = entity_references.get(entity_index, world);
                 world.entity_mut(entity)
@@ -182,8 +195,7 @@ pub struct ResolvedScene {
     /// A list of all [`SceneEntityReference`] values associated with this entity. There can be more than one if this scene uses
     /// "flattened" caching.
     pub entity_references: Vec<SceneEntityReference>,
-    pub(crate) shared_entities: Vec<(AtomicU64, ResolvedScene)>,
-    pub(crate) spawned_shared_scenes: AtomicBool,
+    pub shared_entities: SharedEntities,
 }
 
 impl core::fmt::Debug for ResolvedScene {
@@ -229,31 +241,13 @@ impl ResolvedScene {
         bundle_scratch: &mut BundleScratch,
         writer_ops: impl FnOnce(&mut TemplateContext, &mut BundleWriter),
     ) -> Result<(), ApplySceneError> {
-        if !self.shared_entities.is_empty() {
-            if self.spawned_shared_scenes.load(Ordering::Relaxed) {
-                for (atomic_id, scene) in self.shared_entities.iter() {
-                    for reference in scene.entity_references.iter().copied() {
-                        let entity = Entity::from_bits(atomic_id.load(Ordering::Relaxed));
-                        context.entity_references.set(reference, entity);
-                    }
-                }
-            } else {
-                self.spawned_shared_scenes.store(true, Ordering::Relaxed);
-                context
-                    .entity
-                    .world_scope(|world| -> Result<(), ApplySceneError> {
-                        for (atomic_id, scene) in self.shared_entities.iter() {
-                            let mut context = TemplateContext {
-                                entity: &mut world.spawn_empty(),
-                                entity_references: context.entity_references,
-                            };
-
-                            atomic_id.store(context.entity.id().to_bits(), Ordering::Relaxed);
-                            scene.apply(&mut context, bundle_scratch)?;
-                        }
-                        Ok(())
-                    })?;
-            }
+        if !self.shared_entities.entities.is_empty() {
+            context
+                .entity
+                .world_scope(|world| -> Result<(), ApplySceneError> {
+                    self.shared_entities
+                        .apply(world, context.entity_references, bundle_scratch)
+                })?;
         }
         let mut bundle_writer = bundle_scratch.writer();
         for entity_reference in self.entity_references.iter().copied() {
@@ -302,7 +296,7 @@ impl ResolvedScene {
                     (related.insert_relationship_target)(
                         &mut bundle_writer,
                         components,
-                        related.scenes.len(),
+                        related.scene_list.scenes.len(),
                     );
                 }
 
@@ -328,7 +322,7 @@ impl ResolvedScene {
                     (related.insert_relationship_target)(
                         &mut bundle_writer,
                         components,
-                        related.scenes.len(),
+                        related.scene_list.scenes.len(),
                     );
                 }
                 (writer_ops)(context, &mut bundle_writer);
@@ -387,7 +381,7 @@ impl ResolvedScene {
                 entity_references,
             } = context;
             entity.world_scope(|world| -> Result<(), ApplySceneError> {
-                for (index, scene) in related_resolved_scenes.scenes.iter().enumerate() {
+                for (index, scene) in related_resolved_scenes.scene_list.scenes.iter().enumerate() {
                     let mut entity =
                         if let Some(entity_reference) = scene.entity_references.first().copied() {
                             let entity = entity_references.get(entity_reference, world);
@@ -650,7 +644,7 @@ pub enum ApplySceneError {
 /// Each [`ResolvedScene`] added here will be spawned as a new [`Entity`] when the "parent" [`ResolvedScene`] is spawned.
 pub struct RelatedResolvedScenes {
     /// The related resolved scenes. Each entry in the list corresponds to a new related entity that will be spawned with the given scene.
-    pub scenes: Vec<ResolvedScene>,
+    pub scene_list: ResolvedSceneList,
     /// The function that will be called to add the relationship to the spawned related scene.
     pub insert_relationship:
         unsafe fn(&mut BundleWriter, &mut ComponentsRegistrator, target: Entity),
@@ -663,7 +657,7 @@ pub struct RelatedResolvedScenes {
 impl core::fmt::Debug for RelatedResolvedScenes {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ResolvedRelatedScenes")
-            .field("scenes", &self.scenes)
+            .field("scenes_list", &self.scene_list)
             .finish()
     }
 }
@@ -672,7 +666,7 @@ impl RelatedResolvedScenes {
     /// Creates a new empty [`RelatedResolvedScenes`] for the given relationship type.
     pub fn new<R: Relationship>() -> Self {
         Self {
-            scenes: Vec::new(),
+            scene_list: Default::default(),
             insert_relationship: |bundle_writer, components_registrator, target| {
                 // SAFETY: caller ensures bundler_writer is always used with the same World
                 unsafe { bundle_writer.push_component(components_registrator, R::from(target)) };
@@ -777,5 +771,43 @@ impl SkipTemplate for () {
     #[inline]
     fn should_skip(&self, _type_id: TypeId) -> bool {
         false
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct SharedEntities {
+    pub(crate) entities: Vec<(AtomicU64, ResolvedScene)>,
+    pub(crate) are_spawned: AtomicBool,
+}
+
+impl SharedEntities {
+    pub(crate) fn apply(
+        &self,
+        world: &mut World,
+        entity_references: &mut SceneEntityReferences,
+        bundle_scratch: &mut BundleScratch,
+    ) -> Result<(), ApplySceneError> {
+        if !self.entities.is_empty() {
+            if self.are_spawned.load(Ordering::Relaxed) {
+                for (atomic_id, scene) in self.entities.iter() {
+                    for reference in scene.entity_references.iter().copied() {
+                        let entity = Entity::from_bits(atomic_id.load(Ordering::Relaxed));
+                        entity_references.set(reference, entity);
+                    }
+                }
+            } else {
+                self.are_spawned.store(true, Ordering::Relaxed);
+                for (atomic_id, scene) in self.entities.iter() {
+                    let mut context = TemplateContext {
+                        entity: &mut world.spawn_empty(),
+                        entity_references,
+                    };
+
+                    atomic_id.store(context.entity.id().to_bits(), Ordering::Relaxed);
+                    scene.apply(&mut context, bundle_scratch)?;
+                }
+            }
+        }
+        Ok(())
     }
 }

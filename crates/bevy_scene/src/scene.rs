@@ -1,4 +1,4 @@
-use crate::{CachedSceneError, ResolvedScene, SceneList, ScenePatch};
+use crate::{CachedSceneError, ResolvedScene, ResolvedSceneList, SceneList, ScenePatch};
 use bevy_asset::{Asset, AssetPath, AssetServer};
 use bevy_ecs::{
     bundle::Bundle,
@@ -242,7 +242,7 @@ where
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        scenes: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         self.map(|scene_list| scene_list.resolve_list(context, scenes))
             .unwrap_or(Ok(()))
@@ -377,7 +377,7 @@ impl<R: Relationship, L: SceneList> Scene for RelatedScenes<R, L> {
     ) -> Result<(), ResolveSceneError> {
         let related = scene.get_or_insert_related_resolved_scenes::<R>();
         self.related_template_list
-            .resolve_list(context, &mut related.scenes)
+            .resolve_list(context, &mut related.scene_list)
     }
 
     fn register_dependencies(&self, dependencies: &mut SceneDependencies) {
@@ -514,7 +514,7 @@ impl<L: SceneList> SceneList for SceneListScope<L> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        scenes: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         self.0.resolve_list(context, scenes)
     }
@@ -650,6 +650,7 @@ impl<S: Scene> Scene for SharedEntity<S> {
         self.0.resolve(context, &mut resolved_scene)?;
         scene
             .shared_entities
+            .entities
             .push((AtomicU64::default(), resolved_scene));
         Ok(())
     }

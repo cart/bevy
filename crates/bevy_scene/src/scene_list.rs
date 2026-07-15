@@ -1,5 +1,8 @@
+use std::sync::atomic::AtomicU64;
+
 use crate::{
-    ResolveContext, ResolveSceneError, ResolvedScene, Scene, SceneDependencies, SceneScope,
+    ResolveContext, ResolveSceneError, ResolvedScene, ResolvedSceneList, Scene, SceneDependencies,
+    SceneScope, SharedEntity,
 };
 use smallvec::SmallVec;
 use variadics_please::all_tuples;
@@ -15,7 +18,7 @@ pub trait SceneList: SceneListBox {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError>;
 
     /// [`SceneList`] can have [`Asset`] dependencies, which _must_ be loaded before calling [`SceneList::resolve_list`] or it might return a
@@ -45,7 +48,7 @@ pub trait SceneListBox: Send + Sync + 'static {
     fn resolve_list_box(
         self: Box<Self>,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError>;
 
     /// See [`SceneList::register_dependencies`].
@@ -57,7 +60,7 @@ impl<L: SceneList> SceneListBox for L {
     fn resolve_list_box(
         self: Box<Self>,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        scenes: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         (*self).resolve_list(context, scenes)
     }
@@ -72,7 +75,7 @@ impl<T: ?Sized + SceneListBox> SceneList for Box<T> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        scenes: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         self.resolve_list_box(context, scenes)
     }
@@ -91,11 +94,11 @@ impl<S: Scene> SceneList for EntityScene<S> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         let mut resolved_scene = ResolvedScene::default();
         self.0.resolve(context, &mut resolved_scene)?;
-        scenes.push(resolved_scene);
+        list.scenes.push(resolved_scene);
         Ok(())
     }
 
@@ -107,7 +110,7 @@ impl<S: Scene> SceneList for EntityScene<S> {
 macro_rules! scene_list_impl {
     ($($list: ident),*) => {
         impl<$($list: SceneList),*> SceneList for ($($list,)*) {
-            fn resolve_list(self, _context: &mut ResolveContext, _scenes: &mut Vec<ResolvedScene>) -> Result<(), ResolveSceneError> {
+            fn resolve_list(self, _context: &mut ResolveContext, _list: &mut ResolvedSceneList) -> Result<(), ResolveSceneError> {
                 #[expect(
                     clippy::allow_attributes,
                     reason = "This is inside a macro, and as such, may not trigger in all cases."
@@ -117,7 +120,7 @@ macro_rules! scene_list_impl {
                     reason = "The names of these variables are provided by the caller, not by us."
                 )]
                 let ($($list,)*) = self;
-                $($list.resolve_list(_context, _scenes)?;)*
+                $($list.resolve_list(_context, _list)?;)*
                 Ok(())
             }
 
@@ -143,12 +146,12 @@ impl<S: Scene, const N: usize> SceneList for SmallVec<[S; N]> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         for scene in self {
             let mut resolved_scene = ResolvedScene::default();
             scene.resolve(context, &mut resolved_scene)?;
-            scenes.push(resolved_scene);
+            list.scenes.push(resolved_scene);
         }
         Ok(())
     }
@@ -164,10 +167,10 @@ impl<const N: usize> SceneList for SmallVec<[Box<dyn SceneList>; N]> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         for scene_list in self {
-            scene_list.resolve_list(context, scenes)?;
+            scene_list.resolve_list(context, list)?;
         }
         Ok(())
     }
@@ -183,12 +186,12 @@ impl<S: Scene> SceneList for Vec<S> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         for scene in self {
             let mut resolved_scene = ResolvedScene::default();
             scene.resolve(context, &mut resolved_scene)?;
-            scenes.push(resolved_scene);
+            list.scenes.push(resolved_scene);
         }
         Ok(())
     }
@@ -204,10 +207,10 @@ impl SceneList for Vec<Box<dyn SceneList>> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         for scene_list in self {
-            scene_list.resolve_list(context, scenes)?;
+            scene_list.resolve_list(context, list)?;
         }
         Ok(())
     }
@@ -223,15 +226,34 @@ impl<S: Scene> SceneList for SceneScope<S> {
     fn resolve_list(
         self,
         context: &mut ResolveContext,
-        scenes: &mut Vec<ResolvedScene>,
+        list: &mut ResolvedSceneList,
     ) -> Result<(), ResolveSceneError> {
         let mut resolved_scene = ResolvedScene::default();
         self.resolve(context, &mut resolved_scene)?;
-        scenes.push(resolved_scene);
+        list.scenes.push(resolved_scene);
         Ok(())
     }
 
     fn register_dependencies(&self, dependencies: &mut SceneDependencies) {
         Scene::register_dependencies(self, dependencies);
+    }
+}
+
+impl<S: Scene> SceneList for SharedEntity<S> {
+    fn resolve_list(
+        self,
+        context: &mut ResolveContext,
+        list: &mut ResolvedSceneList,
+    ) -> Result<(), ResolveSceneError> {
+        let mut resolved_scene = ResolvedScene::default();
+        self.0.resolve(context, &mut resolved_scene)?;
+        list.shared_entities
+            .entities
+            .push((AtomicU64::default(), resolved_scene));
+        Ok(())
+    }
+
+    fn register_dependencies(&self, dependencies: &mut SceneDependencies) {
+        self.0.register_dependencies(dependencies);
     }
 }
