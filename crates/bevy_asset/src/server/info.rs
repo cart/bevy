@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 #[derive(Debug)]
 pub(crate) struct AssetInfo {
-    handle: StrongOrWeakHandle,
+    pub(crate) handle: StrongOrWeakHandle,
     pub(crate) path: Option<AssetPath<'static>>,
     pub(crate) uuid: Option<Uuid>,
     pub(crate) load_state: LoadState,
@@ -38,20 +38,17 @@ pub(crate) struct AssetInfo {
     ///
     /// [`LoadedAsset`]: crate::loader::LoadedAsset
     loader_dependencies: HashMap<AssetPath<'static>, AssetHash>,
-    /// The number of handle drops to skip for this asset.
-    /// See usage (and comments) in `get_or_create_path_handle` for context.
-    handle_drops_to_skip: usize,
     /// List of tasks waiting for this asset to complete loading
     pub(crate) waiting_tasks: Vec<Waker>,
 }
 
-enum StrongOrWeakHandle {
+pub(crate) enum StrongOrWeakHandle {
     Strong(EntityHandle<AssetData>),
     Weak(WeakEntityHandle<AssetData>),
 }
 
 impl StrongOrWeakHandle {
-    fn get_strong(&self) -> Option<EntityHandle<AssetData>> {
+    pub(crate) fn get_strong(&self) -> Option<EntityHandle<AssetData>> {
         match self {
             StrongOrWeakHandle::Strong(entity_handle) => Some(entity_handle.clone()),
             StrongOrWeakHandle::Weak(weak_entity_handle) => weak_entity_handle.upgrade(),
@@ -95,7 +92,6 @@ impl AssetInfo {
             loader_dependencies: HashMap::default(),
             dependents_waiting_on_load: HashSet::default(),
             dependents_waiting_on_recursive_dep_load: HashSet::default(),
-            handle_drops_to_skip: 0,
             waiting_tasks: Vec::new(),
             loaded_type_id: None,
         }
@@ -362,7 +358,6 @@ impl AssetInfos {
             // Asset meta exists, but all live handles were dropped. This means the `track_assets` system
             // hasn't been run yet to remove the current asset
             // We must create a new strong handle
-            info.handle_drops_to_skip += 1;
             let handle = Self::create_handle_internal(
                 infos,
                 remote_allocator,
@@ -430,14 +425,9 @@ impl AssetInfos {
     }
 
     pub(crate) fn process_handle_drop(&mut self, entity: Entity) {
-        let Entry::Occupied(mut entry) = self.infos.entry(entity) else {
+        let Entry::Occupied(entry) = self.infos.entry(entity) else {
             return;
         };
-
-        if entry.get_mut().handle_drops_to_skip > 0 {
-            entry.get_mut().handle_drops_to_skip -= 1;
-            return;
-        }
 
         self.pending_tasks.remove(&entity);
 
@@ -473,11 +463,6 @@ impl AssetInfos {
         // not having its handle alive.
         for asset in loaded_asset.labeled_assets {
             self.process_asset_load(asset.handle.entity(), asset.asset, world, sender);
-        }
-
-        // Check whether the handle has been dropped since the asset was loaded.
-        if !self.infos.contains_key(&loaded_entity) {
-            return;
         }
 
         let mut loading_deps = loaded_asset.dependencies;

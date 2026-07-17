@@ -2295,10 +2295,10 @@ mod tests {
         in_loader_receiver.recv_blocking().unwrap();
 
         let asset_id = handle.id();
-        // Dropping the handle and doing another update should result in the load being cancelled.
         drop(handle);
         app.update();
-        assert!(asset_server.get_load_state(asset_id).is_none());
+        // The loader is still holding a strong handle so this should still be in the "loading" state
+        assert!(asset_server.get_load_state(asset_id).unwrap().is_loading());
 
         // Unblock the loader and then update a few times, showing that the asset never loads.
         gate_sender.send_blocking(()).unwrap();
@@ -2346,10 +2346,10 @@ mod tests {
         in_loader_receiver.recv_blocking().unwrap();
 
         let asset_id = handle.id();
-        // Dropping the handle and doing another update should result in the load being cancelled.
         drop(handle);
         app.update();
-        assert!(asset_server.get_load_state(asset_id).is_none());
+        // The loader is still holding a strong handle so this should still be in the "loading" state
+        assert!(asset_server.get_load_state(asset_id).unwrap().is_loading());
 
         // Unblock the loader and then update a few times, showing that the asset never loads.
         gate_sender.send_blocking(()).unwrap();
@@ -2524,8 +2524,8 @@ mod tests {
             assert_eq!(
                 messages,
                 [
+                    AssetEvent::Added { id: handle.id() },
                     AssetEvent::LoadedWithDependencies { id: handle.id() },
-                    AssetEvent::Added { id: handle.id() }
                 ]
             );
             Some(())

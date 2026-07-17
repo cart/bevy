@@ -529,7 +529,7 @@ impl AssetServer {
             let server = self.clone();
             let task = IoTaskPool::get().spawn(async move {
                 if let Err(err) = server.load_internal(owned_handle).await {
-                    error!("{}", err);
+                    error!("{err}");
                 }
                 drop(guard);
             });
@@ -550,6 +550,11 @@ impl AssetServer {
     /// Performs an async asset load. This will "reload" the asset if it already exists.
     async fn load_internal<'a>(&self, handle: UntypedHandle) -> Result<(), AssetLoadError> {
         let type_id_hint = handle.type_id_hint();
+
+        // No need to load the asset if this is the only remaining handle
+        if handle.strong_count() == 1 {
+            return Ok(());
+        }
 
         let Some(path) = handle.path() else {
             return Err(if let Some(uuid) = handle.uuid() {
@@ -617,6 +622,11 @@ impl AssetServer {
             .await
         {
             Ok(loaded_asset) => {
+                // No need to load the asset if this is the only remaining handle
+                if handle.strong_count() == 1 {
+                    return Ok(());
+                }
+
                 if let Some(label) = path.label_cow() {
                     match loaded_asset.label_to_asset_index.get(&label) {
                         Some(labeled_asset) => {
@@ -1713,10 +1723,14 @@ pub fn handle_internal_asset_events(world: &mut World) {
                 InternalAssetEvent::Failed { entity, error } => {
                     infos.process_asset_fail(entity, error.clone());
                     world.trigger(LoadFailed { entity, error: error.clone() });
-                    if let Some(asset_info) = infos.get(entity) &&
-                        let Some(type_id) = asset_info.loaded_type_id &&
-                        let Some(path) = &asset_info.path {
-                        if let Some(type_data) = infos.asset_type_data.get(&type_id) {
+                    if let Some(asset_info) = infos.get(entity) && let Some(path) = &asset_info.path {
+                        let type_id = match asset_info.loaded_type_id {
+                            Some(type_id) => Some(type_id),
+                            None => asset_info.handle.get_strong().and_then(|handle| handle.type_id_hint),
+                        };
+
+
+                        if let Some(type_id) = type_id && let Some(type_data) = infos.asset_type_data.get(&type_id) {
                             (type_data.asset_event_senders.failed)(world, entity, error, path.clone());
                         } else {
                             warn!("Failed to trigger AssetLoadFailedEvent for asset type {type_id:?}. This asset type wasn't registered with the AssetServer.");

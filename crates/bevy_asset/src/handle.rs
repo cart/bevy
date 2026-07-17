@@ -431,6 +431,11 @@ impl UntypedHandle {
     pub fn meta_transform(&self) -> Option<&MetaTransform> {
         self.0.meta_transform.as_ref()
     }
+
+    #[inline]
+    pub fn strong_count(&self) -> usize {
+        self.0.strong_count()
+    }
 }
 
 impl PartialEq for UntypedHandle {
