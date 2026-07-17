@@ -154,10 +154,10 @@ impl<A: Asset> CreateTypeData<Handle<A>> for ReflectHandle {
 /// and stable parts of the handle. This can later be used to deserialize the handle.
 ///
 /// Use [`HandleDeserializeProcessor`] to deserialize this data.
-pub struct HandleSerializeProcessor {
+pub struct HandleSerializeProcessor<'a> {
     /// How ephemeral handles are dealt with.
     pub ephemeral_handle_behavior: EphemeralHandleBehavior,
-    pub asset_server: AssetServer,
+    pub asset_server: &'a AssetServer,
 }
 
 /// Specifies the action that will be taken when attempting to serialize an ephemeral handle.
@@ -174,7 +174,7 @@ pub enum EphemeralHandleBehavior {
     Error,
 }
 
-impl ReflectSerializerProcessor for HandleSerializeProcessor {
+impl<'a> ReflectSerializerProcessor for HandleSerializeProcessor<'a> {
     fn try_serialize<S>(
         &self,
         value: &dyn PartialReflect,
@@ -494,7 +494,7 @@ mod tests {
             let type_registry = type_registry.read();
             let processor = HandleSerializeProcessor {
                 ephemeral_handle_behavior: EphemeralHandleBehavior::Silent,
-                asset_server,
+                asset_server: &asset_server,
             };
             let reflect_serializer =
                 TypedReflectSerializer::with_processor(&stuff, &type_registry, &processor);

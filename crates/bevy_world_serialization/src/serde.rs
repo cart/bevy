@@ -2,7 +2,8 @@
 
 use crate::{DynamicEntity, DynamicWorld};
 use bevy_asset::{
-    EphemeralHandleBehavior, HandleDeserializeProcessor, HandleSerializeProcessor, LoadErased,
+    AssetServer, EphemeralHandleBehavior, HandleDeserializeProcessor, HandleSerializeProcessor,
+    LoadErased,
 };
 use bevy_ecs::entity::Entity;
 use bevy_platform::collections::HashSet;
@@ -62,6 +63,8 @@ pub struct DynamicWorldSerializer<'a> {
     pub world: &'a DynamicWorld,
     /// The type registry containing the types present in the dynamic world.
     pub registry: &'a TypeRegistry,
+    /// The asset server to look up serialized handle type data from
+    pub asset_server: &'a AssetServer,
 }
 
 impl<'a> DynamicWorldSerializer<'a> {
@@ -71,8 +74,16 @@ impl<'a> DynamicWorldSerializer<'a> {
     /// if you obtain both the [`DynamicWorld`] and the registry from the same [`World`].
     ///
     /// [`World`]: bevy_ecs::world::World
-    pub fn new(world: &'a DynamicWorld, registry: &'a TypeRegistry) -> Self {
-        DynamicWorldSerializer { world, registry }
+    pub fn new(
+        world: &'a DynamicWorld,
+        registry: &'a TypeRegistry,
+        asset_server: &'a AssetServer,
+    ) -> Self {
+        DynamicWorldSerializer {
+            world,
+            registry,
+            asset_server,
+        }
     }
 }
 
@@ -87,6 +98,7 @@ impl<'a> Serialize for DynamicWorldSerializer<'a> {
             &WorldMapSerializer {
                 entries: &self.world.resources,
                 registry: self.registry,
+                asset_server: self.asset_server,
             },
         )?;
         state.serialize_field(
@@ -94,6 +106,7 @@ impl<'a> Serialize for DynamicWorldSerializer<'a> {
             &EntitiesSerializer {
                 entities: &self.world.entities,
                 registry: self.registry,
+                asset_server: self.asset_server,
             },
         )?;
         state.end()
@@ -106,6 +119,8 @@ pub struct EntitiesSerializer<'a> {
     pub entities: &'a [DynamicEntity],
     /// Type registry in which the component types used by the entities are registered.
     pub registry: &'a TypeRegistry,
+    /// The asset server to look up serialized handle type data from
+    pub asset_server: &'a AssetServer,
 }
 
 impl<'a> Serialize for EntitiesSerializer<'a> {
@@ -120,6 +135,7 @@ impl<'a> Serialize for EntitiesSerializer<'a> {
                 &EntitySerializer {
                     entity,
                     registry: self.registry,
+                    asset_server: self.asset_server,
                 },
             )?;
         }
@@ -133,6 +149,8 @@ pub struct EntitySerializer<'a> {
     pub entity: &'a DynamicEntity,
     /// Type registry in which the component types used by the entity are registered.
     pub registry: &'a TypeRegistry,
+    /// The asset server to look up serialized handle type data from
+    pub asset_server: &'a AssetServer,
 }
 
 impl<'a> Serialize for EntitySerializer<'a> {
@@ -146,6 +164,7 @@ impl<'a> Serialize for EntitySerializer<'a> {
             &WorldMapSerializer {
                 entries: &self.entity.components,
                 registry: self.registry,
+                asset_server: self.asset_server,
             },
         )?;
         state.end()
@@ -164,6 +183,8 @@ pub struct WorldMapSerializer<'a> {
     pub entries: &'a [Box<dyn PartialReflect>],
     /// Type registry in which the types used in `entries` are registered.
     pub registry: &'a TypeRegistry,
+    /// The asset server to look up serialized handle type data from
+    pub asset_server: &'a AssetServer,
 }
 
 impl<'a> Serialize for WorldMapSerializer<'a> {
@@ -196,6 +217,7 @@ impl<'a> Serialize for WorldMapSerializer<'a> {
                     &HandleSerializeProcessor {
                         // TODO: Make this configurable.
                         ephemeral_handle_behavior: EphemeralHandleBehavior::Warn,
+                        asset_server: self.asset_server,
                     },
                 ),
             )?;
@@ -551,7 +573,8 @@ mod tests {
         serde::{DynamicWorldSerializer, WorldDeserializer},
         DynamicWorld, DynamicWorldBuilder,
     };
-    use bevy_asset::{Asset, AssetPath, Handle, LoadErased, ReflectAsset, UntypedHandle};
+    use bevy_app::{App, TaskPoolPlugin};
+    use bevy_asset::{Asset, AssetPlugin, AssetServer, Handle, ReflectAsset};
     use bevy_ecs::{
         entity::{Entity, EntityHashMap},
         prelude::{Component, ReflectComponent, ReflectResource, Resource, World},
@@ -560,7 +583,6 @@ mod tests {
         world::FromWorld,
     };
     use bevy_reflect::{Reflect, ReflectDeserialize, ReflectSerialize};
-    use core::any::TypeId;
     use ron;
     use serde::{de::DeserializeSeed, Deserialize, Serialize};
     use std::io::BufReader;
@@ -712,25 +734,18 @@ mod tests {
     ),
   },
 )"#;
+        let app = create_app();
+        let asset_server = app.world().resource::<AssetServer>();
+
         let output = dynamic_world
-            .serialize(&world.resource::<AppTypeRegistry>().read())
+            .serialize(&world.resource::<AppTypeRegistry>().read(), asset_server)
             .unwrap();
         assert_eq!(expected, output);
-    }
-
-    /// A fake handle creator for the purposes of testing world loading.
-    struct FakeHandleCreator;
-
-    impl LoadErased for FakeHandleCreator {
-        fn load_erased(&mut self, _type_id: TypeId, _path: AssetPath<'static>) -> UntypedHandle {
-            unimplemented!()
-        }
     }
 
     #[test]
     fn should_deserialize() {
         let world = create_world();
-
         let input = r#"(
   resources: {
     "bevy_world_serialization::serde::tests::MyResource": (
@@ -763,10 +778,12 @@ mod tests {
     ),
   },
 )"#;
+        let dummy_app = create_app();
+        let mut asset_server = dummy_app.world().resource::<AssetServer>();
         let mut deserializer = ron::de::Deserializer::from_str(input).unwrap();
         let world_deserializer = WorldDeserializer {
             type_registry: &world.resource::<AppTypeRegistry>().read(),
-            load_from_path: &mut FakeHandleCreator,
+            load_from_path: &mut asset_server,
         };
         let dynamic_world = world_deserializer.deserialize(&mut deserializer).unwrap();
 
@@ -801,11 +818,13 @@ mod tests {
     fn roundtrip_ron(world: &World) -> (DynamicWorld, DynamicWorld) {
         let dynamic_world = DynamicWorld::from_world(world);
         let registry = world.resource::<AppTypeRegistry>().read();
-        let serialized = dynamic_world.serialize(&registry).unwrap();
+        let app = create_app();
+        let mut asset_server = app.world().resource::<AssetServer>();
+        let serialized = dynamic_world.serialize(&registry, asset_server).unwrap();
         let mut deserializer = ron::de::Deserializer::from_str(&serialized).unwrap();
         let world_deserializer = WorldDeserializer {
             type_registry: &registry,
-            load_from_path: &mut FakeHandleCreator,
+            load_from_path: &mut asset_server,
         };
         let deserialized_world = world_deserializer.deserialize(&mut deserializer).unwrap();
         (dynamic_world, deserialized_world)
@@ -868,6 +887,12 @@ mod tests {
         assert_eq!(&qux, world.query::<&Qux>().single(&world).unwrap());
     }
 
+    fn create_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((TaskPoolPlugin::default(), AssetPlugin::default()));
+        app
+    }
+
     #[test]
     fn should_roundtrip_postcard() {
         let mut world = create_world();
@@ -883,7 +908,10 @@ mod tests {
 
         let dynamic_world = DynamicWorld::from_world(&world);
 
-        let dynamic_world_serializer = DynamicWorldSerializer::new(&dynamic_world, registry);
+        let dummy_app = create_app();
+        let mut asset_server = dummy_app.world().resource::<AssetServer>();
+        let dynamic_world_serializer =
+            DynamicWorldSerializer::new(&dynamic_world, registry, asset_server);
         let serialized_world = postcard::to_allocvec(&dynamic_world_serializer).unwrap();
 
         assert_eq!(
@@ -899,7 +927,7 @@ mod tests {
 
         let world_deserializer = WorldDeserializer {
             type_registry: registry,
-            load_from_path: &mut FakeHandleCreator,
+            load_from_path: &mut asset_server,
         };
         let deserialized_world = world_deserializer
             .deserialize(&mut postcard::Deserializer::from_bytes(&serialized_world))
@@ -924,7 +952,10 @@ mod tests {
 
         let dynamic_world = DynamicWorld::from_world(&world);
 
-        let dynamic_world_serializer = DynamicWorldSerializer::new(&dynamic_world, registry);
+        let dummy_app = create_app();
+        let mut asset_server = dummy_app.world().resource::<AssetServer>();
+        let dynamic_world_serializer =
+            DynamicWorldSerializer::new(&dynamic_world, registry, asset_server);
         let mut buf = Vec::new();
         let mut ser = rmp_serde::Serializer::new(&mut buf);
         dynamic_world_serializer.serialize(&mut ser).unwrap();
@@ -943,7 +974,7 @@ mod tests {
 
         let world_deserializer = WorldDeserializer {
             type_registry: registry,
-            load_from_path: &mut FakeHandleCreator,
+            load_from_path: &mut asset_server,
         };
         let mut reader = BufReader::new(buf.as_slice());
 
