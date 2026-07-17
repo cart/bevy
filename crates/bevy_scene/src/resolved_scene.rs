@@ -13,13 +13,14 @@ use bevy_ecs::{
 use bevy_platform::collections::HashSet;
 use bevy_utils::TypeIdMap;
 use core::any::{Any, TypeId};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 /// A final "spawnable" root [`ResolvedScene`].
+#[derive(Component, Clone)]
 pub struct ResolvedSceneRoot {
     /// The root [`ResolvedScene`].
-    pub scene: ResolvedScene,
+    pub scene: Arc<ResolvedScene>,
 }
 
 impl ResolvedSceneRoot {
@@ -28,19 +29,19 @@ impl ResolvedSceneRoot {
     pub fn resolve(
         scene: Box<dyn Scene>,
         assets: &AssetServer,
-        patches: &Query<&ScenePatch>,
+        resolved_scenes: &Query<&ResolvedSceneRoot>,
     ) -> Result<Self, ResolveSceneError> {
         let mut resolved_scene = ResolvedScene::default();
         scene.resolve_box(
             &mut ResolveContext {
                 assets,
-                patches,
-                cached: None,
+                resolved_scenes,
+                cached_scene: None,
             },
             &mut resolved_scene,
         )?;
         Ok(ResolvedSceneRoot {
-            scene: resolved_scene,
+            scene: Arc::new(resolved_scene),
         })
     }
 
@@ -48,7 +49,7 @@ impl ResolvedSceneRoot {
     /// If this fails mid-spawn, the intermediate entity will be despawned.
     pub fn spawn<'w>(&self, world: &'w mut World) -> Result<EntityWorldMut<'w>, ApplySceneError> {
         let mut entity = world.spawn_empty();
-        let result = self.apply(&mut entity, &mut BundleScratch::default());
+        let result = self.apply(&mut entity);
         match result {
             Ok(_) => Ok(entity),
             Err(err) => {
@@ -58,13 +59,17 @@ impl ResolvedSceneRoot {
         }
     }
 
+    pub fn apply(&self, entity: &mut EntityWorldMut) -> Result<(), ApplySceneError> {
+        self.apply_with_scratch(entity, &mut BundleScratch::default())
+    }
+
     /// Applies this scene to the given [`EntityWorldMut`].
     ///
     /// This will apply all of the [`Template`]s in this root [`ResolvedScene`] to the entity. It will also
     /// spawn all of this [`ResolvedScene`]'s related entities.
     ///
     /// If this root [`ResolvedScene`] includes a cached scene, that scene will be applied _first_.
-    pub fn apply(
+    pub fn apply_with_scratch(
         &self,
         entity: &mut EntityWorldMut,
         bundle_scratch: &mut BundleScratch,
@@ -84,8 +89,9 @@ impl ResolvedSceneRoot {
 }
 
 /// A final "spawnable" root list of [`ResolvedScene`]s.
+#[derive(Component, Clone)]
 pub struct ResolvedSceneListRoot {
-    pub scene_list: ResolvedSceneList,
+    pub scene_list: Arc<ResolvedSceneList>,
 }
 
 #[derive(Default, Debug)]
@@ -101,19 +107,19 @@ impl ResolvedSceneListRoot {
     pub fn resolve(
         scene_list: Box<dyn SceneList>,
         assets: &AssetServer,
-        patches: &Query<&ScenePatch>,
+        resolved_scenes: &Query<&ResolvedSceneRoot>,
     ) -> Result<Self, ResolveSceneError> {
         let mut resolved = ResolvedSceneList::default();
         scene_list.resolve_list_box(
             &mut ResolveContext {
                 assets,
-                patches,
-                cached: None,
+                resolved_scenes,
+                cached_scene: None,
             },
             &mut resolved,
         )?;
         Ok(ResolvedSceneListRoot {
-            scene_list: resolved,
+            scene_list: Arc::new(resolved),
         })
     }
     /// Spawns a new [`Entity`] for each [`ResolvedScene`] in the list, and applies that [`ResolvedScene`] to them.
@@ -256,19 +262,18 @@ impl ResolvedScene {
                 .set(entity_reference, context.entity.id());
         }
         if let Some(cached) = &self.cached {
-            let Some(patch) = context.get::<ScenePatch>(cached.handle.entity()) else {
+            let Ok(scene_entity) = context.get_other_entity(cached.handle.entity()) else {
                 return Err(ApplySceneError::MissingCachedScene {
                     path: cached.handle.path().cloned(),
                     id: cached.handle.id(),
                 });
             };
-            let Some(resolved_cached) = &patch.resolved else {
+            let Some(resolved_cached) = scene_entity.get::<ResolvedSceneRoot>().cloned() else {
                 return Err(ApplySceneError::UnresolvedCachedScene {
                     path: cached.handle.path().cloned(),
                     id: cached.handle.id(),
                 });
             };
-            let resolved_cached = resolved_cached.clone();
             // SAFETY: bundle_writer is used with the same World across all template.apply calls,
             // and the next bundle_writer.write call
             unsafe {
@@ -462,10 +467,9 @@ impl ResolvedScene {
         let mut is_cached = false;
         let index = self.template_indices.entry(type_id).or_insert_with(|| {
             let index = self.component_templates.len();
-            let value = if let Some(cached_patch) = &mut context.cached
-                && let Some(resolved_cached) = &cached_patch.resolved
+            let value = if let Some(cached_scene) = &mut context.cached_scene
                 && let Some(cached_template) =
-                    resolved_cached.scene.get_direct_erased_template(type_id)
+                    cached_scene.scene.get_direct_erased_template(type_id)
             {
                 is_cached = true;
                 cached_template.clone_template()

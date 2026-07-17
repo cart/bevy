@@ -1,4 +1,6 @@
-use crate::{CachedSceneError, ResolvedScene, ResolvedSceneList, SceneList, ScenePatch};
+use crate::{
+    CachedSceneError, ResolvedScene, ResolvedSceneList, ResolvedSceneRoot, SceneList, ScenePatch,
+};
 use bevy_asset::{Asset, AssetPath, AssetServer};
 use bevy_ecs::{
     bundle::Bundle,
@@ -172,9 +174,9 @@ pub struct ResolveContext<'a, 'w, 's, 'q> {
     /// The current asset server
     pub assets: &'a AssetServer,
     /// The current [`World`]
-    pub patches: &'a Query<'w, 's, &'q ScenePatch>,
+    pub resolved_scenes: &'a Query<'w, 's, &'q ResolvedSceneRoot>,
     /// The currently cached [`ScenePatch`], if there is one.
-    pub cached: Option<&'a ScenePatch>,
+    pub cached_scene: Option<&'a ResolvedSceneRoot>,
 }
 
 macro_rules! scene_impl {
@@ -411,10 +413,10 @@ impl Scene for CachedSceneAsset {
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
         if let Some(handle) = context.assets.get_handle::<ScenePatch>(&self.0)
-            && let Ok(scene_patch) = context.patches.get(handle.entity())
+            && let Ok(scene_patch) = context.resolved_scenes.get(handle.entity())
         {
             scene.include_cached(handle)?;
-            context.cached = Some(scene_patch);
+            context.cached_scene = Some(scene_patch);
             Ok(())
         } else {
             Err(ResolveSceneError::MissingSceneDependency(self.0))

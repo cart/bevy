@@ -6,7 +6,6 @@ use alloc::sync::Arc;
 use bevy_asset::{Asset, AssetServer, Handle, LoadErased, UntypedHandle};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
-    bundle::BundleScratch,
     component::Component,
     entity::Entity,
     system::Query,
@@ -24,10 +23,6 @@ pub struct ScenePatch {
     /// The dependencies of `scene` (populated using [`Scene::register_dependencies`]). These are "asset dependencies" and will affect the load state.
     #[dependency]
     pub dependencies: Vec<UntypedHandle>,
-    /// The [`ResolvedSceneRoot`], if exists. This is populated after the [`Scene`] has been loaded and resolved
-    // TODO: consider breaking this out to prevent mutating asset events when resolved. Assets as Entities will enable this!
-    // TODO: This Arc exists to allow nested ResolvedSceneRoot::apply when borrowing cached ScenePatch assets (see the ResolvedSceneRoot::apply implementation).
-    pub resolved: Option<Arc<ResolvedSceneRoot>>,
 }
 
 impl ScenePatch {
@@ -49,7 +44,6 @@ impl ScenePatch {
         ScenePatch {
             scene: Some(Box::new(scene)),
             dependencies,
-            resolved: None,
         }
     }
 
@@ -58,35 +52,10 @@ impl ScenePatch {
     pub fn resolve(
         &mut self,
         assets: &AssetServer,
-        patches: &Query<&'static ScenePatch>,
-    ) -> Result<(), ResolveSceneError> {
+        resolved_scenes: &Query<&'static ResolvedSceneRoot>,
+    ) -> Result<ResolvedSceneRoot, ResolveSceneError> {
         let scene = self.scene.take().ok_or(ResolveSceneError::MissingScene)?;
-        self.resolved = Some(Arc::new(ResolvedSceneRoot::resolve(
-            scene, assets, patches,
-        )?));
-        Ok(())
-    }
-
-    /// Spawns the scene in `world` as a new entity. This should only be called after [`ScenePatch::resolve`].
-    pub fn spawn<'w>(&self, world: &'w mut World) -> Result<EntityWorldMut<'w>, SpawnSceneError> {
-        let resolved = self
-            .resolved
-            .as_deref()
-            .ok_or(SpawnSceneError::UnresolvedSceneError)?;
-        resolved
-            .spawn(world)
-            .map_err(SpawnSceneError::ApplySceneError)
-    }
-
-    /// Applies the scene to the given `entity`. This should only be called after [`ScenePatch::resolve`]
-    pub fn apply<'w>(&self, entity: &'w mut EntityWorldMut) -> Result<(), SpawnSceneError> {
-        let resolved = self
-            .resolved
-            .as_deref()
-            .ok_or(SpawnSceneError::UnresolvedSceneError)?;
-        resolved
-            .apply(entity, &mut BundleScratch::default())
-            .map_err(SpawnSceneError::ApplySceneError)
+        Ok(ResolvedSceneRoot::resolve(scene, assets, resolved_scenes)?)
     }
 }
 
@@ -119,10 +88,6 @@ pub struct SceneListPatch {
     /// The dependencies of `scene_list` (populated using [`SceneList::register_dependencies`]). These are "asset dependencies" and will affect the load state.
     #[dependency]
     pub dependencies: Vec<UntypedHandle>,
-
-    /// The [`ResolvedSceneListRoot`], if exists. This is populated after the scene list and its dependencies have been loaded and resolved.
-    // TODO: consider breaking this out to prevent mutating asset events when resolved
-    pub resolved: Option<Arc<ResolvedSceneListRoot>>,
 }
 
 impl SceneListPatch {
@@ -138,7 +103,6 @@ impl SceneListPatch {
         SceneListPatch {
             scene_list: Some(Box::new(scene_list)),
             dependencies,
-            resolved: None,
         }
     }
 
@@ -147,35 +111,12 @@ impl SceneListPatch {
     pub fn resolve(
         &mut self,
         assets: &AssetServer,
-        patches: &Query<&ScenePatch>,
-    ) -> Result<(), ResolveSceneError> {
+        resolved_scenes: &Query<&ResolvedSceneRoot>,
+    ) -> Result<ResolvedSceneListRoot, ResolveSceneError> {
         let scene_list = self
             .scene_list
             .take()
             .ok_or(ResolveSceneError::MissingScene)?;
-        self.resolved = Some(Arc::new(ResolvedSceneListRoot::resolve(
-            scene_list, assets, patches,
-        )?));
-        Ok(())
-    }
-
-    /// Spawns the scene list in `world` as new entities. This should only be called after [`SceneListPatch::resolve`].
-    pub fn spawn<'w>(&self, world: &'w mut World) -> Result<Vec<Entity>, SpawnSceneError> {
-        self.spawn_with(world, |_| {})
-    }
-
-    /// Spawns the scene list in `world` as new entities. This should only be called after [`SceneListPatch::resolve`].
-    pub(crate) fn spawn_with<'w>(
-        &self,
-        world: &'w mut World,
-        func: impl Fn(&mut EntityWorldMut),
-    ) -> Result<Vec<Entity>, SpawnSceneError> {
-        let resolved = self
-            .resolved
-            .as_ref()
-            .ok_or(SpawnSceneError::UnresolvedSceneError)?;
-        resolved
-            .spawn_with(world, func)
-            .map_err(SpawnSceneError::ApplySceneError)
+        ResolvedSceneListRoot::resolve(scene_list, assets, resolved_scenes)
     }
 }

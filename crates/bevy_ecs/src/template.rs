@@ -6,10 +6,10 @@ use core::{hash::Hash, ops::Deref};
 
 use crate::{
     component::{Component, Mutable},
-    entity::Entity,
+    entity::{Entity, EntityNotSpawnedError},
     error::{BevyError, Result},
     resource::Resource,
-    world::{EntityWorldMut, Mut, World},
+    world::{EntityRef, EntityWorldMut, Mut, World},
 };
 use alloc::vec::Vec;
 use bevy_platform::{collections::hash_map::RawEntryMut, hash::Hashed};
@@ -92,6 +92,14 @@ impl<'a, 'w> TemplateContext<'a, 'w> {
     /// Returns the component for a given `entity`, if it exists.
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
         self.entity.world().get::<C>(entity)
+    }
+
+    /// Returns the given `entity`, if it exists.
+    pub fn get_other_entity<'x>(
+        &'x self,
+        entity: Entity,
+    ) -> Result<EntityRef<'x>, EntityNotSpawnedError> {
+        self.entity.world().get_entity(entity)
     }
 }
 

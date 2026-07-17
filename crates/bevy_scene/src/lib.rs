@@ -1086,7 +1086,7 @@ impl Plugin for ScenePlugin {
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as bevy_scene, ScenePlugin};
+    use crate::{self as bevy_scene, ResolvedSceneRoot, ScenePlugin};
     use crate::{prelude::*, ScenePatch};
     use alloc::sync::Arc;
     use bevy_app::{App, TaskPoolPlugin};
@@ -1270,8 +1270,10 @@ mod tests {
         let asset_server = app.world().resource::<AssetServer>().clone();
         let handle = asset_server.load::<ScenePatch>("a.bsn");
         run_app_until(&mut app, || asset_server.is_loaded(&handle));
-        let patch = app.world().get::<ScenePatch>(handle.entity()).unwrap();
-        assert!(patch.resolved.is_some());
+        assert!(app
+            .world()
+            .get::<ResolvedSceneRoot>(handle.entity())
+            .is_some());
 
         let world = app.world_mut();
         let id = world.spawn_scene(b()).unwrap().id();

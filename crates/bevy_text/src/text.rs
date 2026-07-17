@@ -383,6 +383,7 @@ pub struct TextFont {
     /// or a generic font category that is resolved using Parley's
     /// [`FontContext`](`parley::FontContext`) which is accessible through the
     /// [`FontCx`](`crate::FontCx`) resource.
+    #[template]
     pub font: FontSource,
     /// The vertical height of rasterized glyphs in the font atlas in pixels.
     ///
