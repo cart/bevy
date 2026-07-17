@@ -1,5 +1,7 @@
 use crate::{DynamicWorldBuilder, WorldAsset, WorldInstanceSpawnError};
 use bevy_asset::Asset;
+#[cfg(feature = "serialize")]
+use bevy_asset::AssetServer;
 use bevy_ecs::reflect::ReflectResource;
 use bevy_ecs::{
     entity::{Entity, EntityHashMap, SceneEntityMapper},
@@ -226,8 +228,12 @@ impl DynamicWorld {
     /// [`WorldAssetLoader`]: crate::WorldAssetLoader
     /// [Rusty Object Notation (RON)]: https://crates.io/crates/ron
     #[cfg(feature = "serialize")]
-    pub fn serialize(&self, registry: &TypeRegistry) -> Result<String, ron::Error> {
-        serialize_ron(DynamicWorldSerializer::new(self, registry))
+    pub fn serialize(
+        &self,
+        registry: &TypeRegistry,
+        asset_server: &AssetServer,
+    ) -> Result<String, ron::Error> {
+        serialize_ron(DynamicWorldSerializer::new(self, registry, asset_server))
     }
 }
 

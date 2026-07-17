@@ -247,9 +247,7 @@ impl<S: Scene> SceneList for SharedEntity<S> {
     ) -> Result<(), ResolveSceneError> {
         let mut resolved_scene = ResolvedScene::default();
         self.0.resolve(context, &mut resolved_scene)?;
-        list.shared_entities
-            .entities
-            .push((AtomicU64::default(), resolved_scene));
+        list.shared_entities.push(resolved_scene);
         Ok(())
     }
 

@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Clone, PartialEq, Eq, Hash, Reflect)]
+#[derive(Clone, PartialEq, Eq, Hash, Reflect, Debug)]
 pub enum AssetReference<'a> {
     Default,
     Path(AssetPath<'a>),

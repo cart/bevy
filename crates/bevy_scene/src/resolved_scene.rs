@@ -13,7 +13,7 @@ use bevy_ecs::{
 use bevy_platform::collections::HashSet;
 use bevy_utils::TypeIdMap;
 use core::any::{Any, TypeId};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::RwLock;
 use thiserror::Error;
 
 /// A final "spawnable" root [`ResolvedScene`].
@@ -129,7 +129,7 @@ impl ResolvedSceneListRoot {
         let mut entities = Vec::new();
         let mut entity_references = SceneEntityReferences::default();
         let mut bundle_scratch = BundleScratch::default();
-        if !self.scene_list.shared_entities.entities.is_empty() {
+        if !self.scene_list.shared_entities.scenes.is_empty() {
             self.scene_list.shared_entities.apply(
                 world,
                 &mut entity_references,
@@ -241,7 +241,7 @@ impl ResolvedScene {
         bundle_scratch: &mut BundleScratch,
         writer_ops: impl FnOnce(&mut TemplateContext, &mut BundleWriter),
     ) -> Result<(), ApplySceneError> {
-        if !self.shared_entities.entities.is_empty() {
+        if !self.shared_entities.scenes.is_empty() {
             context
                 .entity
                 .world_scope(|world| -> Result<(), ApplySceneError> {
@@ -776,35 +776,38 @@ impl SkipTemplate for () {
 
 #[derive(Default, Debug)]
 pub struct SharedEntities {
-    pub(crate) entities: Vec<(AtomicU64, ResolvedScene)>,
-    pub(crate) are_spawned: AtomicBool,
+    entities: RwLock<Vec<Entity>>,
+    scenes: Vec<ResolvedScene>,
 }
 
 impl SharedEntities {
+    pub fn push(&mut self, scene: ResolvedScene) {
+        self.scenes.push(scene);
+    }
+
     pub(crate) fn apply(
         &self,
         world: &mut World,
         entity_references: &mut SceneEntityReferences,
         bundle_scratch: &mut BundleScratch,
     ) -> Result<(), ApplySceneError> {
-        if !self.entities.is_empty() {
-            if self.are_spawned.load(Ordering::Relaxed) {
-                for (atomic_id, scene) in self.entities.iter() {
-                    for reference in scene.entity_references.iter().copied() {
-                        let entity = Entity::from_bits(atomic_id.load(Ordering::Relaxed));
-                        entity_references.set(reference, entity);
-                    }
-                }
-            } else {
-                self.are_spawned.store(true, Ordering::Relaxed);
-                for (atomic_id, scene) in self.entities.iter() {
-                    let mut context = TemplateContext {
-                        entity: &mut world.spawn_empty(),
-                        entity_references,
-                    };
+        let entities = self.entities.read().unwrap();
+        if entities.len() != self.scenes.len() {
+            drop(entities);
+            let mut entities = self.entities.write().unwrap();
+            for scene in self.scenes[entities.len()..].iter() {
+                let mut context = TemplateContext {
+                    entity: &mut world.spawn_empty(),
+                    entity_references,
+                };
 
-                    atomic_id.store(context.entity.id().to_bits(), Ordering::Relaxed);
-                    scene.apply(&mut context, bundle_scratch)?;
+                entities.push(context.entity.id());
+                scene.apply(&mut context, bundle_scratch)?;
+            }
+        } else {
+            for (entity, scene) in entities.iter().copied().zip(self.scenes.iter()) {
+                for reference in scene.entity_references.iter().copied() {
+                    entity_references.set(reference, entity);
                 }
             }
         }
