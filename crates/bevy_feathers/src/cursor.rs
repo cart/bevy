@@ -34,7 +34,7 @@ pub struct DefaultCursor(pub EntityCursor);
 pub enum EntityCursor {
     #[cfg(feature = "custom_cursor")]
     /// Custom cursor image.
-    Custom(CustomCursor),
+    Custom(#[template] CustomCursor),
     #[default]
     /// System provided cursor icon.
     System(SystemCursorIcon),

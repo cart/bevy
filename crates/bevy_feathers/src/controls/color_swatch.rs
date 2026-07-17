@@ -114,7 +114,7 @@ pub fn color_swatch_bundle<B: Bundle>(overrides: B) -> impl Bundle {
         FeathersColorSwatch,
         ColorSwatchValue::default(),
         AlphaPattern,
-        MaterialNode::<AlphaPatternMaterial>(Handle::default()),
+        MaterialNode::<AlphaPatternMaterial>(todo!("deprecate this")),
         overrides,
         children![(
             Node {

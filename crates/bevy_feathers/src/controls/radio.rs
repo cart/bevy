@@ -153,7 +153,7 @@ pub fn radio_bundle<C: SpawnableList<ChildOf> + Send + Sync + 'static, B: Bundle
         InheritableFont {
             font_size: size::MEDIUM_FONT,
             weight: FontWeight::NORMAL,
-            ..Default::default()
+            ..todo!("deprecate this")
         },
         overrides,
         Children::spawn((

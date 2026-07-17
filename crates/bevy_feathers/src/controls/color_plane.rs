@@ -1,5 +1,5 @@
 use bevy_app::{Plugin, PostUpdate};
-use bevy_asset::{Asset, Assets};
+use bevy_asset::{Asset, AssetCommands};
 use bevy_ecs::{
     bundle::Bundle,
     children,
@@ -245,7 +245,7 @@ fn update_plane_color(
     q_children: Query<&Children>,
     q_material_node: Query<&MaterialNode<ColorPlaneMaterial>>,
     mut q_node: Query<&mut Node>,
-    mut r_materials: ResMut<Assets<ColorPlaneMaterial>>,
+    mut r_materials: Query<&mut ColorPlaneMaterial>,
     mut commands: Commands,
 ) {
     for (plane_ent, plane, plane_value) in q_color_plane.iter() {
@@ -259,14 +259,14 @@ fn update_plane_color(
 
         if let Ok(material_node) = q_material_node.get(*inner_ent) {
             // Node component exists, update it
-            if let Some(mut material) = r_materials.get_mut(material_node.id()) {
+            if let Ok(mut material) = r_materials.get_mut(material_node.id()) {
                 // Update properties
                 material.plane = *plane;
                 material.fixed_channel = plane_value.0.z;
             }
         } else {
             // Insert new node component
-            let material = r_materials.add(ColorPlaneMaterial {
+            let material = commands.spawn_asset(ColorPlaneMaterial {
                 plane: *plane,
                 fixed_channel: plane_value.0.z,
                 #[cfg(all(feature = "webgl", target_arch = "wasm32", not(feature = "webgpu")))]

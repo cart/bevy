@@ -350,7 +350,7 @@ pub fn color_slider_bundle<B: Bundle>(
                 },
                 ColorSliderTrack,
                 AlphaPattern,
-                MaterialNode::<AlphaPatternMaterial>(Handle::default()),
+                MaterialNode::<AlphaPatternMaterial>(todo!("deprecate this")),
                 children![
                     // Left endcap
                     (

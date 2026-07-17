@@ -190,7 +190,7 @@ pub fn button_bundle<C: SpawnableList<ChildOf> + Send + Sync + 'static, B: Bundl
         InheritableFont {
             font_size: size::MEDIUM_FONT,
             weight: FontWeight::NORMAL,
-            ..Default::default()
+            ..todo!("deprecate this")
         },
         overrides,
         Children::spawn(children),

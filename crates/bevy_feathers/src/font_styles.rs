@@ -9,18 +9,19 @@ use bevy_ecs::{
     system::{Commands, Query},
     template::FromTemplate,
 };
-use bevy_reflect::{prelude::ReflectDefault, Reflect};
+use bevy_reflect::Reflect;
 use bevy_text::{Font, FontSize, FontWeight, TextFont};
 
 use crate::theme::ThemedText;
 
 /// A component which, when inserted on an entity, will load the given font and propagate it
 /// downward to any child text entity that has the [`ThemedText`] marker.
-#[derive(Component, Default, Clone, Debug, Reflect, FromTemplate)]
-#[reflect(Component, Default)]
+#[derive(Component, Clone, Debug, Reflect, FromTemplate)]
+#[reflect(Component)]
 #[require(ThemedText, PropagateOver::<TextFont>)]
 pub struct InheritableFont {
     /// The font handle.
+    #[template]
     pub font: Handle<Font>,
     /// The desired font size.
     pub font_size: FontSize,

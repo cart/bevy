@@ -194,7 +194,7 @@ pub fn slider_bundle<B: Bundle>(props: FeathersSliderProps, overrides: B) -> imp
             InheritableFont {
                 font_size: size::SMALL_FONT,
                 weight: FontWeight::NORMAL,
-                ..Default::default()
+                ..todo!("deprecate this")
             },
             children![(Text::new("10.0"), ThemedText, SliderValueText,)],
         )],
