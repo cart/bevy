@@ -2,7 +2,7 @@
 
 use crate::{DynamicEntity, DynamicWorld};
 use bevy_asset::{
-    EphemeralHandleBehavior, HandleDeserializeProcessor, HandleSerializeProcessor, LoadFromPath,
+    EphemeralHandleBehavior, HandleDeserializeProcessor, HandleSerializeProcessor, LoadErased,
 };
 use bevy_ecs::entity::Entity;
 use bevy_platform::collections::HashSet;
@@ -222,7 +222,7 @@ pub struct WorldDeserializer<'a> {
     /// Type registry in which the components and resources types used in the world to deserialize are registered.
     pub type_registry: &'a TypeRegistry,
     /// The [`LoadFromPath`] implementation allowing us to deserialize asset handles.
-    pub load_from_path: &'a mut dyn LoadFromPath,
+    pub load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> DeserializeSeed<'de> for WorldDeserializer<'a> {
@@ -245,7 +245,7 @@ impl<'a, 'de> DeserializeSeed<'de> for WorldDeserializer<'a> {
 
 struct WorldVisitor<'a> {
     type_registry: &'a TypeRegistry,
-    load_from_path: &'a mut dyn LoadFromPath,
+    load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> Visitor<'de> for WorldVisitor<'a> {
@@ -323,7 +323,7 @@ pub struct WorldEntitiesDeserializer<'a> {
     /// Type registry in which the component types used by the entities to deserialize are registered.
     pub type_registry: &'a TypeRegistry,
     /// The [`LoadFromPath`] implementation allowing us to deserialize asset handles.
-    pub load_from_path: &'a mut dyn LoadFromPath,
+    pub load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> DeserializeSeed<'de> for WorldEntitiesDeserializer<'a> {
@@ -342,7 +342,7 @@ impl<'a, 'de> DeserializeSeed<'de> for WorldEntitiesDeserializer<'a> {
 
 struct WorldEntitiesVisitor<'a> {
     type_registry: &'a TypeRegistry,
-    load_from_path: &'a mut dyn LoadFromPath,
+    load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> Visitor<'de> for WorldEntitiesVisitor<'a> {
@@ -377,7 +377,7 @@ pub struct WorldEntityDeserializer<'a> {
     /// Type registry in which the component types used by the entity to deserialize are registered.
     pub type_registry: &'a TypeRegistry,
     /// The [`LoadFromPath`] implementation allowing us to deserialize asset handles.
-    pub load_from_path: &'a mut dyn LoadFromPath,
+    pub load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> DeserializeSeed<'de> for WorldEntityDeserializer<'a> {
@@ -402,7 +402,7 @@ impl<'a, 'de> DeserializeSeed<'de> for WorldEntityDeserializer<'a> {
 struct WorldEntityVisitor<'a> {
     entity: Entity,
     registry: &'a TypeRegistry,
-    load_from_path: &'a mut dyn LoadFromPath,
+    load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> Visitor<'de> for WorldEntityVisitor<'a> {
@@ -464,7 +464,7 @@ pub struct WorldMapDeserializer<'a> {
     /// Type registry in which the types of the values to deserialize are registered.
     pub registry: &'a TypeRegistry,
     /// The [`LoadFromPath`] implementation allowing us to deserialize asset handles.
-    pub load_from_path: &'a mut dyn LoadFromPath,
+    pub load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> DeserializeSeed<'de> for WorldMapDeserializer<'a> {
@@ -483,7 +483,7 @@ impl<'a, 'de> DeserializeSeed<'de> for WorldMapDeserializer<'a> {
 
 struct WorldMapVisitor<'a> {
     registry: &'a TypeRegistry,
-    load_from_path: &'a mut dyn LoadFromPath,
+    load_from_path: &'a mut dyn LoadErased,
 }
 
 impl<'a, 'de> Visitor<'de> for WorldMapVisitor<'a> {
@@ -525,7 +525,7 @@ impl<'a, 'de> Visitor<'de> for WorldMapVisitor<'a> {
                 registration,
                 self.registry,
                 &mut HandleDeserializeProcessor {
-                    load_from_path: self.load_from_path,
+                    load_erased: self.load_from_path,
                 },
             ))?;
 
@@ -551,7 +551,7 @@ mod tests {
         serde::{DynamicWorldSerializer, WorldDeserializer},
         DynamicWorld, DynamicWorldBuilder,
     };
-    use bevy_asset::{Asset, AssetPath, Handle, LoadFromPath, ReflectAsset, UntypedHandle};
+    use bevy_asset::{Asset, AssetPath, Handle, LoadErased, ReflectAsset, UntypedHandle};
     use bevy_ecs::{
         entity::{Entity, EntityHashMap},
         prelude::{Component, ReflectComponent, ReflectResource, Resource, World},
@@ -721,12 +721,8 @@ mod tests {
     /// A fake handle creator for the purposes of testing world loading.
     struct FakeHandleCreator;
 
-    impl LoadFromPath for FakeHandleCreator {
-        fn load_from_path_erased(
-            &mut self,
-            _type_id: TypeId,
-            _path: AssetPath<'static>,
-        ) -> UntypedHandle {
+    impl LoadErased for FakeHandleCreator {
+        fn load_erased(&mut self, _type_id: TypeId, _path: AssetPath<'static>) -> UntypedHandle {
             unimplemented!()
         }
     }

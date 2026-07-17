@@ -723,8 +723,8 @@ impl<'a> LoadContext<'a> {
     /// a load will not be kicked off automatically. It is then the calling context's responsibility to begin a load if necessary.
     ///
     /// If you need to override asset settings, asset type, or load directly, please see [`LoadContext::load_builder`].
-    pub fn load<'b, A: Asset>(&mut self, path: impl Into<AssetPath<'b>>) -> Handle<A> {
-        self.load_builder().load(path)
+    pub fn load<'b, A: Asset>(&mut self, reference: impl Into<AssetReference<'b>>) -> Handle<A> {
+        self.load_builder().load(reference)
     }
 }
 

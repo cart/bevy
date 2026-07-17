@@ -1047,6 +1047,11 @@ impl AssetServer {
         matches!(self.load_state(entity), LoadState::Loaded)
     }
 
+    pub fn loaded_type_id(&self, entity: impl Into<Entity>) -> Option<TypeId> {
+        self.read_infos()
+            .get(entity.into())
+            .and_then(|i| i.loaded_type_id)
+    }
     /// Convenience method that returns true if the asset and all of its direct dependencies have been loaded.
     pub fn is_loaded_with_direct_dependencies(&self, entity: impl Into<Entity>) -> bool {
         matches!(
@@ -1620,10 +1625,13 @@ impl<'a> LoadBuilder<'a> {
 
     /// Same as [`load`](Self::load), but without a type hint, meaning the default loader will be used.
     #[must_use = "not using the returned strong handle may result in the unexpected release of the asset"]
-    pub fn load_untyped<'b>(mut self, asset_path: impl Into<AssetPath<'b>>) -> UntypedHandle {
+    pub fn load_untyped<'b>(mut self, reference: impl Into<AssetReference<'b>>) -> UntypedHandle {
         let meta_transform = self.meta_transform.take();
+        let (path, uuid, is_default) = reference.into().into_owned().split();
         self.load_internal(AssetData {
-            path: Some(asset_path.into().into_owned()),
+            path,
+            uuid,
+            is_default,
             meta_transform,
             ..Default::default()
         })
@@ -1635,11 +1643,14 @@ impl<'a> LoadBuilder<'a> {
     pub fn load_erased<'b>(
         mut self,
         type_id: TypeId,
-        asset_path: impl Into<AssetPath<'b>>,
+        reference: impl Into<AssetReference<'b>>,
     ) -> UntypedHandle {
         let meta_transform = self.meta_transform.take();
+        let (path, uuid, is_default) = reference.into().into_owned().split();
         self.load_internal(AssetData {
-            path: Some(asset_path.into().into_owned()),
+            path,
+            uuid,
+            is_default,
             type_id_hint: Some(type_id),
             meta_transform,
             ..Default::default()
@@ -2166,4 +2177,47 @@ pub enum WriteDefaultMetaError {
     IoErrorFromExistingMetaCheck(Arc<std::io::Error>),
     #[error("encountered HTTP status {0} when reading the existing meta file")]
     HttpErrorFromExistingMetaCheck(u16),
+}
+
+/// A trait for loading an asset.
+///
+/// There are several ways to load an asset. This trait allows deserializing in many contexts
+/// depending on how assets can be loaded. Note all these loads are deferred, and must have a
+/// concrete type.
+pub trait LoadErased {
+    /// Initiates the load for the given expected type ID, and the path.
+    ///
+    /// See [`LoadBuilder::load_erased`](crate::LoadBuilder::load_erased) for more.
+    fn load_erased(&mut self, type_id: TypeId, reference: AssetReference<'static>)
+        -> UntypedHandle;
+}
+
+impl LoadErased for LoadContext<'_> {
+    fn load_erased(
+        &mut self,
+        type_id: TypeId,
+        reference: AssetReference<'static>,
+    ) -> UntypedHandle {
+        self.load_builder().load_erased(type_id, reference)
+    }
+}
+
+impl LoadErased for AssetServer {
+    fn load_erased(
+        &mut self,
+        type_id: TypeId,
+        reference: AssetReference<'static>,
+    ) -> UntypedHandle {
+        self.load_builder().load_erased(type_id, reference)
+    }
+}
+
+impl LoadErased for &AssetServer {
+    fn load_erased(
+        &mut self,
+        type_id: TypeId,
+        reference: AssetReference<'static>,
+    ) -> UntypedHandle {
+        self.load_builder().load_erased(type_id, reference)
+    }
 }

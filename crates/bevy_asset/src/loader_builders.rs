@@ -4,8 +4,8 @@
 use crate::{
     io::Reader,
     meta::{loader_settings_meta_transform, MetaTransform, Settings},
-    Asset, AssetData, AssetPath, ErasedAssetLoader, ErasedLoadedAsset, Handle, LoadContext,
-    LoadDirectError, LoadedAsset, RequestedHandleTypeMismatchError, UntypedHandle,
+    Asset, AssetData, AssetPath, AssetReference, ErasedAssetLoader, ErasedLoadedAsset, Handle,
+    LoadContext, LoadDirectError, LoadedAsset, RequestedHandleTypeMismatchError, UntypedHandle,
 };
 use alloc::{boxed::Box, sync::Arc};
 use core::any::TypeId;
@@ -88,13 +88,16 @@ impl<'ctx, 'builder> NestedLoadBuilder<'ctx, 'builder> {
     ///
     /// This is a "deferred" load, meaning the caller will not have access to the loaded data; to
     /// access the loaded data, use [`Self::load_value`].
-    pub fn load<'a, A: Asset>(mut self, path: impl Into<AssetPath<'a>>) -> Handle<A> {
+    pub fn load<'a, A: Asset>(mut self, reference: impl Into<AssetReference<'a>>) -> Handle<A> {
         let meta_transform = self.meta_transform.take();
+        let (path, uuid, is_default) = reference.into().into_owned().split();
         // The doc comment slightly lies: if `LoadContext::should_load_dependencies` is true, the
         // load will not be started, but the matching handle will still be returned. The caller
         // can't tell the difference.
         self.load_internal(AssetData {
-            path: Some(path.into().into_owned()),
+            path,
+            uuid,
+            is_default,
             meta_transform,
             ..AssetData::new::<A>()
         })
@@ -108,12 +111,15 @@ impl<'ctx, 'builder> NestedLoadBuilder<'ctx, 'builder> {
     pub fn load_erased<'a>(
         mut self,
         type_id: TypeId,
-        path: impl Into<AssetPath<'a>>,
+        reference: impl Into<AssetReference<'a>>,
     ) -> UntypedHandle {
         let meta_transform = self.meta_transform.take();
+        let (path, uuid, is_default) = reference.into().into_owned().split();
         self.load_internal(AssetData {
             type_id_hint: Some(type_id),
-            path: Some(path.into().into_owned()),
+            path,
+            uuid,
+            is_default,
             meta_transform,
             ..Default::default()
         })
@@ -123,10 +129,13 @@ impl<'ctx, 'builder> NestedLoadBuilder<'ctx, 'builder> {
     ///
     /// This is a "deferred" load, meaning the caller will not have access to the loaded data; to
     /// access the loaded data, use [`Self::load_erased_value`].
-    pub fn load_untyped<'a>(mut self, path: impl Into<AssetPath<'a>>) -> UntypedHandle {
+    pub fn load_untyped<'a>(mut self, reference: impl Into<AssetReference<'a>>) -> UntypedHandle {
         let meta_transform = self.meta_transform.take();
+        let (path, uuid, is_default) = reference.into().into_owned().split();
         self.load_internal(AssetData {
-            path: Some(path.into().into_owned()),
+            path,
+            uuid,
+            is_default,
             meta_transform,
             ..Default::default()
         })

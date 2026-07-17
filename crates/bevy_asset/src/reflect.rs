@@ -12,7 +12,7 @@ use bevy_reflect::{
 };
 
 use crate::{
-    meta::Empty, Asset, AssetId, AssetPath, AssetServer, DirectAssetAccessExt, Handle, LoadContext,
+    Asset, AssetPath, AssetReference, AssetServer, DirectAssetAccessExt, Handle, LoadErased,
     UntypedHandle,
 };
 
@@ -157,6 +157,7 @@ impl<A: Asset> CreateTypeData<Handle<A>> for ReflectHandle {
 pub struct HandleSerializeProcessor {
     /// How ephemeral handles are dealt with.
     pub ephemeral_handle_behavior: EphemeralHandleBehavior,
+    pub asset_server: AssetServer,
 }
 
 /// Specifies the action that will be taken when attempting to serialize an ephemeral handle.
@@ -208,14 +209,24 @@ impl ReflectSerializerProcessor for HandleSerializeProcessor {
                             return Err(SerializingEphemeralHandleError(handle.clone()))
                         }
                     }
-                    HandleReference::Uuid(AssetId::<Empty>::DEFAULT_UUID)
+                    HandleReference::Default
                 }
                 Some(path) => HandleReference::Path(path.clone_owned()),
             })
         }
 
         if let Some(untyped_handle) = value_reflect.downcast_ref::<UntypedHandle>() {
-            let Some(asset_registration) = registry.get(untyped_handle.type_id()) else {
+            let type_id = if let Some(type_id) = untyped_handle.type_id_hint() {
+                type_id
+            } else if let Some(type_id) = self.asset_server.loaded_type_id(untyped_handle) {
+                type_id
+            } else {
+                return Err(S::Error::custom(format!(
+                    "Cannot serialize untyped handles that don't have a known type id {:?}. Either provide a type hint when requesting the handle, or wait for it to load before serializing",
+                    untyped_handle
+                )));
+            };
+            let Some(asset_registration) = registry.get(type_id) else {
                 return Err(S::Error::custom(format!(
                     "Missing type registration for asset type of handle {:?}. Ensure the asset implements Reflect, includes #[reflect(Asset)], and is registered",
                     untyped_handle
@@ -266,49 +277,6 @@ impl ReflectSerializerProcessor for HandleSerializeProcessor {
     }
 }
 
-/// A trait for loading an asset.
-///
-/// There are several ways to load an asset. This trait allows deserializing in many contexts
-/// depending on how assets can be loaded. Note all these loads are deferred, and must have a
-/// concrete type.
-pub trait LoadFromPath {
-    /// Initiates the load for the given expected type ID, and the path.
-    ///
-    /// See [`LoadBuilder::load_erased`](crate::LoadBuilder::load_erased) for more.
-    fn load_from_path_erased(&mut self, type_id: TypeId, path: AssetPath<'static>)
-        -> UntypedHandle;
-}
-
-impl LoadFromPath for LoadContext<'_> {
-    fn load_from_path_erased(
-        &mut self,
-        type_id: TypeId,
-        path: AssetPath<'static>,
-    ) -> UntypedHandle {
-        self.load_builder().load_erased(type_id, path)
-    }
-}
-
-impl LoadFromPath for AssetServer {
-    fn load_from_path_erased(
-        &mut self,
-        type_id: TypeId,
-        path: AssetPath<'static>,
-    ) -> UntypedHandle {
-        self.load_builder().load_erased(type_id, path)
-    }
-}
-
-impl LoadFromPath for &AssetServer {
-    fn load_from_path_erased(
-        &mut self,
-        type_id: TypeId,
-        path: AssetPath<'static>,
-    ) -> UntypedHandle {
-        self.load_builder().load_erased(type_id, path)
-    }
-}
-
 /// A [`ReflectDeserializerProcessor`] that manually deserializes [`Handle`] and [`UntypedHandle`],
 /// and passes through for all other types.
 ///
@@ -320,7 +288,7 @@ impl LoadFromPath for &AssetServer {
 /// Use [`HandleSerializeProcessor`] to serialize data for this processor.
 pub struct HandleDeserializeProcessor<'a> {
     /// The loader to load asset paths and retrieve their handles.
-    pub load_from_path: &'a mut dyn LoadFromPath,
+    pub load_erased: &'a mut dyn LoadErased,
 }
 
 impl ReflectDeserializerProcessor for HandleDeserializeProcessor<'_> {
@@ -343,12 +311,10 @@ impl ReflectDeserializerProcessor for HandleDeserializeProcessor<'_> {
                 )));
             };
             let type_id = asset_type.type_id();
-            return Ok(Ok(Box::new(match typed_handle_reference.reference {
-                HandleReference::Path(path) => {
-                    self.load_from_path.load_from_path_erased(type_id, path)
-                }
-                HandleReference::Uuid(uuid) => todo!("Re-add UUID support"),
-            })));
+            return Ok(Ok(Box::new(
+                self.load_erased
+                    .load_erased(type_id, typed_handle_reference.reference.into()),
+            )));
         }
 
         let Some(reflect_handle) = registration.data::<ReflectHandle>() else {
@@ -362,20 +328,32 @@ impl ReflectDeserializerProcessor for HandleDeserializeProcessor<'_> {
         let handle_reference = HandleReference::deserialize(deserializer)?;
 
         let type_id = reflect_handle.asset_type_id;
-        Ok(Ok(reflect_handle.typed(match handle_reference {
-            HandleReference::Path(path) => self.load_from_path.load_from_path_erased(type_id, path),
-            HandleReference::Uuid(uuid) => todo!("Re-add UUID support"),
-        })))
+        Ok(Ok(reflect_handle.typed(
+            self.load_erased
+                .load_erased(type_id, handle_reference.into()),
+        )))
     }
 }
 
 /// The "stable" data of a handle that can be serialized and deserialized.
 #[derive(Serialize, Deserialize)]
 pub enum HandleReference {
+    /// The default handle
+    Default,
     /// The handle references an asset path that needs to be loaded.
     Path(AssetPath<'static>),
     /// The handle references a constant [`Uuid`].
     Uuid(Uuid),
+}
+
+impl From<HandleReference> for AssetReference<'static> {
+    fn from(value: HandleReference) -> Self {
+        match value {
+            HandleReference::Default => AssetReference::Default,
+            HandleReference::Path(asset_path) => AssetReference::Path(asset_path),
+            HandleReference::Uuid(uuid) => AssetReference::Uuid(uuid),
+        }
+    }
 }
 
 /// The "stable" data of a handle whose asset type information is stored internally.
@@ -516,6 +494,7 @@ mod tests {
             let type_registry = type_registry.read();
             let processor = HandleSerializeProcessor {
                 ephemeral_handle_behavior: EphemeralHandleBehavior::Silent,
+                asset_server,
             };
             let reflect_serializer =
                 TypedReflectSerializer::with_processor(&stuff, &type_registry, &processor);
@@ -538,10 +517,11 @@ mod tests {
 
         let type_registry = app.world().resource::<AppTypeRegistry>().0.clone();
         let mut asset_server = app.world().resource::<AssetServer>().clone();
+        let default_other = asset_server.add_default(OtherAsset);
 
         let type_registry = type_registry.read();
         let mut processor = HandleDeserializeProcessor {
-            load_from_path: &mut asset_server,
+            load_erased: &mut asset_server,
         };
         let reflect_deserializer = TypedReflectDeserializer::with_processor(
             type_registry.get(TypeId::of::<Stuff>()).unwrap(),
@@ -559,8 +539,7 @@ mod tests {
         .unwrap();
 
         // The ephemeral handle was replaced by the default handle.
-        todo!("Check this");
-        // assert_eq!(stuff.ephemeral, Handle::default());
+        assert_eq!(stuff.ephemeral, default_other);
 
         // The deserializer should have caused the handles to start loading.
         run_app_until(&mut app, |_| {

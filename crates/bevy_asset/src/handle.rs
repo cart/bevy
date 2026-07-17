@@ -454,6 +454,13 @@ impl Hash for UntypedHandle {
     }
 }
 
+impl Into<Entity> for &UntypedHandle {
+    #[inline]
+    fn into(self) -> Entity {
+        self.entity()
+    }
+}
+
 impl Debug for UntypedHandle {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Handle{{ id: {}", self.entity(),)?;
@@ -657,41 +664,6 @@ mod tests {
             from_reflect_handle.strong_count(),
             4,
             "Converting the reflected value back to a handle should increase the strong count to 4"
-        );
-    }
-
-    #[test]
-    fn handle_from_reflect_verifies_type_id() {
-        #[derive(Reflect, Asset)]
-        struct A;
-        #[derive(Reflect, Asset)]
-        struct B;
-
-        let mut app = create_app().0;
-        app.init_asset::<A>().init_asset::<B>();
-
-        let handle_a = app.world_mut().spawn_asset(A);
-
-        let dynamic_handle_a = handle_a.to_dynamic();
-        let reflected_handle_a = handle_a.as_partial_reflect();
-
-        let handle_b_from_reflect_dynamic: Option<Handle<B>> =
-            FromReflect::from_reflect(&*dynamic_handle_a);
-        let handle_b_from_reflect: Option<Handle<B>> =
-            FromReflect::from_reflect(reflected_handle_a);
-        let handle_a_from_reflect: Option<Handle<A>> =
-            FromReflect::from_reflect(reflected_handle_a);
-        assert!(
-            handle_b_from_reflect.is_none(),
-            "Handle<B> should not be constructible from reflected Handle<A>"
-        );
-        assert!(
-            handle_b_from_reflect_dynamic.is_none(),
-            "Handle<B> should not be constructible from dynamic Handle<A>"
-        );
-        assert!(
-            handle_a_from_reflect.is_some(),
-            "Handle<A> should be constructible from reflected Handle<A>"
         );
     }
 }
