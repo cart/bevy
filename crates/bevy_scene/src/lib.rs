@@ -705,6 +705,7 @@
 //! # }
 //! #[derive(SceneComponent, FromTemplate)]
 //! struct Player {
+//!     #[template]
 //!     image: Handle<Image>,
 //! }
 //!
@@ -1447,7 +1448,7 @@ mod tests {
     }
 
     #[derive(Component, FromTemplate)]
-    struct Reference(Entity);
+    struct Reference(#[template] Entity);
 
     #[test]
     fn bsn_name_references() {
@@ -1921,6 +1922,7 @@ mod tests {
             x: u32,
             y: u32,
             z: u32,
+            #[template]
             nested: Bar,
         }
 
@@ -2023,7 +2025,7 @@ mod tests {
         let world = app.world_mut();
 
         #[derive(Component, FromTemplate, PartialEq, Eq, Debug)]
-        struct Sprite(Handle<Image>);
+        struct Sprite(#[template] Handle<Image>);
 
         fn scene() -> impl Scene {
             bsn! {
@@ -2106,6 +2108,7 @@ mod tests {
 
         #[derive(Component, FromTemplate, PartialEq, Eq, Debug)]
         struct Foo<T: FromTemplate<Template: Default + Template<Output = T>>> {
+            #[template]
             value: T,
             number: u32,
         }
@@ -2418,7 +2421,7 @@ mod tests {
     #[test]
     fn tuple_scene_component_name_reference() {
         #[derive(SceneComponent, FromTemplate)]
-        struct Widget(pub Entity);
+        struct Widget(#[template] pub Entity);
 
         impl Widget {
             fn scene() -> impl Scene {
@@ -2446,6 +2449,7 @@ mod tests {
     fn named_scene_component_name_reference() {
         #[derive(SceneComponent, FromTemplate)]
         struct Widget {
+            #[template]
             entity: Entity,
         }
 
@@ -2477,7 +2481,7 @@ mod tests {
     fn scene_function_name_reference() {
         use bevy_ecs::template::EntityTemplate;
         #[derive(Component, FromTemplate)]
-        struct Reference(Entity);
+        struct Reference(#[template] Entity);
         fn widget(entity: EntityTemplate) -> impl Scene {
             bsn! {
                 Reference(entity)
@@ -2533,7 +2537,7 @@ mod tests {
     fn scene_component_prop_name_reference() {
         use bevy_ecs::template::EntityTemplate;
         #[derive(Component, FromTemplate)]
-        struct Reference(Entity);
+        struct Reference(#[template] Entity);
 
         #[derive(SceneComponent, Clone, Default)]
         #[scene(WidgetProps)]
@@ -2718,7 +2722,7 @@ mod tests {
         }
         fn other_scene() -> impl Scene {}
         #[derive(Component, FromTemplate)]
-        struct Link(Entity);
+        struct Link(#[template] Entity);
         #[derive(SceneComponent, FromTemplate)]
         #[scene(scenecomponentscene(Props))]
         struct MySceneComponent {
@@ -2795,6 +2799,7 @@ mod tests {
     fn scene_with_oneshot_system() {
         #[derive(Component, FromTemplate)]
         struct Callback {
+            #[template]
             callback: SystemHandle<(), ()>,
         }
 
@@ -2963,7 +2968,7 @@ mod tests {
         let world = app.world_mut();
 
         #[derive(Component, FromTemplate)]
-        struct Ref(Entity);
+        struct Ref(#[template] Entity);
 
         let patch = bsn! {
             #patch
@@ -2994,7 +2999,7 @@ mod tests {
         let world = app.world_mut();
 
         #[derive(Component, FromTemplate)]
-        struct Ref(Entity);
+        struct Ref(#[template] Entity);
 
         let patch = bsn! {
             #patch
