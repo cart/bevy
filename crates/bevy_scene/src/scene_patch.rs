@@ -2,16 +2,9 @@ use crate::{
     ApplySceneError, ResolveSceneError, ResolvedSceneListRoot, ResolvedSceneRoot, Scene,
     SceneDependencies, SceneList,
 };
-use alloc::sync::Arc;
 use bevy_asset::{Asset, AssetServer, Handle, LoadErased, UntypedHandle};
 use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::{
-    component::Component,
-    entity::Entity,
-    system::Query,
-    template::FromTemplate,
-    world::{EntityWorldMut, World},
-};
+use bevy_ecs::{component::Component, system::Query, template::FromTemplate};
 use bevy_reflect::TypePath;
 use thiserror::Error;
 

@@ -2,7 +2,6 @@ use crate::{
     ResolvedSceneListRoot, ResolvedSceneRoot, Scene, SceneList, SceneListPatch, ScenePatch,
     ScenePatchInstance, SpawnSceneError,
 };
-use alloc::sync::Arc;
 use bevy_asset::{AssetEvent, AssetServer, Handle};
 use bevy_ecs::{
     bundle::BundleScratch, message::MessageCursor, prelude::*, relationship::Relationship,

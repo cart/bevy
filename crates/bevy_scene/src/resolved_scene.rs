@@ -59,11 +59,17 @@ impl ResolvedSceneRoot {
         }
     }
 
+    /// Applies this scene to the given [`EntityWorldMut`].
+    ///
+    /// This will apply all of the [`Template`]s in this root [`ResolvedScene`] to the entity. It will also
+    /// spawn all of this [`ResolvedScene`]'s related entities.
+    ///
+    /// If this root [`ResolvedScene`] includes a cached scene, that scene will be applied _first_.
     pub fn apply(&self, entity: &mut EntityWorldMut) -> Result<(), ApplySceneError> {
         self.apply_with_scratch(entity, &mut BundleScratch::default())
     }
 
-    /// Applies this scene to the given [`EntityWorldMut`].
+    /// Applies this scene to the given [`EntityWorldMut`], with the given `bundle_scratch`.
     ///
     /// This will apply all of the [`Template`]s in this root [`ResolvedScene`] to the entity. It will also
     /// spawn all of this [`ResolvedScene`]'s related entities.
@@ -91,13 +97,16 @@ impl ResolvedSceneRoot {
 /// A final "spawnable" root list of [`ResolvedScene`]s.
 #[derive(Component, Clone)]
 pub struct ResolvedSceneListRoot {
+    /// The "root" resolved scene list.
     pub scene_list: Arc<ResolvedSceneList>,
 }
 
 #[derive(Default, Debug)]
+/// A resolved [`SceneList`]. This is analogous to [`ResolvedScene`], but for a list.
 pub struct ResolvedSceneList {
     /// The root [`ResolvedScene`] list.
     pub scenes: Vec<ResolvedScene>,
+    /// The shared entities for this scene list.
     pub shared_entities: SharedEntities,
 }
 
@@ -201,6 +210,7 @@ pub struct ResolvedScene {
     /// A list of all [`SceneEntityReference`] values associated with this entity. There can be more than one if this scene uses
     /// "flattened" caching.
     pub entity_references: Vec<SceneEntityReference>,
+    /// The shared entities for this scene.
     pub shared_entities: SharedEntities,
 }
 
@@ -778,6 +788,7 @@ impl SkipTemplate for () {
     }
 }
 
+/// Manages shared entities for a scene
 #[derive(Default, Debug)]
 pub struct SharedEntities {
     entities: RwLock<Vec<Entity>>,
@@ -785,6 +796,7 @@ pub struct SharedEntities {
 }
 
 impl SharedEntities {
+    /// Add a new shared [`ResolvedScene`], which will be spawned as a shared entity.
     pub fn push(&mut self, scene: ResolvedScene) {
         self.scenes.push(scene);
     }

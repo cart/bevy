@@ -13,7 +13,6 @@ use bevy_ecs::{
     template::{FnTemplate, FromTemplate, SceneEntityReference, Template, TemplateContext},
 };
 use core::{any::TypeId, marker::PhantomData};
-use std::sync::atomic::AtomicU64;
 use thiserror::Error;
 use variadics_please::all_tuples;
 
@@ -475,6 +474,7 @@ impl Scene for NameEntityReference {
     }
 }
 
+/// Adds a given [`SceneEntityReference`] to the current [`Scene`], which can be used to identify this [`Scene`]'s spawned entity.
 pub struct AddEntityReference(pub SceneEntityReference);
 
 impl Scene for AddEntityReference {
@@ -640,6 +640,8 @@ impl<F: FnOnce(&mut ResolveContext, &mut ResolvedScene) + Send + Sync + 'static>
     }
 }
 
+/// Defines a new "shared entity" which will be spawned with the given scene. Shared entities are
+/// shared across all instances of a scene.
 pub struct SharedEntity<S: Scene>(pub S);
 
 impl<S: Scene> Scene for SharedEntity<S> {

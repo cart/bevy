@@ -913,6 +913,8 @@ impl_atomic_pod!(
     field(current_uniform_index: u32, current_uniform_index, set_current_uniform_index),
 );
 
+// TODO: with Assets as Entities, this representation is now no longer needed
+// PERF: see above
 #[derive(Clone, Copy, Default, Pod, Zeroable)]
 #[repr(C)]
 struct MeshAssetIdFlat {
@@ -925,7 +927,6 @@ struct MeshAssetIdFlat {
 struct LightmapSlabIndexFlat(u32);
 
 const MESH_ASSET_ID_FLAT_MODE_INDEX: u32 = 0;
-const MESH_ASSET_ID_FLAT_MODE_UUID: u32 = 1;
 
 impl From<AssetId<Mesh>> for MeshAssetIdFlat {
     #[inline]
