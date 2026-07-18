@@ -2,7 +2,7 @@
 use crate::{change_detection::DetectChanges, HotPatchChanges};
 use crate::{
     change_detection::Mut,
-    entity::Entity,
+    entity::{ContainsEntity, Entity, EntityHandle},
     error::BevyError,
     prelude::{FromTemplate, Template},
     system::{
@@ -145,33 +145,44 @@ impl Default for RegisteredSystemDespawner {
 /// crate when the "std" feature is enabled. If not using the default app, the
 /// "std" feature, or `bevy_app` in general, consider running this system
 /// yourself to ensure proper cleanup of registered systems.
-pub enum SystemHandle<I: SystemInput = (), O = ()> {
-    /// A strong handle keeps the system entity alive as long as the handle
-    /// (and any clones of it) exist, as long as the system entity isn't
-    /// manually despawned.
-    Strong(Arc<StrongSystemHandle>),
-    /// A weak handle does not keep the system entity alive.
-    Weak(SystemId<I, O>),
+pub struct SystemHandle<I: SystemInput = (), O = ()> {
+    handle: EntityHandle,
+    _marker: PhantomData<fn() -> (I, O)>,
 }
 
 impl<I: SystemInput, O> SystemHandle<I, O> {
-    /// Returns the [`Entity`] of the registered system associated with this handle.
+    /// Returns the entity for this handle
+    #[inline]
     pub fn entity(&self) -> Entity {
-        match self {
-            SystemHandle::Strong(strong) => strong.entity,
-            SystemHandle::Weak(weak) => weak.entity,
+        self.handle.entity()
+    }
+}
+
+impl<I: SystemInput, O> From<EntityHandle> for SystemHandle<I, O> {
+    fn from(handle: EntityHandle) -> Self {
+        Self {
+            handle,
+            _marker: PhantomData,
         }
     }
 }
 
+impl<I: SystemInput, O> core::fmt::Debug for SystemHandle<I, O> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SystemHandle")
+            .field("handle", &self.handle)
+            .field("_marker", &self._marker)
+            .finish()
+    }
+}
 impl<I: SystemInput, O> Eq for SystemHandle<I, O> {}
 
 // A manual impl is used because the trait bounds should ignore the `I` and `O` phantom parameters.
 impl<I: SystemInput, O> Clone for SystemHandle<I, O> {
     fn clone(&self) -> Self {
-        match self {
-            SystemHandle::Strong(strong) => SystemHandle::Strong(Arc::clone(strong)),
-            SystemHandle::Weak(weak) => SystemHandle::Weak(*weak),
+        Self {
+            handle: self.handle.clone(),
+            _marker: PhantomData,
         }
     }
 }
@@ -194,37 +205,7 @@ impl<I: SystemInput, O> PartialEq<SystemId<I, O>> for SystemHandle<I, O> {
 // and so that the handle can be hashed based on its entity instead of its handle type.
 impl<I: SystemInput, O> core::hash::Hash for SystemHandle<I, O> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.entity().hash(state);
-    }
-}
-
-impl<I: SystemInput, O> core::fmt::Debug for SystemHandle<I, O> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let name = if matches!(self, SystemHandle::Strong(_)) {
-            "StrongSystemHandle"
-        } else {
-            "WeakSystemHandle"
-        };
-        f.debug_tuple(name).field(&self.entity()).finish()
-    }
-}
-
-impl<I: SystemInput, O> From<SystemId<I, O>> for SystemHandle<I, O> {
-    fn from(id: SystemId<I, O>) -> Self {
-        SystemHandle::Weak(id)
-    }
-}
-
-/// A strong handle for a registered system that despawns the entity when dropped.
-pub struct StrongSystemHandle {
-    entity: Entity,
-    drop_queue: Arc<ConcurrentQueue<Entity>>,
-}
-
-impl Drop for StrongSystemHandle {
-    fn drop(&mut self) {
-        // Send the entity to be despawned by the world when the last strong handle is dropped.
-        let _ = self.drop_queue.push(self.entity);
+        self.entity().hash(state)
     }
 }
 
@@ -310,6 +291,8 @@ impl<I: SystemInput + 'static, O: 'static> FromTemplate for SystemHandle<I, O> {
 
 /// A [`Template`] that produces a [`SystemHandle`].
 pub enum SystemHandleTemplate<I: SystemInput + 'static = (), O: 'static = ()> {
+    /// An entity has not been specified. Building a template with this variant will result in an error.
+    None,
     /// Creates a [`SystemHandle`] by cloning the given [`SystemHandle`] value.
     Handle(SystemHandle<I, O>),
     /// Creates a [`SystemHandle`] by registering the given system value using
@@ -357,6 +340,7 @@ impl<I: SystemInput + 'static, O: 'static> Template for SystemHandleTemplate<I, 
         context: &mut TemplateContext,
     ) -> crate::prelude::Result<Self::Output> {
         match self {
+            Self::None => Err(BevyError::error("Must specify a system handle")),
             Self::Handle(handle) => Ok(handle.clone()),
             Self::Value(value) => {
                 let mut value_or_id = value.0.lock().unwrap();
@@ -365,8 +349,9 @@ impl<I: SystemInput + 'static, O: 'static> Template for SystemHandleTemplate<I, 
                     SystemHandleOrValue::Value(system) => {
                         let system = system.take().unwrap();
                         let id = context
-                            .entity
-                            .world_scope(|world| world.register_tracked_boxed_system(system));
+                            .world
+                            .commands()
+                            .register_tracked_boxed_system(system);
                         *value_or_id = SystemHandleOrValue::Handle(id.clone());
                         Ok(id)
                     }
@@ -377,6 +362,7 @@ impl<I: SystemInput + 'static, O: 'static> Template for SystemHandleTemplate<I, 
 
     fn clone_template(&self) -> Self {
         match self {
+            Self::None => Self::None,
             Self::Handle(handle) => Self::Handle(handle.clone()),
             Self::Value(value) => Self::Value(value.clone()),
         }
@@ -385,9 +371,7 @@ impl<I: SystemInput + 'static, O: 'static> Template for SystemHandleTemplate<I, 
 
 impl<I: SystemInput + 'static, O: 'static> Default for SystemHandleTemplate<I, O> {
     fn default() -> Self {
-        Self::Handle(SystemHandle::Weak(SystemId::from_entity(
-            Entity::PLACEHOLDER,
-        )))
+        Self::None
     }
 }
 
@@ -402,12 +386,6 @@ impl<I: SystemInput + 'static, O: 'static> From<BoxedSystem<I, O>> for SystemHan
         Self::Value(SystemHandleValue(Arc::new(Mutex::new(
             SystemHandleOrValue::Value(Some(system)),
         ))))
-    }
-}
-
-impl<I: SystemInput + 'static, O: 'static> From<SystemId<I, O>> for SystemHandleTemplate<I, O> {
-    fn from(id: SystemId<I, O>) -> Self {
-        Self::Handle(SystemHandle::Weak(id))
     }
 }
 
@@ -512,13 +490,7 @@ impl World {
         I: SystemInput + 'static,
         O: 'static,
     {
-        let entity = self.spawn(RegisteredSystem::new(system)).id();
-        let despawner = self.get_resource_or_init::<RegisteredSystemDespawner>();
-
-        SystemHandle::Strong(Arc::new(StrongSystemHandle {
-            entity,
-            drop_queue: despawner.queue.clone(),
-        }))
+        self.spawn(RegisteredSystem::new(system)).handle().into()
     }
 
     /// Removes a registered system and returns the system, if it exists.
@@ -836,6 +808,24 @@ impl World {
     }
 }
 
+impl<'w, 's> Commands<'w, 's> {
+    /// Similar to [`Self::register_tracked_system`], but allows passing in a
+    /// [`BoxedSystem`].
+    ///
+    /// This is useful if the [`IntoSystem`] implementor has already been turned
+    /// into a [`System`](crate::system::System) trait object and put in a [`Box`].
+    pub fn register_tracked_boxed_system<I, O>(
+        &mut self,
+        system: BoxedSystem<I, O>,
+    ) -> SystemHandle<I, O>
+    where
+        I: SystemInput + 'static,
+        O: 'static,
+    {
+        self.spawn_handle(RegisteredSystem::new(system)).into()
+    }
+}
+
 /// An operation with stored systems failed.
 #[derive(Error)]
 pub enum RegisteredSystemError<I: SystemInput = (), O = ()> {
@@ -913,7 +903,7 @@ mod tests {
     use crate::{
         prelude::*,
         system::{
-            despawn_unused_registered_systems, system_value, RegisteredSystemError, SystemHandle,
+            despawn_unused_registered_systems, system_value, RegisteredSystemError,
             SystemHandleTemplate, SystemId,
         },
     };
@@ -1425,9 +1415,6 @@ mod tests {
 
             let a = world.spawn_empty().build_template(&template).unwrap();
             let b = world.spawn_empty().build_template(&template).unwrap();
-
-            assert!(matches!(a, SystemHandle::Strong(_)));
-            assert!(matches!(b, SystemHandle::Strong(_)));
 
             assert_eq!(a, b);
         }

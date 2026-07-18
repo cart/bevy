@@ -21,8 +21,8 @@ use crate::{
     change_detection::{MaybeLocation, Mut},
     component::{Component, ComponentId, Mutable},
     entity::{
-        Entities, Entity, EntityAllocator, EntityClonerBuilder, EntityNotSpawnedError,
-        InvalidEntityError, OptIn, OptOut,
+        Entities, Entity, EntityAllocator, EntityClonerBuilder, EntityHandle,
+        EntityNotSpawnedError, InvalidEntityError, OptIn, OptOut,
     },
     error::{warn, BevyError, ErrorContext},
     event::{EntityEvent, Event},
@@ -432,6 +432,24 @@ impl<'w, 's> Commands<'w, 's> {
                 .unwrap();
         });
         self.entity(entity)
+    }
+
+    pub fn spawn_handle_with_data<T: Send + Sync + 'static, B: Bundle>(
+        &mut self,
+        data: T,
+        bundle: B,
+    ) -> EntityHandle<T> {
+        let entity_handle = self.entity_allocator().alloc_handle_with_data(data);
+        let entity = entity_handle.0.entity;
+        let weak = entity_handle.weak();
+        self.queue(move |world: &mut World| {
+            world.spawn_at(entity, (bundle, weak)).unwrap();
+        });
+        entity_handle.into()
+    }
+
+    pub fn spawn_handle<B: Bundle>(&mut self, bundle: B) -> EntityHandle {
+        self.spawn_handle_with_data((), bundle)
     }
 
     /// Returns the [`EntityCommands`] for the given [`Entity`].
