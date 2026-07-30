@@ -261,12 +261,12 @@ impl<T: Asset> Template for HandleTemplate<T> {
             }
             HandleTemplate::EntityTemplate(entity_template) => {
                 let entity = entity_template.build_template(context)?;
-                // SAFETY: we've checked that this is a different entity
-                let world = unsafe { context.entity.world_mut() };
-                world
-                    .get_entity_mut(entity)?
-                    .handle_with_data(AssetData::new::<T>())
-                    .into()
+                todo!()
+                // context
+                //     .world
+                //     .get_entity_mut(entity)?
+                //     .handle_with_data(AssetData::new::<T>())
+                //     .into()
             }
         })
     }

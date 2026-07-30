@@ -9,7 +9,7 @@ use crate::{
     entity::{Entity, EntityNotSpawnedError},
     error::{BevyError, Result},
     resource::Resource,
-    world::{EntityRef, EntityWorldMut, Mut, World},
+    world::{DeferredWorld, EntityRef, Mut},
 };
 use alloc::vec::Vec;
 use bevy_platform::{collections::hash_map::RawEntryMut, hash::Hashed};
@@ -45,53 +45,55 @@ pub trait Template {
 /// applied to (via an [`EntityWorldMut`]).
 pub struct TemplateContext<'a, 'w> {
     /// The current entity the template is being applied to
-    pub entity: &'a mut EntityWorldMut<'w>,
+    pub entity: Entity,
+    /// Deferred World access.
+    pub world: DeferredWorld<'w>,
     /// A mapping of [`SceneEntityReference`] to [`Entity`] used for resolving `#Name` entity references
     pub entity_references: &'a mut SceneEntityReferences,
 }
 
+// TODO: is this 'w lifetime still necessary
 impl<'a, 'w> TemplateContext<'a, 'w> {
     /// Creates a new [`TemplateContext`].
     pub fn new(
-        entity: &'a mut EntityWorldMut<'w>,
+        entity: Entity,
+        world: DeferredWorld<'w>,
         entity_references: &'a mut SceneEntityReferences,
     ) -> Self {
         Self {
             entity,
+            world,
             entity_references,
         }
     }
     /// Get the entity associated with the [`SceneEntityReference`], spawning a new one
     /// if this is the first call with this index.
     pub fn get_scene_entity(&mut self, reference: SceneEntityReference) -> Entity {
-        self.entity_references.get(
-            reference,
-            // Safety: only used to create a new Entity
-            unsafe { self.entity.world_mut() },
-        )
+        self.entity_references.get(reference, &mut self.world)
     }
 
     /// Retrieves a reference to the given resource `R`.
     #[inline]
     pub fn resource<R: Resource>(&self) -> &R {
-        self.entity.resource()
+        self.world.resource()
     }
 
     /// Retrieves a mutable reference to the given resource `R`.
     #[inline]
     pub fn resource_mut<R: Resource<Mutability = Mutable>>(&mut self) -> Mut<'_, R> {
-        self.entity.resource_mut()
+        self.world.resource_mut()
     }
 
     /// Retrieves the entity associated with the given resource `R`, if it exists.
     #[inline]
     pub fn resource_entity<R: Resource>(&self) -> Option<Entity> {
-        self.entity.resource_entity::<R>()
+        todo!()
+        // self.world.resource_entity::<R>()
     }
 
     /// Returns the component for a given `entity`, if it exists.
     pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
-        self.entity.world().get::<C>(entity)
+        self.world.get::<C>(entity)
     }
 
     /// Returns the given `entity`, if it exists.
@@ -99,7 +101,7 @@ impl<'a, 'w> TemplateContext<'a, 'w> {
         &'x self,
         entity: Entity,
     ) -> Result<EntityRef<'x>, EntityNotSpawnedError> {
-        self.entity.world().get_entity(entity)
+        self.world.get_entity(entity)
     }
 }
 
@@ -111,7 +113,7 @@ pub struct SceneEntityReferences(PreHashMap<InnerSceneEntityReference, Entity>);
 impl SceneEntityReferences {
     /// Get the [`Entity`] associated with this [`SceneEntityReference`]
     /// If the index is unknown, spawn a new empty [`Entity`] and store it
-    pub fn get(&mut self, reference: SceneEntityReference, world: &mut World) -> Entity {
+    pub fn get(&mut self, reference: SceneEntityReference, world: &mut DeferredWorld) -> Entity {
         let inner = reference.0;
         let entry = self
             .0
@@ -120,7 +122,7 @@ impl SceneEntityReferences {
         match entry {
             RawEntryMut::Occupied(entry) => *entry.get(),
             RawEntryMut::Vacant(view) => {
-                let entity = world.spawn_empty().id();
+                let entity = world.commands().spawn_empty().id();
                 view.insert_hashed_nocheck(inner.hash(), inner, entity);
                 entity
             }

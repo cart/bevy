@@ -23,8 +23,8 @@ use crate::{
     template::{SceneEntityReferences, Template, TemplateContext},
     world::{
         error::EntityComponentError, unsafe_world_cell::UnsafeEntityCell, ComponentEntry,
-        DynamicComponentFetch, EntityMut, EntityRef, FilteredEntityMut, FilteredEntityRef, Mut,
-        OccupiedComponentEntry, Ref, VacantComponentEntry, World,
+        DeferredWorld, DynamicComponentFetch, EntityMut, EntityRef, FilteredEntityMut,
+        FilteredEntityRef, Mut, OccupiedComponentEntry, Ref, VacantComponentEntry, World,
     },
 };
 
@@ -1653,7 +1653,7 @@ impl<'w> EntityWorldMut<'w> {
         func: impl FnOnce(&mut TemplateContext) -> crate::error::Result<T>,
     ) -> crate::error::Result<T> {
         let mut scene_entities = SceneEntityReferences::default();
-        let mut context = TemplateContext::new(self, &mut scene_entities);
+        let mut context = TemplateContext::new(self.entity, self.world.into(), &mut scene_entities);
         func(&mut context)
     }
 
@@ -1887,6 +1887,11 @@ impl<'w> EntityWorldMut<'w> {
     #[inline]
     pub unsafe fn world_mut(&mut self) -> &mut World {
         self.world
+    }
+
+    /// Returns a deferred world
+    pub fn deferred_world(&mut self) -> DeferredWorld<'_> {
+        self.world.into()
     }
 
     /// Returns this entity's [`World`], consuming itself.

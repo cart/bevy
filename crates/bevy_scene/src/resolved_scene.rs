@@ -81,7 +81,8 @@ impl ResolvedSceneRoot {
         bundle_scratch: &mut BundleScratch,
     ) -> Result<(), ApplySceneError> {
         let mut entity_references = SceneEntityReferences::default();
-        let mut context = TemplateContext::new(entity, &mut entity_references);
+        let mut context =
+            TemplateContext::new(entity.id(), entity.deferred_world(), &mut entity_references);
 
         let result = self.scene.apply(&mut context, bundle_scratch);
         if !bundle_scratch.is_empty() {
