@@ -43,19 +43,19 @@ pub(crate) struct AssetInfo {
 }
 
 pub(crate) enum StrongOrWeakHandle {
-    Strong(EntityHandle<AssetData>),
-    Weak(WeakEntityHandle<AssetData>),
+    Strong(EntityHandle),
+    Weak(WeakEntityHandle),
 }
 
 impl StrongOrWeakHandle {
-    pub(crate) fn get_strong(&self) -> Option<EntityHandle<AssetData>> {
+    pub(crate) fn get_strong(&self) -> Option<EntityHandle> {
         match self {
             StrongOrWeakHandle::Strong(entity_handle) => Some(entity_handle.clone()),
             StrongOrWeakHandle::Weak(weak_entity_handle) => weak_entity_handle.upgrade(),
         }
     }
 
-    fn weak(&self) -> WeakEntityHandle<AssetData> {
+    fn weak(&self) -> WeakEntityHandle {
         match self {
             StrongOrWeakHandle::Strong(entity_handle) => entity_handle.weak(),
             StrongOrWeakHandle::Weak(weak_entity_handle) => weak_entity_handle.clone(),
@@ -66,7 +66,10 @@ impl StrongOrWeakHandle {
 impl Debug for StrongOrWeakHandle {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Strong(arg0) => f.debug_tuple("Strong").field(arg0.data()).finish(),
+            Self::Strong(arg0) => f
+                .debug_tuple("Strong")
+                .field(&arg0.data::<AssetData>())
+                .finish(),
             Self::Weak(arg0) => f.debug_tuple("Weak").field(arg0).finish(),
         }
     }

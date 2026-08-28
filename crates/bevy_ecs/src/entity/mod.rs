@@ -123,7 +123,7 @@ use crate::{
     change_detection::{CheckChangeTicks, MaybeLocation, Tick},
     storage::{SparseSetIndex, TableId, TableRow},
 };
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{fmt, hash::Hash, mem, num::NonZero, panic::Location};
 use derive_more::derive::Display;
 use log::warn;
@@ -804,10 +804,14 @@ impl EntityAllocator {
 
     /// Creates a new handle for the given `entity`, with the given `data` stored in it.
     /// This should only be done if there are no existing handles for the entity.
-    pub fn get_handle_with_data<T>(&self, entity: Entity, data: T) -> EntityHandle<T> {
+    pub fn get_handle_with_data<T: EntityHandleData>(
+        &self,
+        entity: Entity,
+        data: T,
+    ) -> EntityHandle {
         EntityHandle(Arc::new(InnerEntityHandle {
             entity,
-            data,
+            data: Box::new(data),
             drop_sender: self.inner.handle_drop_sender().clone(),
         }))
     }
@@ -818,7 +822,7 @@ impl EntityAllocator {
     }
 
     /// Allocates a new entity and creates a handle for it with the given `data`.
-    pub fn alloc_handle_with_data<T>(&self, data: T) -> EntityHandle<T> {
+    pub fn alloc_handle_with_data<T: EntityHandleData>(&self, data: T) -> EntityHandle {
         self.get_handle_with_data(self.alloc(), data)
     }
 

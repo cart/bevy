@@ -45,7 +45,7 @@ use log::warn;
 use nonmax::NonMaxU32;
 
 use crate::{
-    entity::{EntityHandle, InnerEntityHandle},
+    entity::{EntityHandle, EntityHandleData, InnerEntityHandle},
     query::DebugCheckedUnwrap,
 };
 
@@ -1097,10 +1097,14 @@ impl RemoteAllocator {
 
     /// Creates a new handle for the given `entity`, with the given `data` stored in it.
     /// This should only be done if there are no existing handles for the entity.
-    pub fn get_handle_with_data<T>(&self, entity: Entity, data: T) -> EntityHandle<T> {
+    pub fn get_handle_with_data<T: EntityHandleData>(
+        &self,
+        entity: Entity,
+        data: T,
+    ) -> EntityHandle {
         EntityHandle(Arc::new(InnerEntityHandle {
             entity,
-            data,
+            data: Box::new(data),
             drop_sender: self.shared.handle_drop_sender.clone(),
         }))
     }
@@ -1111,7 +1115,7 @@ impl RemoteAllocator {
     }
 
     /// Allocates a new entity and creates a handle for it with the given `data`.
-    pub fn alloc_handle_with_data<T>(&self, data: T) -> EntityHandle<T> {
+    pub fn alloc_handle_with_data<T: EntityHandleData>(&self, data: T) -> EntityHandle {
         self.get_handle_with_data(self.alloc(), data)
     }
 }

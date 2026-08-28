@@ -6,8 +6,8 @@ use crate::{
     change_detection::{ComponentTicks, MaybeLocation, MutUntyped, Tick},
     component::{Component, ComponentId, Components, Mutable, StorageType},
     entity::{
-        Entity, EntityCloner, EntityClonerBuilder, EntityHandle, EntityLocation, OptIn, OptOut,
-        WeakEntityHandle,
+        Entity, EntityCloner, EntityClonerBuilder, EntityHandle, EntityHandleData, EntityLocation,
+        OptIn, OptOut, WeakEntityHandle,
     },
     event::{EntityComponentsTrigger, EntityEvent},
     lifecycle::{Despawn, Discard, Remove, DESPAWN, DISCARD, REMOVE},
@@ -20,7 +20,7 @@ use crate::{
     resource::{Resource, ResourceEntities},
     storage::{SparseSets, Table},
     system::EntityCommands,
-    template::{SceneEntityReferences, Template, TemplateContext},
+    template::{SceneEntities, Template, TemplateContext},
     world::{
         error::EntityComponentError, unsafe_world_cell::UnsafeEntityCell, ComponentEntry,
         DeferredWorld, DynamicComponentFetch, EntityMut, EntityRef, FilteredEntityMut,
@@ -1652,7 +1652,7 @@ impl<'w> EntityWorldMut<'w> {
         &mut self,
         func: impl FnOnce(&mut TemplateContext) -> crate::error::Result<T>,
     ) -> crate::error::Result<T> {
-        let mut scene_entities = SceneEntityReferences::default();
+        let mut scene_entities = SceneEntities::default();
         let mut context = TemplateContext::new(self.entity, self.world.into(), &mut scene_entities);
         func(&mut context)
     }
@@ -2360,8 +2360,8 @@ impl<'w> EntityWorldMut<'w> {
     /// This is tracked using the [`WeakEntityHandle`] component stored on the entity.
     ///
     /// Note that if a handle already exists, the passed in `data` will be ignored and the current handle's data will continue to be used.
-    pub fn handle_with_data<T: Send + Sync + 'static>(&mut self, data: T) -> EntityHandle<T> {
-        if let Some(handle) = self.get::<WeakEntityHandle<T>>() {
+    pub fn handle_with_data<T: EntityHandleData>(&mut self, data: T) -> EntityHandle {
+        if let Some(handle) = self.get::<WeakEntityHandle>() {
             handle.upgrade().expect("Cannot upgrade a weak entity handle to a strong entity handle because it has already been dropped")
         } else {
             let allocator = &self.world().entity_allocator;

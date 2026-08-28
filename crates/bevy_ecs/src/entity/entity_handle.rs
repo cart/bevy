@@ -1,86 +1,62 @@
 #![allow(missing_docs)]
-use core::ops::Deref;
 
 use crate::{
     component::Component,
     entity::{ContainsEntity, Entity},
     world::World,
 };
-use alloc::sync::{Arc, Weak};
+use alloc::{
+    boxed::Box,
+    sync::{Arc, Weak},
+};
 use bevy_reflect::{Reflect, TypePath};
 use crossbeam_channel::Sender;
+use downcast_rs::{impl_downcast, Downcast};
 
 /// A handle to an entity.
-#[derive(Reflect)]
-pub struct EntityHandle<T = ()>(pub Arc<InnerEntityHandle<T>>);
+#[derive(Reflect, Debug)]
+pub struct EntityHandle(pub Arc<InnerEntityHandle>);
 
-impl<T: alloc::fmt::Debug> alloc::fmt::Debug for EntityHandle<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("EntityHandle").field(&self.0.data).finish()
-    }
-}
-
-impl<T> Clone for EntityHandle<T> {
+impl Clone for EntityHandle {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
-
-/// A handle to an entity.
-pub trait InnerEntityHandleTrait: Send + Sync + 'static {
-    /// The entity in this handle.
-    fn id(&self) -> Entity;
-}
-
-impl<T: Send + Sync + 'static> InnerEntityHandleTrait for InnerEntityHandle<T> {
-    fn id(&self) -> Entity {
-        self.entity
-    }
-}
-
-impl<T> Drop for InnerEntityHandle<T> {
+impl Drop for InnerEntityHandle {
     fn drop(&mut self) {
         let _ = self.drop_sender.send(self.entity);
     }
 }
 
-impl<T> ContainsEntity for EntityHandle<T> {
+impl ContainsEntity for EntityHandle {
     fn entity(&self) -> Entity {
         self.0.entity
     }
 }
 
-impl<T> Deref for EntityHandle<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0.data
-    }
-}
-
-impl<T: Send + Sync + 'static> EntityHandle<T> {
+impl EntityHandle {
     pub fn id(&self) -> Entity {
         self.0.entity
     }
 
-    pub fn data(&self) -> &T {
-        &self.0.data
+    pub fn data<T: EntityHandleData>(&self) -> Option<&T> {
+        self.0.data.downcast_ref::<T>()
     }
 
     pub fn strong_count(&self) -> usize {
         Arc::strong_count(&self.0)
     }
 
-    pub fn weak(&self) -> WeakEntityHandle<T> {
+    pub fn weak(&self) -> WeakEntityHandle {
         WeakEntityHandle(Arc::downgrade(&self.0))
     }
 }
 
 #[derive(Component, Debug)]
-pub struct WeakEntityHandle<T = ()>(Weak<InnerEntityHandle<T>>);
+pub struct WeakEntityHandle(Weak<InnerEntityHandle>);
 
-impl<T> WeakEntityHandle<T> {
-    pub fn upgrade(&self) -> Option<EntityHandle<T>> {
+impl WeakEntityHandle {
+    pub fn upgrade(&self) -> Option<EntityHandle> {
         self.0.upgrade().map(|value| EntityHandle(value))
     }
 
@@ -89,17 +65,26 @@ impl<T> WeakEntityHandle<T> {
     }
 }
 
-impl<T> Clone for WeakEntityHandle<T> {
+impl Clone for WeakEntityHandle {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
 #[derive(TypePath)]
-pub struct InnerEntityHandle<T> {
+pub struct InnerEntityHandle {
     pub entity: Entity,
-    pub data: T,
+    pub data: Box<dyn EntityHandleData>,
     pub(super) drop_sender: Sender<Entity>,
+}
+
+impl core::fmt::Debug for InnerEntityHandle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("InnerEntityHandle")
+            .field("entity", &self.entity)
+            .field("drop_sender", &self.drop_sender)
+            .finish()
+    }
 }
 
 pub fn despawn_dropped_entities(world: &mut World) {
@@ -107,6 +92,13 @@ pub fn despawn_dropped_entities(world: &mut World) {
         world.despawn(entity);
     }
 }
+
+/// Erased data stored on an [`EntityHandle`].
+pub trait EntityHandleData: Send + Sync + Downcast {}
+
+impl EntityHandleData for () {}
+
+impl_downcast!(EntityHandleData);
 
 #[cfg(test)]
 mod tests {

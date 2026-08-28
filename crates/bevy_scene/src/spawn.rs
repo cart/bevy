@@ -507,7 +507,8 @@ impl EntityWorldMutSceneExt for EntityWorldMut<'_> {
         let assets = self.resource::<AssetServer>();
         let mut patch = ScenePatch::load(assets, scene);
         let resolved_scene = patch.resolve(assets, &query.get(self.world()).unwrap())?;
-        Ok(resolved_scene.apply(self)?)
+        let entity = self.id();
+        self.world_scope(|world| Ok(resolved_scene.apply(entity, world)?))
     }
 
     fn queue_apply_scene<S: Scene>(&mut self, scene: S) {
@@ -734,9 +735,8 @@ pub fn spawn_queued(
                     && let Some(entities) = waiting.scene_entities.remove(id)
                 {
                     for entity in entities {
-                        if let Ok(mut entity_mut) = world.get_entity_mut(entity)
-                            && let Err(err) =
-                                resolved.apply_with_scratch(&mut entity_mut, &mut bundle_scratch)
+                        if let Err(err) =
+                            resolved.apply_with_scratch(entity, world, &mut bundle_scratch)
                         {
                             error!(
                                 "Failed to apply scene (id: {}) to entity {entity}: {}",
@@ -810,8 +810,7 @@ impl QueuedScenes {
     ) {
         for (entity, handle) in core::mem::take(&mut self.new_scene_entities) {
             if let Some(resolved) = world.get::<ResolvedSceneRoot>(handle.entity()).cloned() {
-                let mut entity_mut = world.get_entity_mut(entity).unwrap();
-                if let Err(err) = resolved.apply_with_scratch(&mut entity_mut, bundle_scratch) {
+                if let Err(err) = resolved.apply_with_scratch(entity, world, bundle_scratch) {
                     let scene_patch_instance = scene_patch_instances.get(world, entity).unwrap();
                     let handle = &scene_patch_instance.0;
                     let id = handle.id();

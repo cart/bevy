@@ -6,13 +6,19 @@ use core::{hash::Hash, ops::Deref};
 
 use crate::{
     component::{Component, Mutable},
-    entity::{Entity, EntityNotSpawnedError},
+    entity::{
+        Entity, EntityHandle, EntityHandleData, EntityHashMap, EntityNotSpawnedError,
+        WeakEntityHandle,
+    },
     error::{BevyError, Result},
     resource::Resource,
-    world::{DeferredWorld, EntityRef, Mut},
+    world::{DeferredWorld, EntityMut, EntityRef, Mut, World},
 };
 use alloc::vec::Vec;
-use bevy_platform::{collections::hash_map::RawEntryMut, hash::Hashed};
+use bevy_platform::{
+    collections::hash_map::{Entry, RawEntryMut},
+    hash::Hashed,
+};
 use bevy_utils::PreHashMap;
 use indexmap::Equivalent;
 use variadics_please::all_tuples;
@@ -49,7 +55,7 @@ pub struct TemplateContext<'a, 'w> {
     /// Deferred World access.
     pub world: DeferredWorld<'w>,
     /// A mapping of [`SceneEntityReference`] to [`Entity`] used for resolving `#Name` entity references
-    pub entity_references: &'a mut SceneEntityReferences,
+    pub scene_entities: &'a mut SceneEntities,
 }
 
 // TODO: is this 'w lifetime still necessary
@@ -58,18 +64,29 @@ impl<'a, 'w> TemplateContext<'a, 'w> {
     pub fn new(
         entity: Entity,
         world: DeferredWorld<'w>,
-        entity_references: &'a mut SceneEntityReferences,
+        scene_entities: &'a mut SceneEntities,
     ) -> Self {
         Self {
             entity,
             world,
-            entity_references,
+            scene_entities,
         }
     }
+
+    /// Returns a reference to the current entity.
+    pub fn entity(&self) -> EntityRef<'_> {
+        self.world.entity(self.entity)
+    }
+
+    /// Returns a mutable reference to the current entity.
+    pub fn entity_mut(&mut self) -> EntityMut<'_> {
+        self.world.entity_mut(self.entity)
+    }
+
     /// Get the entity associated with the [`SceneEntityReference`], spawning a new one
     /// if this is the first call with this index.
     pub fn get_scene_entity(&mut self, reference: SceneEntityReference) -> Entity {
-        self.entity_references.get(reference, &mut self.world)
+        self.scene_entities.get_deferred(reference, &mut self.world)
     }
 
     /// Retrieves a reference to the given resource `R`.
@@ -97,26 +114,82 @@ impl<'a, 'w> TemplateContext<'a, 'w> {
     }
 
     /// Returns the given `entity`, if it exists.
-    pub fn get_other_entity<'x>(
+    pub fn get_entity<'x>(
         &'x self,
         entity: Entity,
     ) -> Result<EntityRef<'x>, EntityNotSpawnedError> {
         self.world.get_entity(entity)
+    }
+
+    /// Gets the current entity handle or creates a new one. If a new handle is created, a command
+    /// will be queued to insert it on the entity, and the handle will be stored on this context in case
+    /// it is requested again (this will prevent multiple handles, provided the same context is used).
+    pub fn get_or_create_handle_with_data<T: EntityHandleData>(
+        &mut self,
+        entity: Entity,
+        data: impl Fn() -> T,
+    ) -> EntityHandle {
+        if let Some(handle) = self
+            .world
+            .get_entity(entity)
+            .ok()
+            .and_then(|e| e.get::<WeakEntityHandle>())
+            .and_then(|h| h.upgrade())
+        {
+            handle
+        } else {
+            match self.scene_entities.reserved_handles.entry(entity) {
+                Entry::Occupied(entry) => entry.get().clone(),
+                Entry::Vacant(entry) => {
+                    let handle = self
+                        .world
+                        .entity_allocator()
+                        .get_handle_with_data(entity, data());
+                    self.world.commands().entity(entity).insert(handle.weak());
+                    entry.insert(handle).clone()
+                }
+            }
+        }
     }
 }
 
 /// Struct to store a mapping from [`SceneEntityReference`] to [`Entity`]
 /// which are used for resolving `#Name` entity references in bsn! macros
 #[derive(Default)]
-pub struct SceneEntityReferences(PreHashMap<InnerSceneEntityReference, Entity>);
+pub struct SceneEntities {
+    entity_references: PreHashMap<InnerSceneEntityReference, Entity>,
+    reserved_handles: EntityHashMap<EntityHandle>,
+}
 
-impl SceneEntityReferences {
+impl SceneEntities {
     /// Get the [`Entity`] associated with this [`SceneEntityReference`]
     /// If the index is unknown, spawn a new empty [`Entity`] and store it
-    pub fn get(&mut self, reference: SceneEntityReference, world: &mut DeferredWorld) -> Entity {
+    pub fn get(&mut self, reference: SceneEntityReference, world: &mut World) -> Entity {
         let inner = reference.0;
         let entry = self
-            .0
+            .entity_references
+            .raw_entry_mut()
+            .from_key_hashed_nocheck(inner.hash(), &inner);
+        match entry {
+            RawEntryMut::Occupied(entry) => *entry.get(),
+            RawEntryMut::Vacant(view) => {
+                let entity = world.spawn_empty().id();
+                view.insert_hashed_nocheck(inner.hash(), inner, entity);
+                entity
+            }
+        }
+    }
+
+    /// Get the [`Entity`] associated with this [`SceneEntityReference`]
+    /// If the index is unknown, queues a spawn command for a new empty [`Entity`] and stores it.
+    pub fn get_deferred(
+        &mut self,
+        reference: SceneEntityReference,
+        world: &mut DeferredWorld,
+    ) -> Entity {
+        let inner = reference.0;
+        let entry = self
+            .entity_references
             .raw_entry_mut()
             .from_key_hashed_nocheck(inner.hash(), &inner);
         match entry {
@@ -133,7 +206,7 @@ impl SceneEntityReferences {
     pub fn set(&mut self, reference: SceneEntityReference, entity: Entity) {
         let inner = reference.0;
         match self
-            .0
+            .entity_references
             .raw_entry_mut()
             .from_key_hashed_nocheck(inner.hash(), &inner)
         {

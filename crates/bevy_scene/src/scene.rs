@@ -538,7 +538,11 @@ impl<I: IntoObserverSystem<E, B, M> + Clone, E: EntityEvent, B: Bundle, M: 'stat
     type Output = ();
 
     fn build_template(&self, context: &mut TemplateContext) -> Result<Self::Output> {
-        context.entity.observe(self.0.clone());
+        context
+            .world
+            .commands()
+            .entity(context.entity)
+            .observe(self.0.clone());
         Ok(())
     }
 

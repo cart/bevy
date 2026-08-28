@@ -21,7 +21,7 @@ use crate::{
     change_detection::{MaybeLocation, Mut},
     component::{Component, ComponentId, Mutable},
     entity::{
-        Entities, Entity, EntityAllocator, EntityClonerBuilder, EntityHandle,
+        Entities, Entity, EntityAllocator, EntityClonerBuilder, EntityHandle, EntityHandleData,
         EntityNotSpawnedError, InvalidEntityError, OptIn, OptOut,
     },
     error::{warn, BevyError, ErrorContext},
@@ -434,11 +434,11 @@ impl<'w, 's> Commands<'w, 's> {
         self.entity(entity)
     }
 
-    pub fn spawn_handle_with_data<T: Send + Sync + 'static, B: Bundle>(
+    pub fn spawn_handle_with_data<T: EntityHandleData, B: Bundle>(
         &mut self,
         data: T,
         bundle: B,
-    ) -> EntityHandle<T> {
+    ) -> EntityHandle {
         let entity_handle = self.entity_allocator().alloc_handle_with_data(data);
         let entity = entity_handle.0.entity;
         let weak = entity_handle.weak();

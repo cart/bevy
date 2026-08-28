@@ -7,8 +7,8 @@ use bevy_ecs::{
     error::{BevyError, Result},
     relationship::{Relationship, RelationshipTarget},
     system::Query,
-    template::{SceneEntityReference, SceneEntityReferences, Template, TemplateContext},
-    world::{EntityWorldMut, World},
+    template::{SceneEntities, SceneEntityReference, Template, TemplateContext},
+    world::{error::EntityMutableFetchError, EntityWorldMut, World},
 };
 use bevy_platform::collections::HashSet;
 use bevy_utils::TypeIdMap;
@@ -48,12 +48,15 @@ impl ResolvedSceneRoot {
     /// This will spawn a new [`Entity`], then call [`ResolvedSceneRoot::apply`] on it.
     /// If this fails mid-spawn, the intermediate entity will be despawned.
     pub fn spawn<'w>(&self, world: &'w mut World) -> Result<EntityWorldMut<'w>, ApplySceneError> {
-        let mut entity = world.spawn_empty();
-        let result = self.apply(&mut entity);
+        let entity = world.spawn_empty().id();
+        let result = self.apply(entity, world);
+        let entity_mut = world
+            .get_entity_mut(entity)
+            .map_err(ApplySceneError::MissingEntityError)?;
         match result {
-            Ok(_) => Ok(entity),
+            Ok(_) => Ok(entity_mut),
             Err(err) => {
-                entity.despawn();
+                entity_mut.despawn();
                 Err(err)
             }
         }
@@ -65,8 +68,8 @@ impl ResolvedSceneRoot {
     /// spawn all of this [`ResolvedScene`]'s related entities.
     ///
     /// If this root [`ResolvedScene`] includes a cached scene, that scene will be applied _first_.
-    pub fn apply(&self, entity: &mut EntityWorldMut) -> Result<(), ApplySceneError> {
-        self.apply_with_scratch(entity, &mut BundleScratch::default())
+    pub fn apply(&self, entity: Entity, world: &mut World) -> Result<(), ApplySceneError> {
+        self.apply_with_scratch(entity, world, &mut BundleScratch::default())
     }
 
     /// Applies this scene to the given [`EntityWorldMut`], with the given `bundle_scratch`.
@@ -77,18 +80,19 @@ impl ResolvedSceneRoot {
     /// If this root [`ResolvedScene`] includes a cached scene, that scene will be applied _first_.
     pub fn apply_with_scratch(
         &self,
-        entity: &mut EntityWorldMut,
+        entity: Entity,
+        world: &mut World,
         bundle_scratch: &mut BundleScratch,
     ) -> Result<(), ApplySceneError> {
-        let mut entity_references = SceneEntityReferences::default();
-        let mut context =
-            TemplateContext::new(entity.id(), entity.deferred_world(), &mut entity_references);
+        let mut entity_references = SceneEntities::default();
 
-        let result = self.scene.apply(&mut context, bundle_scratch);
+        let result = self
+            .scene
+            .apply(entity, world, &mut entity_references, bundle_scratch);
         if !bundle_scratch.is_empty() {
             // SAFETY: Components comes from the same world as the `context` passed in to self.scene.apply above
             unsafe {
-                bundle_scratch.manual_drop(entity.world().components());
+                bundle_scratch.manual_drop(world.components());
             }
         }
         result
@@ -143,33 +147,32 @@ impl ResolvedSceneListRoot {
         func: impl Fn(&mut EntityWorldMut),
     ) -> Result<Vec<Entity>, ApplySceneError> {
         let mut entities = Vec::new();
-        let mut entity_references = SceneEntityReferences::default();
+        let mut scene_entities = SceneEntities::default();
         let mut bundle_scratch = BundleScratch::default();
         if !self.scene_list.shared_entities.scenes.is_empty() {
             self.scene_list.shared_entities.apply(
                 world,
-                &mut entity_references,
+                &mut scene_entities,
                 &mut bundle_scratch,
             )?;
         }
         for scene in self.scene_list.scenes.iter() {
             let mut entity = if let Some(entity_index) = scene.entity_references.first().copied() {
-                let entity = entity_references.get(entity_index, world);
+                let entity = scene_entities.get(entity_index, world);
                 world.entity_mut(entity)
             } else {
                 world.spawn_empty()
             };
 
             func(&mut entity);
-            entities.push(entity.id());
-            let result = scene.apply(
-                &mut TemplateContext::new(&mut entity, &mut entity_references),
-                &mut bundle_scratch,
-            );
+            let entity_id = entity.id();
+            entities.push(entity_id);
+            drop(entity);
+            let result = scene.apply(entity_id, world, &mut scene_entities, &mut bundle_scratch);
             if let Err(err) = result {
                 // SAFETY: Components comes from the same world as the `context` passed in to self.scene.apply above
                 unsafe {
-                    bundle_scratch.manual_drop(entity.world().components());
+                    bundle_scratch.manual_drop(world.components());
                 }
                 return Err(err);
             }
@@ -235,10 +238,12 @@ impl ResolvedScene {
     /// If this [`ResolvedScene`] includes a cached scene, that scene will be applied _first_.
     fn apply(
         &self,
-        context: &mut TemplateContext,
+        entity: Entity,
+        world: &mut World,
+        entity_references: &mut SceneEntities,
         bundle_scratch: &mut BundleScratch,
     ) -> Result<(), ApplySceneError> {
-        self.apply_with(context, bundle_scratch, |_, _| {})
+        self.apply_with(entity, world, entity_references, bundle_scratch, |_, _| {})
     }
 
     /// Applies this scene to the given [`TemplateContext`] (which holds an already-spawned [`EntityWorldMut`]).
@@ -254,26 +259,22 @@ impl ResolvedScene {
     /// unsafe functions / the caller should verify they are using the passed in `context`).
     fn apply_with(
         &self,
-        context: &mut TemplateContext,
+        entity: Entity,
+        world: &mut World,
+        scene_entities: &mut SceneEntities,
         bundle_scratch: &mut BundleScratch,
-        writer_ops: impl FnOnce(&mut TemplateContext, &mut BundleWriter),
+        writer_ops: impl FnOnce(&mut World, &mut BundleWriter),
     ) -> Result<(), ApplySceneError> {
         if !self.shared_entities.scenes.is_empty() {
-            context
-                .entity
-                .world_scope(|world| -> Result<(), ApplySceneError> {
-                    self.shared_entities
-                        .apply(world, context.entity_references, bundle_scratch)
-                })?;
+            self.shared_entities
+                .apply(world, scene_entities, bundle_scratch)?;
         }
         let mut bundle_writer = bundle_scratch.writer();
         for entity_reference in self.entity_references.iter().copied() {
-            context
-                .entity_references
-                .set(entity_reference, context.entity.id());
+            scene_entities.set(entity_reference, entity);
         }
         if let Some(cached) = &self.cached {
-            let Ok(scene_entity) = context.get_other_entity(cached.handle.entity()) else {
+            let Ok(scene_entity) = world.get_entity(cached.handle.entity()) else {
                 return Err(ApplySceneError::MissingCachedScene {
                     path: cached.handle.path().cloned(),
                     id: cached.handle.id(),
@@ -291,7 +292,9 @@ impl ResolvedScene {
                 resolved_cached
                     .scene
                     .apply_templates_without_bundle_write(
-                        context,
+                        entity,
+                        world,
+                        scene_entities,
                         &mut bundle_writer,
                         // this will skip building / inserting templates that
                         // have local copies in the current scene
@@ -302,10 +305,14 @@ impl ResolvedScene {
                         cached: cached.handle.path().cloned(),
                         error: Box::new(e),
                     })?;
-                self.apply_templates_without_bundle_write(context, &mut bundle_writer, ())?;
-                // SAFETY: World is only used for component registration, which does not affect
-                // the entity location
-                let components = &mut context.entity.world_mut().components_registrator();
+                self.apply_templates_without_bundle_write(
+                    entity,
+                    world,
+                    scene_entities,
+                    &mut bundle_writer,
+                    (),
+                )?;
+                let components = &mut world.components_registrator();
                 // This inserts empty RelationshipTarget collections to avoid archetype moves when then related entities are spawned
                 // It pre-allocates space in the collection to avoid reallocs as related entities are added.
                 for related in self.related.values() {
@@ -316,22 +323,29 @@ impl ResolvedScene {
                     );
                 }
 
-                (writer_ops)(context, &mut bundle_writer);
+                (writer_ops)(world, &mut bundle_writer);
+                bundle_writer.write(&mut world.entity_mut(entity));
+                world.flush();
 
-                bundle_writer.write(context.entity);
-
-                resolved_cached
-                    .scene
-                    .apply_related(context, bundle_scratch)?;
-                self.apply_related(context, bundle_scratch)?;
+                resolved_cached.scene.apply_related(
+                    entity,
+                    world,
+                    scene_entities,
+                    bundle_scratch,
+                )?;
+                self.apply_related(entity, world, scene_entities, bundle_scratch)?;
             }
         } else {
             // SAFETY: bundle_writer was used with the same World across all cases in this function,
             unsafe {
-                self.apply_templates_without_bundle_write(context, &mut bundle_writer, ())?;
-                // SAFETY: World is only used for component registration, which does not affect
-                // the entity location
-                let components = &mut context.entity.world_mut().components_registrator();
+                self.apply_templates_without_bundle_write(
+                    entity,
+                    world,
+                    scene_entities,
+                    &mut bundle_writer,
+                    (),
+                )?;
+                let components = &mut world.components_registrator();
                 // This inserts empty RelationshipTarget collections to avoid archetype moves when then related entities are spawned
                 // It pre-allocates space in the collection to avoid reallocs as related entities are added.
                 for related in self.related.values() {
@@ -341,9 +355,9 @@ impl ResolvedScene {
                         related.scene_list.scenes.len(),
                     );
                 }
-                (writer_ops)(context, &mut bundle_writer);
-                bundle_writer.write(context.entity);
-                self.apply_related(context, bundle_scratch)?;
+                (writer_ops)(world, &mut bundle_writer);
+                bundle_writer.write(&mut world.entity_mut(entity));
+                self.apply_related(entity, world, scene_entities, bundle_scratch)?;
             }
         };
 
@@ -356,7 +370,9 @@ impl ResolvedScene {
     /// `context`'s World.
     unsafe fn apply_templates_without_bundle_write(
         &self,
-        context: &mut TemplateContext,
+        entity: Entity,
+        world: &mut World,
+        entity_references: &mut SceneEntities,
         bundle_writer: &mut BundleWriter,
         skip_templates: impl SkipTemplate,
     ) -> Result<(), ApplySceneError> {
@@ -368,7 +384,7 @@ impl ResolvedScene {
             // and the next bundle_writer.write call
             unsafe {
                 template
-                    .apply(context, bundle_writer)
+                    .apply(entity, world, entity_references, bundle_writer)
                     .map_err(ApplySceneError::TemplateBuildError)?;
             }
         }
@@ -378,7 +394,7 @@ impl ResolvedScene {
             // and the next bundle_writer.write call
             unsafe {
                 template
-                    .apply(context)
+                    .apply(entity, world, entity_references)
                     .map_err(ApplySceneError::TemplateBuildError)?;
             }
         }
@@ -387,51 +403,47 @@ impl ResolvedScene {
 
     fn apply_related(
         &self,
-        context: &mut TemplateContext,
+        target: Entity,
+        world: &mut World,
+        scene_entities: &mut SceneEntities,
         bundle_scratch: &mut BundleScratch,
     ) -> Result<(), ApplySceneError> {
         for related_resolved_scenes in self.related.values() {
-            let target = context.entity.id();
-            let TemplateContext {
-                entity,
-                entity_references,
-            } = context;
-            entity.world_scope(|world| -> Result<(), ApplySceneError> {
-                for (index, scene) in related_resolved_scenes.scene_list.scenes.iter().enumerate() {
-                    let mut entity =
-                        if let Some(entity_reference) = scene.entity_references.first().copied() {
-                            let entity = entity_references.get(entity_reference, world);
-                            world.entity_mut(entity)
-                        } else {
-                            world.spawn_empty()
-                        };
+            for (index, scene) in related_resolved_scenes.scene_list.scenes.iter().enumerate() {
+                let entity =
+                    if let Some(entity_reference) = scene.entity_references.first().copied() {
+                        let entity = scene_entities.get(entity_reference, world);
+                        entity
+                    } else {
+                        world.spawn_empty().id()
+                    };
 
-                    scene
-                        .apply_with(
-                            &mut TemplateContext::new(&mut entity, entity_references),
-                            bundle_scratch,
-                            |context, bundle_writer| {
-                                // SAFETY: `context` is used to write all previous `bundle_writer` components
-                                // and is also used to write this relationship component
-                                unsafe {
-                                    (related_resolved_scenes.insert_relationship)(
-                                        bundle_writer,
-                                        // SAFETY: World is only used for component registration, which does not affect
-                                        // the entity location
-                                        &mut context.entity.world_mut().components_registrator(),
-                                        target,
-                                    );
-                                }
-                            },
-                        )
-                        .map_err(|e| ApplySceneError::RelatedSceneError {
-                            relationship_type_name: related_resolved_scenes.relationship_name,
-                            index,
-                            error: Box::new(e),
-                        })?;
-                }
-                Ok(())
-            })?;
+                scene
+                    .apply_with(
+                        entity,
+                        world,
+                        scene_entities,
+                        bundle_scratch,
+                        |world, bundle_writer| {
+                            // SAFETY: `context` is used to write all previous `bundle_writer` components
+                            // and is also used to write this relationship component
+                            unsafe {
+                                (related_resolved_scenes.insert_relationship)(
+                                    bundle_writer,
+                                    // SAFETY: World is only used for component registration, which does not affect
+                                    // the entity location
+                                    &mut world.components_registrator(),
+                                    target,
+                                );
+                            }
+                        },
+                    )
+                    .map_err(|e| ApplySceneError::RelatedSceneError {
+                        relationship_type_name: related_resolved_scenes.relationship_name,
+                        index,
+                        error: Box::new(e),
+                    })?;
+            }
         }
 
         Ok(())
@@ -653,6 +665,9 @@ pub enum ApplySceneError {
         /// The error that occurred when applying the related scene.
         error: Box<ApplySceneError>,
     },
+    /// Caused when the root spawned entity no longer exists after applying the scene.
+    #[error("After applying the scene, the entity no longer exists. This is likely due to a template or command that despawned it.")]
+    MissingEntityError(EntityMutableFetchError),
 }
 
 /// A collection of [`ResolvedScene`]s that are related to a given [`ResolvedScene`] by a [`Relationship`].
@@ -713,7 +728,9 @@ pub trait ErasedComponentTemplate: Any + Send + Sync {
     /// If you are calling it outside of that context, you are almost certainly doing something wrong!
     unsafe fn apply(
         &self,
-        context: &mut TemplateContext,
+        entity: Entity,
+        world: &mut World,
+        scene_entities: &mut SceneEntities,
         bundle_writer: &mut BundleWriter,
     ) -> Result<(), BevyError>;
 
@@ -724,14 +741,18 @@ pub trait ErasedComponentTemplate: Any + Send + Sync {
 impl<T: Template<Output: Component> + Send + Sync + 'static> ErasedComponentTemplate for T {
     unsafe fn apply(
         &self,
-        context: &mut TemplateContext,
+        entity: Entity,
+        world: &mut World,
+        scene_entities: &mut SceneEntities,
         bundle_writer: &mut BundleWriter,
     ) -> Result<(), BevyError> {
-        let component = self.build_template(context)?;
-        // SAFETY: world_mut is only used to register components, which does not affect entity location
-        let mut components = unsafe { context.entity.world_mut().components_registrator() };
+        let component = self.build_template(&mut TemplateContext {
+            entity,
+            world: world.into(),
+            scene_entities,
+        })?;
         // SAFETY: The caller verifies that `bundle_writer` is always used with the same World.
-        unsafe { bundle_writer.push_component(&mut components, component) };
+        unsafe { bundle_writer.push_component(&mut world.components_registrator(), component) };
 
         Ok(())
     }
@@ -751,16 +772,30 @@ pub trait ErasedBundleTemplate: Any + Send + Sync {
     /// `bundle_writer` must always be used with the same World that is stored in `context`. This
     /// is intended to be used by a scene system in a scoped / controlled / easily verifiable context.
     /// If you are calling it outside of that context, you are almost certainly doing something wrong!
-    unsafe fn apply(&self, context: &mut TemplateContext) -> Result<(), BevyError>;
+    unsafe fn apply(
+        &self,
+        entity: Entity,
+        world: &mut World,
+        scene_entities: &mut SceneEntities,
+    ) -> Result<(), BevyError>;
 
     /// Clones this template. See [`Clone`].
     fn clone_template(&self) -> Box<dyn ErasedBundleTemplate>;
 }
 
 impl<T: Template<Output: Bundle> + Send + Sync + 'static> ErasedBundleTemplate for T {
-    unsafe fn apply(&self, context: &mut TemplateContext) -> Result<(), BevyError> {
-        let bundle = self.build_template(context)?;
-        context.entity.insert(bundle);
+    unsafe fn apply(
+        &self,
+        entity: Entity,
+        world: &mut World,
+        scene_entities: &mut SceneEntities,
+    ) -> Result<(), BevyError> {
+        let bundle = self.build_template(&mut TemplateContext {
+            entity,
+            world: world.into(),
+            scene_entities,
+        })?;
+        world.entity_mut(entity).insert(bundle);
         Ok(())
     }
 
@@ -805,7 +840,7 @@ impl SharedEntities {
     pub(crate) fn apply(
         &self,
         world: &mut World,
-        entity_references: &mut SceneEntityReferences,
+        entity_references: &mut SceneEntities,
         bundle_scratch: &mut BundleScratch,
     ) -> Result<(), ApplySceneError> {
         let entities = self.entities.read().unwrap();
@@ -813,13 +848,9 @@ impl SharedEntities {
             drop(entities);
             let mut entities = self.entities.write().unwrap();
             for scene in self.scenes[entities.len()..].iter() {
-                let mut context = TemplateContext {
-                    entity: &mut world.spawn_empty(),
-                    entity_references,
-                };
-
-                entities.push(context.entity.id());
-                scene.apply(&mut context, bundle_scratch)?;
+                let entity = world.spawn_empty().id();
+                entities.push(entity);
+                scene.apply(entity, world, entity_references, bundle_scratch)?;
             }
         } else {
             for (entity, scene) in entities.iter().copied().zip(self.scenes.iter()) {

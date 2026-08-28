@@ -1737,7 +1737,7 @@ pub fn handle_internal_asset_events(world: &mut World) {
                     if let Some(asset_info) = infos.get(entity) && let Some(path) = &asset_info.path {
                         let type_id = match asset_info.loaded_type_id {
                             Some(type_id) => Some(type_id),
-                            None => asset_info.handle.get_strong().and_then(|handle| handle.type_id_hint),
+                            None => asset_info.handle.get_strong().and_then(|handle| handle.data::<AssetData>().unwrap().type_id_hint),
                         };
 
 

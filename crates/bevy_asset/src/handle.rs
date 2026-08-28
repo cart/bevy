@@ -4,7 +4,7 @@ use crate::{
 };
 use alloc::sync::Arc;
 use bevy_ecs::{
-    entity::{ContainsEntity, Entity, EntityHandle},
+    entity::{ContainsEntity, Entity, EntityHandle, EntityHandleData},
     template::{EntityTemplate, FromTemplate, SpecializeFromTemplate, Template, TemplateContext},
 };
 use bevy_platform::{collections::Equivalent, sync::Mutex};
@@ -22,7 +22,7 @@ use uuid::Uuid;
 #[derive(Reflect)]
 #[reflect(Debug, Hash, PartialEq, Clone, Handle)]
 pub struct Handle<T: Asset> {
-    pub(crate) entity_handle: EntityHandle<AssetData>,
+    pub(crate) entity_handle: EntityHandle,
     #[reflect(ignore, clone)]
     pub(crate) _marker: PhantomData<T>,
 }
@@ -37,6 +37,8 @@ pub struct AssetData {
     pub type_id_hint: Option<TypeId>,
     pub meta_transform: Option<MetaTransform>,
 }
+
+impl EntityHandleData for AssetData {}
 
 impl AssetData {
     pub fn new<A: Asset>() -> Self {
@@ -73,18 +75,22 @@ impl<A: Asset> Handle<A> {
     }
 
     pub fn is_default(&self) -> bool {
-        self.entity_handle.is_default
+        self.data().is_default
+    }
+
+    pub fn data(&self) -> &AssetData {
+        self.entity_handle.data::<AssetData>().unwrap()
     }
 
     /// Returns the path if this is (1) a strong handle and (2) the asset has a path
     #[inline]
     pub fn path(&self) -> Option<&AssetPath<'static>> {
-        self.entity_handle.path.as_ref()
+        self.data().path.as_ref()
     }
 
     #[inline]
     pub fn uuid(&self) -> Option<Uuid> {
-        self.entity_handle.uuid
+        self.data().uuid
     }
 
     #[inline]
@@ -261,12 +267,8 @@ impl<T: Asset> Template for HandleTemplate<T> {
             }
             HandleTemplate::EntityTemplate(entity_template) => {
                 let entity = entity_template.build_template(context)?;
-                todo!()
-                // context
-                //     .world
-                //     .get_entity_mut(entity)?
-                //     .handle_with_data(AssetData::new::<T>())
-                //     .into()
+                let handle = context.get_or_create_handle_with_data(entity, AssetData::new::<T>);
+                handle.into()
             }
         })
     }
@@ -323,8 +325,8 @@ impl<A: Asset> Debug for Handle<A> {
     }
 }
 
-impl<A: Asset> From<EntityHandle<AssetData>> for Handle<A> {
-    fn from(entity_handle: EntityHandle<AssetData>) -> Self {
+impl<A: Asset> From<EntityHandle> for Handle<A> {
+    fn from(entity_handle: EntityHandle) -> Self {
         Handle {
             entity_handle,
             _marker: PhantomData,
@@ -387,7 +389,7 @@ impl<A: Asset> From<&mut Handle<A>> for AssetId<A> {
 ///
 /// See [`Handle`] for more information.
 #[derive(Clone, Reflect)]
-pub struct UntypedHandle(pub(crate) EntityHandle<AssetData>);
+pub struct UntypedHandle(pub(crate) EntityHandle);
 
 impl UntypedHandle {
     pub fn entity(&self) -> Entity {
@@ -397,18 +399,22 @@ impl UntypedHandle {
     /// Returns the path if this is (1) a strong handle and (2) the asset has a path
     #[inline]
     pub fn path(&self) -> Option<&AssetPath<'static>> {
-        self.0.path.as_ref()
+        self.data().path.as_ref()
+    }
+
+    pub fn data(&self) -> &AssetData {
+        self.0.data::<AssetData>().unwrap()
     }
 
     /// Returns whether or not this is the default asset.
     #[inline]
     pub fn is_default(&self) -> bool {
-        self.0.is_default
+        self.data().is_default
     }
 
     #[inline]
     pub fn uuid(&self) -> Option<Uuid> {
-        self.0.uuid
+        self.data().uuid
     }
 
     /// Converts to a typed Handle. This _will not check if the target Handle type matches_.
@@ -422,14 +428,14 @@ impl UntypedHandle {
 
     #[inline]
     pub fn type_id_hint(&self) -> Option<TypeId> {
-        self.0.type_id_hint
+        self.data().type_id_hint
     }
 
     /// The "meta transform" for the strong handle. This will only be [`Some`] if the handle is strong and there is a meta transform
     /// associated with it.
     #[inline]
     pub fn meta_transform(&self) -> Option<&MetaTransform> {
-        self.0.meta_transform.as_ref()
+        self.data().meta_transform.as_ref()
     }
 
     #[inline]

@@ -76,6 +76,7 @@ std = [
   "arrayvec/std",
   "log/std",
   "bevy_platform/std",
+  "downcast-rs/std",
 ]
 
 ## `critical-section` provides the building blocks for synchronization primitives
@@ -114,6 +115,7 @@ derive_more = { version = "2", default-features = false, features = [
   "as_ref",
 ] }
 crossbeam-channel = "0.5.0"
+downcast-rs = { version = "2", default-features = false }
 nonmax = { version = "0.5", default-features = false }
 arrayvec = { version = "0.7.4", default-features = false }
 smallvec = { version = "1", default-features = false, features = [
