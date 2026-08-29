@@ -261,9 +261,15 @@ impl DeriveComponent {
                     Some(func) => quote! { || { let x: #ident = (#func)().into(); x } },
                     None => quote! { <#ident as #FQDefault>::default },
                 };
-                register_required.push(quote! {
-                    required_components.register_required::<#ident>(#constructor);
-                });
+                if require.is_template {
+                    register_required.push(quote! {
+                        required_components.register_required_template(#constructor());
+                    });
+                } else {
+                    register_required.push(quote! {
+                        required_components.register_required::<#ident>(#constructor);
+                    });
+                }
             }
         }
         let additional_requires = &self.additional_requires;
@@ -583,6 +589,7 @@ pub enum StorageTy {
 /// Derived required component from the `#[require]` attribute.
 pub struct Require {
     path: Path,
+    is_template: bool,
     func: Option<TokenStream>,
 }
 
@@ -604,6 +611,12 @@ const SPARSE_SET: &str = "SparseSet";
 
 impl Parse for Require {
     fn parse(input: syn::parse::ParseStream) -> Result<Self> {
+        let is_template = if input.peek(kw::template) {
+            let _ = input.parse::<kw::template>()?;
+            true
+        } else {
+            false
+        };
         let mut path = input.parse::<Path>()?;
         let mut last_segment_is_lower = false;
         let mut is_constructor_call = false;
@@ -662,7 +675,11 @@ impl Parse for Require {
             path.segments.pop();
             path.segments.pop_punct();
         }
-        Ok(Require { path, func })
+        Ok(Require {
+            path,
+            func,
+            is_template,
+        })
     }
 }
 
@@ -704,6 +721,7 @@ mod kw {
     syn::custom_keyword!(relationship);
     syn::custom_keyword!(linked_spawn);
     syn::custom_keyword!(allow_self_referential);
+    syn::custom_keyword!(template);
 }
 
 impl Parse for Relationship {

@@ -122,6 +122,7 @@ impl<'w> BundleSpawner<'w> {
             // - table_row was just allocated, bundle matches
             unsafe {
                 bundle_info.write_components(
+                    self.world,
                     table,
                     sparse_sets,
                     &SpawnBundleStatus,

@@ -12,6 +12,8 @@ use crate::{
     entity::Entity,
     query::DebugCheckedUnwrap as _,
     storage::{SparseSets, Table, TableRow},
+    template::{SceneEntities, Template, TemplateContext},
+    world::unsafe_world_cell::UnsafeWorldCell,
 };
 
 /// Metadata associated with a required component. See [`Component`] for details.
@@ -25,7 +27,9 @@ pub struct RequiredComponent {
 #[derive(Clone)]
 pub struct RequiredComponentConstructor(
     // Note: this function makes `unsafe` assumptions, so it cannot be public.
-    Arc<dyn Fn(&mut Table, &mut SparseSets, Tick, TableRow, Entity, MaybeLocation)>,
+    Arc<
+        dyn Fn(UnsafeWorldCell, &mut Table, &mut SparseSets, Tick, TableRow, Entity, MaybeLocation),
+    >,
 );
 
 impl RequiredComponentConstructor {
@@ -49,6 +53,7 @@ impl RequiredComponentConstructor {
             use alloc::boxed::Box;
 
             type Constructor = dyn for<'a, 'b> Fn(
+                UnsafeWorldCell,
                 &'a mut Table,
                 &'b mut SparseSets,
                 Tick,
@@ -64,7 +69,7 @@ impl RequiredComponentConstructor {
             type Intermediate<T> = Arc<T>;
 
             let boxed: Intermediate<Constructor> = Intermediate::new(
-                move |table, sparse_sets, change_tick, table_row, entity, caller| {
+                move |_world, table, sparse_sets, change_tick, table_row, entity, caller| {
                     OwningPtr::make(constructor(), |ptr| {
                         // SAFETY: This will only be called in the context of `BundleInfo::write_components`, which will
                         // pass in a valid table_row and entity requiring a C constructor
@@ -102,6 +107,7 @@ impl RequiredComponentConstructor {
     /// Again, don't call this anywhere but [`BundleInfo::write_components`].
     pub(crate) unsafe fn initialize(
         &self,
+        world: UnsafeWorldCell,
         table: &mut Table,
         sparse_sets: &mut SparseSets,
         change_tick: Tick,
@@ -109,7 +115,15 @@ impl RequiredComponentConstructor {
         entity: Entity,
         caller: MaybeLocation,
     ) {
-        (self.0)(table, sparse_sets, change_tick, table_row, entity, caller);
+        (self.0)(
+            world,
+            table,
+            sparse_sets,
+            change_tick,
+            table_row,
+            entity,
+            caller,
+        );
     }
 }
 
@@ -162,6 +176,68 @@ impl RequiredComponents {
         // - `id` was just registered in `components`;
         // - the caller guarantees all other components were registered in `components`.
         unsafe { self.register_by_id::<C>(id, components, constructor) };
+    }
+
+    /// Registers the [`Component`] `C` as an explicitly required component, which will be constructed using the
+    /// given `T` [`Template`].
+    ///
+    /// If the component was not already registered as an explicit required component then it is added
+    /// as one, potentially overriding the constructor of an inherited required component, otherwise panics.
+    ///
+    /// # Safety
+    ///
+    /// - all other components in this [`RequiredComponents`] instance must have been registered in `components`.
+    unsafe fn register_template<T: Template<Output = C> + Send + Sync + 'static, C: Component>(
+        &mut self,
+        components: &mut ComponentsRegistrator<'_>,
+        template: T,
+    ) {
+        let component_id = components.register_component::<C>();
+        // SAFETY:
+        // - `id` was just registered in `components`;
+        // - e caller guarantees all other components were registered in `components`.
+        #[cfg(not(target_has_atomic = "ptr"))]
+        type Intermediate<T> = Box<T>;
+
+        #[cfg(target_has_atomic = "ptr")]
+        type Intermediate<T> = Arc<T>;
+
+        unsafe {
+            self.register_dynamic_with(component_id, components, move || {
+                RequiredComponentConstructor(Intermediate::new(
+                    move |world, table, sparse_sets, change_tick, table_row, entity, caller| {
+                        let mut context = TemplateContext {
+                            entity,
+                            world: world.into_deferred(),
+                            scene_entities: &mut SceneEntities::default(),
+                        };
+                        let component = template
+                            .clone_template()
+                            .build_template(&mut context)
+                            .unwrap();
+                        OwningPtr::make(component, |ptr| {
+                            // SAFETY: This will only be called in the context of `BundleInfo::write_components`, which will
+                            // pass in a valid table_row and entity requiring a C constructor
+                            // C::STORAGE_TYPE is the storage type associated with `component_id` / `C`
+                            // `ptr` points to valid `C` data, which matches the type associated with `component_id`
+                            unsafe {
+                                BundleInfo::initialize_required_component(
+                                    table,
+                                    sparse_sets,
+                                    change_tick,
+                                    table_row,
+                                    entity,
+                                    component_id,
+                                    C::STORAGE_TYPE,
+                                    ptr,
+                                    caller,
+                                );
+                            }
+                        });
+                    },
+                ))
+            })
+        };
     }
 
     /// Registers the [`Component`] with the given `component_id` ID as an explicitly required component.
@@ -596,6 +672,26 @@ impl<'a, 'w> RequiredComponentsRegistrator<'a, 'w> {
                 .register(self.components, constructor);
         }
     }
+    ///
+    /// Registers the [`Component`] `C` as an explicitly required component, which will be constructed
+    /// using the given Template.
+    ///
+    /// If the component was not already registered as an explicit required component then it is added
+    /// as one, potentially overriding the constructor of an inherited required component, otherwise panics.
+    pub fn register_required_template<
+        T: Template<Output = C> + Send + Sync + 'static,
+        C: Component,
+    >(
+        &mut self,
+        template: T,
+    ) {
+        // SAFETY: we internally guarantee that all components in `required_components`
+        // are registered in `components`
+        unsafe {
+            self.required_components
+                .register_template(self.components, template);
+        }
+    }
 
     /// Registers the [`Component`] with the given `component_id` ID as an explicitly required component.
     ///
@@ -654,6 +750,7 @@ impl<'a, 'w> RequiredComponentsRegistrator<'a, 'w> {
 #[cfg(test)]
 mod tests {
     use alloc::string::{String, ToString};
+    use bevy_ecs_macros::FromTemplate;
 
     use crate::{
         bundle::Bundle,
@@ -1597,5 +1694,33 @@ mod tests {
             world.try_register_required_components::<C, A>(),
             Err(RequiredComponentsError::CyclicRequirement(_, _))
         ));
+    }
+
+    #[test]
+    fn require_template() {
+        #[derive(Component, Default)]
+        #[require(template BTemplate)]
+        struct A;
+
+        #[derive(Component, FromTemplate)]
+        struct B {
+            #[template]
+            handle: Handle,
+        }
+
+        #[derive(Component, FromTemplate)]
+        #[template(manual_default)]
+        struct Handle(String);
+
+        impl Default for HandleTemplate {
+            fn default() -> Self {
+                Self("test".to_string())
+            }
+        }
+
+        let mut world = World::new();
+        let entity = world.spawn(A);
+        let b = entity.get::<B>().unwrap();
+        assert_eq!(&b.handle.0, "test");
     }
 }

@@ -390,6 +390,7 @@ impl<'w> BundleInserter<'w> {
             // - table_row & bundle match
             unsafe {
                 self.bundle_info.as_ref().write_components(
+                    self.world,
                     table,
                     sparse_sets,
                     archetype_after_insert,

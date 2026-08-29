@@ -18,6 +18,7 @@ use crate::{
     entity::Entity,
     query::DebugCheckedUnwrap as _,
     storage::{SparseSetIndex, SparseSets, Storages, Table, TableRow},
+    world::unsafe_world_cell::UnsafeWorldCell,
 };
 
 /// For a specific [`World`], this stores a unique value identifying a type of a registered [`Bundle`].
@@ -238,6 +239,7 @@ impl BundleInfo {
     #[inline]
     pub(super) unsafe fn write_components<'a, T: DynamicBundle, S: BundleComponentStatus>(
         &self,
+        world: UnsafeWorldCell,
         table: &mut Table,
         sparse_sets: &mut SparseSets,
         bundle_component_status: &S,
@@ -322,6 +324,7 @@ impl BundleInfo {
             // SAFETY: we're in write_components
             unsafe {
                 required_component.initialize(
+                    world,
                     table,
                     sparse_sets,
                     change_tick,
