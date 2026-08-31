@@ -45,14 +45,6 @@ pub trait DirectAssetAccessExt {
 
     /// Creates a new [`LoadBuilder`] similar to [`AssetServer::load_builder`].
     fn load_builder(&self) -> LoadBuilder<'_>;
-
-    /// Load an asset with settings, similarly to [`AssetServer::load_with_settings`].
-    #[deprecated(note = "Use `world.load_builder().with_settings(settings).load(path)`")]
-    fn load_asset_with_settings<'a, A: Asset, S: Settings>(
-        &self,
-        path: impl Into<AssetReference<'a>>,
-        settings: impl Fn(&mut S) + Send + Sync + 'static,
-    ) -> Handle<A>;
 }
 
 impl DirectAssetAccessExt for World {
@@ -98,21 +90,6 @@ impl DirectAssetAccessExt for World {
     /// If `self` doesn't have an [`AssetServer`] resource initialized yet.
     fn load_builder(&self) -> LoadBuilder<'_> {
         self.resource::<AssetServer>().load_builder()
-    }
-
-    /// Load an asset with settings, similarly to [`AssetServer::load_with_settings`].
-    ///
-    /// # Panics
-    /// If `self` doesn't have an [`AssetServer`] resource initialized yet.
-    fn load_asset_with_settings<'a, A: Asset, S: Settings>(
-        &self,
-        path: impl Into<AssetReference<'a>>,
-        settings: impl Fn(&mut S) + Send + Sync + 'static,
-    ) -> Handle<A> {
-        self.resource::<AssetServer>()
-            .load_builder()
-            .with_settings(settings)
-            .load(path.into())
     }
 }
 

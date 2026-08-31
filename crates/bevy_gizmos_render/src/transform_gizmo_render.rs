@@ -102,7 +102,10 @@ impl Plugin for TransformGizmoRenderPlugin {
             )
                 .chain()
                 .after(bevy_transform::TransformSystems::Propagate)
-                .after(bevy_camera::visibility::VisibilitySystems::VisibilityPropagate),
+                .after(bevy_camera::visibility::VisibilitySystems::VisibilityPropagate)
+                .after(bevy_render::camera::camera_system)
+                .after(bevy_camera::visibility::check_visibility_cpu_culling)
+                .in_set(bevy_app::TransformGizmoRenderStep),
         );
     }
 }
@@ -191,6 +194,15 @@ fn spawn_gizmo_meshes(mut commands: Commands) {
             minor_radius: VIEW_RING_MINOR,
             major_radius: VIEW_RING_MAJOR,
         }
+        .mesh()
+        .build(),
+    );
+    let view_scale_mesh = commands.spawn_asset(
+        Cuboid::new(
+            SCALE_CUBE_SIZE * 1.5,
+            SCALE_CUBE_SIZE * 1.5,
+            SCALE_CUBE_SIZE * 1.5,
+        )
         .mesh()
         .build(),
     );
@@ -330,6 +342,17 @@ fn spawn_gizmo_meshes(mut commands: Commands) {
         );
     }
 
+    let mat = make_mat(&mut commands, TransformGizmoAxis::View);
+    // View-axis cube (scale)
+    spawn_child(
+        &mut commands,
+        view_scale_mesh,
+        mat,
+        Transform::IDENTITY,
+        TransformGizmoAxis::View,
+        TransformGizmoMode::Scale,
+    );
+
     // --- Overlay camera ---
     // This camera renders only the gizmo layer, after the main camera (order: 1),
     // without clearing the color buffer — so gizmo meshes appear on top of everything.
@@ -349,9 +372,16 @@ fn spawn_gizmo_meshes(mut commands: Commands) {
 
 fn update_gizmo_meshes(
     focus: Option<bevy_ecs::system::Single<&GlobalTransform, With<TransformGizmoFocus>>>,
-    marked_cameras: Query<&GlobalTransform, (With<TransformGizmoCamera>, With<Camera>)>,
+    marked_cameras: Query<
+        (&GlobalTransform, &Camera),
+        (
+            With<TransformGizmoCamera>,
+            With<Camera>,
+            Without<GizmoOverlayCamera>,
+        ),
+    >,
     all_cameras: Query<
-        &GlobalTransform,
+        (&GlobalTransform, &Camera),
         (
             Without<GizmoOverlayCamera>,
             Without<TransformGizmoRoot>,
@@ -375,7 +405,7 @@ fn update_gizmo_meshes(
     >,
     mut std_materials: Query<&mut StandardMaterial>,
     mut overlay_cam: Query<
-        &mut Transform,
+        (&mut Transform, &mut Camera),
         (
             With<GizmoOverlayCamera>,
             Without<TransformGizmoRoot>,
@@ -396,16 +426,16 @@ fn update_gizmo_meshes(
         *root_vis = Visibility::Hidden;
         return;
     };
-    let Some(cam_tf): Option<&GlobalTransform> =
-        bevy_gizmos::resolve_gizmo_camera!(marked_cameras, all_cameras)
+    let Some((cam_tf, cam)) = bevy_gizmos::resolve_gizmo_camera!(marked_cameras, all_cameras)
     else {
         *root_vis = Visibility::Hidden;
         return;
     };
 
     // Copy main camera transform to overlay camera
-    if let Ok(mut overlay_tf) = overlay_cam.single_mut() {
+    if let Ok((mut overlay_tf, mut overlay_cam)) = overlay_cam.single_mut() {
         *overlay_tf = cam_tf.compute_transform();
+        overlay_cam.viewport = cam.viewport.clone();
     }
 
     *root_vis = Visibility::Inherited;

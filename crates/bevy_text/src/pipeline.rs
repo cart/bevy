@@ -1,23 +1,22 @@
 use alloc::borrow::Cow;
 use bevy_asset::{AssetReference, AssetServer};
-use bevy_ecs::system::{Commands, Query};
-use bevy_platform::collections::HashMap;
-
-use core::hash::BuildHasher;
-
 use bevy_color::Color;
 use bevy_ecs::{
-    component::Component, entity::Entity, reflect::ReflectComponent, resource::Resource,
-    system::ResMut,
+    component::Component,
+    entity::Entity,
+    reflect::ReflectComponent,
+    resource::Resource,
+    system::{Commands, Query, ResMut},
 };
 use bevy_image::prelude::*;
 use bevy_log::warn_once;
 use bevy_math::{Rect, Vec2};
-use bevy_platform::hash::FixedHasher;
+use bevy_platform::{collections::HashMap, hash::FixedHasher};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
-use parley::style::{OverflowWrap, TextWrapMode, WordBreak};
+use core::hash::BuildHasher;
 use parley::{
-    Alignment, AlignmentOptions, FontFamily, Layout, PositionedLayoutItem, StyleProperty,
+    style::{OverflowWrap, TextWrapMode, WordBreak},
+    Alignment, AlignmentOptions, Layout, PositionedLayoutItem, StyleProperty,
 };
 use swash::FontRef;
 
@@ -26,11 +25,11 @@ use crate::{
     error::TextError,
     get_glyph_atlas_info,
     parley_context::{FontCx, LayoutCx, ScaleCx},
-    ComputedTextBlock, Font, FontAtlasKey, FontAtlasSet, FontHinting, FontSmoothing, FontSource,
-    Justify, LetterSpacing, LineBreak, LineHeight, PositionedGlyph, TextBounds, TextEntity,
-    TextFont, TextLayout,
+    ComputedTextBlock, DeferredFontAtlas, Font, FontAtlasKey, FontAtlasSet, FontHinting,
+    FontSmoothing, FontSource, Justify, LetterSpacing, LineBreak, LineHeight, PositionedGlyph,
+    TextBounds, TextEntity, TextFont, TextLayout,
 };
-use crate::{DeferredFontAtlas, TextBrush};
+use crate::{RemSize, TextBrush};
 
 struct TextSectionView<'a> {
     index: usize,
@@ -59,7 +58,6 @@ impl TextPipeline {
     pub fn update_buffer<'a>(
         &mut self,
         fonts: &Query<&Font>,
-        asset_server: &AssetServer,
         text_spans: impl Iterator<
             Item = (
                 Entity,
@@ -79,7 +77,7 @@ impl TextPipeline {
         font_cx: &mut FontCx,
         layout_cx: &mut LayoutCx,
         logical_viewport_size: Vec2,
-        base_rem_size: f32,
+        base_rem_size: RemSize,
     ) -> Result<(), TextError> {
         computed.entities.clear();
         computed.needs_rerender = false;
@@ -120,7 +118,7 @@ impl TextPipeline {
                 }
 
                 if matches!(text_font.font, FontSource::Handle(_))
-                    && resolve_font_source(text_font, fonts, asset_server).is_err()
+                    && text_font.font.resolve_font_family(fonts).is_err()
                 {
                     return Err(TextError::NoSuchFont);
                 }
@@ -193,7 +191,7 @@ impl TextPipeline {
                     continue;
                 }
 
-                let resolved_family = resolve_font_source(section.text_font, fonts, asset_server)?;
+                let resolved_family = section.text_font.font.resolve_font_family(fonts)?;
 
                 builder.push(StyleProperty::FontFamily(resolved_family), range.clone());
                 builder.push(
@@ -271,7 +269,7 @@ impl TextPipeline {
         font_system: &mut FontCx,
         layout_cx: &mut LayoutCx,
         logical_viewport_size: Vec2,
-        base_rem_size: f32,
+        base_rem_size: RemSize,
     ) -> Result<TextMeasureInfo, TextError> {
         const MIN_WIDTH_CONTENT_BOUNDS: TextBounds = TextBounds::new_horizontal(0.0);
 
@@ -279,7 +277,6 @@ impl TextPipeline {
 
         self.update_buffer(
             fonts,
-            asset_server,
             text_spans,
             layout.linebreak,
             layout.justify,
@@ -434,63 +431,11 @@ impl TextPipeline {
     }
 }
 
-/// Resolve a [`TextFont`]'s [`FontSource`] to a font family.
-pub fn resolve_font_source<'a>(
-    text_font: &'a TextFont,
-    fonts: &'a Query<&Font>,
-    asset_server: &'a AssetServer,
-) -> Result<FontFamily<'a>, TextError> {
-    Ok(match &text_font.font {
-        FontSource::Default => FontFamily::Single(parley::FontFamilyName::Named(Cow::Borrowed(
-            fonts
-                .get(&asset_server.load::<Font>(AssetReference::Default))
-                .map_err(|_| TextError::NoSuchFont)?
-                .alias
-                .as_str(),
-        ))),
-        FontSource::Handle(handle) => {
-            FontFamily::Single(parley::FontFamilyName::Named(Cow::Borrowed(
-                fonts
-                    .get(handle)
-                    .map_err(|_| TextError::NoSuchFont)?
-                    .alias
-                    .as_str(),
-            )))
-        }
-        FontSource::Family(family) => FontFamily::named(family.as_str()),
-        generic => {
-            #[cfg(not(feature = "system_font_discovery"))]
-            bevy_log::error_once!(
-                "A generic FontSource ({generic:?}) was used, but the `system_font_discovery` \
-                feature is not enabled. Text may not render. Enable the feature to allow Bevy \
-                to discover system fonts."
-            );
-            match generic {
-                FontSource::Serif => parley::GenericFamily::Serif.into(),
-                FontSource::SansSerif => parley::GenericFamily::SansSerif.into(),
-                FontSource::Cursive => parley::GenericFamily::Cursive.into(),
-                FontSource::Fantasy => parley::GenericFamily::Fantasy.into(),
-                FontSource::Monospace => parley::GenericFamily::Monospace.into(),
-                FontSource::SystemUi => parley::GenericFamily::SystemUi.into(),
-                FontSource::UiSerif => parley::GenericFamily::UiSerif.into(),
-                FontSource::UiSansSerif => parley::GenericFamily::UiSansSerif.into(),
-                FontSource::UiMonospace => parley::GenericFamily::UiMonospace.into(),
-                FontSource::UiRounded => parley::GenericFamily::UiRounded.into(),
-                FontSource::Emoji => parley::GenericFamily::Emoji.into(),
-                FontSource::Math => parley::GenericFamily::Math.into(),
-                FontSource::FangSong => parley::GenericFamily::FangSong.into(),
-                FontSource::Handle(_) | FontSource::Family(_) => unreachable!(),
-                FontSource::Default => unreachable!(),
-            }
-        }
-    })
-}
-
 /// Render information for a corresponding text block.
 ///
 /// Contains scaled glyphs and their size. Generated via [`TextPipeline::update_text_layout_info`] when an entity has
 /// [`TextLayout`] and [`ComputedTextBlock`] components.
-#[derive(Component, Clone, Default, Debug, Reflect)]
+#[derive(Component, Clone, Debug, Reflect)]
 #[reflect(Component, Default, Debug, Clone)]
 pub struct TextLayoutInfo {
     /// The target scale factor for this text layout
@@ -524,6 +469,20 @@ impl TextLayoutInfo {
         self.cursor = None;
         self.selection_rects.clear();
         self.preedit_underline_rects.clear();
+    }
+}
+
+impl Default for TextLayoutInfo {
+    fn default() -> Self {
+        Self {
+            scale_factor: 1.,
+            glyphs: Default::default(),
+            run_geometry: Default::default(),
+            size: Vec2::ZERO,
+            cursor: None,
+            selection_rects: Default::default(),
+            preedit_underline_rects: Default::default(),
+        }
     }
 }
 

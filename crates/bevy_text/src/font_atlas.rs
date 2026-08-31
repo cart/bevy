@@ -8,6 +8,9 @@ use wgpu_types::{Extent3d, TextureDimension, TextureFormat};
 
 use crate::{FontSmoothing, GlyphAtlasInfo, GlyphAtlasLocation, TextError};
 
+/// Padding in pixels between glyph textures and the font atlas edges.
+const GLYPH_ATLAS_PADDING: u32 = 2;
+
 /// Key identifying a glyph
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GlyphCacheKey {
@@ -39,6 +42,35 @@ pub struct FontAtlas {
 }
 
 impl FontAtlas {
+    /// Create a new [`FontAtlas`] with the given size, adding it to the appropriate asset collections.
+    // pub fn new(
+    //     textures: &mut Assets<Image>,
+    //     size: UVec2,
+    //     font_smoothing: FontSmoothing,
+    // ) -> FontAtlas {
+    //     let mut image = Image::new_fill(
+    //         size.to_extents(),
+    //         TextureDimension::D2,
+    //         &[0, 0, 0, 0],
+    //         TextureFormat::Rgba8UnormSrgb,
+    //         // Need to keep this image CPU persistent in order to add additional glyphs later on
+    //         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    //     );
+    //     if font_smoothing == FontSmoothing::None {
+    //         image.sampler = ImageSampler::nearest();
+    //     }
+    //     let texture = textures.add(image);
+    //     Self {
+    //         texture_atlas: TextureAtlasLayout::new_empty(size),
+    //         glyph_to_atlas_index: HashMap::default(),
+    //         dynamic_texture_atlas_builder: DynamicTextureAtlasBuilder::new(
+    //             size,
+    //             GLYPH_ATLAS_PADDING,
+    //         ),
+    //         texture,
+    //     }
+    // }
+
     /// Get the [`GlyphAtlasLocation`] for a subpixel-offset glyph.
     pub fn get_glyph_index(&self, cache_key: GlyphCacheKey) -> Option<GlyphAtlasLocation> {
         self.glyph_to_atlas_index.get(&cache_key).copied()
@@ -257,8 +289,12 @@ pub fn add_glyph_to_atlas(
             .size
             .height
             .max(glyph_texture.width());
-        // Pick the higher of 512 or the smallest power of 2 greater than glyph_max_size
-        let containing = (1u32 << (32 - glyph_max_size.leading_zeros())).max(512);
+        // Returns the smallest power-of-two atlas size that fits the glyph and its
+        // required padding, with a minimum size of 512 pixels.
+        let containing = glyph_max_size
+            .saturating_add(GLYPH_ATLAS_PADDING * 2)
+            .next_power_of_two()
+            .max(512);
 
         let mut new_atlas =
             DeferredFontAtlas::new(commands, UVec2::splat(containing), font_smoothing);
@@ -382,4 +418,45 @@ pub fn get_glyph_atlas_info(
                     })
             })
         })
+}
+
+#[cfg(test)]
+mod allocation_regression_tests {
+    use super::*;
+    use swash::{scale::ScaleContext, FontRef};
+
+    // Regression test for https://github.com/bevyengine/bevy/issues/25224.
+    // Atlas sizing must account for the padding used when constructing the atlas.
+    #[test]
+    fn new_atlas_fits_boundary_sized_glyph_with_padding() {
+        let font =
+            FontRef::from_index(include_bytes!("FiraMono-subset.ttf"), 0).expect("valid test font");
+        let glyph_id = font.charmap().map('M');
+        let mut scale_context = ScaleContext::new();
+        let mut measurement_scaler = scale_context.builder(font).size(1479.0).build();
+        let (glyph_texture, _, _) = get_outlined_glyph_texture(
+            &mut measurement_scaler,
+            glyph_id,
+            FontSmoothing::AntiAliased,
+        )
+        .expect("glyph should rasterize");
+        assert_eq!(
+            glyph_texture.width().max(glyph_texture.height()),
+            1021,
+            "test font no longer reproduces the atlas boundary"
+        );
+
+        let mut scaler = scale_context.builder(font).size(1479.0).build();
+        let mut font_atlases = Vec::new();
+        let mut textures = Assets::default();
+
+        add_glyph_to_atlas(
+            &mut font_atlases,
+            &mut textures,
+            &mut scaler,
+            FontSmoothing::AntiAliased,
+            glyph_id,
+        )
+        .expect("a newly created atlas should fit the glyph that requested it");
+    }
 }

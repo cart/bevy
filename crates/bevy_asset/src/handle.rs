@@ -640,10 +640,69 @@ mod tests {
         app.init_asset::<MyAsset>();
 
         let handle: Handle<MyAsset> = app.world_mut().spawn_asset(MyAsset { value: 1 });
-        assert_eq!(
-            handle.strong_count(),
-            1,
-            "Inserting the asset should result in a strong count of 1"
+        match &handle {
+            Handle::Strong(strong) => {
+                assert_eq!(
+                    Arc::strong_count(strong),
+                    1,
+                    "Inserting the asset should result in a strong count of 1"
+                );
+
+                let reflected: &dyn Reflect = &handle;
+                let _cloned_handle: Box<dyn Reflect> = reflected.reflect_clone().unwrap();
+
+                assert_eq!(
+                    Arc::strong_count(strong),
+                    2,
+                    "Cloning the handle with reflect should increase the strong count to 2"
+                );
+
+                let dynamic_handle: Box<dyn PartialReflect> = reflected.to_dynamic().unwrap();
+
+                assert_eq!(
+                    Arc::strong_count(strong),
+                    3,
+                    "Converting the handle to a dynamic should increase the strong count to 3"
+                );
+
+                let from_reflect_handle: Handle<MyAsset> =
+                    FromReflect::from_reflect(&*dynamic_handle).unwrap();
+
+                assert_eq!(Arc::strong_count(strong), 4, "Converting the reflected value back to a handle should increase the strong count to 4");
+                assert!(
+                    from_reflect_handle.is_strong(),
+                    "The cloned handle should still be strong"
+                );
+            }
+            _ => panic!("Expected a strong handle"),
+        }
+    }
+
+    #[test]
+    fn handle_from_reflect_verifies_type_id() {
+        #[derive(Reflect, Asset)]
+        struct A;
+        #[derive(Reflect, Asset)]
+        struct B;
+
+        let mut app = create_app().0;
+        app.init_asset::<A>().init_asset::<B>();
+
+        let mut assets = app.world_mut().resource_mut::<Assets<A>>();
+        let handle_a = assets.add(A);
+
+        let dynamic_handle_a = handle_a.to_dynamic().unwrap();
+        let reflected_handle_a = handle_a.as_partial_reflect();
+
+        let handle_b_from_reflect_dynamic: Option<Handle<B>> =
+            FromReflect::from_reflect(&*dynamic_handle_a);
+        let handle_b_from_reflect: Option<Handle<B>> =
+            FromReflect::from_reflect(reflected_handle_a);
+        let handle_a_from_reflect: Option<Handle<A>> =
+            FromReflect::from_reflect(reflected_handle_a);
+        assert!(
+            handle_b_from_reflect.is_none(),
+            "Handle<B> should not be constructible from reflected Handle<A>"
         );
 
         let reflected: &dyn Reflect = &handle;

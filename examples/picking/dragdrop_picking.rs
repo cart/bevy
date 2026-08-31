@@ -60,14 +60,14 @@ fn setup(mut commands: Commands) {
                     Pickable::IGNORE,
                 ))
                 .observe(
-                    |mut event: On<Pointer<DragStart>>,
+                    |mut event: On<PointerDragStart>,
                      mut button_color: Single<&mut BackgroundColor, With<DraggableButton>>| {
                         button_color.0 = Color::srgb(1.0, 0.5, 0.0);
                         event.propagate(false);
                     },
                 )
                 .observe(
-                    |mut event: On<Pointer<DragEnd>>,
+                    |mut event: On<PointerDragEnd>,
                      mut button_color: Single<&mut BackgroundColor, With<DraggableButton>>| {
                         button_color.0 = Color::srgb(1.0, 0.0, 0.0);
                         event.propagate(false);
@@ -98,7 +98,7 @@ fn setup(mut commands: Commands) {
 }
 
 fn on_drag_enter(
-    mut event: On<Pointer<DragEnter>>,
+    mut event: On<PointerDragEnter>,
     button: Single<Entity, With<DraggableButton>>,
     mut commands: Commands,
 ) {
@@ -120,7 +120,7 @@ fn on_drag_enter(
 }
 
 fn on_drag_over(
-    mut event: On<Pointer<DragOver>>,
+    mut event: On<PointerDragOver>,
     button: Single<Entity, With<DraggableButton>>,
     mut ghost_transform: Single<&mut Transform, With<GhostPreview>>,
 ) {
@@ -134,7 +134,7 @@ fn on_drag_over(
 }
 
 fn on_drag_drop(
-    mut event: On<Pointer<DragDrop>>,
+    mut event: On<PointerDragDrop>,
     button: Single<Entity, With<DraggableButton>>,
     mut commands: Commands,
     ghost: Single<Entity, With<GhostPreview>>,
@@ -158,7 +158,7 @@ fn on_drag_drop(
 }
 
 fn on_drag_leave(
-    mut event: On<Pointer<DragLeave>>,
+    mut event: On<PointerDragLeave>,
     button: Single<Entity, With<DraggableButton>>,
     mut commands: Commands,
     ghost: Single<Entity, With<GhostPreview>>,

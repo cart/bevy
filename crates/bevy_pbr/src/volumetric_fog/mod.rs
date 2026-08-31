@@ -64,7 +64,7 @@ pub struct FogAssets {
 
 impl Plugin for VolumetricFogPlugin {
     fn build(&self, app: &mut App) {
-        embedded_asset!(app, "volumetric_fog.wgsl");
+        embedded_asset!(app, "volumetric_fog.wesl");
 
         let plane_mesh = app
             .world_mut()
@@ -110,6 +110,6 @@ impl Plugin for VolumetricFogPlugin {
     }
 }
 
-impl SyncComponent<VolumetricFogPlugin> for FogVolume {
+impl SyncComponent<RenderApp, VolumetricFogPlugin> for FogVolume {
     type Target = Self;
 }

@@ -270,7 +270,6 @@ pub fn update_text2d_layout(
         if text_changed {
             match text_pipeline.update_buffer(
                 &fonts,
-                &asset_server,
                 text_reader.iter(entity),
                 block.linebreak,
                 block.justify,
@@ -280,7 +279,7 @@ pub fn update_text2d_layout(
                 &mut font_system,
                 &mut layout_cx,
                 logical_viewport_size,
-                rem_size.0,
+                *rem_size,
             ) {
                 Err(
                     TextError::NoSuchFont

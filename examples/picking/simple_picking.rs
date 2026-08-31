@@ -21,16 +21,14 @@ fn setup_scene(mut commands: Commands) {
             },
         ))
         .observe(on_click_spawn_cube)
-        .observe(|out: On<Pointer<Out>>, mut texts: Query<&mut TextColor>| {
+        .observe(|out: On<PointerOut>, mut texts: Query<&mut TextColor>| {
             let mut text_color = texts.get_mut(out.entity).unwrap();
             text_color.0 = Color::WHITE;
         })
-        .observe(
-            |over: On<Pointer<Over>>, mut texts: Query<&mut TextColor>| {
-                let mut color = texts.get_mut(over.entity).unwrap();
-                color.0 = bevy::color::palettes::tailwind::CYAN_400.into();
-            },
-        );
+        .observe(|over: On<PointerOver>, mut texts: Query<&mut TextColor>| {
+            let mut color = texts.get_mut(over.entity).unwrap();
+            color.0 = bevy::color::palettes::tailwind::CYAN_400.into();
+        });
 
     // Base
     let base_mesh = commands.spawn_asset(Mesh::from(Circle::new(4.0)));
@@ -57,7 +55,7 @@ fn setup_scene(mut commands: Commands) {
     ));
 }
 
-fn on_click_spawn_cube(_click: On<Pointer<Click>>, mut commands: Commands, mut num: Local<usize>) {
+fn on_click_spawn_cube(_click: On<PointerClick>, mut commands: Commands, mut num: Local<usize>) {
     let mesh = commands.spawn_asset(Mesh::from(Cuboid::new(0.5, 0.5, 0.5)));
     let material = commands.spawn_asset(StandardMaterial::from(Color::srgb_u8(124, 144, 255)));
     commands
@@ -71,7 +69,7 @@ fn on_click_spawn_cube(_click: On<Pointer<Click>>, mut commands: Commands, mut n
     *num += 1;
 }
 
-fn on_drag_rotate(drag: On<Pointer<Drag>>, mut transforms: Query<&mut Transform>) {
+fn on_drag_rotate(drag: On<PointerDrag>, mut transforms: Query<&mut Transform>) {
     if let Ok(mut transform) = transforms.get_mut(drag.entity) {
         transform.rotate_y(drag.delta.x * 0.02);
         transform.rotate_x(drag.delta.y * 0.02);
