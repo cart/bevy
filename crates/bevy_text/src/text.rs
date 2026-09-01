@@ -190,7 +190,7 @@ impl TextLayout {
 /// but each node has its own [`TextFont`] and [`TextColor`].
 #[derive(Component, Debug, Default, Clone, Deref, DerefMut, Reflect)]
 #[reflect(Component, Default, Debug, Clone)]
-#[require(TextFont, TextColor, LineHeight, LetterSpacing)]
+#[require(template TextFontTemplate, TextColor, LineHeight, LetterSpacing)]
 pub struct TextSpan(pub String);
 
 impl TextSpan {
@@ -549,6 +549,12 @@ impl From<Handle<Font>> for FontSource {
     }
 }
 
+impl From<Handle<Font>> for FontSourceTemplate {
+    fn from(handle: Handle<Font>) -> Self {
+        Self::Handle(handle.into())
+    }
+}
+
 impl From<&Handle<Font>> for FontSource {
     fn from(handle: &Handle<Font>) -> Self {
         Self::Handle(handle.clone())
@@ -700,49 +706,7 @@ pub struct TextFont {
     pub font_variations: FontVariations,
 }
 
-impl TextFont {
-    /// Returns a new [`TextFont`] with the specified font size.
-    pub fn from_font_size(font_size: impl Into<FontSize>) -> Self {
-        Self::default().with_font_size(font_size)
-    }
-
-    /// Returns a new [`TextFont`] with the specified font weight
-    pub fn from_font_weight(weight: impl Into<FontWeight>) -> Self {
-        Self::default().with_font_weight(weight)
-    }
-
-    /// Returns this [`TextFont`] with the specified font face handle.
-    pub fn with_font(mut self, font: Handle<Font>) -> Self {
-        self.font = FontSource::Handle(font);
-        self
-    }
-
-    /// Returns this [`TextFont`] with the specified font family.
-    pub fn with_family(mut self, family: impl Into<SmolStr>) -> Self {
-        self.font = FontSource::Family(family.into());
-        self
-    }
-
-    /// Returns this [`TextFont`] with the specified font size.
-    pub fn with_font_size(mut self, font_size: impl Into<FontSize>) -> Self {
-        self.font_size = font_size.into();
-        self
-    }
-
-    /// Returns this [`TextFont`] with the specified [`FontSmoothing`].
-    pub const fn with_font_smoothing(mut self, font_smoothing: FontSmoothing) -> Self {
-        self.font_smoothing = font_smoothing;
-        self
-    }
-
-    /// Returns this [`TextFont`] with the specified [`FontWeight`].
-    pub fn with_font_weight(mut self, weight: impl Into<FontWeight>) -> Self {
-        self.weight = weight.into();
-        self
-    }
-}
-
-impl<T: Into<FontSource>> From<T> for TextFont {
+impl<T: Into<FontSourceTemplate>> From<T> for TextFontTemplate {
     fn from(source: T) -> Self {
         Self {
             font: source.into(),
@@ -751,10 +715,10 @@ impl<T: Into<FontSource>> From<T> for TextFont {
     }
 }
 
-impl Default for TextFont {
+impl Default for TextFontTemplate {
     fn default() -> Self {
         Self {
-            font: todo!("Default font source"),
+            font: Default::default(),
             font_size: FontSize::Rem(1.),
             style: FontStyle::Normal,
             weight: FontWeight::NORMAL,
@@ -762,23 +726,6 @@ impl Default for TextFont {
             font_features: FontFeatures::default(),
             font_variations: FontVariations::default(),
             font_smoothing: Default::default(),
-        }
-    }
-}
-
-impl Default for TextFontTemplate {
-    fn default() -> Self {
-        // TODO: This would benefit from the proposed "default field values" Rust feature
-        let text_font = TextFont::default();
-        Self {
-            font: Default::default(),
-            font_size: text_font.font_size,
-            style: text_font.style,
-            weight: text_font.weight,
-            width: text_font.width,
-            font_features: text_font.font_features,
-            font_variations: text_font.font_variations,
-            font_smoothing: text_font.font_smoothing,
         }
     }
 }

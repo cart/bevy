@@ -1,4 +1,3 @@
-use bevy_asset::AssetServer;
 use bevy_color::Color;
 use bevy_ecs::{
     component::Component,

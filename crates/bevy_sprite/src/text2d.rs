@@ -22,7 +22,7 @@ use bevy_math::{FloatOrd, Vec2, Vec3};
 use bevy_reflect::{prelude::ReflectDefault, Reflect};
 use bevy_text::{
     ComputedTextBlock, Font, FontAtlasSet, FontCx, FontHinting, LayoutCx, LetterSpacing, LineBreak,
-    LineHeight, RemSize, ScaleCx, TextBounds, TextColor, TextError, TextFont, TextLayout,
+    LineHeight, RemSize, ScaleCx, TextBounds, TextColor, TextError, TextFontTemplate, TextLayout,
     TextLayoutInfo, TextPipeline, TextReader, TextSection, TextWriter,
 };
 use bevy_transform::components::Transform;
@@ -85,7 +85,7 @@ use core::any::TypeId;
 #[reflect(Component, Default, Debug, Clone)]
 #[require(
     TextLayout,
-    TextFont,
+    template TextFontTemplate,
     TextColor,
     LineHeight,
     LetterSpacing,

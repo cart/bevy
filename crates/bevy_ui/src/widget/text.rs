@@ -2,7 +2,6 @@ use crate::{
     ComputedNode, ComputedUiRenderTargetInfo, ContentSize, FixedMeasure, Measure, MeasureArgs,
     Node, NodeMeasure,
 };
-use bevy_asset::AssetServer;
 use bevy_color::Color;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
@@ -20,7 +19,7 @@ use bevy_math::Vec2;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_text::{
     ComputedTextBlock, Font, FontAtlasSet, FontCx, FontHinting, LayoutCx, LetterSpacing, LineBreak,
-    LineHeight, RemSize, ScaleCx, TextBounds, TextColor, TextError, TextFont, TextLayout,
+    LineHeight, RemSize, ScaleCx, TextBounds, TextColor, TextError, TextFontTemplate, TextLayout,
     TextLayoutInfo, TextMeasureInfo, TextPipeline, TextReader, TextSection, TextWriter,
 };
 use taffy::{style::AvailableSpace, MaybeMath, ResolveOrZero};
@@ -99,7 +98,7 @@ impl Default for TextNodeFlags {
 #[require(
     Node,
     TextLayout,
-    TextFont,
+    template TextFontTemplate,
     TextColor,
     LineHeight,
     LetterSpacing,

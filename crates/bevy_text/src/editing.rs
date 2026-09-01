@@ -75,7 +75,7 @@
 use crate::{
     scroll::TextViewport,
     text_edit::{poll_and_apply_paste, reveal_cursor, TextEdit},
-    FontCx, FontHinting, LayoutCx, LineHeight, TextBrush, TextColor, TextFont, TextLayout,
+    FontCx, FontHinting, LayoutCx, LineHeight, TextBrush, TextColor, TextFontTemplate, TextLayout,
 };
 use alloc::sync::Arc;
 use bevy_clipboard::ClipboardRead;
@@ -99,7 +99,7 @@ use parley::{FontContext, LayoutContext, PlainEditor, SplitString};
 #[derive(Component, Clone)]
 #[require(
     TextLayout,
-    TextFont,
+    template TextFontTemplate,
     TextColor,
     LineHeight,
     FontHinting,

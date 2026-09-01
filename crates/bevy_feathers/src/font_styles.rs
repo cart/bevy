@@ -1,5 +1,5 @@
 //! A framework for inheritable font styles.
-use bevy_app::{Propagate, PropagateOver};
+use bevy_app::{PropagateOver, PropagateTemplate};
 use bevy_asset::Handle;
 use bevy_ecs::{
     component::Component,
@@ -10,7 +10,7 @@ use bevy_ecs::{
     template::FromTemplate,
 };
 use bevy_reflect::Reflect;
-use bevy_text::{Font, FontSize, FontWeight, TextFont};
+use bevy_text::{Font, FontSize, FontWeight, TextFont, TextFontTemplate};
 
 use crate::theme::ThemedText;
 
@@ -37,11 +37,13 @@ pub(crate) fn on_changed_font(
     mut commands: Commands,
 ) {
     if let Ok(inheritable_font) = font_style.get(insert.entity) {
-        commands.entity(insert.entity).insert(Propagate(TextFont {
-            font: inheritable_font.font.clone().into(),
-            font_size: inheritable_font.font_size,
-            weight: inheritable_font.weight,
-            ..Default::default()
-        }));
+        commands
+            .entity(insert.entity)
+            .insert_template(PropagateTemplate(TextFontTemplate {
+                font: inheritable_font.font.clone().into(),
+                font_size: inheritable_font.font_size,
+                weight: inheritable_font.weight,
+                ..Default::default()
+            }));
     }
 }
