@@ -121,7 +121,7 @@ pub trait WorldSceneExt {
     /// #     ScenePlugin::default(),
     /// # ));
     /// # let world = app.world_mut();
-    /// #[derive(Component, FromTemplate)]
+    /// #[derive(Component, Default, Clone)]
     /// enum Team {
     ///     #[default]
     ///     Red,
@@ -160,7 +160,7 @@ pub trait WorldSceneExt {
     /// #     ScenePlugin::default(),
     /// # ));
     /// # let world = app.world_mut();
-    /// #[derive(Component, FromTemplate)]
+    /// #[derive(Component, Default, Clone)]
     /// enum Team {
     ///     #[default]
     ///     Red,
@@ -315,7 +315,7 @@ pub trait CommandsSceneExt {
     /// # use bevy_ecs::prelude::*;
     /// # let mut world = World::new();
     /// # let mut commands = world.commands();
-    /// #[derive(Component, FromTemplate)]
+    /// #[derive(Component, Default, Clone)]
     /// enum Team {
     ///     #[default]
     ///     Red,
@@ -348,7 +348,7 @@ pub trait CommandsSceneExt {
     /// # use bevy_ecs::prelude::*;
     /// # let mut world = World::new();
     /// # let mut commands = world.commands();
-    /// #[derive(Component, FromTemplate)]
+    /// #[derive(Component, Default, Clone)]
     /// enum Team {
     ///     #[default]
     ///     Red,
@@ -435,7 +435,7 @@ pub trait EntityWorldMutSceneExt {
     /// #     ScenePlugin::default(),
     /// # ));
     /// # let world = app.world_mut();
-    /// #[derive(Component, FromTemplate)]
+    /// #[derive(Component, Default, Clone)]
     /// enum Team {
     ///     #[default]
     ///     Red,
@@ -543,7 +543,7 @@ pub trait EntityCommandsSceneExt {
     /// # use bevy_app::TaskPoolPlugin;
     /// # let mut app = App::new();
     /// # let mut commands = app.world_mut().commands();
-    /// #[derive(Component, FromTemplate)]
+    /// #[derive(Component, Default, Clone)]
     /// enum Team {
     ///     #[default]
     ///     Red,

@@ -7,9 +7,7 @@ use bevy_ecs::{
     world::{Mut, World},
 };
 
-use crate::{
-    meta::Settings, Asset, AssetData, AssetId, AssetReference, AssetServer, Handle, LoadBuilder,
-};
+use crate::{Asset, AssetData, AssetId, AssetReference, AssetServer, Handle, LoadBuilder};
 
 /// An extension trait for methods for working with assets directly from a [`World`].
 pub trait DirectAssetAccessExt {

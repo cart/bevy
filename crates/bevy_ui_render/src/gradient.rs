@@ -342,7 +342,6 @@ fn compute_color_stops(
 
 pub fn extract_gradients(
     mut commands: Commands,
-    asset_server: Extract<Res<AssetServer>>,
     mut extracted_gradients: ResMut<ExtractedGradients>,
     gradients_query: Extract<
         Query<

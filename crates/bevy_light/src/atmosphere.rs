@@ -3,13 +3,14 @@
 use alloc::{borrow::Cow, sync::Arc};
 use bevy_asset::{Asset, AssetEvent, AssetId, Handle};
 use bevy_color::{ColorToComponents, Gray, LinearRgba};
+use bevy_curve::Curve;
+use bevy_curve::{FunctionCurve, Interval, SampleAutoCurve};
 use bevy_ecs::{
     component::Component, lifecycle::HookContext, message::MessageReader, system::Query,
     template::FromTemplate, world::DeferredWorld,
 };
 use bevy_image::Image;
-use bevy_math::curve::{FunctionCurve, Interval, SampleAutoCurve};
-use bevy_math::{ops, Curve, FloatPow, Vec3};
+use bevy_math::{ops, FloatPow, Vec3};
 use bevy_platform::collections::HashSet;
 use bevy_reflect::TypePath;
 use bevy_transform::components::GlobalTransform;

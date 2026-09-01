@@ -31,12 +31,9 @@ use crate::{
     relationship::RelationshipHookMode,
     resource::Resource,
     schedule::ScheduleLabel,
-    system::{
-        BoxedSystem, Deferred, IntoSystem, RegisteredSystem, SystemId, SystemInput,
-        SystemParamValidationError,
-    },
+    system::{BoxedSystem, Deferred, IntoSystem, RegisteredSystem, SystemId, SystemInput},
     template::Template,
-    world::{unsafe_world_cell::UnsafeWorldCell, CommandQueue, EntityWorldMut, FromWorld, World},
+    world::{CommandQueue, EntityWorldMut, FromWorld, World},
 };
 
 /// A [`Command`] queue to perform structural changes to the [`World`].

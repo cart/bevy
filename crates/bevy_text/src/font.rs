@@ -1,12 +1,9 @@
 use crate::FontCx;
 use crate::FontSource;
 use crate::TextFont;
-use bevy_asset::AssetReference;
-use bevy_asset::AssetServer;
 use bevy_asset::{Asset, AssetId};
 use bevy_ecs::entity::Entity;
 use bevy_ecs::query::With;
-use bevy_ecs::system::Res;
 use bevy_ecs::{
     change_detection::DetectChangesMut,
     system::{Local, Query, ResMut},

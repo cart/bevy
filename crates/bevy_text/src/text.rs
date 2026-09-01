@@ -1,5 +1,5 @@
 use crate::{Font, TextBrush, TextError, TextLayoutInfo, TextSection};
-use bevy_asset::{AssetReference, AssetServer, Handle};
+use bevy_asset::Handle;
 use bevy_color::Color;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{prelude::*, reflect::ReflectComponent};
@@ -300,7 +300,7 @@ pub enum FontSource {
     /// Ordered list of font sources.
     List(#[template] Vec<FontSource>),
     /// Resolve the font using a generic font family.
-    Generic(#[template] GenericFontFamily),
+    Generic(GenericFontFamily),
 }
 
 impl FontSource {
@@ -586,7 +586,7 @@ impl<const N: usize> From<[FontSource; N]> for FontSource {
 }
 
 /// Generic font families that are resolved through Parley's font database.
-#[derive(Clone, Copy, Debug, Reflect, PartialEq, Eq, Hash, FromTemplate)]
+#[derive(Default, Clone, Copy, Debug, Reflect, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum GenericFontFamily {
     /// Fonts with serifs — small decorative strokes at the ends of letterforms.

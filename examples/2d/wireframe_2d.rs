@@ -105,24 +105,24 @@ impl From<ColorCircleWireframeSetting> for Color {
 /// Set up a simple 3D scene
 fn setup(mut commands: Commands) {
     commands.spawn_scene(bsn! {
-        main_ui_node_scene()
+        @main_ui_node_scene()
         Children [
             (
-                feathers_option_buttons("Toggle global",
+                @feathers_option_buttons("Toggle global",
                     &[
                         (GlobalWireframeSetting::On, "ON"),
                         (GlobalWireframeSetting::Off, "OFF"),
                     ], 0)
             ),
             (
-                feathers_option_buttons("Change global color",
+                @feathers_option_buttons("Change global color",
                     &[
                         (GlobalColorSetting::Red, "RED"),
                         (GlobalColorSetting::White, "WHITE"),
                     ], 1)
             ),
             (
-                feathers_option_buttons("Change color of the circle wireframe",
+                @feathers_option_buttons("Change color of the circle wireframe",
                     &[
                         (ColorCircleWireframeSetting::Red, "RED"),
                         (ColorCircleWireframeSetting::Green, "GREEN"),

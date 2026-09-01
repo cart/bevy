@@ -287,7 +287,6 @@ pub fn measure_text_system(
     mut text_pipeline: ResMut<TextPipeline>,
     mut font_system: ResMut<FontCx>,
     mut layout_cx: ResMut<LayoutCx>,
-    asset_server: Res<AssetServer>,
     rem_size: Res<RemSize>,
 ) {
     for (
@@ -316,7 +315,6 @@ pub fn measure_text_system(
         match text_pipeline.create_text_measure(
             entity,
             &fonts,
-            &asset_server,
             text_reader.iter(entity),
             computed_target.scale_factor,
             &block,

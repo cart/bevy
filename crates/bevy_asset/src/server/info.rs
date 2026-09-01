@@ -16,7 +16,6 @@ use crossbeam_channel::Sender;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-#[derive(Debug)]
 pub(crate) struct AssetInfo {
     pub(crate) handle: StrongOrWeakHandle,
     pub(crate) path: Option<AssetPath<'static>>,
@@ -138,7 +137,6 @@ impl Debug for AssetInfos {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("AssetInfos")
             .field("path_to_index", &self.path_to_entity)
-            .field("infos", &self.infos)
             .finish()
     }
 }

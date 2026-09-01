@@ -1,5 +1,4 @@
-use alloc::borrow::Cow;
-use bevy_asset::{AssetReference, AssetServer};
+use bevy_asset::AssetServer;
 use bevy_color::Color;
 use bevy_ecs::{
     component::Component,
@@ -251,7 +250,6 @@ impl TextPipeline {
         &mut self,
         entity: Entity,
         fonts: &Query<&Font>,
-        asset_server: &AssetServer,
         text_spans: impl Iterator<
             Item = (
                 Entity,
