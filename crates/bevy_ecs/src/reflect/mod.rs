@@ -1,16 +1,5 @@
 //! Types that enable reflection support.
 
-use core::{
-    any::TypeId,
-    ops::{Deref, DerefMut},
-};
-
-use crate::{resource::Resource, world::World};
-use bevy_reflect::{
-    std_traits::ReflectDefault, PartialReflect, Reflect, ReflectFromReflect, TypePath,
-    TypeRegistry, TypeRegistryArc,
-};
-
 mod bundle;
 mod component;
 mod entity_commands;
@@ -18,9 +7,10 @@ mod event;
 mod from_world;
 mod map_entities;
 mod message;
+mod relationship;
 mod resource;
+mod template;
 
-use bevy_utils::prelude::DebugName;
 pub use bundle::{ReflectBundle, ReflectBundleFns};
 pub use component::{ReflectComponent, ReflectComponentFns};
 pub use entity_commands::ReflectCommandExt;
@@ -28,7 +18,20 @@ pub use event::{ReflectEvent, ReflectEventFns};
 pub use from_world::{ReflectFromWorld, ReflectFromWorldFns};
 pub use map_entities::ReflectMapEntities;
 pub use message::{ReflectMessage, ReflectMessageFns};
+pub use relationship::*;
 pub use resource::ReflectResource;
+pub use template::*;
+
+use crate::{resource::Resource, world::World};
+use bevy_reflect::{
+    std_traits::ReflectDefault, PartialReflect, Reflect, ReflectFromReflect, TypePath,
+    TypeRegistry, TypeRegistryArc,
+};
+use bevy_utils::prelude::DebugName;
+use core::{
+    any::TypeId,
+    ops::{Deref, DerefMut},
+};
 
 /// A [`Resource`] storing [`TypeRegistry`] for
 /// type registrations relevant to a whole app.

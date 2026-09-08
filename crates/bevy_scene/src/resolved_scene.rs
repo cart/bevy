@@ -1,13 +1,17 @@
 use crate::{Ready, ResolveContext, ResolveSceneError, Scene, SceneList, ScenePatch};
 use bevy_asset::{AssetId, AssetPath, AssetServer, Assets, Handle, UntypedAssetId};
 use bevy_ecs::{
-    bundle::{Bundle, BundleScratch, BundleWriter},
-    component::{Component, ComponentsRegistrator},
+    bundle::{
+        insert_relationship_in_bundle_writer, insert_relationship_target_in_bundle_writer, Bundle,
+        BundleScratch, BundleWriter,
+    },
+    component::ComponentsRegistrator,
     entity::Entity,
     error::{BevyError, Result},
     relationship::{Relationship, RelationshipTarget},
     template::{
-        FromTemplate, SceneEntityReference, SceneEntityReferences, Template, TemplateContext,
+        ErasedBundleTemplate, ErasedTemplate, FromTemplate, SceneEffect, SceneEntityReference,
+        SceneEntityReferences, Template, TemplateContext,
     },
     world::{EntityWorldMut, World},
 };
@@ -173,7 +177,7 @@ pub struct ResolvedScene {
     ///
     /// [`Children`]: bevy_ecs::hierarchy::Children
     // PERF: special casing Children might make sense here to avoid hashing
-    related: TypeIdIndexMap<RelatedResolvedScenes>,
+    pub(crate) related: TypeIdIndexMap<RelatedResolvedScenes>,
     /// The cached [`ScenePatch`] to apply _first_ before applying this [`ResolvedScene`].
     cached: Option<CachedSceneInfo>,
     /// A [`TypeId`] to `templates` index mapping. If a [`Template`] is intended to be shared / patched across scenes, it should be registered
@@ -393,7 +397,8 @@ impl ResolvedScene {
                             },
                         )
                         .map_err(|e| ApplySceneError::RelatedSceneError {
-                            relationship_type_name: related_resolved_scenes.relationship_name,
+                            relationship_type_name: related_resolved_scenes
+                                .relationship_target_name,
                             index,
                             error: Box::new(e),
                         })?;
@@ -477,7 +482,7 @@ impl ResolvedScene {
         &'a mut self,
         context: &mut ResolveContext,
         type_id: TypeId,
-        default: fn() -> Box<dyn ErasedTemplate>,
+        default: impl Fn() -> Box<dyn ErasedTemplate>,
     ) -> &'a mut dyn ErasedTemplate {
         let mut is_cached = false;
         let index = self.template_indices.entry(type_id).or_insert_with(|| {
@@ -546,12 +551,12 @@ impl ResolvedScene {
     /// This will return the existing [`RelatedResolvedScenes`], if it exists. If not, a new empty [`RelatedResolvedScenes`] will be inserted and returned.
     ///
     /// This is used to add new related scenes and read existing related scenes.
-    pub fn get_or_insert_related_resolved_scenes<R: Relationship>(
+    pub fn get_or_insert_related_resolved_scenes<T: RelationshipTarget>(
         &mut self,
     ) -> &mut RelatedResolvedScenes {
         self.related
-            .entry(TypeId::of::<R>())
-            .or_insert_with(RelatedResolvedScenes::new::<R>)
+            .entry(TypeId::of::<T>())
+            .or_insert_with(RelatedResolvedScenes::new::<T>)
     }
 
     /// Configures this [`ResolvedScene`] to include the given [`ScenePatch`] cached.
@@ -667,8 +672,8 @@ pub struct RelatedResolvedScenes {
         unsafe fn(&mut BundleWriter, &mut ComponentsRegistrator, target: Entity),
     /// The function that will be called to add the relationship target to the spawned scene with the given capacity.
     pub insert_relationship_target: unsafe fn(&mut BundleWriter, &mut ComponentsRegistrator, usize),
-    /// The type name of the relationship. This is used for more helpful error message.
-    pub relationship_name: &'static str,
+    /// The type name of the relationship target. This is used for more helpful error message.
+    pub relationship_target_name: &'static str,
 }
 
 impl core::fmt::Debug for RelatedResolvedScenes {
@@ -681,112 +686,13 @@ impl core::fmt::Debug for RelatedResolvedScenes {
 
 impl RelatedResolvedScenes {
     /// Creates a new empty [`RelatedResolvedScenes`] for the given relationship type.
-    pub fn new<R: Relationship>() -> Self {
+    pub fn new<T: RelationshipTarget>() -> Self {
         Self {
             scenes: Vec::new(),
-            insert_relationship: |bundle_writer, components_registrator, target| {
-                // SAFETY: caller ensures bundler_writer is always used with the same World
-                unsafe { bundle_writer.push_component(components_registrator, R::from(target)) };
-            },
-            insert_relationship_target: |bundle_writer, components_registrator, capacity| {
-                let relationship_target =
-                    <<R as Relationship>::RelationshipTarget as RelationshipTarget>::with_capacity(
-                        capacity,
-                    );
-                // SAFETY: caller ensures bundler_writer is always used with the same World
-                unsafe {
-                    bundle_writer.push_component(components_registrator, relationship_target);
-                };
-            },
-            relationship_name: core::any::type_name::<R>(),
+            insert_relationship: insert_relationship_in_bundle_writer::<T::Relationship>,
+            insert_relationship_target: insert_relationship_target_in_bundle_writer::<T>,
+            relationship_target_name: core::any::type_name::<T>(),
         }
-    }
-}
-
-/// A type-erased, object-safe, downcastable version of [`Template`] that produces a [`Component`], which will be added to the
-/// given [`BundleWriter`].
-pub trait ErasedTemplate: Any + Send + Sync {
-    /// Applies this template to the given `entity`.
-    ///
-    /// # Safety
-    ///
-    /// `bundle_writer` must always be used with the same World that is stored in `context`. This
-    /// is intended to be used by a scene system in a scoped / controlled / easily verifiable context.
-    /// If you are calling it outside of that context, you are almost certainly doing something wrong!
-    unsafe fn apply(
-        &self,
-        context: &mut TemplateContext,
-        bundle_writer: &mut BundleWriter,
-    ) -> Result<(), BevyError>;
-
-    /// Clones this template. See [`Clone`].
-    fn clone_template(&self) -> Box<dyn ErasedTemplate>;
-}
-
-impl<T: Template<Output: SceneEffect> + Send + Sync + 'static> ErasedTemplate for T {
-    unsafe fn apply(
-        &self,
-        context: &mut TemplateContext,
-        bundle_writer: &mut BundleWriter,
-    ) -> Result<(), BevyError> {
-        let output = self.build_template(context)?;
-        output.apply(context, bundle_writer);
-        Ok(())
-    }
-
-    fn clone_template(&self) -> Box<dyn ErasedTemplate> {
-        Box::new(Template::clone_template(self))
-    }
-}
-
-/// Something that has an effect on the final applied scene. This is usually a [`Component`].
-pub trait SceneEffect {
-    /// Applies the scene effect to the current context.
-    fn apply(self, context: &mut TemplateContext, bundle_writer: &mut BundleWriter);
-}
-
-/// A scene effect that does nothing.
-pub struct EmptySceneEffect;
-
-impl SceneEffect for EmptySceneEffect {
-    #[inline]
-    fn apply(self, _context: &mut TemplateContext, _bundle_writer: &mut BundleWriter) {}
-}
-
-impl<C: Component> SceneEffect for C {
-    fn apply(self, context: &mut TemplateContext, bundle_writer: &mut BundleWriter) {
-        // SAFETY: world_mut is only used to register components, which does not affect entity location
-        let mut components = unsafe { context.entity.world_mut().components_registrator() };
-        // SAFETY: The caller verifies that `bundle_writer` is always used with the same World.
-        unsafe { bundle_writer.push_component(&mut components, self) };
-    }
-}
-
-/// A type-erased, object-safe, downcastable version of [`Template`] that produces a [`Bundle`], which will be added
-/// immediately to a given `entity`.
-pub trait ErasedBundleTemplate: Any + Send + Sync {
-    /// Applies this template to the given `entity`.
-    ///
-    /// # Safety
-    ///
-    /// `bundle_writer` must always be used with the same World that is stored in `context`. This
-    /// is intended to be used by a scene system in a scoped / controlled / easily verifiable context.
-    /// If you are calling it outside of that context, you are almost certainly doing something wrong!
-    unsafe fn apply(&self, context: &mut TemplateContext) -> Result<(), BevyError>;
-
-    /// Clones this template. See [`Clone`].
-    fn clone_template(&self) -> Box<dyn ErasedBundleTemplate>;
-}
-
-impl<T: Template<Output: Bundle> + Send + Sync + 'static> ErasedBundleTemplate for T {
-    unsafe fn apply(&self, context: &mut TemplateContext) -> Result<(), BevyError> {
-        let bundle = self.build_template(context)?;
-        context.entity.insert(bundle);
-        Ok(())
-    }
-
-    fn clone_template(&self) -> Box<dyn ErasedBundleTemplate> {
-        Box::new(Template::clone_template(self))
     }
 }
 

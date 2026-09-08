@@ -10,7 +10,7 @@ use crate::{CreateTypeData, PartialReflect, Reflect};
 /// A [`ReflectDefault`] for type `T` can be obtained via [`CreateTypeData::create_type_data`].
 #[derive(Clone)]
 pub struct ReflectDefault {
-    default: fn() -> Box<dyn Reflect>,
+    pub default: fn() -> Box<dyn Reflect>,
 }
 
 impl ReflectDefault {

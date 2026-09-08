@@ -1,6 +1,7 @@
 use crate::{
     component::{Component, ComponentId, Components, ComponentsRegistrator},
-    relationship::RelationshipHookMode,
+    entity::Entity,
+    relationship::{Relationship, RelationshipHookMode, RelationshipTarget},
     world::EntityWorldMut,
 };
 use alloc::vec::Vec;
@@ -176,6 +177,37 @@ impl<'a> BundleWriter<'a> {
     pub fn is_empty(&self) -> bool {
         self.0.component_ids.is_empty()
     }
+}
+
+/// Inserts the given relationship type with the given `target` entity.
+///
+/// # Safety
+/// Caller must ensure that the `bundle_writer` has been and will be used with the same world.
+/// Caller must ensure that components_registrator matches the World used with `bundle_writer`
+pub unsafe fn insert_relationship_in_bundle_writer<R: Relationship>(
+    bundle_writer: &mut BundleWriter,
+    components_registrator: &mut ComponentsRegistrator,
+    target: Entity,
+) {
+    // SAFETY: caller ensures bundler_writer is always used with the same World
+    unsafe { bundle_writer.push_component(components_registrator, R::from(target)) };
+}
+
+/// Inserts the given relationship target type with the given `capacity`.
+///
+/// # Safety
+/// Caller must ensure that the `bundle_writer` has been and will be used with the same world.
+/// Caller must ensure that components_registrator matches the World used with `bundle_writer`
+pub unsafe fn insert_relationship_target_in_bundle_writer<T: RelationshipTarget>(
+    bundle_writer: &mut BundleWriter,
+    components_registrator: &mut ComponentsRegistrator,
+    capacity: usize,
+) {
+    let relationship_target = <T as RelationshipTarget>::with_capacity(capacity);
+    // SAFETY: caller ensures bundler_writer is always used with the same World
+    unsafe {
+        bundle_writer.push_component(components_registrator, relationship_target);
+    };
 }
 
 #[cfg(test)]

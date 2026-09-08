@@ -900,6 +900,8 @@ pub mod macro_utils;
 
 extern crate alloc;
 
+mod asset_loader;
+mod dynamic_scene;
 mod resolved_scene;
 mod scene;
 mod scene_component;
@@ -926,6 +928,8 @@ pub use bevy_scene_macros::bsn_list;
 
 pub use bevy_scene_macros::SceneComponent;
 
+use crate::asset_loader::BsnLoader;
+
 /// Adds support for spawning Bevy Scenes. See [`Scene`], [`SceneList`], [`ScenePatch`], and the [`bsn!`] macro for more information.
 #[derive(Default)]
 pub struct ScenePlugin;
@@ -936,6 +940,7 @@ impl Plugin for ScenePlugin {
             .init_resource::<WaitingScenes>()
             .init_asset::<ScenePatch>()
             .init_asset::<SceneListPatch>()
+            .init_asset_loader::<BsnLoader>()
             .add_systems(
                 SpawnScene,
                 (resolve_scene_patches, spawn_queued)

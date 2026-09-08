@@ -1,16 +1,17 @@
 //! Functionality that relates to the [`Template`] trait.
 pub use bevy_ecs_macros::FromTemplate;
 
-use core::{hash::Hash, ops::Deref};
+use core::{any::Any, hash::Hash, ops::Deref};
 
 use crate::{
-    component::Mutable,
+    bundle::{Bundle, BundleWriter},
+    component::{Component, Mutable},
     entity::Entity,
     error::{BevyError, Result},
     resource::Resource,
     world::{EntityWorldMut, Mut, World},
 };
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 use bevy_platform::{collections::hash_map::RawEntryMut, hash::Hashed};
 use bevy_utils::PreHashMap;
 use indexmap::Equivalent;
@@ -143,21 +144,27 @@ pub struct SceneEntityReference(Hashed<InnerSceneEntityReference>);
 
 /// The inner struct actually storing the unique index
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct InnerSceneEntityReference {
-    file: &'static str,
-    line: usize,
-    column: usize,
-    name_id: usize,
-    runtime: u64,
+pub enum InnerSceneEntityReference {
+    MacroInvocation {
+        file: &'static str,
+        line: usize,
+        column: usize,
+        name_id: usize,
+        runtime: u64,
+    },
+    SceneAsset {
+        scene_id: usize,
+        index: usize,
+    },
 }
 impl SceneEntityReference {
     /// Create a new [`SceneEntityReference`] from the invocation location, runtime time, and a local (per-macro) counter for names
-    pub fn new(
+    pub fn macro_invocation(
         (file, line, column): (&'static str, usize, usize),
         name_id: usize,
         runtime: u64,
     ) -> Self {
-        Self(Hashed::new(InnerSceneEntityReference {
+        Self(Hashed::new(InnerSceneEntityReference::MacroInvocation {
             file,
             line,
             column,
@@ -165,14 +172,32 @@ impl SceneEntityReference {
             runtime,
         }))
     }
+
+    pub fn scene_asset(scene_id: usize, index: usize) -> Self {
+        Self(Hashed::new(InnerSceneEntityReference::SceneAsset {
+            scene_id,
+            index,
+        }))
+    }
 }
 
 impl core::fmt::Display for SceneEntityReference {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_fmt(format_args!(
-            "global={}:{}:{} name_id={} runtime={:?}",
-            self.file, self.line, self.column, self.name_id, self.runtime
-        ))
+        match self.deref().deref() {
+            InnerSceneEntityReference::MacroInvocation {
+                file,
+                line,
+                column,
+                name_id,
+                runtime,
+            } => f.write_fmt(format_args!(
+                "global={}:{}:{} name_id={} runtime={:?}",
+                file, line, column, name_id, runtime
+            )),
+            InnerSceneEntityReference::SceneAsset { scene_id, index } => {
+                f.write_fmt(format_args!("scene_id={} index={}", scene_id, index))
+            }
+        }
     }
 }
 
@@ -437,7 +462,9 @@ impl EntityTemplate {
         name_id: usize,
         runtime: u64,
     ) -> Self {
-        Self::SceneEntityReference(SceneEntityReference::new(invocation, name_id, runtime))
+        Self::SceneEntityReference(SceneEntityReference::macro_invocation(
+            invocation, name_id, runtime,
+        ))
     }
 }
 
@@ -582,6 +609,93 @@ impl<T: Template> Template for VecTemplate<T> {
 
     fn clone_template(&self) -> Self {
         VecTemplate(self.0.iter().map(Template::clone_template).collect())
+    }
+}
+
+/// A type-erased, object-safe, downcastable version of [`Template`] that produces a [`Component`], which will be added to the
+/// given [`BundleWriter`].
+pub trait ErasedTemplate: Any + Send + Sync {
+    /// Applies this template to the given `entity`.
+    ///
+    /// # Safety
+    ///
+    /// `bundle_writer` must always be used with the same World that is stored in `context`. This
+    /// is intended to be used by a scene system in a scoped / controlled / easily verifiable context.
+    /// If you are calling it outside of that context, you are almost certainly doing something wrong!
+    unsafe fn apply(
+        &self,
+        context: &mut TemplateContext,
+        bundle_writer: &mut BundleWriter,
+    ) -> Result<(), BevyError>;
+
+    /// Clones this template. See [`Clone`].
+    fn clone_template(&self) -> Box<dyn ErasedTemplate>;
+}
+
+impl<T: Template<Output: SceneEffect> + Send + Sync + 'static> ErasedTemplate for T {
+    unsafe fn apply(
+        &self,
+        context: &mut TemplateContext,
+        bundle_writer: &mut BundleWriter,
+    ) -> Result<(), BevyError> {
+        let output = self.build_template(context)?;
+        output.apply(context, bundle_writer);
+        Ok(())
+    }
+
+    fn clone_template(&self) -> Box<dyn ErasedTemplate> {
+        Box::new(Template::clone_template(self))
+    }
+}
+
+/// Something that has an effect on the final applied scene. This is usually a [`Component`].
+pub trait SceneEffect {
+    /// Applies the scene effect to the current context.
+    fn apply(self, context: &mut TemplateContext, bundle_writer: &mut BundleWriter);
+}
+
+/// A scene effect that does nothing.
+pub struct EmptySceneEffect;
+
+impl SceneEffect for EmptySceneEffect {
+    #[inline]
+    fn apply(self, _context: &mut TemplateContext, _bundle_writer: &mut BundleWriter) {}
+}
+
+impl<C: Component> SceneEffect for C {
+    fn apply(self, context: &mut TemplateContext, bundle_writer: &mut BundleWriter) {
+        // SAFETY: world_mut is only used to register components, which does not affect entity location
+        let mut components = unsafe { context.entity.world_mut().components_registrator() };
+        // SAFETY: The caller verifies that `bundle_writer` is always used with the same World.
+        unsafe { bundle_writer.push_component(&mut components, self) };
+    }
+}
+
+/// A type-erased, object-safe, downcastable version of [`Template`] that produces a [`Bundle`], which will be added
+/// immediately to a given `entity`.
+pub trait ErasedBundleTemplate: Any + Send + Sync {
+    /// Applies this template to the given `entity`.
+    ///
+    /// # Safety
+    ///
+    /// `bundle_writer` must always be used with the same World that is stored in `context`. This
+    /// is intended to be used by a scene system in a scoped / controlled / easily verifiable context.
+    /// If you are calling it outside of that context, you are almost certainly doing something wrong!
+    unsafe fn apply(&self, context: &mut TemplateContext) -> Result<(), BevyError>;
+
+    /// Clones this template. See [`Clone`].
+    fn clone_template(&self) -> Box<dyn ErasedBundleTemplate>;
+}
+
+impl<T: Template<Output: Bundle> + Send + Sync + 'static> ErasedBundleTemplate for T {
+    unsafe fn apply(&self, context: &mut TemplateContext) -> Result<(), BevyError> {
+        let bundle = self.build_template(context)?;
+        context.entity.insert(bundle);
+        Ok(())
+    }
+
+    fn clone_template(&self) -> Box<dyn ErasedBundleTemplate> {
+        Box::new(Template::clone_template(self))
     }
 }
 

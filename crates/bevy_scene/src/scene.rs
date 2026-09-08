@@ -1,5 +1,5 @@
 use crate::{
-    CachedSceneError, EmptySceneEffect, ErasedTemplate, ResolvedScene, SceneList, ScenePatch,
+    dynamic_scene::ApplyDynamicValueError, CachedSceneError, ResolvedScene, SceneList, ScenePatch,
 };
 use bevy_asset::{Asset, AssetPath, AssetServer, Assets};
 use bevy_ecs::{
@@ -9,8 +9,12 @@ use bevy_ecs::{
     name::Name,
     relationship::RelationshipTarget,
     system::IntoObserverSystem,
-    template::{FnTemplate, FromTemplate, SceneEntityReference, Template, TemplateContext},
+    template::{
+        EmptySceneEffect, ErasedTemplate, FnTemplate, FromTemplate, SceneEntityReference, Template,
+        TemplateContext,
+    },
 };
+use bevy_reflect::ApplyError;
 use core::{any::TypeId, marker::PhantomData};
 use thiserror::Error;
 use variadics_please::all_tuples;
@@ -143,6 +147,11 @@ impl SceneDependencies {
     pub fn iter(&self) -> impl Iterator<Item = &SceneDependency> {
         self.0.iter()
     }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 /// An asset dependency of a [`Scene`].
@@ -165,6 +174,11 @@ pub enum ResolveSceneError {
     /// Caused when a [`Scene`]/[`SceneList`] is not present on the scene asset.
     #[error("The Scene/SceneList is not present on the scene asset. This is likely because the scene has already been resolved, which consumed the source scene")]
     MissingScene,
+    /// Caused when applying a [`DynamicValue`] fails.
+    ///
+    /// [`DynamicValue`]: crate::dynamic_scene::DynamicValue
+    #[error(transparent)]
+    ApplyDynamicValueError(#[from] ApplyDynamicValueError),
 }
 
 /// Context used by [`Scene`] implementations during [`Scene::resolve`].
@@ -395,7 +409,7 @@ impl<R: RelationshipTarget> Scene for RelatedScenes<R> {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let related = scene.get_or_insert_related_resolved_scenes::<R::Relationship>();
+        let related = scene.get_or_insert_related_resolved_scenes::<R>();
         self.related_template_list
             .resolve_list(context, &mut related.scenes)
     }
