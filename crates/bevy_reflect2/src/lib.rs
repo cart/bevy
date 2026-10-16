@@ -101,6 +101,22 @@ mod tests {
     }
 
     #[test]
+    fn reflect_default_drop_not_called() {
+        #[derive(Reflect, Default)]
+        #[reflect(Default)]
+        struct Foo(u32);
+
+        impl Drop for Foo {
+            fn drop(&mut self) {
+                panic!();
+            }
+        }
+
+        let foo = Foo::TYPE.default().unwrap();
+        core::mem::forget(foo);
+    }
+
+    #[test]
     fn custom_type_data() {
         #[derive(Clone)]
         struct ReflectThing(TypeId);

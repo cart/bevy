@@ -93,6 +93,6 @@ pub unsafe fn set_default<T: Default>(ptr: *mut u8) {
     // SAFETY: caller verifies that ptr is a valid allocation of type T, and it corresponds
     // to a unique, mutable reference
     unsafe {
-        *(ptr as *mut T) = T::default();
+        (ptr as *mut T).write(T::default());
     }
 }
