@@ -11,8 +11,8 @@ pub struct Struct {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FieldKind {
-    Struct,
-    Tuple,
+    Named,
+    Unnamed,
     Unit,
 }
 

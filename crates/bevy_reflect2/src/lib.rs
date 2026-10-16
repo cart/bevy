@@ -67,7 +67,7 @@ mod tests {
         let Kind::Struct(struct_kind) = &reflect.ty().kind else {
             panic!("Expected struct kind");
         };
-        assert_eq!(struct_kind.kind, FieldKind::Struct);
+        assert_eq!(struct_kind.kind, FieldKind::Named);
 
         {
             let struct_ref = reflect.struct_ref().unwrap();
@@ -90,6 +90,74 @@ mod tests {
             *value = 11;
         }
         assert_eq!(foo.value, 11);
+    }
+
+    #[test]
+    fn reflect_struct_tuple() {
+        #[derive(Reflect)]
+        struct Foo(u32, f32);
+
+        let mut foo = Foo(10, 20.);
+        let reflect = &mut foo as &mut dyn Reflect;
+        assert_eq!(reflect.ty().type_id, TypeId::of::<Foo>());
+        assert_eq!(reflect.ty().type_path().full(), "bevy_reflect2::tests::Foo");
+        assert_eq!(reflect.ty().type_path().short(), "Foo");
+        assert_eq!(
+            reflect.ty().type_path().module_name(),
+            Some("bevy_reflect2::tests")
+        );
+        assert_eq!(reflect.ty().type_path().crate_name(), Some("bevy_reflect2"));
+        let Kind::Struct(struct_kind) = &reflect.ty().kind else {
+            panic!("Expected struct kind");
+        };
+        assert_eq!(struct_kind.kind, FieldKind::Unnamed);
+
+        {
+            let struct_ref = reflect.struct_ref().unwrap();
+            let field = struct_ref.field(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u32>());
+            let value = field.downcast_ref::<u32>().unwrap();
+            assert_eq!(*value, 10);
+
+            let field = struct_ref.field(1).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<f32>());
+            let value = field.downcast_ref::<f32>().unwrap();
+            assert_eq!(*value, 20.);
+        }
+
+        {
+            let mut struct_mut = reflect.struct_mut().unwrap();
+            let field = struct_mut.field_mut(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u32>());
+            let value = field.downcast_mut::<u32>().unwrap();
+            *value = 11;
+        }
+        assert_eq!(foo.0, 11);
+    }
+
+    #[test]
+    fn reflect_struct_unit() {
+        #[derive(Reflect)]
+        struct Foo;
+
+        let mut foo = Foo;
+        let reflect = &mut foo as &mut dyn Reflect;
+        assert_eq!(reflect.ty().type_id, TypeId::of::<Foo>());
+        assert_eq!(reflect.ty().type_path().full(), "bevy_reflect2::tests::Foo");
+        assert_eq!(reflect.ty().type_path().short(), "Foo");
+        assert_eq!(
+            reflect.ty().type_path().module_name(),
+            Some("bevy_reflect2::tests")
+        );
+        assert_eq!(reflect.ty().type_path().crate_name(), Some("bevy_reflect2"));
+        let Kind::Struct(struct_kind) = &reflect.ty().kind else {
+            panic!("Expected struct kind");
+        };
+        assert_eq!(struct_kind.kind, FieldKind::Unit);
+        assert!(struct_kind.fields.is_empty());
+
+        let struct_ref = reflect.struct_ref().unwrap();
+        assert!(struct_ref.field(0).is_none());
     }
 
     #[test]

@@ -87,10 +87,10 @@ fn kind(ast: &DeriveInput, bevy_reflect: &Path) -> (TokenStream, TokenStream) {
 fn struct_kind(data_struct: &DataStruct, bevy_reflect: &Path) -> TokenStream {
     let field_kind = match &data_struct.fields {
         Fields::Named(_) => {
-            quote! { #bevy_reflect::FieldKind::Struct }
+            quote! { #bevy_reflect::FieldKind::Named }
         }
         Fields::Unnamed(_) => {
-            quote! { #bevy_reflect::FieldKind::Tuple }
+            quote! { #bevy_reflect::FieldKind::Unnamed }
         }
         Fields::Unit => {
             quote! { #bevy_reflect::FieldKind::Unit }
@@ -161,7 +161,7 @@ fn enum_kind(
         }
         let (variant_kind, field_access) = match variant.fields {
             Fields::Named(_) => (
-                quote! {#bevy_reflect::FieldKind::Struct},
+                quote! {#bevy_reflect::FieldKind::Named},
                 quote! {
                     #type_ident::#variant_ident { #(#field_names),* } => match index {
                         #(#field_index_cases,)*
@@ -170,7 +170,7 @@ fn enum_kind(
                 },
             ),
             Fields::Unnamed(_) => (
-                quote! {#bevy_reflect::FieldKind::Tuple},
+                quote! {#bevy_reflect::FieldKind::Unnamed},
                 quote! {
                     #type_ident::#variant_ident(#(#field_names),*) => match index {
                         #(#field_index_cases,)*
