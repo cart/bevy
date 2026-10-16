@@ -1,12 +1,12 @@
 mod attributes;
 mod type_data;
 
-use bevy_macro_utils::BevyManifest;
+use bevy_macro_utils::{fq_std::FQOption, BevyManifest};
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::{format_ident, quote, quote_spanned};
 use syn::{
-    parse_quote, spanned::Spanned, Data, DeriveInput, GenericParam, MacroDelimiter, Member, Meta,
-    Path,
+    parse_quote, spanned::Spanned, Data, DataEnum, DataStruct, DeriveInput, Fields, GenericParam,
+    MacroDelimiter, Member, Meta, Path,
 };
 
 use crate::reflect::{attributes::ContainerAttributes, type_data::TypeDataRegistration};
@@ -34,7 +34,7 @@ pub(crate) fn derive_reflect(ast: DeriveInput) -> Result<TokenStream, syn::Error
         }
     }
 
-    let kind = kind(&ast, &bevy_reflect);
+    let (kind, kind_declarations) = kind(&ast, &bevy_reflect);
 
     let type_ident = &ast.ident;
     let type_ident_str = type_ident.to_string();
@@ -72,51 +72,151 @@ pub(crate) fn derive_reflect(ast: DeriveInput) -> Result<TokenStream, syn::Error
         }
 
         #type_registration
+        #kind_declarations
     })
 }
 
-fn kind(ast: &DeriveInput, bevy_reflect: &Path) -> TokenStream {
+fn kind(ast: &DeriveInput, bevy_reflect: &Path) -> (TokenStream, TokenStream) {
     match &ast.data {
-        Data::Struct(data_struct) => {
-            let field_kind = match &data_struct.fields {
-                syn::Fields::Named(_) => {
-                    quote! { #bevy_reflect::FieldKind::Struct }
-                }
-                syn::Fields::Unnamed(_) => {
-                    quote! { #bevy_reflect::FieldKind::Tuple }
-                }
-                syn::Fields::Unit => {
-                    quote! { #bevy_reflect::FieldKind::Unit }
-                }
-            };
-            let mut fields = Vec::with_capacity(data_struct.fields.len());
-            for (index, field) in data_struct.fields.iter().enumerate() {
-                let (name, ident) = if let Some(ident) = &field.ident {
-                    (ident.to_string(), Member::Named(ident.clone()))
-                } else {
-                    (index.to_string(), Member::Unnamed(index.into()))
-                };
-                let field_ty = &field.ty;
-                fields.push(quote! {
-                    #bevy_reflect::Field {
-                        name: #name,
-                        offset: ::core::mem::offset_of!(Self, #ident),
-                        ty: #bevy_reflect::TypeRef(#bevy_reflect::Type::of::<#field_ty>),
-                    }
-                })
-            }
-            quote! {
-                #bevy_reflect::Kind::Struct(#bevy_reflect::Struct {
-                    kind: #field_kind,
-                    fields: &[
-                        #(#fields,)*
-                    ],
-                })
-            }
-        }
-        Data::Enum(_data_enum) => todo!(),
+        Data::Struct(data_struct) => (struct_kind(data_struct, bevy_reflect), quote! {}),
+        Data::Enum(data_enum) => enum_kind(ast, data_enum, bevy_reflect),
         Data::Union(_data_union) => todo!(),
     }
+}
+
+fn struct_kind(data_struct: &DataStruct, bevy_reflect: &Path) -> TokenStream {
+    let field_kind = match &data_struct.fields {
+        Fields::Named(_) => {
+            quote! { #bevy_reflect::FieldKind::Struct }
+        }
+        Fields::Unnamed(_) => {
+            quote! { #bevy_reflect::FieldKind::Tuple }
+        }
+        Fields::Unit => {
+            quote! { #bevy_reflect::FieldKind::Unit }
+        }
+    };
+    let mut fields = Vec::with_capacity(data_struct.fields.len());
+    for (index, field) in data_struct.fields.iter().enumerate() {
+        let (name, ident) = if let Some(ident) = &field.ident {
+            (ident.to_string(), Member::Named(ident.clone()))
+        } else {
+            (index.to_string(), Member::Unnamed(index.into()))
+        };
+        let field_ty = &field.ty;
+        fields.push(quote! {
+            #bevy_reflect::Field {
+                name: #name,
+                offset: ::core::mem::offset_of!(Self, #ident),
+                ty: #bevy_reflect::TypeRef(#bevy_reflect::Type::of::<#field_ty>),
+            }
+        })
+    }
+    quote! {
+        #bevy_reflect::Kind::Struct(#bevy_reflect::Struct {
+            kind: #field_kind,
+            fields: &[
+                #(#fields),*
+            ],
+        })
+    }
+}
+
+fn enum_kind(
+    ast: &DeriveInput,
+    data_enum: &DataEnum,
+    bevy_reflect: &Path,
+) -> (TokenStream, TokenStream) {
+    let type_ident = &ast.ident;
+    let mut variants = Vec::with_capacity(data_enum.variants.len());
+    let mut variant_field_accesses = Vec::with_capacity(data_enum.variants.len());
+    for (index, variant) in data_enum.variants.iter().enumerate() {
+        let variant_ident = &variant.ident;
+
+        let mut fields = Vec::with_capacity(variant.fields.len());
+        let mut field_names = Vec::with_capacity(variant.fields.len());
+        let mut field_index_cases = Vec::with_capacity(variant.fields.len());
+        for (field_index, field) in variant.fields.iter().enumerate() {
+            let name = if let Some(ident) = &field.ident {
+                ident.to_string()
+            } else {
+                index.to_string()
+            };
+            let field_ty = &field.ty;
+            fields.push(quote! {
+                #bevy_reflect::EnumField {
+                    name: #name,
+                    ty: #bevy_reflect::TypeRef(#bevy_reflect::Type::of::<#field_ty>),
+                }
+            });
+            let field_name = field
+                .ident
+                .clone()
+                .unwrap_or_else(|| format_ident!("f{}", field_index));
+            let field_type = &field.ty;
+            field_index_cases.push(quote! {
+                #field_index => #FQOption::Some((#field_name as *const #field_type as *const u8, <#field_type as #bevy_reflect::Typed>::TYPE.vtable.cast_reflect))
+            });
+            field_names.push(field_name);
+        }
+        let (variant_kind, field_access) = match variant.fields {
+            Fields::Named(_) => (
+                quote! {#bevy_reflect::FieldKind::Struct},
+                quote! {
+                    #type_ident::#variant_ident { #(#field_names),* } => match index {
+                        #(#field_index_cases,)*
+                        _ => #FQOption::None,
+                    }
+                },
+            ),
+            Fields::Unnamed(_) => (
+                quote! {#bevy_reflect::FieldKind::Tuple},
+                quote! {
+                    #type_ident::#variant_ident(#(#field_names),*) => match index {
+                        #(#field_index_cases,)*
+                        _ => #FQOption::None,
+                    }
+                },
+            ),
+            Fields::Unit => (
+                quote! {#bevy_reflect::FieldKind::Unit},
+                quote! {
+                    #type_ident::#variant_ident => None
+                },
+            ),
+        };
+        let name = variant.ident.to_string();
+        variants.push(quote! {
+            #bevy_reflect::Variant {
+                name: #name,
+                kind: #variant_kind,
+                fields: &[
+                    #(#fields),*
+                ],
+            }
+        });
+        variant_field_accesses.push(field_access);
+    }
+    let kind = quote! {
+        #bevy_reflect::Kind::Enum(#bevy_reflect::Enum {
+            cast_enum_access: #bevy_reflect::cast_enum_access::<Self>,
+            variants: &[
+                #(#variants),*
+            ],
+        })
+    };
+    let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
+    let kind_declarations = quote! {
+        unsafe impl #impl_generics #bevy_reflect::EnumAccess for #type_ident #type_generics #where_clause {
+            fn field(&self, index: usize) -> #FQOption<(*const u8, fn(*const u8) -> *const dyn #bevy_reflect::Reflect)> {
+                match self {
+                    #(#variant_field_accesses,)*
+                }
+            }
+        }
+    };
+
+    (kind, kind_declarations)
 }
 
 fn vtable(

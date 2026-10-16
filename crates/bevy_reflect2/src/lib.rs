@@ -1,4 +1,7 @@
 //! Rust reflection.
+//!
+//! TODO:
+//! - For safety reasons, [`Type`] (and relevant descendant types) should be unsafe to construct.
 
 #![expect(unsafe_code, reason = "This crate uses unsafe")]
 #![expect(missing_docs, reason = "Work in progress")]
@@ -35,24 +38,25 @@ pub use type_registry::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as bevy_reflect2, CreateTypeData, Kind, Reflect, TypeRegistry, Typed};
+    use crate::{
+        self as bevy_reflect2, CreateTypeData, FieldKind, Kind, Reflect, TypeRegistry, Typed,
+    };
     use core::any::{Any, TypeId};
 
     #[test]
-    fn basics() {
+    fn reflect_struct_named() {
         #[derive(Reflect)]
         struct Foo {
             value: u32,
             other: f32,
         }
 
-        let foo = Foo {
+        let mut foo = Foo {
             value: 10,
             other: 20.,
         };
-        let reflect = &foo as &dyn Reflect;
+        let reflect = &mut foo as &mut dyn Reflect;
         assert_eq!(reflect.ty().type_id, TypeId::of::<Foo>());
-
         assert_eq!(reflect.ty().type_path().full(), "bevy_reflect2::tests::Foo");
         assert_eq!(reflect.ty().type_path().short(), "Foo");
         assert_eq!(
@@ -60,17 +64,94 @@ mod tests {
             Some("bevy_reflect2::tests")
         );
         assert_eq!(reflect.ty().type_path().crate_name(), Some("bevy_reflect2"));
+        let Kind::Struct(struct_kind) = &reflect.ty().kind else {
+            panic!("Expected struct kind");
+        };
+        assert_eq!(struct_kind.kind, FieldKind::Struct);
 
-        let struct_ref = reflect.struct_ref().unwrap();
-        let field = struct_ref.field(0).unwrap();
-        assert_eq!(field.ty().type_id, TypeId::of::<u32>());
-        let value = field.downcast_ref::<u32>().unwrap();
-        assert_eq!(*value, 10);
+        {
+            let struct_ref = reflect.struct_ref().unwrap();
+            let field = struct_ref.field(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u32>());
+            let value = field.downcast_ref::<u32>().unwrap();
+            assert_eq!(*value, 10);
 
-        let field = struct_ref.field(1).unwrap();
-        assert_eq!(field.ty().type_id, TypeId::of::<f32>());
-        let value = field.downcast_ref::<f32>().unwrap();
-        assert_eq!(*value, 20.);
+            let field = struct_ref.field(1).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<f32>());
+            let value = field.downcast_ref::<f32>().unwrap();
+            assert_eq!(*value, 20.);
+        }
+
+        {
+            let mut struct_mut = reflect.struct_mut().unwrap();
+            let field = struct_mut.field_mut(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u32>());
+            let value = field.downcast_mut::<u32>().unwrap();
+            *value = 11;
+        }
+        assert_eq!(foo.value, 11);
+    }
+
+    #[test]
+    fn reflect_enum() {
+        #[derive(Reflect, PartialEq, Eq, Debug)]
+        enum Foo {
+            X { value: u32 },
+            Y(u64),
+            Z,
+        }
+
+        let mut foo = Foo::X { value: 1 };
+        let reflect = &mut foo as &mut dyn Reflect;
+        assert_eq!(reflect.ty().type_id, TypeId::of::<Foo>());
+        assert_eq!(reflect.ty().type_path().full(), "bevy_reflect2::tests::Foo");
+        let Kind::Enum(_enum_kind) = &reflect.ty().kind else {
+            panic!("Expected enum kind");
+        };
+
+        {
+            let enum_ref = reflect.enum_ref().unwrap();
+            let field = enum_ref.field(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u32>());
+            let value = field.downcast_ref::<u32>().unwrap();
+            assert_eq!(*value, 1);
+            assert!(enum_ref.field(1).is_none());
+        }
+        {
+            let mut enum_mut = reflect.enum_mut().unwrap();
+            let field = enum_mut.field_mut(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u32>());
+            let value = field.downcast_mut::<u32>().unwrap();
+            *value = 11;
+        }
+
+        assert_eq!(foo, Foo::X { value: 11 });
+
+        let mut foo = Foo::Y(1);
+        let reflect = &mut foo as &mut dyn Reflect;
+
+        {
+            let enum_ref = reflect.enum_ref().unwrap();
+            let field = enum_ref.field(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u64>());
+            let value = field.downcast_ref::<u64>().unwrap();
+            assert_eq!(*value, 1);
+            assert!(enum_ref.field(1).is_none());
+        }
+        {
+            let mut enum_mut = reflect.enum_mut().unwrap();
+            let field = enum_mut.field_mut(0).unwrap();
+            assert_eq!(field.ty().type_id, TypeId::of::<u64>());
+            let value = field.downcast_mut::<u64>().unwrap();
+            *value = 11;
+        }
+        assert_eq!(foo, Foo::Y(11));
+
+        let foo = Foo::Z;
+        let reflect = &foo as &dyn Reflect;
+
+        let enum_ref = reflect.enum_ref().unwrap();
+        assert!(enum_ref.field(0).is_none());
     }
 
     #[test]
@@ -137,6 +218,7 @@ mod tests {
         let thing = registration.data::<ReflectThing>().unwrap();
         assert_eq!(thing.0, TypeId::of::<Foo>());
     }
+
     // #[test]
     // fn generic_basics() {
     //     #[derive(Reflect)]

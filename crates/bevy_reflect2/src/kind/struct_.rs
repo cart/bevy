@@ -9,7 +9,7 @@ pub struct Struct {
     pub kind: FieldKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FieldKind {
     Struct,
     Tuple,
