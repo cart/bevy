@@ -3,7 +3,7 @@ pub use bevy_reflect2_macros::Reflect;
 use crate::{
     kind::Kind,
     ty::{Type, Typed},
-    EnumMut, EnumRef, StructMut, StructRef,
+    EnumAccess, EnumMut, EnumRef, StructMut, StructRef,
 };
 use alloc::boxed::Box;
 use bevy_ptr::{Ptr, PtrMut};
@@ -71,7 +71,8 @@ impl dyn Reflect {
         };
 
         // SAFETY: self.ptr() is a valid, initialized type that matches the type described in enum_type
-        Some(unsafe { EnumRef::new(self.ptr(), enum_type) })
+        let access = unsafe { &*(enum_type.cast_enum_access)(self.ptr().as_ptr()) };
+        Some(EnumRef { access, enum_type })
     }
 
     pub fn enum_mut(&mut self) -> Option<EnumMut<'_>> {
@@ -80,6 +81,9 @@ impl dyn Reflect {
         };
 
         // SAFETY: self.ptr() is a valid, initialized type that matches the type described in enum_type
-        Some(unsafe { EnumMut::new(self.ptr_mut(), enum_type) })
+        let access = unsafe {
+            &mut *((enum_type.cast_enum_access)(self.ptr_mut().as_ptr()) as *mut dyn EnumAccess)
+        };
+        Some(EnumMut { access, enum_type })
     }
 }

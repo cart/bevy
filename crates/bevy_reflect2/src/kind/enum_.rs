@@ -52,7 +52,7 @@ pub struct EnumField {
 pub unsafe trait EnumAccess: Any {
     fn field(&self, index: usize) -> Option<&dyn Reflect>;
     fn field_mut(&mut self, index: usize) -> Option<&mut dyn Reflect>;
-    // fn variant(&self) -> usize;
+    fn variant(&self) -> usize;
 }
 
 pub fn cast_enum_access<E: EnumAccess>(ptr: *const u8) -> *const dyn EnumAccess {
@@ -60,51 +60,50 @@ pub fn cast_enum_access<E: EnumAccess>(ptr: *const u8) -> *const dyn EnumAccess 
 }
 
 pub struct EnumRef<'a> {
-    // SAFETY NOTE: this should only ever be constructed with EnumRef::new
-    ptr: Ptr<'a>,
-    // SAFETY NOTE: this should only ever be constructed with EnumRef::new
-    enum_type: &'static Enum,
+    pub(crate) access: &'a dyn EnumAccess,
+    pub(crate) enum_type: &'static Enum,
 }
 
 impl<'a> EnumRef<'a> {
-    /// # Safety
-    ///
-    /// `ptr` must be a valid, initialized value that exactly matches the type described in `enum_type`
-    pub unsafe fn new(ptr: Ptr<'a>, enum_type: &'static Enum) -> Self {
-        Self { ptr, enum_type }
+    #[inline]
+    pub fn enum_type(&self) -> &'static Enum {
+        self.enum_type
     }
 
+    #[inline]
     pub fn field(&self, index: usize) -> Option<&dyn Reflect> {
-        // SAFETY: self.ptr matches the `enum_type`
-        let enum_access = unsafe { self.enum_type.enum_access(self.ptr) };
-        enum_access.field(index)
+        self.access.field(index)
+    }
+
+    #[inline]
+    pub fn variant(&self) -> usize {
+        self.access.variant()
     }
 }
 
 pub struct EnumMut<'a> {
-    // SAFETY NOTE: this should only ever be constructed with EnumRef::new
-    ptr: PtrMut<'a>,
-    // SAFETY NOTE: this should only ever be constructed with EnumRef::new
-    enum_type: &'static Enum,
+    pub(crate) access: &'a mut dyn EnumAccess,
+    pub(crate) enum_type: &'static Enum,
 }
 
 impl<'a> EnumMut<'a> {
-    /// # Safety
-    ///
-    /// `ptr` must be a valid, initialized value that exactly matches the type described in `enum_type`
-    pub unsafe fn new(ptr: PtrMut<'a>, enum_type: &'static Enum) -> Self {
-        Self { ptr, enum_type }
+    #[inline]
+    pub fn enum_type(&self) -> &'static Enum {
+        self.enum_type
     }
 
+    #[inline]
     pub fn field(&self, index: usize) -> Option<&dyn Reflect> {
-        // SAFETY: self.ptr matches the `enum_type`
-        let enum_access = unsafe { self.enum_type.enum_access(self.ptr.as_ref()) };
-        enum_access.field(index)
+        self.access.field(index)
     }
 
+    #[inline]
     pub fn field_mut(&mut self, index: usize) -> Option<&mut dyn Reflect> {
-        // SAFETY: self.ptr matches the `enum_type`
-        let enum_access = unsafe { self.enum_type.enum_access_mut(&mut self.ptr) };
-        enum_access.field_mut(index)
+        self.access.field_mut(index)
+    }
+
+    #[inline]
+    pub fn variant(&self) -> usize {
+        self.access.variant()
     }
 }

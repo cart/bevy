@@ -184,6 +184,7 @@ mod tests {
         {
             let enum_ref = reflect.enum_ref().unwrap();
             let field = enum_ref.field(0).unwrap();
+            assert_eq!(enum_ref.variant(), 0);
             assert_eq!(field.ty().type_id, TypeId::of::<u32>());
             let value = field.downcast_ref::<u32>().unwrap();
             assert_eq!(*value, 1);
@@ -191,6 +192,7 @@ mod tests {
         }
         {
             let mut enum_mut = reflect.enum_mut().unwrap();
+            assert_eq!(enum_mut.variant(), 0);
             let field = enum_mut.field_mut(0).unwrap();
             assert_eq!(field.ty().type_id, TypeId::of::<u32>());
             let value = field.downcast_mut::<u32>().unwrap();
@@ -204,6 +206,7 @@ mod tests {
 
         {
             let enum_ref = reflect.enum_ref().unwrap();
+            assert_eq!(enum_ref.variant(), 1);
             let field = enum_ref.field(0).unwrap();
             assert_eq!(field.ty().type_id, TypeId::of::<u64>());
             let value = field.downcast_ref::<u64>().unwrap();
@@ -212,6 +215,7 @@ mod tests {
         }
         {
             let mut enum_mut = reflect.enum_mut().unwrap();
+            assert_eq!(enum_mut.variant(), 1);
             let field = enum_mut.field_mut(0).unwrap();
             assert_eq!(field.ty().type_id, TypeId::of::<u64>());
             let value = field.downcast_mut::<u64>().unwrap();
@@ -223,6 +227,7 @@ mod tests {
         let reflect = &foo as &dyn Reflect;
 
         let enum_ref = reflect.enum_ref().unwrap();
+        assert_eq!(enum_ref.variant(), 2);
         assert!(enum_ref.field(0).is_none());
     }
 

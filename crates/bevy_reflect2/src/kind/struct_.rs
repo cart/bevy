@@ -121,6 +121,11 @@ impl<'a> StructRef<'a> {
         Self { ptr, struct_type }
     }
 
+    #[inline]
+    pub fn struct_type(&self) -> &'static Struct {
+        self.struct_type
+    }
+
     pub fn field(&self, index: usize) -> Option<&dyn Reflect> {
         let field = self.struct_type.fields.get(index)?;
         // SAFETY: self.ptr matches the type of the parent struct of this field
@@ -141,6 +146,11 @@ impl<'a> StructMut<'a> {
     /// `ptr` must be a valid, initialized value that exactly matches the type described in `struct_type`
     pub unsafe fn new(ptr: PtrMut<'a>, struct_type: &'static Struct) -> Self {
         Self { ptr, struct_type }
+    }
+
+    #[inline]
+    pub fn struct_type(&self) -> &'static Struct {
+        self.struct_type
     }
 
     pub fn field(&self, index: usize) -> Option<&dyn Reflect> {

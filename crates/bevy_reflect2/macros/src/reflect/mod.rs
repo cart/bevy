@@ -130,6 +130,7 @@ fn enum_kind(
     let type_ident = &ast.ident;
     let mut variants = Vec::with_capacity(data_enum.variants.len());
     let mut variant_field_accesses = Vec::with_capacity(data_enum.variants.len());
+    let mut variant_indices = Vec::with_capacity(data_enum.variants.len());
     for (index, variant) in data_enum.variants.iter().enumerate() {
         let variant_ident = &variant.ident;
 
@@ -158,7 +159,7 @@ fn enum_kind(
             });
             field_names.push(field_name);
         }
-        let (variant_kind, field_access) = match variant.fields {
+        let (variant_kind, field_access, variant_index) = match variant.fields {
             Fields::Named(_) => (
                 quote! {#bevy_reflect::FieldKind::Named},
                 quote! {
@@ -166,6 +167,9 @@ fn enum_kind(
                         #(#field_index_cases,)*
                         _ => #FQOption::None,
                     }
+                },
+                quote! {
+                    #type_ident::#variant_ident { .. } => #index
                 },
             ),
             Fields::Unnamed(_) => (
@@ -176,11 +180,17 @@ fn enum_kind(
                         _ => #FQOption::None,
                     }
                 },
+                quote! {
+                    #type_ident::#variant_ident( .. ) => #index
+                },
             ),
             Fields::Unit => (
                 quote! {#bevy_reflect::FieldKind::Unit},
                 quote! {
                     #type_ident::#variant_ident => None
+                },
+                quote! {
+                    #type_ident::#variant_ident => #index
                 },
             ),
         };
@@ -195,6 +205,7 @@ fn enum_kind(
             }
         });
         variant_field_accesses.push(field_access);
+        variant_indices.push(variant_index);
     }
     let kind = quote! {
         #bevy_reflect::Kind::Enum(#bevy_reflect::Enum {
@@ -216,6 +227,12 @@ fn enum_kind(
             fn field_mut(&mut self, index: usize) -> #FQOption<&mut dyn #bevy_reflect::Reflect> {
                 match self {
                     #(#variant_field_accesses,)*
+                }
+            }
+
+            fn variant(&self) -> usize {
+                match self {
+                    #(#variant_indices,)*
                 }
             }
         }
