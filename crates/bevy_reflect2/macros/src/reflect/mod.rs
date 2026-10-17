@@ -153,9 +153,8 @@ fn enum_kind(
                 .ident
                 .clone()
                 .unwrap_or_else(|| format_ident!("f{}", field_index));
-            let field_type = &field.ty;
             field_index_cases.push(quote! {
-                #field_index => #FQOption::Some((#field_name as *const #field_type as *const u8, <#field_type as #bevy_reflect::Typed>::TYPE.vtable.cast_reflect))
+                #field_index => #FQOption::Some(#field_name)
             });
             field_names.push(field_name);
         }
@@ -208,7 +207,13 @@ fn enum_kind(
     let (impl_generics, type_generics, where_clause) = &ast.generics.split_for_impl();
     let kind_declarations = quote! {
         unsafe impl #impl_generics #bevy_reflect::EnumAccess for #type_ident #type_generics #where_clause {
-            fn field(&self, index: usize) -> #FQOption<(*const u8, fn(*const u8) -> *const dyn #bevy_reflect::Reflect)> {
+            fn field(&self, index: usize) -> #FQOption<&dyn #bevy_reflect::Reflect> {
+                match self {
+                    #(#variant_field_accesses,)*
+                }
+            }
+
+            fn field_mut(&mut self, index: usize) -> #FQOption<&mut dyn #bevy_reflect::Reflect> {
                 match self {
                     #(#variant_field_accesses,)*
                 }

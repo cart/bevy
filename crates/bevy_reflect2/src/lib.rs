@@ -41,7 +41,11 @@ mod tests {
     use crate::{
         self as bevy_reflect2, CreateTypeData, FieldKind, Kind, Reflect, TypeRegistry, Typed,
     };
-    use core::any::{Any, TypeId};
+    use alloc::boxed::Box;
+    use core::{
+        alloc::Layout,
+        any::{Any, TypeId},
+    };
 
     #[test]
     fn reflect_struct_named() {
@@ -262,7 +266,10 @@ mod tests {
         }
 
         let foo = Foo::TYPE.default().unwrap();
-        core::mem::forget(foo);
+        let raw = Box::into_raw(foo);
+        unsafe {
+            alloc::alloc::dealloc(raw as *mut u8, Layout::new::<Foo>());
+        }
     }
 
     #[test]

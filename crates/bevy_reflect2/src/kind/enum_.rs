@@ -23,6 +23,13 @@ impl Enum {
         // guarantees that the cast_enum_access implementation is valid
         unsafe { &*(self.cast_enum_access)(enum_ptr.as_ptr()) }
     }
+
+    /// Caller must ensure that `enum_ptr` is a valid, initialized value that matches this [`Enum`].
+    pub unsafe fn enum_access_mut<'a>(&self, enum_ptr: &mut PtrMut<'a>) -> &'a mut dyn EnumAccess {
+        // Caller guarantees that ptr matches the type defined in this `Enum`, and the `Enum` author
+        // guarantees that the cast_enum_access implementation is valid
+        unsafe { &mut *((self.cast_enum_access)(enum_ptr.as_ptr()) as *mut dyn EnumAccess) }
+    }
 }
 
 #[derive(Debug)]
@@ -43,7 +50,8 @@ pub struct EnumField {
 /// [`EnumAccess::field`] must return a tuple containing (1) a valid pointer to the field at the given index,
 /// and (2) a valid "cast reflect" function for fields of that type
 pub unsafe trait EnumAccess: Any {
-    fn field(&self, index: usize) -> Option<(*const u8, fn(*const u8) -> *const dyn Reflect)>;
+    fn field(&self, index: usize) -> Option<&dyn Reflect>;
+    fn field_mut(&mut self, index: usize) -> Option<&mut dyn Reflect>;
     // fn variant(&self) -> usize;
 }
 
@@ -69,10 +77,7 @@ impl<'a> EnumRef<'a> {
     pub fn field(&self, index: usize) -> Option<&dyn Reflect> {
         // SAFETY: self.ptr matches the `enum_type`
         let enum_access = unsafe { self.enum_type.enum_access(self.ptr) };
-        let (field_ptr, cast_reflect) = enum_access.field(index)?;
-        // EnumAccess implementer guarantees that field_ptr is a valid pointer to the field at that index, and that
-        // cast_reflect is a valid "cast reflect" function for fields of that type
-        Some(unsafe { &*cast_reflect(field_ptr) })
+        enum_access.field(index)
     }
 }
 
@@ -94,19 +99,12 @@ impl<'a> EnumMut<'a> {
     pub fn field(&self, index: usize) -> Option<&dyn Reflect> {
         // SAFETY: self.ptr matches the `enum_type`
         let enum_access = unsafe { self.enum_type.enum_access(self.ptr.as_ref()) };
-        let (field_ptr, cast_reflect) = enum_access.field(index)?;
-        // EnumAccess implementer guarantees that field_ptr is a valid pointer to the field at that index, and that
-        // cast_reflect is a valid "cast reflect" function for fields of that type
-        Some(unsafe { &*cast_reflect(field_ptr) })
+        enum_access.field(index)
     }
 
     pub fn field_mut(&mut self, index: usize) -> Option<&mut dyn Reflect> {
         // SAFETY: self.ptr matches the `enum_type`
-        let enum_access = unsafe { self.enum_type.enum_access(self.ptr.as_ref()) };
-        let (field_ptr, cast_reflect) = enum_access.field(index)?;
-        // SAFETY: EnumAccess implementer guarantees that field_ptr is a valid pointer to the field at that index, and that
-        // cast_reflect is a valid "cast reflect" function for fields of that type.
-        // We have unique access to the struct ptr, so accessing the field mutably is ok.
-        Some(unsafe { &mut *(cast_reflect(field_ptr) as *mut dyn Reflect) })
+        let enum_access = unsafe { self.enum_type.enum_access_mut(&mut self.ptr) };
+        enum_access.field_mut(index)
     }
 }

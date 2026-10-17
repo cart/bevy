@@ -2,6 +2,10 @@ use crate::{self as bevy_reflect2, TypePath};
 use crate::{GetTypeRegistration, TypeRegistration};
 use alloc::string::String;
 use bevy_reflect2_macros::type_path;
+use core::sync::atomic::{
+    AtomicBool, AtomicI16, AtomicI32, AtomicI64, AtomicIsize, AtomicU16, AtomicU32, AtomicU64,
+    AtomicUsize,
+};
 use core::{alloc::Layout, any::TypeId};
 
 use crate::{
@@ -57,3 +61,13 @@ impl_primitive_type!(
     Primitive::Unit,
     TypePath::new("()", "()", (0, 2), None, None)
 );
+
+impl_primitive_type!(AtomicBool, Primitive::Bool);
+impl_primitive_type!(AtomicU16, Primitive::Int);
+impl_primitive_type!(AtomicU32, Primitive::Int);
+impl_primitive_type!(AtomicU64, Primitive::Int);
+impl_primitive_type!(AtomicUsize, Primitive::Int);
+impl_primitive_type!(AtomicI16, Primitive::Int);
+impl_primitive_type!(AtomicI32, Primitive::Int);
+impl_primitive_type!(AtomicI64, Primitive::Int);
+impl_primitive_type!(AtomicIsize, Primitive::Int);
